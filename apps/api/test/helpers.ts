@@ -53,8 +53,11 @@ export function appWithCapturedLogs(overrides: Record<string, string> = {}) {
   return { app, lines };
 }
 
-export function makeApp(overrides: Record<string, string> = {}) {
-  return createApp(testConfig(overrides));
+export function makeApp(
+  overrides: Record<string, string> = {},
+  extraRoutes?: Parameters<typeof createApp>[2],
+) {
+  return createApp(testConfig(overrides), undefined, extraRoutes);
 }
 
 let counter = 0;

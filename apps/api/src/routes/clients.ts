@@ -1,52 +1,93 @@
-import { Router, type Request } from 'express';
 import {
-  can,
+  PROJECT_STATUSES,
   clientSchema,
   contactSchema,
   listQuerySchema,
   updateClientSchema,
   updateContactSchema,
-  type SystemRole,
+  type ProjectStatus,
 } from '@xc8/shared';
-import type { FilterQuery } from 'mongoose';
-import type { AppConfig } from '../config.js';
-import { conflict, notFound } from '../lib/errors.js';
+import type { Request } from 'express';
+import type { FilterQuery, Types } from 'mongoose';
+import { perm, type RouteRegistry } from '../access/registry.js';
+import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paginate } from '../lib/pagination.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
-import { currentRole, currentUser, requireAuth, requirePermission } from '../middleware/auth.js';
+import { currentUser } from '../middleware/auth.js';
 import {
   ClientContactModel,
   ClientModel,
+  ProjectModel,
+  UserModel,
   type Client,
   type ClientContact,
+  type Project,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
-import { toClientDto, toContactDto } from '../services/dto.js';
+import { toClientDto, toContactDto, toProjectSummaryDto } from '../services/dto.js';
+import { clientInScope, projectScopeFilter, visibleClientIds } from '../services/scope.js';
 
 /**
- * Clients and client contacts (FR-CLI-01..03). Admin and PM manage; Viewer reads all.
- * Members may only see clients of their own projects (07 §4); until projects exist
- * (later milestone) that set is empty, so Members get empty lists and 404 on reads.
+ * Clients, their contacts and their projects (FR-CLI-01..03, FR-CLI-09..12).
+ * The central gate checks the access rules (`clients.*`, `contacts.*`, `projects.view`);
+ * these handlers add the fixed scope: Members only see clients of projects they belong to
+ * (FR-ACL-07), so until projects exist they see none and get 404 by id.
  */
-function canReadAll(req: Request) {
-  return can(currentRole(req) as SystemRole, 'clients:read:all');
-}
 
 function nullify<T extends Record<string, unknown>>(input: T): T {
   // Convert empty optional strings to null so they clear the stored value.
   return Object.fromEntries(Object.entries(input).map(([k, v]) => [k, v === '' ? null : v])) as T;
 }
 
-export function clientsRouter(config: AppConfig) {
-  const router = Router();
-  router.use(requireAuth(config));
+/** Loads a client the caller may see, or 404 (no leak of records outside the scope). */
+async function clientForRequest(req: Request, id = idParam(req)) {
+  const client = await ClientModel.findById(id);
+  if (!client || !(await clientInScope(currentUser(req), client._id))) throw notFound();
+  return client;
+}
 
-  router.get('/', async (req, res) => {
+async function projectCounts(req: Request, clientIds: Types.ObjectId[]) {
+  const counts = await ProjectModel.aggregate<{ _id: unknown; n: number }>([
+    {
+      $match: {
+        ...projectScopeFilter(currentUser(req)),
+        clientId: { $in: clientIds },
+        archived: false,
+      },
+    },
+    { $group: { _id: '$clientId', n: { $sum: 1 } } },
+  ]);
+  return new Map(counts.map((c) => [String(c._id), c.n]));
+}
+
+async function contactCounts(clientIds: Types.ObjectId[]) {
+  const counts = await ClientContactModel.aggregate<{ _id: unknown; n: number }>([
+    { $match: { clientId: { $in: clientIds }, active: true } },
+    { $group: { _id: '$clientId', n: { $sum: 1 } } },
+  ]);
+  return new Map(counts.map((c) => [String(c._id), c.n]));
+}
+
+async function clientDto(
+  req: Request,
+  client: { _id: Types.ObjectId } & Parameters<typeof toClientDto>[0],
+) {
+  const [contacts, projects] = await Promise.all([
+    contactCounts([client._id]),
+    projectCounts(req, [client._id]),
+  ]);
+  const key = client._id.toString();
+  return toClientDto(client, contacts.get(key) ?? 0, projects.get(key) ?? 0);
+}
+
+export function clientsRouter(registry: RouteRegistry) {
+  const r = registry.router('/clients');
+
+  r.get('/', perm('clients', 'view'), async (req, res) => {
     const q = parseQuery(listQuerySchema, req);
-    if (!canReadAll(req)) {
-      return res.json({ items: [], page: q.page, pageSize: q.pageSize, total: 0 });
-    }
     const filter: FilterQuery<Client> = {};
+    const scope = await visibleClientIds(currentUser(req));
+    if (scope) filter._id = { $in: scope };
     if (q.includeInactive !== 'true') filter.active = true;
     if (q.q) filter.name = new RegExp(escapeRegex(q.q), 'i');
     const { skip, limit } = paginate(q.page, q.pageSize);
@@ -54,32 +95,24 @@ export function clientsRouter(config: AppConfig) {
       ClientModel.find(filter).sort({ name: 1 }).skip(skip).limit(limit).lean(),
       ClientModel.countDocuments(filter),
     ]);
-    const counts = await ClientContactModel.aggregate<{ _id: unknown; n: number }>([
-      { $match: { clientId: { $in: items.map((c) => c._id) }, active: true } },
-      { $group: { _id: '$clientId', n: { $sum: 1 } } },
-    ]);
-    const byId = new Map(counts.map((c) => [String(c._id), c.n]));
+    const ids = items.map((c) => c._id);
+    const [contacts, projects] = await Promise.all([contactCounts(ids), projectCounts(req, ids)]);
     res.json({
-      items: items.map((c) => toClientDto(c, byId.get(c._id.toString()) ?? 0)),
+      items: items.map((c) =>
+        toClientDto(c, contacts.get(c._id.toString()) ?? 0, projects.get(c._id.toString()) ?? 0),
+      ),
       page: q.page,
       pageSize: q.pageSize,
       total,
     });
   });
 
-  router.get('/:id', async (req, res) => {
-    const id = idParam(req);
-    if (!canReadAll(req)) throw notFound();
-    const client = await ClientModel.findById(id).lean();
-    if (!client) throw notFound();
-    const contactCount = await ClientContactModel.countDocuments({
-      clientId: client._id,
-      active: true,
-    });
-    res.json({ client: toClientDto(client, contactCount) });
+  r.get('/:id', perm('clients', 'view'), async (req, res) => {
+    const client = await clientForRequest(req);
+    res.json({ client: await clientDto(req, client) });
   });
 
-  router.post('/', requirePermission('clients:manage'), async (req, res) => {
+  r.post('/', perm('clients', 'create'), async (req, res) => {
     const input = parseBody(clientSchema, req);
     await assertClientNameFree(input.name);
     const client = await ClientModel.create({ ...input, nameKey: input.name.toLowerCase() });
@@ -92,10 +125,9 @@ export function clientsRouter(config: AppConfig) {
     res.status(201).json({ client: toClientDto(client) });
   });
 
-  router.patch('/:id', requirePermission('clients:manage'), async (req, res) => {
+  r.patch('/:id', perm('clients', 'edit'), async (req, res) => {
     const input = nullify(parseBody(updateClientSchema, req));
-    const client = await ClientModel.findById(idParam(req));
-    if (!client) throw notFound();
+    const client = await clientForRequest(req);
     if (input.name && input.name.toLowerCase() !== client.nameKey) {
       await assertClientNameFree(input.name, client._id.toString());
       client.nameKey = input.name.toLowerCase();
@@ -108,16 +140,16 @@ export function clientsRouter(config: AppConfig) {
       entityId: client._id,
       action: 'client_updated',
     });
-    res.json({ client: toClientDto(client) });
+    res.json({ client: await clientDto(req, client) });
   });
 
+  // Clients are deactivated rather than deleted (FR-CLI-08 pattern), so this counts as Delete.
   for (const [path, active] of [
     ['deactivate', false],
     ['reactivate', true],
   ] as const) {
-    router.post(`/:id/${path}`, requirePermission('clients:manage'), async (req, res) => {
-      const client = await ClientModel.findById(idParam(req));
-      if (!client) throw notFound();
+    r.post(`/:id/${path}`, perm('clients', 'delete'), async (req, res) => {
+      const client = await clientForRequest(req);
       if (client.active !== active) {
         client.active = active;
         await client.save();
@@ -129,27 +161,31 @@ export function clientsRouter(config: AppConfig) {
           changes: [{ field: 'active', old: !active, new: active }],
         });
       }
-      res.json({ client: toClientDto(client) });
+      res.json({ client: await clientDto(req, client) });
     });
   }
 
-  // ----- Contacts of a client -----
-  router.get('/:id/contacts', async (req, res) => {
-    const id = idParam(req);
-    if (!canReadAll(req)) throw notFound();
-    const client = await ClientModel.findById(id).lean();
-    if (!client) throw notFound();
+  // ----- Contacts tab (FR-CLI-09/10) -----
+  r.get('/:id/contacts', perm('contacts', 'view'), async (req, res) => {
+    const client = await clientForRequest(req);
     const q = parseQuery(listQuerySchema, req);
     const filter: FilterQuery<ClientContact> = { clientId: client._id };
-    if (q.includeInactive !== 'true') filter.active = true;
+    if (q.status === 'INACTIVE') filter.active = false;
+    else if (q.status === 'ALL' || q.includeInactive === 'true') {
+      // all contacts
+    } else if (q.status && q.status !== 'ACTIVE') throw badRequest('Unknown status.');
+    else filter.active = true;
+    if (q.q) {
+      const re = new RegExp(escapeRegex(q.q), 'i');
+      filter.$or = [{ name: re }, { email: re }, { position: re }, { department: re }];
+    }
     const contacts = await ClientContactModel.find(filter).sort({ name: 1 }).lean();
     res.json({ items: contacts.map((c) => toContactDto(c, client.name)) });
   });
 
-  router.post('/:id/contacts', requirePermission('clients:manage'), async (req, res) => {
+  r.post('/:id/contacts', perm('contacts', 'create'), async (req, res) => {
     const input = parseBody(contactSchema, req);
-    const client = await ClientModel.findById(idParam(req)).lean();
-    if (!client) throw notFound();
+    const client = await clientForRequest(req);
     const contact = await ClientContactModel.create({ ...input, clientId: client._id });
     await audit({
       actorId: currentUser(req)._id,
@@ -160,22 +196,63 @@ export function clientsRouter(config: AppConfig) {
     res.status(201).json({ contact: toContactDto(contact, client.name) });
   });
 
-  return router;
+  // ----- Projects tab (FR-CLI-11/12): only projects in the caller's scope, enforced here -----
+  r.get('/:id/projects', perm('projects', 'view'), async (req, res) => {
+    const client = await clientForRequest(req);
+    const q = parseQuery(listQuerySchema, req);
+    const filter: FilterQuery<Project> = {
+      ...projectScopeFilter(currentUser(req)),
+      clientId: client._id,
+    };
+    if (q.status === 'ARCHIVED') filter.archived = true;
+    else {
+      filter.archived = false;
+      if (q.status) {
+        if (!(PROJECT_STATUSES as readonly string[]).includes(q.status)) {
+          throw badRequest('Unknown status.');
+        }
+        filter.status = q.status as ProjectStatus;
+      }
+    }
+    if (q.q) filter.name = new RegExp(escapeRegex(q.q), 'i');
+    const projects = await ProjectModel.find(filter).sort({ name: 1 }).limit(500).lean();
+    const managers = await UserModel.find({
+      _id: { $in: projects.map((p) => p.managerId).filter(Boolean) },
+    })
+      .select('name')
+      .lean();
+    const names = new Map(managers.map((u) => [u._id.toString(), u.name]));
+    res.json({
+      items: projects.map((p) =>
+        toProjectSummaryDto(p, p.managerId ? (names.get(p.managerId.toString()) ?? null) : null),
+      ),
+      total: projects.length,
+    });
+  });
+
+  return r.router;
 }
 
-/** Contacts across all clients, for the Client contacts screen. */
-export function contactsRouter(config: AppConfig) {
-  const router = Router();
-  router.use(requireAuth(config));
+/** Contacts across clients (kept for the Milestone 1 web app and for edits from the Contacts tab). */
+export function contactsRouter(registry: RouteRegistry) {
+  const r = registry.router('/contacts');
 
-  router.get('/', async (req, res) => {
+  async function contactForRequest(req: Request) {
+    const contact = await ClientContactModel.findById(idParam(req));
+    if (!contact || !(await clientInScope(currentUser(req), contact.clientId))) throw notFound();
+    return contact;
+  }
+
+  r.get('/', perm('contacts', 'view'), async (req, res) => {
     const q = parseQuery(listQuerySchema, req);
-    if (!canReadAll(req)) {
-      return res.json({ items: [], page: q.page, pageSize: q.pageSize, total: 0 });
-    }
     const filter: FilterQuery<ClientContact> = {};
+    const scope = await visibleClientIds(currentUser(req));
+    if (scope) filter.clientId = { $in: scope };
     if (q.includeInactive !== 'true') filter.active = true;
-    if (q.clientId) filter.clientId = q.clientId;
+    if (q.clientId) {
+      filter.clientId =
+        scope && !scope.some((id) => id.toString() === q.clientId) ? { $in: [] } : q.clientId;
+    }
     if (q.q) {
       const re = new RegExp(escapeRegex(q.q), 'i');
       filter.$or = [{ name: re }, { email: re }, { department: re }];
@@ -197,19 +274,15 @@ export function contactsRouter(config: AppConfig) {
     });
   });
 
-  router.get('/:id', async (req, res) => {
-    const id = idParam(req);
-    if (!canReadAll(req)) throw notFound();
-    const contact = await ClientContactModel.findById(id).lean();
-    if (!contact) throw notFound();
+  r.get('/:id', perm('contacts', 'view'), async (req, res) => {
+    const contact = await contactForRequest(req);
     const client = await ClientModel.findById(contact.clientId).select('name').lean();
     res.json({ contact: toContactDto(contact, client?.name ?? '') });
   });
 
-  router.patch('/:id', requirePermission('clients:manage'), async (req, res) => {
+  r.patch('/:id', perm('contacts', 'edit'), async (req, res) => {
     const input = nullify(parseBody(updateContactSchema, req));
-    const contact = await ClientContactModel.findById(idParam(req));
-    if (!contact) throw notFound();
+    const contact = await contactForRequest(req);
     contact.set(input);
     await contact.save();
     await audit({
@@ -222,13 +295,13 @@ export function contactsRouter(config: AppConfig) {
     res.json({ contact: toContactDto(contact, client?.name ?? '') });
   });
 
+  // Contacts are deactivated, never deleted (FR-CLI-08), so this counts as Delete.
   for (const [path, active] of [
     ['deactivate', false],
     ['reactivate', true],
   ] as const) {
-    router.post(`/:id/${path}`, requirePermission('clients:manage'), async (req, res) => {
-      const contact = await ClientContactModel.findById(idParam(req));
-      if (!contact) throw notFound();
+    r.post(`/:id/${path}`, perm('contacts', 'delete'), async (req, res) => {
+      const contact = await contactForRequest(req);
       if (contact.active !== active) {
         contact.active = active;
         await contact.save();
@@ -245,7 +318,7 @@ export function contactsRouter(config: AppConfig) {
     });
   }
 
-  return router;
+  return r.router;
 }
 
 async function assertClientNameFree(name: string, exceptId?: string) {

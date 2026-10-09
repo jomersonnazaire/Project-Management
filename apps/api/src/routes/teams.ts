@@ -1,19 +1,17 @@
-import { Router } from 'express';
 import { listQuerySchema, teamSchema } from '@xc8/shared';
-import type { AppConfig } from '../config.js';
+import { perm, type RouteRegistry } from '../access/registry.js';
 import { conflict, notFound } from '../lib/errors.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
-import { currentUser, requireAuth, requirePermission } from '../middleware/auth.js';
+import { currentUser } from '../middleware/auth.js';
 import { TeamModel, UserModel } from '../models/index.js';
 import { audit } from '../services/audit.js';
 import { toTeamDto } from '../services/dto.js';
 
-/** Teams (FR-USR-04, AC-03.1): everyone signed in can read; only Admin manages. */
-export function teamsRouter(config: AppConfig) {
-  const router = Router();
-  router.use(requireAuth(config));
+/** Teams (FR-USR-04, AC-03.1). Access per the `teams` access rules (default: Admin only). */
+export function teamsRouter(registry: RouteRegistry) {
+  const router = registry.router('/teams');
 
-  router.get('/', requirePermission('teams:read'), async (req, res) => {
+  router.get('/', perm('teams', 'view'), async (req, res) => {
     const q = parseQuery(listQuerySchema, req);
     const filter = q.includeArchived === 'true' ? {} : { archived: false };
     const teams = await TeamModel.find(filter).sort({ name: 1 }).lean();
@@ -26,7 +24,7 @@ export function teamsRouter(config: AppConfig) {
     res.json({ items: teams.map((t) => toTeamDto(t, byId.get(t._id.toString()) ?? 0)) });
   });
 
-  router.post('/', requirePermission('teams:manage'), async (req, res) => {
+  router.post('/', perm('teams', 'create'), async (req, res) => {
     const { name } = parseBody(teamSchema, req);
     if (await TeamModel.exists({ nameKey: name.toLowerCase() })) {
       throw conflict('A team with this name already exists.', 'TEAM_NAME_IN_USE');
@@ -41,7 +39,7 @@ export function teamsRouter(config: AppConfig) {
     res.status(201).json({ team: toTeamDto(team) });
   });
 
-  router.patch('/:id', requirePermission('teams:manage'), async (req, res) => {
+  router.patch('/:id', perm('teams', 'edit'), async (req, res) => {
     const { name } = parseBody(teamSchema, req);
     const team = await TeamModel.findById(idParam(req));
     if (!team) throw notFound();
@@ -63,11 +61,12 @@ export function teamsRouter(config: AppConfig) {
     res.json({ team: toTeamDto(team) });
   });
 
+  // Teams are archived rather than deleted, so archive/unarchive count as Delete.
   for (const [path, archived] of [
     ['archive', true],
     ['unarchive', false],
   ] as const) {
-    router.post(`/:id/${path}`, requirePermission('teams:manage'), async (req, res) => {
+    router.post(`/:id/${path}`, perm('teams', 'delete'), async (req, res) => {
       const team = await TeamModel.findById(idParam(req));
       if (!team) throw notFound();
       // AC-03.2 (warn about open tasks) applies once tasks exist (later milestone).
@@ -86,5 +85,5 @@ export function teamsRouter(config: AppConfig) {
     });
   }
 
-  return router;
+  return router.router;
 }

@@ -2,11 +2,14 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { connectDb, disconnectDb } from './db.js';
 import { createLogger } from './logger.js';
+import { ensureDefaultAccessRules } from './services/accessRules.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
 
 await connectDb(config.MONGODB_URI, config.MONGODB_DB_NAME);
+// Seed the default access rules if a role has none yet (idempotent; never overwrites changes).
+await ensureDefaultAccessRules(logger);
 const app = createApp(config, logger);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'API listening');

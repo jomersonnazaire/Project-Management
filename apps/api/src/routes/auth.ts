@@ -1,16 +1,19 @@
-import { Router, type RequestHandler } from 'express';
+import type { RequestHandler } from 'express';
 import {
   changePasswordSchema,
   inviteTokenSchema,
   loginSchema,
   setupPasswordSchema,
+  type SystemRole,
 } from '@xc8/shared';
+import { AUTHENTICATED, PUBLIC, type RouteRegistry } from '../access/registry.js';
 import type { AppConfig } from '../config.js';
 import { HttpError, badRequest, unauthorized } from '../lib/errors.js';
 import { parseBody } from '../lib/validate.js';
 import { clientIp } from '../middleware/clientIp.js';
-import { currentUser, requireAuth } from '../middleware/auth.js';
+import { currentPermissions, currentRole, currentUser } from '../middleware/auth.js';
 import { SessionModel, UserModel } from '../models/index.js';
+import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
 import { toUserDto } from '../services/dto.js';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '../services/passwords.js';
@@ -28,10 +31,14 @@ const INVALID_CREDENTIALS = 'Email or password is incorrect.';
  * Auth routes. Every lookup is against the `users` collection only, so a client contact's
  * email behaves exactly like an unknown email (FR-AUTH-08, AC-01.6).
  */
-export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
-  const router = Router();
+export function authRouter(
+  config: AppConfig,
+  registry: RouteRegistry,
+  authLimiter: RequestHandler,
+) {
+  const router = registry.router('/auth');
 
-  router.post('/login', authLimiter, async (req, res) => {
+  router.post('/login', PUBLIC, authLimiter, async (req, res) => {
     const { email, password } = parseBody(loginSchema, req);
     const user = await UserModel.findOne({ email }).select('+passwordHash');
 
@@ -95,10 +102,13 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
       clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET }),
     );
     user.lastLoginAt = now;
-    res.json({ user: toUserDto(user) });
+    res.json({
+      user: toUserDto(user),
+      permissions: await permissionsFor(user.systemRole as SystemRole),
+    });
   });
 
-  router.post('/logout', async (req, res) => {
+  router.post('/logout', PUBLIC, async (req, res) => {
     const token: unknown = req.cookies?.[cookieName(config)];
     if (typeof token === 'string' && token.length <= 200) {
       await SessionModel.deleteOne({ tokenHash: sha256(token) });
@@ -107,8 +117,14 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
     res.status(204).end();
   });
 
-  router.get('/me', requireAuth(config), (req, res) => {
-    res.json({ user: toUserDto(currentUser(req)) });
+  /** The signed-in user and their role's effective permissions (doc 11; refreshed per request). */
+  router.get('/me', AUTHENTICATED, (req, res) => {
+    res.json({ user: toUserDto(currentUser(req)), permissions: currentPermissions(req) });
+  });
+
+  /** Read-only summary of the caller's own role's permissions (FR-ACL-13). */
+  router.get('/me/permissions', AUTHENTICATED, (req, res) => {
+    res.json({ role: currentRole(req), permissions: currentPermissions(req) });
   });
 
   /**
@@ -116,7 +132,7 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
    * POST with the token in the JSON body so it never appears in a URL path, where platform
    * HTTP logs and proxies would record it (FR-AUTH-04/05, QA review R-2). Read-only.
    */
-  router.post('/invite/verify', authLimiter, async (req, res) => {
+  router.post('/invite/verify', PUBLIC, authLimiter, async (req, res) => {
     const parsed = inviteTokenSchema.safeParse(req.body);
     // Malformed tokens get the same answer as unknown, used or expired ones (AC-02.6).
     if (!parsed.success) throw invalidLink();
@@ -133,7 +149,7 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
   });
 
   /** First-time password setup via invite token (FR-AUTH-04, AC-02.2). Signs the user in. */
-  router.post('/setup-password', authLimiter, async (req, res) => {
+  router.post('/setup-password', PUBLIC, authLimiter, async (req, res) => {
     const { token, password } = parseBody(setupPasswordSchema, req);
     const user = await findByInviteToken(token);
     const passwordHash = await hashPassword(password);
@@ -167,10 +183,13 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
       res,
       clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET }),
     );
-    res.json({ user: toUserDto(updated) });
+    res.json({
+      user: toUserDto(updated),
+      permissions: await permissionsFor(updated.systemRole as SystemRole),
+    });
   });
 
-  router.post('/change-password', requireAuth(config), async (req, res) => {
+  router.post('/change-password', AUTHENTICATED, async (req, res) => {
     const { currentPassword, newPassword } = parseBody(changePasswordSchema, req);
     const me = await UserModel.findById(currentUser(req)._id).select('+passwordHash');
     if (!me?.passwordHash || !(await verifyPassword(me.passwordHash, currentPassword))) {
@@ -190,7 +209,7 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
     res.status(204).end();
   });
 
-  return router;
+  return router.router;
 }
 
 const LINK_EXPIRED_MESSAGE = 'This link has expired. Ask an Admin for a new one.';

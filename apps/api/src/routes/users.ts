@@ -1,4 +1,3 @@
-import { Router } from 'express';
 import {
   SYSTEM_ROLES,
   inviteUserSchema,
@@ -8,23 +7,27 @@ import {
   type SystemRole,
 } from '@xc8/shared';
 import type { FilterQuery } from 'mongoose';
+import { perm, type RouteRegistry } from '../access/registry.js';
 import type { AppConfig } from '../config.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { paginate } from '../lib/pagination.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
-import { currentUser, requireAuth, requirePermission } from '../middleware/auth.js';
+import { currentUser } from '../middleware/auth.js';
 import { TeamModel, UserModel, type User, type UserDoc } from '../models/index.js';
 import { audit } from '../services/audit.js';
 import { toUserDto } from '../services/dto.js';
 import { revokeUserSessions } from '../services/sessions.js';
 import { newToken, sha256 } from '../services/tokens.js';
 
-/** User administration: Admin only (FR-USR-05, AC-02.3). */
-export function usersRouter(config: AppConfig) {
-  const router = Router();
-  router.use(requireAuth(config), requirePermission('users:manage'));
+/**
+ * User administration (FR-USR-05, AC-02.3). Access per the `users` access rules (default and
+ * locked: Admin). Fixed rule on top: only Admins can grant the Admin role or change, deactivate
+ * or reissue links for Admin accounts, so a grant on `users` can't be used to take over an Admin.
+ */
+export function usersRouter(config: AppConfig, registry: RouteRegistry) {
+  const router = registry.router('/users');
 
-  router.get('/', async (req, res) => {
+  router.get('/', perm('users', 'view'), async (req, res) => {
     const q = parseQuery(listQuerySchema, req);
     const filter: FilterQuery<User> = {};
     if (q.q) {
@@ -48,15 +51,16 @@ export function usersRouter(config: AppConfig) {
     res.json({ items: items.map(toUserDto), page: q.page, pageSize: q.pageSize, total });
   });
 
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', perm('users', 'view'), async (req, res) => {
     const user = await UserModel.findById(idParam(req)).select('+passwordHash');
     if (!user) throw notFound();
     res.json({ user: toUserDto(user) });
   });
 
   /** Invite a user (FR-AUTH-04). Returns a one-time setup link for the Admin to share. */
-  router.post('/', async (req, res) => {
+  router.post('/', perm('users', 'create'), async (req, res) => {
     const input = parseBody(inviteUserSchema, req);
+    assertMayManageAdmins(currentUser(req), input.systemRole);
     await assertTeamsExist(input.teamIds);
     if (await UserModel.exists({ email: input.email })) {
       throw conflict('Email already in use', 'EMAIL_IN_USE');
@@ -98,12 +102,13 @@ export function usersRouter(config: AppConfig) {
     res.status(201).json(body);
   });
 
-  router.patch('/:id', async (req, res) => {
+  router.patch('/:id', perm('users', 'edit'), async (req, res) => {
     const id = idParam(req);
     const input = parseBody(updateUserSchema, req);
     const admin = currentUser(req);
     const user = await UserModel.findById(id).select('+passwordHash');
     if (!user) throw notFound();
+    assertMayManageAdmins(admin, user.systemRole, input.systemRole);
 
     if (input.systemRole && input.systemRole !== user.systemRole) {
       // A user can't change their own role, Admins included (FR-USR-05, AC-02.4).
@@ -144,10 +149,11 @@ export function usersRouter(config: AppConfig) {
   });
 
   /** Deactivate (FR-AUTH-06). History is preserved; sessions are revoked immediately. */
-  router.post('/:id/deactivate', async (req, res) => {
+  router.post('/:id/deactivate', perm('users', 'delete'), async (req, res) => {
     const admin = currentUser(req);
     const user = await UserModel.findById(idParam(req)).select('+passwordHash');
     if (!user) throw notFound();
+    assertMayManageAdmins(admin, user.systemRole);
     if (user._id.equals(admin._id)) {
       throw conflict("You can't deactivate your own account.", 'SELF_DEACTIVATE');
     }
@@ -168,10 +174,11 @@ export function usersRouter(config: AppConfig) {
     res.json({ user: toUserDto(user) });
   });
 
-  router.post('/:id/reactivate', async (req, res) => {
+  router.post('/:id/reactivate', perm('users', 'delete'), async (req, res) => {
     const admin = currentUser(req);
     const user = await UserModel.findById(idParam(req)).select('+passwordHash');
     if (!user) throw notFound();
+    assertMayManageAdmins(admin, user.systemRole);
     if (!user.active) {
       user.active = true;
       user.deactivatedAt = null;
@@ -195,10 +202,11 @@ export function usersRouter(config: AppConfig) {
    * users (expires after RESET_TTL_HOURS). Email delivery is deferred, so the Admin shares it.
    * A user holds at most one link: storing the new hash cancels any earlier unused link.
    */
-  router.post('/:id/invite', async (req, res) => {
+  router.post('/:id/invite', perm('users', 'edit'), async (req, res) => {
     const admin = currentUser(req);
     const user = await UserModel.findById(idParam(req)).select('+passwordHash +invite');
     if (!user) throw notFound();
+    assertMayManageAdmins(admin, user.systemRole);
     if (!user.active) throw conflict('Reactivate this user first.', 'USER_DEACTIVATED');
     const purpose = user.passwordHash ? 'RESET' : 'INVITE';
     const ttlHours = purpose === 'RESET' ? config.RESET_TTL_HOURS : config.INVITE_TTL_HOURS;
@@ -229,7 +237,15 @@ export function usersRouter(config: AppConfig) {
     res.json(body);
   });
 
-  return router;
+  return router.router;
+}
+
+/** Only Admins may create, change or remove Admin accounts or grant the Admin role. */
+function assertMayManageAdmins(actor: UserDoc, targetRole: string, newRole?: string) {
+  if (actor.systemRole === 'ADMIN') return;
+  if (targetRole === 'ADMIN' || newRole === 'ADMIN') {
+    throw forbidden('Only Admins can manage Admin accounts.', 'FORBIDDEN');
+  }
 }
 
 function setupUrl(config: AppConfig, token: string) {

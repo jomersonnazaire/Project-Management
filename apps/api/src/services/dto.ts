@@ -1,4 +1,12 @@
-import type { ClientDto, ContactDto, TeamDto, UserDto, UserStatus } from '@xc8/shared';
+import type {
+  ClientDto,
+  ContactDto,
+  ProjectStatus,
+  ProjectSummaryDto,
+  TeamDto,
+  UserDto,
+  UserStatus,
+} from '@xc8/shared';
 import type { Types } from 'mongoose';
 
 type Id = Types.ObjectId;
@@ -61,6 +69,7 @@ export function toClientDto(
     active?: boolean | null;
   },
   contactCount = 0,
+  projectCount = 0,
 ): ClientDto {
   return {
     id: c._id.toString(),
@@ -70,6 +79,7 @@ export function toClientDto(
     notes: c.notes ?? null,
     active: Boolean(c.active),
     contactCount,
+    projectCount,
   };
 }
 
@@ -100,5 +110,31 @@ export function toContactDto(
     active: Boolean(c.active),
     pendingCount: 0,
     overdueCount: 0,
+  };
+}
+
+export function toProjectSummaryDto(
+  p: {
+    _id: Id;
+    name: string;
+    clientId: Id;
+    startDate?: Date | null;
+    plannedEndDate?: Date | null;
+    progress?: number | null;
+    status?: string | null;
+    archived?: boolean | null;
+  },
+  managerName: string | null,
+): ProjectSummaryDto {
+  return {
+    id: p._id.toString(),
+    name: p.name,
+    clientId: p.clientId.toString(),
+    managerName,
+    startDate: p.startDate ? p.startDate.toISOString() : null,
+    plannedEndDate: p.plannedEndDate ? p.plannedEndDate.toISOString() : null,
+    progress: p.progress ?? 0,
+    status: (p.status ?? 'ACTIVE') as ProjectStatus,
+    archived: Boolean(p.archived),
   };
 }

@@ -20,6 +20,8 @@ const activityLogSchema = new Schema(
       default: [],
     },
     reason: { type: String, default: null },
+    /** Structured context, e.g. `{ role, recordType, permission }` for access rule changes. */
+    meta: { type: Schema.Types.Mixed, default: null },
     at: { type: Date, default: () => new Date() },
   },
   { strict: 'throw', collection: 'activityLogs', versionKey: false },
