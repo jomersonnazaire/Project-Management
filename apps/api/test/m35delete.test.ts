@@ -219,7 +219,7 @@ describe('Delete a phase', () => {
         .delete(`${base(w)}/phases?name=${encodeURIComponent(phase)}`)
         .set(CSRF);
       expect(blocked.body.error.code).toBe('PHASE_HAS_DOCUMENTS');
-      await DocumentModel.deleteOne({ _id: sample._id });
+      await DocumentModel.deleteOne({ _id: (sample as unknown as { _id: string })._id });
     }
     expect(
       (await w.member.agent.delete(`${base(w)}/phases?name=${encodeURIComponent(phase)}`).set(CSRF))

@@ -50,3 +50,4 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.6.6 | 2026-10-09 | FR-CAL-05 Working days setting with at-least-one-day guard; FR-CAL-02 uses it. |
 | v0.6.7 | 2026-10-09 | Doc 12 aligned with M3 build calls: Holidays tab, 90-day notifications label, PMs read-only on others' conversations; Defender pending. |
 | v0.6.8 | 2026-10-09 | M3 done: phase folders unrestrictable, official holidays loading + later proclamations, Members delete own time (doc 11 §6). |
+| v0.6.9 | 2026-10-09 | My tasks: Today (planned/aging) and Due tabs, FR-TSK-22 to 25, AC-TODAY-2 to 5. |

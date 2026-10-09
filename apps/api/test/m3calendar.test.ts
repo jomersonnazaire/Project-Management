@@ -45,7 +45,7 @@ async function setDays(agent: Agent, days: number[]) {
   return agent.put('/api/v1/settings/working-days').set(CSRF).send({ days, version });
 }
 
-describe('TC-N16 / AC-TODAY-1: Today uses the Philippine date', () => {
+describe('TC-N16 / AC-TODAY-1 (rerun on Due, TC-N22): Due uses the Philippine date', () => {
   it('at 00:30 Manila (16:30 UTC the day before) due-today and overdue tasks show, overdue first', async () => {
     const w = await world(app);
     const tasks = (await w.pm.agent.get(`/api/v1/projects/${w.project.id}/tasks`)).body.items;
@@ -65,16 +65,16 @@ describe('TC-N16 / AC-TODAY-1: Today uses the Philippine date', () => {
     );
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-08T16:30:00Z'));
-    const res = await w.member.agent.get('/api/v1/tasks/mine?view=today');
+    const res = await w.member.agent.get('/api/v1/tasks/mine?view=due');
     expect(res.status).toBe(200);
     expect(res.body.today).toBe('2026-10-09');
-    expect(res.body.counts.today).toBe(2);
+    expect(res.body.counts.due).toBe(2);
     expect(res.body.items.map((t: { id: string }) => t.id)).toEqual([tasks[1].id, tasks[0].id]);
     expect(res.body.items[0]).toMatchObject({ overdue: true, daysLate: 1 });
     expect(res.body.items[1].overdue).toBe(false);
     // One minute before midnight Manila it's still Oct 8 there: only the Oct 8 task is "today".
     vi.setSystemTime(new Date('2026-10-08T15:59:00Z'));
-    const before = (await w.member.agent.get('/api/v1/tasks/mine?view=today')).body;
+    const before = (await w.member.agent.get('/api/v1/tasks/mine?view=due')).body;
     expect(before.today).toBe('2026-10-08');
     expect(before.items.map((t: { id: string }) => t.id)).toEqual([tasks[1].id]);
   });

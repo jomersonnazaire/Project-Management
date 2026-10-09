@@ -202,3 +202,42 @@ describe('M3.5 task and phase delete messages', () => {
     expect(phaseDeleteBlockedReason(1, 4)).toBe('This phase has 1 task; delete or move it first.');
   });
 });
+
+describe('My tasks › Today (FR-TSK-23/24, TC-N26, TC-N29, TC-N30)', () => {
+  it('age badge: 2 no colour, 3 amber, 6 amber, 7 red', async () => {
+    const { ageTone, ageLabel } = await import('../src/index.js');
+    expect([2, 3, 6, 7].map(ageTone)).toEqual(['none', 'amber', 'amber', 'red']);
+    expect(ageLabel(1)).toBe('1 working day');
+    expect(ageLabel(3)).toBe('3 working days');
+  });
+
+  it('working days since planned start skip weekends and holidays, never negative', async () => {
+    const { workingDaysSince, DEFAULT_CALENDAR } = await import('../src/index.js');
+    const d = (s: string) => new Date(`${s}T00:00:00Z`);
+    expect(workingDaysSince(d('2026-10-05'), d('2026-10-08'))).toBe(3);
+    expect(
+      workingDaysSince(d('2026-10-05'), d('2026-10-08'), {
+        ...DEFAULT_CALENDAR,
+        holidays: { '2026-10-07': 'REGULAR' },
+      }),
+    ).toBe(2);
+    expect(workingDaysSince(d('2026-10-03'), d('2026-10-05'))).toBe(1);
+    expect(workingDaysSince(d('2026-10-08'), d('2026-10-08'))).toBe(0);
+    expect(workingDaysSince(d('2026-10-09'), d('2026-10-08'))).toBe(0);
+  });
+
+  it('each task is in one section at most', async () => {
+    const { todaySection } = await import('../src/index.js');
+    const d = (s: string) => new Date(`${s}T00:00:00Z`);
+    const today = d('2026-10-08');
+    const t = (status: 'TODO' | 'IN_PROGRESS' | 'BLOCKED', start: string, due: string) =>
+      todaySection({ status, plannedStart: d(start), dueDate: d(due) }, today);
+    expect(t('TODO', '2026-10-05', '2026-10-13')).toBe('AGING');
+    expect(t('IN_PROGRESS', '2026-10-05', '2026-10-13')).toBe('PLANNED');
+    expect(t('IN_PROGRESS', '2026-10-01', '2026-10-07')).toBe('AGING');
+    expect(t('BLOCKED', '2026-10-05', '2026-10-13')).toBe('PLANNED');
+    expect(t('TODO', '2026-10-08', '2026-10-08')).toBe('PLANNED');
+    expect(t('TODO', '2026-10-09', '2026-10-13')).toBeNull();
+    expect(todaySection({ status: 'TODO', plannedStart: null, dueDate: today }, today)).toBeNull();
+  });
+});

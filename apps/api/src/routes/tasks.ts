@@ -14,6 +14,8 @@ import {
   rejectTaskSchema,
   phaseDeleteBlockedReason,
   taskDeleteBlockedReason,
+  todaySection,
+  workingDaysSince,
   taskStatusSchema,
   taskVersionSchema,
   todayPH,
@@ -49,6 +51,7 @@ import {
   type Task,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { loadCalendar } from '../services/calendar.js';
 import { taskRecordCounts } from '../services/taskRecords.js';
 import { notify } from '../services/notify.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
@@ -697,9 +700,14 @@ export function tasksRouter(registry: RouteRegistry) {
       ...projectScopeFilter(user),
       archived: { $ne: true },
     })
-      .select('name managerId memberIds')
+      .select('name managerId memberIds status')
       .lean();
     const projectIds = projects.map((p) => p._id);
+    // FR-TSK-25: tasks on On Hold projects are hidden from Today and Due.
+    const onHold = new Set(
+      projects.filter((p) => p.status === 'ON_HOLD').map((p) => p._id.toString()),
+    );
+    const active = (t: TaskDoc) => !onHold.has(t.projectId.toString());
     const managed = projects
       .filter((p) =>
         user.systemRole === 'ADMIN'
@@ -721,11 +729,21 @@ export function tasksRouter(registry: RouteRegistry) {
       t.status === 'FOR_REVIEW' &&
       (Boolean(t.approval?.reviewerId?.equals(user._id)) ||
         managed.some((id) => id.equals(t.projectId)));
-    // FR-TSK-20/21: Today = my open tasks overdue or due on today's PHILIPPINE date.
-    const isToday = (t: TaskDoc) =>
-      isMine(user, t) && isOpen(t) && Boolean(t.dueDate) && t.dueDate! <= today;
+    // FR-TSK-20/21/22: Due = my open tasks overdue or due on today's PHILIPPINE date.
+    const isDue = (t: TaskDoc) =>
+      isMine(user, t) && isOpen(t) && active(t) && Boolean(t.dueDate) && t.dueDate! <= today;
+    // FR-TSK-23: Today = Aging + Planned for today, from plannedStart and the due date.
+    const sectionOf = (t: TaskDoc) =>
+      isMine(user, t) && isOpen(t) && active(t)
+        ? todaySection(
+            { status: t.status as TaskStatus, plannedStart: t.plannedStart, dueDate: t.dueDate },
+            today,
+          )
+        : null;
+    const isToday = (t: TaskDoc) => sectionOf(t) !== null;
     const counts = {
       today: all.filter(isToday).length,
+      due: all.filter(isDue).length,
       overdue: all.filter(
         (t) =>
           isMine(user, t) &&
@@ -744,6 +762,9 @@ export function tasksRouter(registry: RouteRegistry) {
       case 'today':
         list = all.filter(isToday);
         break;
+      case 'due':
+        list = all.filter(isDue);
+        break;
       case 'accountable':
         list = all.filter((t) => Boolean(t.ownerId?.equals(user._id)) && isOpen(t));
         break;
@@ -761,9 +782,12 @@ export function tasksRouter(registry: RouteRegistry) {
       list = list.filter((t) => re.test(t.name));
     }
     const names = new Map(projects.map((p) => [p._id.toString(), p.name]));
+    // FR-TSK-24: age in working days (Working days setting + holidays).
+    const calendar = q.view === 'today' ? await loadCalendar() : null;
     const items: MyTaskDto[] = list.map((t) => {
       const status = t.status as TaskStatus;
       const overdue = isOverdue({ status, dueDate: t.dueDate }, today);
+      const section = q.view === 'today' ? sectionOf(t) : null;
       return {
         id: t._id.toString(),
         name: t.name,
@@ -781,15 +805,31 @@ export function tasksRouter(registry: RouteRegistry) {
         actualHours: t.actualHours ?? 0,
         status,
         party: t.party as MyTaskDto['party'],
+        plannedStart: dateOrNull(t.plannedStart),
+        section,
+        ageDays:
+          section && t.plannedStart && calendar
+            ? workingDaysSince(t.plannedStart, today, calendar)
+            : null,
       };
     });
-    // Overdue first (most days late first), then by due date (undated last).
-    items.sort((a, b) => {
-      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
-      if (a.overdue && b.overdue && a.daysLate !== b.daysLate) return b.daysLate - a.daysLate;
-      if (!a.dueDate || !b.dueDate) return a.dueDate ? -1 : b.dueDate ? 1 : 0;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
+    if (q.view === 'today') {
+      // Planned for today by planned start; Aging oldest first (earliest planned start).
+      items.sort((a, b) => {
+        if (a.section !== b.section) return a.section === 'PLANNED' ? -1 : 1;
+        if (a.section === 'AGING' && (a.ageDays ?? 0) !== (b.ageDays ?? 0)) {
+          return (b.ageDays ?? 0) - (a.ageDays ?? 0);
+        }
+        return (a.plannedStart ?? '').localeCompare(b.plannedStart ?? '');
+      });
+    } else
+      // Overdue first (most days late first), then by due date (undated last).
+      items.sort((a, b) => {
+        if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+        if (a.overdue && b.overdue && a.daysLate !== b.daysLate) return b.daysLate - a.daysLate;
+        if (!a.dueDate || !b.dueDate) return a.dueDate ? -1 : b.dueDate ? 1 : 0;
+        return a.dueDate.localeCompare(b.dueDate);
+      });
     const h = await HolidayModel.findOne({ date: today }).select('name type').lean();
     res.json({
       items,

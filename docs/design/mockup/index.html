@@ -118,7 +118,8 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#issues" data-p="issues">⚑ Project issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
 <a href="#allissues" data-p="allissues">⚑ All issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
 <a href="#issue" data-p="issue">⚑ Issue detail <span class="pill info" style="margin-left:auto">M3.5</span></a>
-<a href="#today" data-p="today">☀ My tasks · Today <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#today" data-p="today">⏰ My tasks · Due <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#plan" data-p="plan">☀ My tasks · Today (plan) <span class="pill info" style="margin-left:auto">M3.5</span></a>
 <a href="#holidays" data-p="holidays">📅 Holidays <span class="pill info" style="margin-left:auto">M3</span></a>
 <a href="#notif" data-p="notif">🔔 Notifications <span class="pill info" style="margin-left:auto">M3</span></a>
 <a href="#pcontacts" data-p="pcontacts">☏ Project contacts <span class="pill info" style="margin-left:auto">M2</span></a>
@@ -138,7 +139,7 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#login" data-p="login">⎋ Login (sign out)</a>
 </aside>
 <main>
-<div class="banner">Mockup v0.7.4 (Sneat style) for review. All names and numbers are example data, not live data.</div>
+<div class="banner">Mockup v0.7.6 (Sneat style) for review. All names and numbers are example data, not live data.</div>
 
 <!-- DASHBOARD -->
 <section class="page" id="dash">
@@ -520,7 +521,7 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <!-- MY TASKS TODAY (M3) -->
 <section class="page" id="today">
 <header><h1>My tasks</h1><div class="search">Search my tasks…</div><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
-<div class="tabs"><span class="on">Today <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">This week</span><span>All open</span><span>Completed</span></div>
+<div class="tabs"><span onclick="location.hash='plan'">Today <span class="pill grey">5</span></span><span class="on">Due <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">This week</span><span>All open</span><span>Completed</span></div>
 <div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
 <div class="row" style="margin-bottom:8px"><b style="color:var(--ink)">Friday, Oct 9</b><span class="note">Philippine time</span></div>
 <h4 style="margin:10px 0 4px;color:var(--bad)">Overdue · 2</h4>
@@ -534,6 +535,25 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <p class="note">Open tasks assigned to you (owner or assignee). Overdue tasks are listed first. "Today" uses Philippine time, so it flips at midnight here, not in UTC. Done tasks drop off the list.</p></div>
 <div><div class="card"><h3>Empty state</h3><div class="empty" style="padding:16px">☀<br><b>Nothing due today</b><p class="note">You're clear for today. <a href="#mytasks">See this week</a></p></div></div>
 <div class="card" style="margin-top:16px"><h3>Holiday</h3><div class="lock" style="background:var(--blueb);color:#00586b">📅 Today is Bonifacio Day (regular holiday). New due dates skip today. Tasks already due today keep their date.</div></div></div></div>
+</section>
+<!-- MY TASKS TODAY / PLAN (M3.5) -->
+<section class="page" id="plan">
+<header><h1>My tasks</h1><div class="search">Search my tasks…</div><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
+<div class="tabs"><span class="on">Today <span class="pill grey">5</span></span><span onclick="location.hash='today'">Due <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">This week</span><span>All open</span><span>Completed</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:8px"><b style="color:var(--ink)">Friday, Oct 9</b><span class="note">Philippine time · by planned date</span></div>
+<h4 style="margin:10px 0 4px">Planned for today · 2</h4>
+<table><tr><th>Task</th><th>Planned</th><th>Due</th><th></th><th>Status</th><th></th></tr>
+<tr><td><a href="#checklist"><b>Prepare UAT scripts</b></a><div class="note">Northwind Upgrade · Phase 3</div></td><td>Oct 9</td><td>Oct 14</td><td></td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr><td><a href="#checklist"><b>Submit BP tax code mapping</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td>Oct 7 → Oct 9</td><td>Today</td><td></td><td><span class="pill info">In progress</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<h4 style="margin:16px 0 4px;color:var(--warn)">Aging · 3 <span class="note" style="font-weight:400">planned start has passed and the task is not started or past due · age in working days</span></h4>
+<table><tr><th>Task</th><th>Planned</th><th>Due</th><th>Age</th><th>Status</th><th></th></tr>
+<tr><td><a href="#checklist"><b>Client master data – Items</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td>Sep 29</td><td>Oct 3 · overdue</td><td><span class="pill bad">8 days</span></td><td><span class="pill bad">Blocked</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr><td><a href="#checklist"><b>Configure system &amp; validate</b></a><div class="note">SAP B1 Rollout · Phase 2</div></td><td>Oct 5</td><td>Oct 20</td><td><span class="pill warn">4 days</span></td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr><td><a href="#checklist"><b>Draft training outline</b></a><div class="note">Northwind Upgrade · Phase 4</div></td><td>Oct 8</td><td>Oct 23</td><td><span class="pill grey">1 day</span></td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<p class="note">Oldest first. Age badge turns amber at 3+ days and red at 7+ . Completed tasks drop off. A task can appear here and on the Due tab.</p></div>
+<div><div class="card"><h3>Rules (doc 12, FR-TSK-22 to 25)</h3><p class="note">Each task sits in one section. Aging: planned start passed and still Not started, or past due. Planned for today: any other open task with today between planned start and due, including work in progress. Blocked tasks show; On hold tasks are hidden. Age counts working days, so holidays and the Working days setting apply.</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">☀<br><b>Nothing planned for today</b><p class="note">No aging tasks either. <a href="#today">Check what's due</a></p></div></div></div></div>
 </section>
 <!-- HOLIDAYS (M3) -->
 <section class="page" id="holidays">

@@ -39,7 +39,11 @@
 ### 3.1b My tasks Today tab and working-day calendar (M3)
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-TSK-20 | My tasks gets a **Today** tab, first in order, with a count: open tasks assigned to me (owner or assignee) that are **overdue first** (red, with days late), then those **due today**. Each row has "Log time". Empty state: "Nothing due today". (Jomerson, Lean) | Must |
+| FR-TSK-20 | *(Superseded by FR-TSK-22 to 25: this tab is renamed **Due**.)* My tasks gets a **Today** tab, first in order, with a count: open tasks assigned to me (owner or assignee) that are **overdue first** (red, with days late), then those **due today**. Each row has "Log time". Empty state: "Nothing due today". (Jomerson, Lean) | Must |
+| FR-TSK-22 | My tasks tabs, in order: **Today** (planned work), **Due** (the former Today tab, by due date: overdue first in red, then due today), then This week, All open, Completed (Jomerson, Lean). | Must |
+| FR-TSK-23 | **Today tab** has two sections built from the existing `plannedStart` and due date, open tasks only (not Completed or Cancelled), owner or assignee is me. **Aging:** tasks whose planned start is before today and that are either still Not started or past their due date, oldest first, each with an age badge. **Planned for today:** every other open task where planned start ≤ today ≤ due date. Each task appears in only one section. | Must |
+| FR-TSK-24 | **Age** = working days since planned start (FR-CAL-02: Working days setting and holidays), shown as "N working days". Badge amber at 3 or more, red at 7 or more (Lean). | Must |
+| FR-TSK-25 | **Blocked** tasks show in both tabs with their Blocked badge; tasks on **On Hold** projects are hidden from both. All dates are Philippine time (FR-TSK-21). A task can appear in both Today and Due. | Must |
 | FR-TSK-21 | "Today" and "overdue" are always computed in **Philippine time (Asia/Manila, UTC+8)**, never server UTC; the tab is labelled "Philippine time" (Queen). | Must |
 | FR-CAL-01 | Admins manage a holiday list per year on its own **Admin › Holidays** tab, with Working days on the same page (Deven, accepted by Lean): date, name, type **Regular holiday / Special non-working day / Special working day**; duplicate dates refused; "Copy from previous year". | Must |
 | FR-CAL-05 | Admin › Settings has a **Working days** setting: one checkbox per weekday, Mon–Fri ticked by default (Jomerson). **At least one day must stay ticked** (UI and API, 422 otherwise), and the date calculation has a hard iteration limit so it can never loop (Queen). Changes only affect dates computed afterwards, are audited, and need Edit on `settings`. | Must |
@@ -48,6 +52,10 @@
 | FR-CAL-04 | Calendar changes are audited and limited to roles with Edit on `settings`. | Must |
 
 - **AC-TODAY-1** At 00:30 Philippine time (16:30 UTC the day before), a task due that Philippine date appears in Today; one due the previous date shows as overdue. **(API)**
+- **AC-TODAY-2** A task planned to start Monday, Not started, viewed Thursday shows in Aging with "3 working days"; the same task In progress and not yet due shows in Planned for today instead. **(API)**
+- **AC-TODAY-3** A task planned last week and past its due date shows in Aging on Today and as overdue on Due.
+- **AC-TODAY-4** With Wednesday a Regular holiday, the task above shows "2 working days" on Thursday.
+- **AC-TODAY-5** A Blocked task shows in both tabs; a task on an On Hold project shows in neither.
 - **AC-CAL-1** With a Special working day on Saturday, a 1-working-day offset from Friday lands on that Saturday. **(API)**
 - **AC-CAL-3** Unticking the last working day is refused in the UI ("Keep at least one working day.") and by the API (422). With Saturday ticked, a 1-working-day offset from Friday lands on Saturday. **(API)**
 - **AC-CAL-2** Adding a holiday on a date with 12 due tasks shows the count before saving and leaves those 12 due dates unchanged.
