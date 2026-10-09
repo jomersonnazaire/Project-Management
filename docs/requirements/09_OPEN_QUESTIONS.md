@@ -66,3 +66,8 @@ Document management questions Q-20 to Q-25 are in [10 §9](10_DOCUMENT_MANAGEMEN
 | Landing page after sign-in | My tasks until the Dashboard ships in Milestone 4 | AC-01.1 |
 | Invite and reset delivery | Single-use links copied by an Admin and shared by hand. Email is deferred | FR-AUTH-04, FR-AUTH-05, AC-02.6 |
 | Link expiry | 72 hours for invites, 24 hours for resets. **Proposed by Rich; change it if you prefer other values** | FR-AUTH-04, FR-AUTH-05 |
+| Password complexity | At least 8 characters, plus a number and a symbol (Jomerson) | FR-AUTH-02, AC-02.2 |
+| Absolute session cap | 12 hours (PR #1, accepted) | FR-AUTH-03, AC-01.5b |
+| Lockout response | Lock silently with the generic 401, not 423 (Lean) | FR-AUTH-07, AC-01.3 |
+| Invite and reset tokens | Sent in a POST body, not a GET path (Lean) | FR-AUTH-04, FR-AUTH-05 |
+| Rate limiter store | In memory with one pinned instance for now; shared store before scale-out is tech debt TD-01 (Lean) | NFR-05 |

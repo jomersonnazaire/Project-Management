@@ -67,7 +67,7 @@ List endpoints support pagination (`page`, `pageSize` ≤ 100), sorting, and fil
 - NFR-02 Session via httpOnly, Secure, SameSite=Lax cookie (or short-lived JWT + refresh in httpOnly cookie). No tokens in localStorage.
 - NFR-03 CSRF protection for cookie-based auth; CORS limited to the app origin.
 - NFR-04 Input validation on every endpoint; reject unknown fields; protect against NoSQL operator injection (`$` keys).
-- NFR-05 Rate-limit sign-in and password-reset endpoints per IP (suggested: 20 attempts per 15 minutes, returning 429), in addition to the per-account lockout in FR-AUTH-07.
+- NFR-05 Rate-limit sign-in and password-reset endpoints per IP (suggested: 20 attempts per 15 minutes, returning 429), in addition to the per-account lockout in FR-AUTH-07. **Phase 1:** the limiter is in memory, so the App Service is pinned to one instance. **Tech debt (TD-01):** move the limiter and lockout counters to a shared store (for example MongoDB or Redis) before scaling out to more than one instance.
 - NFR-06 Evidence files: type and size checks, randomized storage keys, downloads only via authorized signed URLs.
 - NFR-07 Secrets in environment variables / secret manager; nothing secret in the React bundle.
 - NFR-08 HTTPS only; security headers (Helmet).

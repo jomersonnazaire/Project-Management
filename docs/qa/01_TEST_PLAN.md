@@ -1,6 +1,6 @@
 # 01 · Phase 1 Test Plan
 
-**Project:** AI-Powered Implementation Project Tracker · **Version:** v0.1.3 (2026-10-09) · **Owner:** Queen The QA
+**Project:** AI-Powered Implementation Project Tracker · **Version:** v0.1.4 (2026-10-09) · **Owner:** Queen The QA
 **Based on:** Requirements v0.3.3 (`docs/requirements`), Mockup v0.4.1 (Sneat theme, `docs/design/THEME_TOKENS.md`) (`docs/design/mockup`)
 
 ## 1. Objective
@@ -90,3 +90,5 @@ These need a decision from Rich/Lean before the matching tests can be finalized:
 **Changed 2026-10-09 (Jomerson via Deven):** the password minimum is 8 characters (TC-A13). Sign-in lands on My tasks until Milestone 4 (TC-A01). Invite and reset links are shared by hand because email is deferred (TC-A14). E-signature is deferred indefinitely and stays out of scope.
 
 **Changed for requirements v0.3.3:** invite links expire after 72 h and reset links after 24 h, and a new link cancels any earlier unused one (TC-A14).
+
+**Changed for PR #1:** passwords now also need a number and a symbol (TC-A13). There is a new 12 h absolute session cap (TC-A15), tracing to AC-01.5b in requirements v0.3.4.

@@ -1,6 +1,6 @@
 # Phase 1 Requirements: AI-Powered Implementation Project Tracker
 
-**Status:** v0.3.3, approved by Jomerson for the Phase 1 build (2026-10-09) · **Author:** Rich (Research & Requirements) · **Date:** 2026-10-09
+**Status:** v0.3.5, approved by Jomerson for the Phase 1 build (2026-10-09) · **Author:** Rich (Research & Requirements) · **Date:** 2026-10-09
 **Sources:** Product blueprint PDF ("AI-Powered Implementation Project Tracker"), UI mockup v0.4 by UIE, Sneat style (incl. Documents, Login, My tasks, Admin, Template editor, dialogs, empty/error states), competitor research.
 
 | # | Document | Primary reader |
@@ -29,3 +29,5 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.3.1 | 2026-10-09 | Added Lean's decisions on QA's questions: health rule, On Hold blocks time logging, 25 MiB = 26,214,400 bytes, 30-minute idle timeout, per-account lockout plus per-IP rate limit. Added the Sneat UI theme and contrast rule to 07. |
 | v0.3.2 | 2026-10-09 | Jomerson approved Phase 1. 07 updated: Node.js 22 LTS (Azure has no Node 20), plus the hosting setup (Vercel, Azure App Service, MongoDB Atlas, Azure Blob `project-documents`). |
 | v0.3.3 | 2026-10-09 | Milestone 1 decisions: 8-character password minimum; sign-in lands on My tasks until Milestone 4; invite and reset links are single-use and shared by hand (72 hours and 24 hours), with emailed reset deferred. |
+| v0.3.4 | 2026-10-09 | PR #1 deviations accepted: passwords need a number and a symbol, and sessions have a 12-hour absolute cap. |
+| v0.3.5 | 2026-10-09 | Lean's calls on QA findings: silent lockout (AC-01.3), invite and reset tokens in a POST body, rate limiter tech debt TD-01. |
