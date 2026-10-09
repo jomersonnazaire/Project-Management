@@ -41,7 +41,6 @@ import {
   DocumentModel,
   FolderModel,
   HolidayModel,
-  TimeEntryModel,
   ProjectModel,
   TaskModel,
   TeamModel,

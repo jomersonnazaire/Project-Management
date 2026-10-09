@@ -30,7 +30,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
     (row.edit ? 'E' : '') +
     (row.delete ? 'D' : '');
 
-  it('has the 14 record types of §3 plus M3 conversations and notifications, in order', () => {
+  it('has the 14 record types of §3 plus M3 conversations and notifications and M3.5 issues, in order', () => {
     expect(RECORD_TYPE_KEYS).toEqual([
       'users',
       'teams',
@@ -44,6 +44,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       'approvals',
       'time',
       'documents',
+      'issues',
       'conversations',
       'notifications',
       'reports',
@@ -65,6 +66,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       approvals: ['E', 'E', 'E', ''],
       time: ['VCED', 'VCED', 'VCED', ''],
       documents: ['VCED', 'VCED', 'VC', 'V'],
+      issues: ['VCED', 'VCE', 'VCE', 'V'],
       conversations: ['VC', 'VC', 'VC', 'V'],
       notifications: ['V', 'V', 'V', 'V'],
       reports: ['V', 'V', 'V', 'V'],
@@ -180,5 +182,23 @@ describe('schemas (NFR-04)', () => {
     expect(inviteTokenSchema.safeParse({ token: 'short' }).success).toBe(false);
     expect(inviteTokenSchema.safeParse({ token: { $ne: null } }).success).toBe(false);
     expect(inviteTokenSchema.safeParse({ token, password: 'x' }).success).toBe(false);
+  });
+});
+
+describe('M3.5 task and phase delete messages', () => {
+  it('says what blocks it, in plain words', async () => {
+    const { taskDeleteBlockedReason, phaseDeleteBlockedReason } = await import('../src/index.js');
+    expect(taskDeleteBlockedReason({})).toBeNull();
+    expect(taskDeleteBlockedReason({ timeEntries: 3 })).toBe(
+      'This task has 3 time entries; remove them first.',
+    );
+    expect(taskDeleteBlockedReason({ followUps: 1 })).toBe(
+      'This task has 1 follow-up; remove it first.',
+    );
+    expect(taskDeleteBlockedReason({ timeEntries: 1, comments: 2, issues: 1 })).toBe(
+      'This task has 1 time entry, 2 comments and 1 linked issue; remove them first.',
+    );
+    expect(phaseDeleteBlockedReason(0, 0)).toBeNull();
+    expect(phaseDeleteBlockedReason(1, 4)).toBe('This phase has 1 task; delete or move it first.');
   });
 });
