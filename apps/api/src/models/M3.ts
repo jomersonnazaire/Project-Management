@@ -1,5 +1,7 @@
 import {
+  DOCUMENT_STATES,
   DOCUMENT_STATUSES,
+  PARTY_KINDS,
   FILE_KINDS,
   HOLIDAY_TYPES,
   MESSAGE_TYPES,
@@ -68,12 +70,24 @@ const folderSchema = new Schema(
     /** For PHASE folders: the task phase they hold evidence for (FR-DOC-17). */
     phase: { type: String, default: null },
     order: { type: Number, default: 0 },
+    /** FR-DOC-43: visible only to the PM, Admins and `allowedUserIds` (sub-folders inherit it). */
+    restricted: { type: Boolean, default: false },
+    allowedUserIds: { type: [ObjectId], ref: 'User', default: [] },
   },
   { timestamps: true, strict: 'throw', collection: 'folders', versionKey: false },
 );
 folderSchema.index({ projectId: 1, parentId: 1, nameKey: 1 }, { unique: true });
 export type Folder = InferSchemaType<typeof folderSchema>;
 export const FolderModel = model('Folder', folderSchema);
+
+/** A user or a client contact (FR-DOC-10 requested-from, FR-DOC-25 signer). */
+const partySchema = new Schema(
+  {
+    kind: { type: String, enum: PARTY_KINDS, required: true },
+    id: { type: ObjectId, required: true },
+  },
+  { _id: false },
+);
 
 /** Documents and their versions (FR-DOC-10..33). Versions are never deleted (FR-DOC-32). */
 const versionSchema = new Schema(
@@ -88,6 +102,8 @@ const versionSchema = new Schema(
     uploadedBy: { type: ObjectId, ref: 'User' },
     uploadedAt: { type: Date, default: () => new Date() },
     note: { type: String, default: null },
+    /** FR-DOC-25: signed by this client contact; `uploadedBy` recorded it. */
+    signedBy: { type: partySchema, default: null },
   },
   { _id: false },
 );
@@ -97,8 +113,22 @@ const documentSchema = new Schema(
     folderId: { type: ObjectId, ref: 'Folder', required: true, index: true },
     name: { type: String, required: true, trim: true, maxlength: 200 },
     nameKey: { type: String, required: true },
-    kind: { type: String, enum: FILE_KINDS, required: true },
-    status: { type: String, enum: DOCUMENT_STATUSES, default: 'SUBMITTED' },
+    /** null until a Requested document gets its first file. */
+    kind: { type: String, enum: FILE_KINDS, default: null },
+    status: { type: String, enum: DOCUMENT_STATES, default: 'SUBMITTED' },
+    /** FR-DOC-20/22: documents that don't need a signature are complete at Submitted. */
+    requiresSignature: { type: Boolean, default: false },
+    /** Request a document (FR-DOC-20); null for direct uploads. */
+    requestedBy: { type: ObjectId, ref: 'User', default: null },
+    requestedFrom: { type: partySchema, default: null },
+    dueDate: { type: Date, default: null },
+    cancelled: {
+      type: new Schema(
+        { by: { type: ObjectId, ref: 'User' }, at: Date, reason: String },
+        { _id: false },
+      ),
+      default: null,
+    },
     signedVersion: { type: Number, default: null },
     taskId: { type: ObjectId, ref: 'Task', default: null, index: true },
     source: { type: String, enum: ['DOCUMENT', 'EVIDENCE'], default: 'DOCUMENT' },
@@ -112,6 +142,7 @@ const documentSchema = new Schema(
             at: { type: Date, default: () => new Date() },
             version: { type: Number, default: null },
             note: { type: String, default: null },
+            onBehalfOf: { type: partySchema, default: null },
           },
           { _id: false },
         ),
@@ -125,6 +156,8 @@ const documentSchema = new Schema(
   { timestamps: true, strict: 'throw', collection: 'documents', versionKey: false },
 );
 documentSchema.index({ projectId: 1, folderId: 1, nameKey: 1 });
+documentSchema.index({ 'requestedFrom.id': 1, status: 1, dueDate: 1 });
+documentSchema.index({ status: 1, dueDate: 1 });
 export type DocumentRec = InferSchemaType<typeof documentSchema>;
 export const DocumentModel = model('Document', documentSchema);
 
@@ -145,6 +178,10 @@ const uploadSchema = new Schema(
     status: { type: String, enum: ['SUBMITTED', 'SIGNED'], default: 'SUBMITTED' },
     onDuplicate: { type: String, enum: ['NEW_VERSION', 'KEEP_BOTH'], default: 'NEW_VERSION' },
     note: { type: String, default: null },
+    /** FR-DOC-21: the Requested document this file fulfils. */
+    fulfilsDocumentId: { type: ObjectId, ref: 'Document', default: null },
+    /** FR-DOC-25: client contact who signed the uploaded copy. */
+    signedByContactId: { type: ObjectId, ref: 'ClientContact', default: null },
     state: { type: String, enum: ['PENDING', 'DONE', 'REJECTED'], default: 'PENDING' },
     rejectReason: { type: String, default: null },
     documentId: { type: ObjectId, ref: 'Document', default: null },

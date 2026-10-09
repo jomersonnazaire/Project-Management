@@ -3,6 +3,8 @@ import {
   KEEP_ONE_WORKING_DAY,
   OPEN_TASK_STATUSES,
   copyHolidaysSchema,
+  officialHolidaysSchema,
+  PH_OFFICIAL_HOLIDAYS,
   holidaySchema,
   parseDateOnly,
   toDateOnly,
@@ -26,6 +28,7 @@ import {
   TaskModel,
   type Holiday,
 } from '../models/index.js';
+import { loadOfficialHolidays } from '../services/officialHolidays.js';
 import { audit } from '../services/audit.js';
 import { CALENDAR_KEY, workingDaysSetting } from '../services/calendar.js';
 
@@ -268,6 +271,26 @@ export function settingsRouter(registry: RouteRegistry) {
       meta: { fromYear: input.fromYear, toYear: input.toYear, copied, skipped },
     });
     res.json({ copied, skipped });
+  });
+
+  // Seed data: the official Philippine holidays for 2026 and 2027 (types per the proclamations).
+  r.post('/holidays/official', perm('settings', 'edit'), async (req, res) => {
+    const { year } = parseBody(officialHolidaysSchema, req);
+    if (!PH_OFFICIAL_HOLIDAYS[year]) {
+      throw unprocessable(
+        `There's no official holiday list for ${year} yet. Add the holidays one by one.`,
+        'NO_OFFICIAL_LIST',
+      );
+    }
+    const result = await loadOfficialHolidays(year);
+    await audit({
+      actorId: currentUser(req)._id,
+      entityType: 'settings',
+      entityId: SETTINGS_ENTITY,
+      action: 'holidays_loaded',
+      meta: { year, ...result },
+    });
+    res.json(result);
   });
 
   return r.router;

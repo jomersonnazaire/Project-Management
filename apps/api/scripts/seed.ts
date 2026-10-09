@@ -12,6 +12,7 @@
  * Re-running the script updates the same records (matched by email / name); it never duplicates.
  */
 import {
+  OFFICIAL_HOLIDAY_YEARS,
   isPasswordValid,
   parseDateOnly,
   PASSWORD_POLICY_MESSAGE,
@@ -32,6 +33,7 @@ import {
 import { LAUNCH_TEMPLATE_KEY, ensureLaunchTemplate } from '../src/services/launchTemplate.js';
 import { buildPlanTasks, recomputeProject } from '../src/services/projectService.js';
 import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
+import { loadOfficialHolidays } from '../src/services/officialHolidays.js';
 import { hashPassword } from '../src/services/passwords.js';
 import { newToken, sha256 } from '../src/services/tokens.js';
 
@@ -302,6 +304,11 @@ async function main() {
       await recomputeProject(projectId);
       console.log(`Sample project created: ${sample.name}`);
     }
+  }
+
+  for (const year of OFFICIAL_HOLIDAY_YEARS) {
+    const r = await loadOfficialHolidays(year);
+    console.log(`Philippine holidays ${year}: ${r.added} added, ${r.skipped} already there`);
   }
 
   const counts = {

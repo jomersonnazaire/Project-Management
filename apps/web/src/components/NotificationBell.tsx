@@ -1,4 +1,4 @@
-import { NOTIFICATION_VERBS, shortName } from '@xc8/shared';
+import { NOTIFICATION_LIST_NOTE, NOTIFICATION_VERBS, shortName } from '@xc8/shared';
 import { useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
@@ -95,9 +95,7 @@ export function NotificationBell() {
           </ul>
         )}
         {items.length > 0 && (
-          <p className="small text-body-secondary text-center my-2">
-            Showing your latest notifications
-          </p>
+          <p className="small text-body-secondary text-center my-2">{NOTIFICATION_LIST_NOTE}</p>
         )}
       </Dropdown.Menu>
     </Dropdown>

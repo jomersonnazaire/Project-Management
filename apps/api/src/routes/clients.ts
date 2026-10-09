@@ -18,6 +18,7 @@ import { currentUser } from '../middleware/auth.js';
 import {
   ClientContactModel,
   ClientModel,
+  DocumentModel,
   ProjectModel,
   TaskModel,
   type Client,
@@ -86,9 +87,22 @@ async function withProjects(req: Request, contacts: ContactDto[]): Promise<Conta
   })
     .select('clientContactId dueDate')
     .lean();
+  // FR-DOC-26 / AC-26.4: open document requests from the contact count as pending items too.
+  const requests = await DocumentModel.find({
+    'requestedFrom.kind': 'CONTACT',
+    'requestedFrom.id': { $in: ids },
+    status: 'REQUESTED',
+    archived: { $ne: true },
+    ...(scoped ? { projectId: { $in: scoped } } : {}),
+  })
+    .select('requestedFrom dueDate')
+    .lean();
   const today = todayPH();
   return contacts.map((c) => {
-    const mine = tasks.filter((t) => t.clientContactId?.toString() === c.id);
+    const mine = [
+      ...tasks,
+      ...requests.map((d) => ({ clientContactId: d.requestedFrom?.id, dueDate: d.dueDate })),
+    ].filter((t) => t.clientContactId?.toString() === c.id);
     return {
       ...c,
       projects: projects

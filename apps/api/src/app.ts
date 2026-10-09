@@ -29,6 +29,7 @@ import { teamsRouter } from './routes/teams.js';
 import { templatesRouter } from './routes/templates.js';
 import { usersRouter } from './routes/users.js';
 import { conversationsRouter } from './routes/conversations.js';
+import { documentRequestsRouter } from './routes/documentRequests.js';
 import { documentsRouter } from './routes/documents.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { settingsRouter } from './routes/settings.js';
@@ -121,6 +122,7 @@ export function createApp(
     settingsRouter(registry),
     ...timeRouter(registry),
     ...documentsRouter(config, registry, blobStore),
+    documentRequestsRouter(registry),
     notificationsRouter(registry),
     conversationsRouter(registry),
     ...(extraRoutes ? [extraRoutes(registry)] : []),

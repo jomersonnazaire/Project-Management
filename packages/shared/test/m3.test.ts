@@ -139,7 +139,12 @@ describe('Upload name and size rules (FR-EVD-01..03, FR-DOC-13)', () => {
     expect(big).toMatchObject({ status: 413, code: 'FILE_TOO_LARGE' });
     expect(
       checkFileRules({ name: 'Big_Export.xlsx', size: 31 * 1_048_576 }, 'EVIDENCE')?.message,
-    ).toBe('Big_Export.xlsx is 31 MB. The limit is 25 MB.');
+    ).toBe('Big_Export.xlsx is 31 MB, larger than the 25 MB limit.');
+    // DEF-004: one byte over must not read "25 MB. The limit is 25 MB."
+    expect(big?.message).toBe('Big_Export.xlsx is larger than 25 MB, the limit per file.');
+    expect(checkFileRules({ name: 'b.pdf', size: 25.6 * 1_048_576 }, 'DOCUMENT')?.message).toBe(
+      'b.pdf is 26 MB, larger than the 25 MB limit.',
+    );
     expect(checkFileRules({ name: 'a.pdf', size: 0 }, 'EVIDENCE')?.code).toBe('EMPTY_FILE');
   });
 });

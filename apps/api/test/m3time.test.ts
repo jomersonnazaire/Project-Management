@@ -112,6 +112,13 @@ describe('FR-TIME-04/06: weekly lock and own entries', () => {
     expect((await TaskModel.findById(t1).lean())!.actualHours).toBe(3);
     // Members have no Delete on time entries in the default grid (VCE); PMs delete their own.
     expect((await w.member.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(403);
+    // DEF-005: anyone else (an outsider, another PM) gets 404 for someone else's entry, not 403.
+    expect((await w.outsider.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(404);
+    expect((await w.pm2.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(404);
+    expect((await w.pm.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(404);
+    expect((await w.member.agent.delete(`/api/v1/time/${'0'.repeat(24)}`).set(CSRF)).status).toBe(
+      404,
+    );
     const mine = (await log(w.pm.agent, t1, '2026-10-13', 1)).body.entry;
     expect((await TaskModel.findById(t1).lean())!.actualHours).toBe(4);
     expect((await w.pm.agent.delete(`/api/v1/time/${mine.id}`).set(CSRF)).status).toBe(204);

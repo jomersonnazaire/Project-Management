@@ -2,9 +2,11 @@ import { HOLIDAY_BANNER_NOTE, HOLIDAY_TYPE_LABELS, type MyTaskDto } from '@xc8/s
 import { useState } from 'react';
 import { Button, Form, Nav } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { useTimeWeek } from '../api/m3Hooks';
+import { useDocumentRequests, useTimeWeek } from '../api/m3Hooks';
+import { DocumentRequestList } from '../components/DocumentRequestList';
 import { useMyTasks } from '../api/projectHooks';
 import { useAuth } from '../auth/AuthContext';
+import { useCan } from '../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../components/Feedback';
 import { LogTimeModal } from '../components/LogTimeModal';
 import { PageHeader } from '../components/PageHeader';
@@ -121,6 +123,8 @@ export function MyTasksPage() {
   const [q, setQ] = useState('');
   const [logging, setLogging] = useState<MyTaskDto | null>(null);
   const mine = useMyTasks(view, q || undefined);
+  // FR-DOC-26: documents requested from me (overdue ones in red), shown with the Today tab.
+  const requests = useDocumentRequests('mine', useCan('documents', 'view'));
   const week = useTimeWeek();
   const counts = mine.data?.counts;
   const items = mine.data?.items ?? [];
@@ -192,7 +196,22 @@ export function MyTasksPage() {
           {mine.isPending ? (
             <LoadingRows />
           ) : view === 'today' ? (
-            <TodayList items={items} today={mine.data?.today ?? ''} onLog={setLogging} />
+            <>
+              <TodayList items={items} today={mine.data?.today ?? ''} onLog={setLogging} />
+              {(requests.data?.items.length ?? 0) > 0 && (
+                <section className="mt-5" aria-labelledby="requested-from-you">
+                  <h3 className="h6 mb-3" id="requested-from-you">
+                    Documents requested from you
+                    {(requests.data?.overdue ?? 0) > 0 && (
+                      <span className="badge bg-label-danger ms-2">
+                        {requests.data?.overdue} overdue
+                      </span>
+                    )}
+                  </h3>
+                  <DocumentRequestList items={requests.data!.items} showContact={false} />
+                </section>
+              )}
+            </>
           ) : items.length === 0 ? (
             <EmptyState icon="bx-check" title="You're all caught up">
               {q ? 'No tasks match your search.' : 'No tasks here right now.'}

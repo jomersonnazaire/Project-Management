@@ -1,12 +1,16 @@
 import {
+  CLIENT_CONTACT_NOTICE,
   DOCUMENT_ACCEPT,
+  DOCUMENT_FILTER_STATES,
   DOCUMENT_STATUSES,
   DOCUMENT_STATUS_LABELS,
   DOCUMENT_TYPES_LABEL,
   checkFileRules,
   formatBytes,
+  partyLabel,
   shortName,
   type DocumentDto,
+  type DocumentState,
   type DocumentStatus,
   type FolderDto,
   type ProjectDto,
@@ -15,6 +19,7 @@ import {
 } from '@xc8/shared';
 import { useRef, useState, type FormEvent } from 'react';
 import { Button, Form, Modal, Nav, ProgressBar } from 'react-bootstrap';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
 import {
   completeUpload,
@@ -24,18 +29,24 @@ import {
   useDocumentMutation,
   useDocuments,
   useFolders,
+  useRequestParties,
 } from '../../api/m3Hooks';
 import { EmptyState, ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
 import { ReasonModal } from '../../components/ReasonModal';
 import { dateTime, shortDate } from '../../lib/format';
 import { FileChip } from './EvidenceSection';
+import { FolderAccessModal, RequestModal } from './DocumentRequestModals';
 
-const STATUS_BADGE: Record<DocumentStatus, string> = {
+const STATUS_BADGE: Record<DocumentState, string> = {
+  REQUESTED: 'bg-label-warning',
   SUBMITTED: 'bg-label-info',
   SIGNED: 'bg-label-success',
+  CANCELLED: 'bg-label-secondary',
 };
 
 const EVENT_LABELS: Record<string, string> = {
+  REQUESTED: 'Requested',
+  CANCELLED: 'Cancelled',
   SUBMITTED: 'Submitted',
   SIGNED: 'Signed',
   UPDATED: 'Updated',
@@ -50,6 +61,7 @@ function UploadModal({
   folderId,
   tasks,
   existing,
+  fulfils,
   onClose,
 }: {
   project: ProjectDto;
@@ -57,22 +69,32 @@ function UploadModal({
   folderId: string;
   tasks: TaskDto[];
   existing: DocumentDto[];
+  /** Pre-selected request (the document panel's "Upload file" on a Requested document). */
+  fulfils?: DocumentDto | null;
   onClose: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [form, setForm] = useState({
-    folderId,
+    folderId: fulfils?.folderId ?? folderId,
     status: 'SUBMITTED' as DocumentStatus,
     taskId: '',
     onDuplicate: 'NEW_VERSION' as 'NEW_VERSION' | 'KEEP_BOTH',
     note: '',
+    fulfilsDocumentId: fulfils?.id ?? '',
+    signedByContactId: '',
   });
+  // FR-DOC-21: any open request in the project can be fulfilled; FR-DOC-25: signed by a contact.
+  const requests = useDocuments(project.id, { status: 'REQUESTED' });
+  const parties = useRequestParties(project.id);
+  const openRequests = requests.data?.items ?? (fulfils ? [fulfils] : []);
+  const chosen = openRequests.find((d) => d.id === form.fulfilsDocumentId) ?? null;
   const [error, setError] = useState('');
   const [pct, setPct] = useState<number | null>(null);
   const [over, setOver] = useState(false);
   const dup =
     file &&
+    !form.fulfilsDocumentId &&
     existing.some(
       (d) => d.name.toLowerCase() === file.name.toLowerCase() && d.folderId === form.folderId,
     );
@@ -101,6 +123,10 @@ function UploadModal({
             onDuplicate: form.onDuplicate,
             taskId: form.taskId || null,
             ...(form.note.trim() ? { note: form.note.trim() } : {}),
+            ...(form.fulfilsDocumentId ? { fulfilsDocumentId: form.fulfilsDocumentId } : {}),
+            ...(form.status === 'SIGNED' && form.signedByContactId
+              ? { signedByContactId: form.signedByContactId }
+              : {}),
           },
         },
       );
@@ -186,7 +212,8 @@ function UploadModal({
             <Form.Group className="col-sm-6" controlId="doc-folder">
               <Form.Label>Folder</Form.Label>
               <Form.Select
-                value={form.folderId}
+                value={chosen ? chosen.folderId : form.folderId}
+                disabled={Boolean(chosen)}
                 onChange={(e) => setForm({ ...form, folderId: e.target.value })}
               >
                 {folders.map((f) => (
@@ -201,7 +228,13 @@ function UploadModal({
               <Form.Label>Status</Form.Label>
               <Form.Select
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as DocumentStatus })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    status: e.target.value as DocumentStatus,
+                    signedByContactId: '',
+                  })
+                }
               >
                 {DOCUMENT_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -210,6 +243,41 @@ function UploadModal({
                 ))}
               </Form.Select>
             </Form.Group>
+            <Form.Group className="col-12" controlId="doc-fulfils">
+              <Form.Label>Fulfils request</Form.Label>
+              <Form.Select
+                value={form.fulfilsDocumentId}
+                onChange={(e) => setForm({ ...form, fulfilsDocumentId: e.target.value })}
+              >
+                <option value="">None (a new document)</option>
+                {openRequests.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                    {d.request?.requestedFrom ? ` · ${d.request.requestedFrom.name}` : ''}
+                  </option>
+                ))}
+              </Form.Select>
+              {chosen && <Form.Text>The file is added to {chosen.name} as version 1.</Form.Text>}
+            </Form.Group>
+            {form.status === 'SIGNED' && (
+              <Form.Group className="col-12" controlId="doc-signed-by">
+                <Form.Label>Signed by</Form.Label>
+                <Form.Select
+                  value={form.signedByContactId}
+                  onChange={(e) => setForm({ ...form, signedByContactId: e.target.value })}
+                >
+                  <option value="">Our team</option>
+                  {(parties.data?.contacts ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {partyLabel(c)} (client contact)
+                    </option>
+                  ))}
+                </Form.Select>
+                <Form.Text>
+                  For a client signature, you're recorded as the person who uploaded it.
+                </Form.Text>
+              </Form.Group>
+            )}
             <Form.Group className="col-12" controlId="doc-task">
               <Form.Label>Linked task (optional)</Form.Label>
               <Form.Select
@@ -266,16 +334,54 @@ function UploadModal({
   );
 }
 
+/** "Signed" + " by R. Santos (client, recorded by J. Nazaire)" (FR-DOC-25, AC-28.1). */
+function eventParts(ev: DocumentDto['events'][number]) {
+  const label = EVENT_LABELS[ev.event] ?? ev.event;
+  const actor = ev.actor ? shortName(ev.actor.name) : 'Unknown';
+  const who = ev.onBehalfOf ? `${ev.onBehalfOf.name} (client, recorded by ${actor})` : actor;
+  return { label, rest: `${ev.version ? ` v${ev.version}` : ''} by ${who}` };
+}
+
+/** Requested › Submitted › Signed steps (mockup document panel). */
+function Steps({ doc }: { doc: DocumentDto }) {
+  if (doc.status === 'CANCELLED') return null;
+  const order: DocumentState[] = ['REQUESTED', 'SUBMITTED', 'SIGNED'];
+  const reached = order.indexOf(doc.status);
+  const shown = doc.request ? order : order.slice(1);
+  return (
+    <ol className="doc-steps list-inline small mb-3" aria-label="Document status">
+      {shown.map((st) => {
+        const i = order.indexOf(st);
+        const state = i < reached ? 'done' : i === reached ? 'current' : 'todo';
+        return (
+          <li
+            key={st}
+            className={`list-inline-item doc-step-${state}`}
+            aria-current={state === 'current' ? 'step' : undefined}
+          >
+            {state !== 'todo' ? '✓ ' : ''}
+            {DOCUMENT_STATUS_LABELS[st]}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function DocumentDetail({
   doc,
   projectId,
   onArchive,
   onRestore,
+  onFulfil,
+  onCancel,
 }: {
   doc: DocumentDto;
   projectId: string;
   onArchive: () => void;
   onRestore: () => void;
+  onFulfil: () => void;
+  onCancel: () => void;
 }) {
   const [error, setError] = useState('');
   const [showVersions, setShowVersions] = useState(false);
@@ -291,7 +397,25 @@ function DocumentDetail({
         <span className={`badge ${STATUS_BADGE[doc.status]} mb-3`}>
           {DOCUMENT_STATUS_LABELS[doc.status]}
         </span>
+        {doc.request?.overdue && <span className="badge bg-label-danger ms-2 mb-3">Overdue</span>}
         {doc.archived && <span className="badge bg-label-secondary ms-2">Archived</span>}
+        <Steps doc={doc} />
+        {doc.status === 'REQUESTED' && doc.request && (
+          <p className="small mb-2">
+            Waiting on {partyLabel(doc.request.requestedFrom)}
+            {doc.request.dueDate && ` · due ${shortDate(doc.request.dueDate)}`}
+            {doc.requiresSignature && (
+              <span className="d-block text-body-secondary">Needs a signed copy.</span>
+            )}
+          </p>
+        )}
+        {doc.request?.cancelled && (
+          <LockNotice>
+            Cancelled by{' '}
+            {doc.request.cancelled.by ? shortName(doc.request.cancelled.by.name) : 'Unknown'}: “
+            {doc.request.cancelled.reason}”. Cancelled requests are kept and can't be changed.
+          </LockNotice>
+        )}
         {doc.status === 'SIGNED' && (
           <LockNotice>
             Signed documents are locked. A change needs a new version, and the signed copy is kept.
@@ -301,9 +425,8 @@ function DocumentDetail({
         <ul className="list-unstyled small my-3">
           {[...doc.events].reverse().map((ev, i) => (
             <li key={i} className="mb-2">
-              <strong>{EVENT_LABELS[ev.event] ?? ev.event}</strong>
-              {ev.version ? ` v${ev.version}` : ''} by{' '}
-              {ev.actor ? shortName(ev.actor.name) : 'Unknown'}
+              <strong>{eventParts(ev).label}</strong>
+              {eventParts(ev).rest}
               {ev.note && <div className="text-body-secondary">“{ev.note}”</div>}
               <div className="text-body-secondary">{dateTime(ev.at)}</div>
             </li>
@@ -317,6 +440,7 @@ function DocumentDetail({
                   v{v.version} · {formatBytes(v.size)} · {DOCUMENT_STATUS_LABELS[v.status]}
                   {doc.signedVersion === v.version && ' · Signed copy'}
                   <span className="d-block text-body-secondary">
+                    {v.signedBy ? `Signed by ${v.signedBy.name} (client), recorded by ` : ''}
                     {v.uploadedBy ? shortName(v.uploadedBy.name) : 'Unknown'} ·{' '}
                     {shortDate(v.uploadedAt)}
                   </span>
@@ -339,12 +463,31 @@ function DocumentDetail({
           </div>
         )}
         <div className="d-flex flex-wrap gap-2">
-          <Button size="sm" variant="outline-secondary" onClick={() => setShowVersions((x) => !x)}>
-            Versions ({doc.versions.length})
-          </Button>
-          <Button size="sm" onClick={() => void download()}>
-            Download
-          </Button>
+          {doc.versions.length > 0 && (
+            <>
+              <Button
+                size="sm"
+                variant="outline-secondary"
+                onClick={() => setShowVersions((x) => !x)}
+              >
+                Versions ({doc.versions.length})
+              </Button>
+              <Button size="sm" onClick={() => void download()}>
+                Download
+              </Button>
+            </>
+          )}
+          {doc.status === 'REQUESTED' && doc.can.upload && (
+            <Button size="sm" onClick={onFulfil}>
+              <i className="bx bx-upload me-1" aria-hidden="true" />
+              Upload file
+            </Button>
+          )}
+          {doc.can.cancel && (
+            <Button size="sm" variant="outline-danger" onClick={onCancel}>
+              Cancel request
+            </Button>
+          )}
           {doc.can.archive &&
             (doc.archived ? (
               <Button size="sm" variant="outline-secondary" onClick={onRestore}>
@@ -357,17 +500,44 @@ function DocumentDetail({
             ))}
         </div>
         <p className="small text-body-secondary mt-3 mb-0">
-          Downloads are permission-checked and the link expires after 5 minutes.
+          Downloads are permission-checked and the link expires after 5 minutes.{' '}
+          {CLIENT_CONTACT_NOTICE}
         </p>
       </div>
     </div>
   );
 }
 
+/** "Waiting on R. Santos · due Oct 12" for requests (mockup), else who uploaded or signed. */
+function SubmittedBy({ doc }: { doc: DocumentDto }) {
+  if (doc.status === 'REQUESTED' && doc.request) {
+    return (
+      <span className={doc.request.overdue ? 'text-danger' : 'text-body-secondary'}>
+        Waiting on {doc.request.requestedFrom?.name ?? 'someone'}
+        {doc.request.requestedFrom && !doc.request.requestedFrom.active && ' (inactive)'}
+        {doc.request.dueDate && ` · due ${shortDate(doc.request.dueDate)}`}
+        {doc.request.overdue && ' · overdue'}
+      </span>
+    );
+  }
+  if (doc.status === 'CANCELLED') return <span className="text-body-secondary">–</span>;
+  const signer = doc.versions[doc.versions.length - 1]?.signedBy;
+  if (signer) {
+    return (
+      <>
+        {shortName(signer.name)} <span className="badge bg-label-warning">Client</span>
+      </>
+    );
+  }
+  return <>{doc.uploadedBy ? shortName(doc.uploadedBy.name) : '–'}</>;
+}
+
 /** Project Documents (FR-DOC-01..41): folders, versions, Signed lock, permission-checked downloads. */
 export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: TaskDto[] }) {
   const folders = useFolders(project.id);
-  const [folderId, setFolderId] = useState<string | null>(null);
+  // Deep links from Dashboard / My tasks: ?folder=…&doc=… opens that document.
+  const [params] = useSearchParams();
+  const [folderId, setFolderId] = useState<string | null>(params.get('folder'));
   const [status, setStatus] = useState<string>('');
   const [archived, setArchived] = useState(false);
   const [q, setQ] = useState('');
@@ -379,8 +549,11 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
     archived: archived ? 'true' : undefined,
   });
   const mutation = useDocumentMutation(project.id);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [selected, setSelected] = useState<string | null>(params.get('doc'));
+  const [uploading, setUploading] = useState<{ fulfils: DocumentDto | null } | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [cancelling, setCancelling] = useState<DocumentDto | null>(null);
+  const [editingAccess, setEditingAccess] = useState(false);
   const [newFolder, setNewFolder] = useState<string | null>(null);
   const [archiving, setArchiving] = useState<DocumentDto | null>(null);
   const list = docs.data?.items ?? [];
@@ -420,6 +593,13 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
                   >
                     <i className="bx bx-folder me-2" aria-hidden="true" />
                     <span className="me-auto text-truncate">{f.name}</span>
+                    {f.restricted && (
+                      <i
+                        className="bx bx-lock-alt me-1"
+                        aria-label="Restricted folder"
+                        title="Restricted folder"
+                      />
+                    )}
                     <small>{f.documentCount}</small>
                   </button>
                 ))}
@@ -429,6 +609,17 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
               Contracts and phase folders are created from the template. Custom folders can be
               added.
             </p>
+            {folder?.canRestrict && writable && !q && (
+              <Button
+                size="sm"
+                variant="outline-secondary"
+                className="mt-3 w-100"
+                onClick={() => setEditingAccess(true)}
+              >
+                <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+                Who can see “{folder.name}”
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -448,8 +639,22 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
                 style={{ maxWidth: 200 }}
                 onChange={(e) => setQ(e.target.value)}
               />
+              {docs.data?.can.request && writable && (
+                <Button
+                  size="sm"
+                  variant="outline-primary"
+                  onClick={() => setRequesting(true)}
+                  disabled={!folders.data}
+                >
+                  Request document
+                </Button>
+              )}
               {docs.data?.can.upload && writable && (
-                <Button size="sm" onClick={() => setUploading(true)} disabled={!folders.data}>
+                <Button
+                  size="sm"
+                  onClick={() => setUploading({ fulfils: null })}
+                  disabled={!folders.data}
+                >
                   <i className="bx bx-upload me-1" aria-hidden="true" />
                   Upload
                 </Button>
@@ -468,7 +673,7 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
                   All
                 </Nav.Link>
               </Nav.Item>
-              {DOCUMENT_STATUSES.map((s) => (
+              {DOCUMENT_FILTER_STATES.map((s) => (
                 <Nav.Item key={s}>
                   <Nav.Link
                     as="button"
@@ -479,7 +684,7 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
                     }}
                   >
                     {DOCUMENT_STATUS_LABELS[s]}
-                    {docs.data && !archived ? ` (${docs.data.counts[s]})` : ''}
+                    {docs.data && !archived ? ` (${docs.data.counts[s] ?? 0})` : ''}
                   </Nav.Link>
                 </Nav.Item>
               ))}
@@ -501,8 +706,13 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
             {docs.isPending ? (
               <LoadingRows />
             ) : list.length === 0 ? (
-              <EmptyState icon="bx-folder-open" title="No documents here yet">
-                {DOCUMENT_TYPES_LABEL}
+              <EmptyState
+                icon="bx-folder-open"
+                title={q || status || archived ? 'No documents match' : 'This folder is empty'}
+              >
+                {q || status || archived
+                  ? DOCUMENT_TYPES_LABEL
+                  : 'Upload a file or request one from a team member or client contact.'}
               </EmptyState>
             ) : (
               <div className="table-responsive">
@@ -511,7 +721,8 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
                     <tr>
                       <th scope="col">Document</th>
                       <th scope="col">Status</th>
-                      <th scope="col">Uploaded by</th>
+                      <th scope="col">Requested by</th>
+                      <th scope="col">Submitted by</th>
                       <th scope="col">Version</th>
                       <th scope="col">Updated</th>
                     </tr>
@@ -537,10 +748,15 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
                             {DOCUMENT_STATUS_LABELS[d.status]}
                           </span>
                         </td>
-                        <td data-label="Uploaded by">
-                          {d.uploadedBy ? shortName(d.uploadedBy.name) : '–'}
+                        <td data-label="Requested by">
+                          {d.request?.requestedBy ? shortName(d.request.requestedBy.name) : '–'}
                         </td>
-                        <td data-label="Version">v{d.latestVersion}</td>
+                        <td data-label="Submitted by">
+                          <SubmittedBy doc={d} />
+                        </td>
+                        <td data-label="Version">
+                          {d.latestVersion ? `v${d.latestVersion}` : '–'}
+                        </td>
                         <td data-label="Updated">{shortDate(d.updatedAt)}</td>
                       </tr>
                     ))}
@@ -562,6 +778,8 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
             projectId={project.id}
             onArchive={() => setArchiving(doc)}
             onRestore={() => mutation.mutate({ path: `/documents/${doc.id}/restore` })}
+            onFulfil={() => setUploading({ fulfils: doc })}
+            onCancel={() => setCancelling(doc)}
           />
         </div>
       )}
@@ -572,11 +790,48 @@ export function DocumentsTab({ project, tasks }: { project: ProjectDto; tasks: T
           folderId={current}
           tasks={tasks}
           existing={list}
+          fulfils={uploading.fulfils}
           onClose={() => {
-            setUploading(false);
+            setUploading(null);
             void docs.refetch();
             void folders.refetch();
           }}
+        />
+      )}
+      {requesting && folders.data && current && (
+        <RequestModal
+          project={project}
+          folders={folders.data.items}
+          folderId={current}
+          tasks={tasks}
+          onClose={(created) => {
+            setRequesting(false);
+            if (created) setSelected(created.id);
+          }}
+        />
+      )}
+      {editingAccess && folder && (
+        <FolderAccessModal
+          project={project}
+          folder={folder}
+          onClose={() => setEditingAccess(false)}
+        />
+      )}
+      {cancelling && (
+        <ReasonModal
+          title="Cancel request"
+          label="Reason"
+          confirmLabel="Cancel request"
+          intro="The request is kept, read-only, with your reason."
+          pending={mutation.isPending}
+          error={mutation.error}
+          onClose={() => setCancelling(null)}
+          onSubmit={(reason) =>
+            mutation.mutate(
+              { path: `/documents/${cancelling.id}/cancel`, body: { reason } },
+              { onSuccess: () => setCancelling(null) },
+            )
+          }
         />
       )}
       {newFolder !== null && (
