@@ -18,6 +18,8 @@ import { TemplateEditorPage } from './pages/templates/TemplateEditorPage';
 import { TemplatesPage } from './pages/templates/TemplatesPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { TimePage } from './pages/time/TimePage';
+import { AllIssuesPage } from './pages/issues/AllIssuesPage';
+import { IssueDetailPage } from './pages/issues/IssueDetailPage';
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
@@ -113,6 +115,22 @@ export function App() {
               element={
                 <RequirePermission any={[['reports', 'view']]}>
                   <DashboardPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/issues"
+              element={
+                <RequirePermission any={[['issues', 'view']]}>
+                  <AllIssuesPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/issues/:id"
+              element={
+                <RequirePermission any={[['issues', 'view']]}>
+                  <IssueDetailPage />
                 </RequirePermission>
               }
             />

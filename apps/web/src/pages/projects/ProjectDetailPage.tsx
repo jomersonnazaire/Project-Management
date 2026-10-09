@@ -1,4 +1,5 @@
 import {
+  ISSUE_COMPLETED_BANNER,
   TEMPLATE_TYPE_LABELS,
   hasPermission,
   plural,
@@ -6,7 +7,7 @@ import {
   type RecordType,
 } from '@xc8/shared';
 import { useState } from 'react';
-import { Alert, Button } from 'react-bootstrap';
+import { Alert, Button, Modal } from 'react-bootstrap';
 import {
   Link,
   NavLink,
@@ -18,6 +19,7 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import { ApiError } from '../../api/client';
+import { useProjectIssues } from '../../api/issueHooks';
 import { useProject, useProjectAction, useProjectTasks } from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
@@ -39,6 +41,8 @@ import { DocumentsTab } from './DocumentsTab';
 import { ProjectTimeTab } from './ProjectTimeTab';
 import { TaskFormModal } from './TaskFormModal';
 import { TaskPanel } from './TaskPanel';
+import { ProjectIssuesTab } from '../issues/ProjectIssuesTab';
+import { RaiseIssueModal } from '../issues/IssueUi';
 
 /** Project detail with its plan, board, team and contacts (FR-PRJ-06..13, FR-TSK-*). */
 export function ProjectDetailPage() {
@@ -55,6 +59,20 @@ export function ProjectDetailPage() {
   const openTask = params.get('task');
   const { permissions } = useAuth();
   const can = (r: RecordType, a: AccessAction) => hasPermission(permissions, r, a);
+  const issues = useProjectIssues(id, {}, can('issues', 'view'));
+  const [raising, setRaising] = useState(false);
+  const [openIssues, setOpenIssues] = useState<string[] | null>(null);
+  const archive = () =>
+    action.mutate('archive', {
+      onError: (e) => {
+        // FR-ISS-13: open issues → list them and ask again.
+        if (e instanceof ApiError && e.code === 'OPEN_ISSUES') {
+          setOpenIssues((e.details as { issues?: string[] } | undefined)?.issues ?? []);
+        }
+      },
+    });
+  const archiveError =
+    action.error instanceof ApiError && action.error.code === 'OPEN_ISSUES' ? null : action.error;
 
   if (project.error instanceof ApiError && project.error.status === 404) return <NotFoundPage />;
   const p = project.data;
@@ -81,6 +99,9 @@ export function ProjectDetailPage() {
     { to: 'team', label: 'Team' },
     { to: 'contacts', label: 'Active contacts' },
     ...(can('conversations', 'view') ? [{ to: 'conversation', label: 'Conversation' }] : []),
+    ...(can('issues', 'view')
+      ? [{ to: 'issues', label: 'Issues', count: issues.data?.counts.open }]
+      : []),
     { to: 'timeline', label: 'Timeline' },
     ...(can('documents', 'view') ? [{ to: 'documents', label: 'Documents' }] : []),
     ...(can('time', 'view') ? [{ to: 'time', label: 'Time' }] : []),
@@ -94,7 +115,12 @@ export function ProjectDetailPage() {
         title={p.name}
         badge={<ProjectBadge status={p.status} health={p.health} archived={p.archived} />}
       >
-        {p.can.planTasks && !p.archived && (
+        {issues.data?.can.create && !p.archived && (
+          <Button variant="primary" onClick={() => setRaising(true)}>
+            + Raise issue
+          </Button>
+        )}
+        {p.can.planTasks && !p.archived && p.status !== 'COMPLETED' && (
           <Button variant="outline-primary" onClick={() => setAdding(true)}>
             + Add task
           </Button>
@@ -111,7 +137,10 @@ export function ProjectDetailPage() {
           {w}
         </Alert>
       ))}
-      <ErrorAlert error={action.error} action />
+      <ErrorAlert error={archiveError} action />
+      {p.status === 'COMPLETED' && !p.archived && can('issues', 'view') && (
+        <Alert variant="info">{ISSUE_COMPLETED_BANNER}</Alert>
+      )}
       {p.archived && (
         <LockNotice>
           This project is archived and read-only.
@@ -177,7 +206,7 @@ export function ProjectDetailPage() {
                         'Archive this project? It becomes read-only and hidden from lists.',
                       )
                     ) {
-                      action.mutate('archive');
+                      archive();
                     }
                   }}
                 >
@@ -213,6 +242,11 @@ export function ProjectDetailPage() {
               className="nav-link"
             >
               {t.label}
+              {'count' in t && t.count ? (
+                <span className="badge bg-label-danger ms-2" aria-label={`${t.count} open`}>
+                  {t.count}
+                </span>
+              ) : null}
             </NavLink>
           </li>
         ))}
@@ -231,6 +265,7 @@ export function ProjectDetailPage() {
             path="conversation"
             element={<ConversationTab project={p} tasks={list} onOpenTask={setTask} />}
           />
+          <Route path="issues" element={<ProjectIssuesTab project={p} />} />
           <Route path="documents" element={<DocumentsTab project={p} tasks={list} />} />
           <Route path="time" element={<ProjectTimeTab project={p} />} />
           {p.can.activity && <Route path="activity" element={<ActivityTab project={p} />} />}
@@ -240,6 +275,42 @@ export function ProjectDetailPage() {
 
       {openTask && (
         <TaskPanel taskId={openTask} project={p} tasks={list} onClose={() => setTask(null)} />
+      )}
+      {raising && <RaiseIssueModal projectId={p.id} onClose={() => setRaising(false)} />}
+      {openIssues && (
+        <Modal
+          show
+          centered
+          onHide={() => setOpenIssues(null)}
+          aria-labelledby="archive-open-title"
+        >
+          <Modal.Header closeButton>
+            <Modal.Title as="h2" className="h5" id="archive-open-title">
+              Archive {p.name}?
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {openIssues.length} issue{openIssues.length === 1 ? ' is' : 's are'} still open:{' '}
+            {openIssues.join(', ')}. After archiving, nobody can update them.
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline-secondary" onClick={() => setOpenIssues(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={action.isPending}
+              onClick={() =>
+                action.mutate(
+                  { action: 'archive', confirmOpenIssues: true },
+                  { onSuccess: () => setOpenIssues(null) },
+                )
+              }
+            >
+              Archive anyway
+            </Button>
+          </Modal.Footer>
+        </Modal>
       )}
       {editing && <ProjectEditModal project={p} onClose={() => setEditing(false)} />}
       {adding && (

@@ -130,9 +130,17 @@ export function useUpdateProject(id: string) {
 export function useProjectAction(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (action: 'archive' | 'unarchive' | 'delete'): Promise<void> => {
-      if (action === 'delete') await api<void>(`/projects/${id}`, { method: 'DELETE' });
-      else await api<{ project: ProjectDto }>(`/projects/${id}/${action}`, { method: 'POST' });
+    mutationFn: async (
+      req: 'archive' | 'unarchive' | 'delete' | { action: 'archive'; confirmOpenIssues: true },
+    ): Promise<void> => {
+      if (req === 'delete') await api<void>(`/projects/${id}`, { method: 'DELETE' });
+      else if (typeof req === 'object') {
+        // FR-ISS-13: archive anyway after the open-issues warning.
+        await api<{ project: ProjectDto }>(`/projects/${id}/archive`, {
+          method: 'POST',
+          body: { confirmOpenIssues: true },
+        });
+      } else await api<{ project: ProjectDto }>(`/projects/${id}/${req}`, { method: 'POST' });
     },
     onSuccess: () => invalidateProjects(qc),
   });
