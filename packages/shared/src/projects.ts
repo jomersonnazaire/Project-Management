@@ -638,6 +638,8 @@ export const updateProjectSchema = z
     reason: optionalText(500),
     /** Confirms that changing the client clears the active contacts (FR-PRJ-13). */
     confirmClearContacts: z.boolean().optional(),
+    /** EC-68: confirms the client change although issues keep contacts from the old client. */
+    confirmIssueContacts: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;

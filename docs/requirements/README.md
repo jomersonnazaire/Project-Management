@@ -54,3 +54,5 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.7.0 | 2026-10-09 | PR #7 calls confirmed: My tasks tabs after Due, PMs view-only on other projects' issues, phase deletion rule, M3.5 items deferred to M4. |
 | v0.7.1 | 2026-10-09 | NFR-25: out-of-scope records return 404 on every method (after DEF-005 and DEF-006). |
 | v0.7.2 | 2026-10-09 | Q-08 resolved, Q-09 as setting; NFR-26 separate staging environment. |
+| v0.8.0 draft | 2026-10-09 | Doc 14: Microsoft sign-in (M5), Activity Tracker (M6), Daily Activity Report (M7), Leave (M8), PM view folded into M4. Q-36 to Q-47. |
+| v0.8.1 | 2026-10-09 | Doc 14: daily timesheet with Submit day, reopen and weekly-lock flag (FR-ACT-10 to 14); DAR fallback for non-Outlook users (FR-DAR-04b). |

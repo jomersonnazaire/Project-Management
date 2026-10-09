@@ -7,3 +7,4 @@ export * from './projects.js';
 export * from './m3.js';
 export * from './phHolidays.js';
 export * from './issues.js';
+export * from './reports.js';
