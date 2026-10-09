@@ -3,7 +3,13 @@
 Web app for managing Xceler8 implementation projects: templates, tasks, time, client follow-up and documents.
 Requirements, the QA plan and the design (mockup v0.4, theme tokens) are in [`docs/`](docs/).
 
-**Status:** Phase 1, Milestone 1.5. Covers tooling, authentication, access and job roles, users, teams, clients and client contacts (Milestone 1), plus editable access rules and client Details/Contacts/Projects tabs (Milestone 1.5, `docs/requirements/11_ACCESS_RULES_AND_CONTACTS.md`).
+**Status:** Phase 1, Milestone 2. Covers tooling, authentication, access and job roles, users, teams, clients and client contacts (Milestone 1), editable access rules and client Details/Contacts/Projects tabs (Milestone 1.5, `docs/requirements/11_ACCESS_RULES_AND_CONTACTS.md`), plus versioned implementation templates, projects created from templates, task checklist and kanban board, task details with approvals and evidence links, project active contacts and a real My tasks page (Milestone 2). Time logging and documents (Milestone 3) and the dashboard, workload and reports (Milestone 4) are not built yet.
+
+Milestone 2 decisions that are easy to change in `packages/shared/src/projects.ts`:
+
+- **Q-11:** publishing a template counts as Edit on Templates (`TEMPLATE_PUBLISH_PERMISSION`); PMs publish by default and lose it if Edit on Templates is unticked.
+- **Q-12:** PMs view all projects but edit and archive only projects they manage (`PM_PROJECT_EDIT_SCOPE = 'OWN'`; `'ALL'` lets them edit any project). Only Admins delete projects.
+- **EC-58:** a missing effort estimate is stored as `null` (never 0), shown as "–" with a "No estimate" hint, and left out of effort variance and over-budget flags.
 
 ## Repository layout
 
@@ -59,6 +65,7 @@ All other users get `SEED_USER_PASSWORD`. Set `SEED_RESET_PASSWORDS=true` to ove
 | `deactivated`              | Member          | Support         | deactivated; can't sign in                  |
 
 The seed also creates 6 teams and two clients (Acme Trading, Northwind Foods), each with 3 contacts (one inactive).
+For Milestone 2 it adds the launch template **SAP B1 Implementation** (published v1, 10 activities in 4 phases from `06_WORKFLOW.md` §4, no effort estimates) and two Acme projects managed by `pm` with `member` on the team: _QA SAP B1 Rollout (seed)_ (generated from the template) and _QA Empty Project (seed)_ (no tasks). Everything is created once and never overwritten. The API also creates the launch template on startup if no version of it exists.
 
 ## Scripts (repo root)
 
