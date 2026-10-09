@@ -171,7 +171,7 @@ export function TaskPanel({
 
             {!archived && !t.deletable && t.deleteBlockedReason && (
               <p className="small text-body-secondary mt-n2 mb-4" data-testid="delete-blocked">
-                <i className="bx bx-info-circle me-1" aria-hidden="true" />
+                <i className="bx bx-lock-alt me-1" aria-hidden="true" />
                 Can’t delete: {t.deleteBlockedReason}
               </p>
             )}

@@ -26,10 +26,21 @@ export interface IssueFilters {
   q?: string;
 }
 
+const NO_COUNTS: IssueListDto['counts'] = { open: 0, critical: 0, high: 0, overdue: 0, waiting: 0 };
+/** Tolerates partial bodies (older API, test doubles) so the page never crashes on a missing field. */
+function normalizeList(r: Partial<IssueListDto> | undefined): IssueListDto {
+  return {
+    items: Array.isArray(r?.items) ? r.items : [],
+    counts: { ...NO_COUNTS, ...(r?.counts ?? {}) },
+    can: { create: Boolean(r?.can?.create) },
+  };
+}
+
 export function useProjectIssues(projectId: string, filters: IssueFilters = {}, enabled = true) {
   return useQuery({
     queryKey: ['issues', 'project', projectId, filters],
-    queryFn: () => api<IssueListDto>(`/projects/${projectId}/issues${qs({ ...filters })}`),
+    queryFn: () =>
+      api<IssueListDto>(`/projects/${projectId}/issues${qs({ ...filters })}`).then(normalizeList),
     enabled,
   });
 }
@@ -37,7 +48,7 @@ export function useProjectIssues(projectId: string, filters: IssueFilters = {}, 
 export function useAllIssues(filters: IssueFilters = {}, enabled = true) {
   return useQuery({
     queryKey: ['issues', 'all', filters],
-    queryFn: () => api<IssueListDto>(`/issues${qs({ ...filters })}`),
+    queryFn: () => api<IssueListDto>(`/issues${qs({ ...filters })}`).then(normalizeList),
     enabled,
   });
 }
@@ -53,14 +64,24 @@ export function useIssueActivity(id: string) {
   return useQuery({
     queryKey: ['issues', 'activity', id],
     queryFn: () =>
-      api<{ items: IssueActivityDto[] }>(`/issues/${id}/activity`).then((r) => r.items),
+      api<{ items?: IssueActivityDto[] }>(`/issues/${id}/activity`).then((r) => r?.items ?? []),
   });
 }
 
 export function useIssueOptions(projectId: string | null) {
   return useQuery({
     queryKey: ['issues', 'options', projectId],
-    queryFn: () => api<IssueOptionsDto>(`/projects/${projectId}/issue-options`),
+    queryFn: () =>
+      api<Partial<IssueOptionsDto>>(`/projects/${projectId}/issue-options`).then(
+        (r): IssueOptionsDto => ({
+          users: r?.users ?? [],
+          contacts: r?.contacts ?? [],
+          tasks: r?.tasks ?? [],
+          messages: r?.messages ?? [],
+          defaultStage: r?.defaultStage ?? 'BEFORE_GO_LIVE',
+          defaultDue: r?.defaultDue ?? ({} as IssueOptionsDto['defaultDue']),
+        }),
+      ),
     enabled: Boolean(projectId),
   });
 }
@@ -126,7 +147,10 @@ export const issueTickets = (issueId: string, files: File[]) =>
 export function useProjectPhases(projectId: string, enabled = true) {
   return useQuery({
     queryKey: ['tasks', 'phases', projectId],
-    queryFn: () => api<{ items: PhaseDto[] }>(`/projects/${projectId}/phases`).then((r) => r.items),
+    queryFn: () =>
+      api<{ items?: PhaseDto[] }>(`/projects/${projectId}/phases`).then((r) =>
+        Array.isArray(r?.items) ? r.items : [],
+      ),
     enabled,
   });
 }

@@ -34,7 +34,7 @@ describe('Access rules screen (doc 11, mockup v0.5.2)', () => {
     expect(screen.getByRole('tab', { name: 'PM' })).toHaveAttribute('aria-selected', 'true');
     await screen.findByText('accessRules', { selector: 'code' });
     // 16 record types (M3 adds conversations and notifications).
-    expect(document.querySelectorAll('tbody tr[data-record]')).toHaveLength(16);
+    expect(document.querySelectorAll('tbody tr[data-record]')).toHaveLength(17);
     // PM defaults: clients VCED, users none.
     for (const a of [/^View Clients$/, /^Create Clients$/, /^Edit Clients$/, /^Delete Clients$/])
       expect(box(row('clients'), a)).toBeChecked();

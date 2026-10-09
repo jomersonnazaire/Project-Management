@@ -381,7 +381,7 @@ export function RaiseIssueModal({
                 ))}
               </Form.Select>
               <Form.Control.Feedback type="invalid">{show('severity')}</Form.Control.Feedback>
-              {severity && o && (
+              {severity && o?.defaultDue[severity] && (
                 <Form.Text>
                   Due {issueDueLabel(o.defaultDue[severity], false)} by default.
                 </Form.Text>
