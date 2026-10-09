@@ -9,6 +9,7 @@ import {
   type HolidayDto,
   type HolidayType,
   OFFICIAL_HOLIDAY_YEARS,
+  PH_OFFICIAL_HOLIDAYS,
 } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
@@ -17,6 +18,7 @@ import { ApiError } from '../../api/client';
 import { useCalendar, useCalendarMutation, useHolidayImpact } from '../../api/m3Hooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { TopbarActions } from '../../components/PageHeader';
 import { shortDate } from '../../lib/format';
 
 const weekday = (date: string) =>
@@ -299,6 +301,9 @@ export function HolidaysPanel() {
   );
   // Seed data: the official Philippine holidays for the years we have (2026, 2027).
   const hasOfficial = OFFICIAL_HOLIDAY_YEARS.includes(year);
+  // The toolbar offers loading only while some official date is still missing from the year.
+  const listed = new Set((cal.data?.holidays ?? []).map((h) => h.date));
+  const officialMissing = (PH_OFFICIAL_HOLIDAYS[year] ?? []).some((h) => !listed.has(h.date));
   const loadOfficial = () =>
     mutation.mutate(
       { path: '/holidays/official', body: { year } },
@@ -317,6 +322,12 @@ export function HolidaysPanel() {
 
   return (
     <div className="row g-6">
+      {/* DR-17: the primary action sits in the page header so the toolbar stays on one row. */}
+      {canEdit && (
+        <TopbarActions>
+          <Button onClick={() => setEditing('new')}>+ Add holiday</Button>
+        </TopbarActions>
+      )}
       <div className="col-lg-8">
         <div className="card">
           <div className="card-body">
@@ -343,7 +354,7 @@ export function HolidaysPanel() {
               <Form.Select
                 aria-label="Filter by type"
                 className="ms-auto"
-                style={{ maxWidth: 240 }}
+                style={{ maxWidth: 200 }}
                 value={type}
                 onChange={(e) => setType(e.target.value)}
               >
@@ -354,9 +365,8 @@ export function HolidaysPanel() {
                   </option>
                 ))}
               </Form.Select>
-              {officialButton}
+              {officialMissing && officialButton}
               {copyButton}
-              {canEdit && <Button onClick={() => setEditing('new')}>+ Add holiday</Button>}
             </div>
             <ErrorAlert error={cal.error} />
             <ErrorAlert error={mutation.error} action />

@@ -63,7 +63,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       projects: ['VCED', 'VCE', 'V', 'V'],
       tasks: ['VCED', 'VCED', 'VE', 'V'],
       approvals: ['E', 'E', 'E', ''],
-      time: ['VCED', 'VCED', 'VCE', ''],
+      time: ['VCED', 'VCED', 'VCED', ''],
       documents: ['VCED', 'VCED', 'VC', 'V'],
       conversations: ['VC', 'VC', 'VC', 'V'],
       notifications: ['V', 'V', 'V', 'V'],

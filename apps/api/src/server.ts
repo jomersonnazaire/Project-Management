@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { connectDb, disconnectDb } from './db.js';
 import { createLogger } from './logger.js';
+import { applyAccessDefaultChanges } from './services/accessDefaults.js';
 import { ensureDefaultAccessRules } from './services/accessRules.js';
 import { ensureLaunchTemplate } from './services/launchTemplate.js';
 
@@ -11,6 +12,8 @@ const logger = createLogger(config.LOG_LEVEL);
 await connectDb(config.MONGODB_URI, config.MONGODB_DB_NAME);
 // Seed the default access rules if a role has none yet (idempotent; never overwrites changes).
 await ensureDefaultAccessRules(logger);
+// Apply pending changes to the defaults once (doc 11 §12): only cells still at the old default.
+await applyAccessDefaultChanges(logger);
 // Seed the SAP B1 launch template once (idempotent; never touches it after that, FR-TPL-09).
 await ensureLaunchTemplate(logger);
 const app = createApp(config, logger);

@@ -169,7 +169,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     projects: 'V',
     tasks: 'VE',
     approvals: 'E',
-    time: 'VCE',
+    // Delete on own entries only (FR-TIME-06; doc 11 §6, Lean 2026-10-09). Was 'VCE' before v0.6.8.
+    time: 'VCED',
     documents: 'VC',
     conversations: 'VC',
     notifications: 'V',
@@ -195,6 +196,35 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     audit: '',
   },
 };
+
+/**
+ * Changes to the seeded defaults after go-live (doc 11 §12, Queen/Rich 2026-10-09). The general
+ * rule: a default change ships as a one-time migration that switches only cells still at their
+ * old default value, leaves cells an Admin changed alone, and is audited. To change a default,
+ * edit DEFAULT_SPEC above AND append an entry here with a new, never-reused id. The API applies
+ * pending entries on start-up (idempotent, safe with several instances).
+ */
+export interface AccessDefaultChange {
+  /** Unique, never reused, e.g. "2026-10-09-member-time-delete". */
+  id: string;
+  /** Why the default changed, for the audit log. */
+  reason: string;
+  cells: {
+    role: SystemRole;
+    record: RecordType;
+    action: AccessAction;
+    from: boolean;
+    to: boolean;
+  }[];
+}
+
+export const ACCESS_DEFAULT_CHANGES: readonly AccessDefaultChange[] = [
+  {
+    id: '2026-10-09-member-time-delete',
+    reason: 'Members can delete their own time entries (doc 11 §6, doc 12 §8 v0.6.8)',
+    cells: [{ role: 'MEMBER', record: 'time', action: 'delete', from: false, to: true }],
+  },
+];
 
 function buildGrid(spec: Record<RecordType, string>): PermissionGrid {
   return Object.fromEntries(RECORD_TYPE_KEYS.map((k) => [k, grants(spec[k])])) as PermissionGrid;

@@ -9,3 +9,4 @@ export * from './Project.js';
 export * from './Template.js';
 export * from './Task.js';
 export * from './M3.js';
+export * from './Migration.js';
