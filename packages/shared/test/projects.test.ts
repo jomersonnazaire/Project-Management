@@ -10,6 +10,10 @@ import {
   forecastEnd,
   formatHours,
   formatVariance,
+  plural,
+  scheduleVarianceLabel,
+  canViewProjectActivity,
+  DEFAULT_ACCESS_RULES,
   parseDateOnly,
   progressPct,
   projectBadge,
@@ -155,8 +159,9 @@ describe('EC-58: tasks without an estimate', () => {
 
   it('shows "–", has no variance and is never over budget; summaries count unestimated tasks; time still counts', () => {
     expect(formatHours(null)).toBe('–');
-    expect(formatHours(0)).toBe('0');
-    expect(formatHours(2.5)).toBe('2.5');
+    expect(formatHours(0)).toBe('0h');
+    expect(formatHours(2.5)).toBe('2.5h');
+    expect(formatHours(4)).toBe('4h');
     expect(effortVariance({ estHours: null, actualHours: 5 })).toEqual({
       variance: null,
       overrunPct: null,
@@ -200,5 +205,43 @@ describe('request schemas and decisions', () => {
 
   it('Q-12 default: PMs edit only their own projects', () => {
     expect(PM_PROJECT_EDIT_SCOPE).toBe('OWN');
+  });
+});
+
+describe('M2 follow-ups (DR-09, DR-10, doc 11 §12)', () => {
+  it('DR-10 pluralizes counts', () => {
+    expect([plural(1, 'task'), plural(2, 'task'), plural(0, 'task')]).toEqual([
+      '1 task',
+      '2 tasks',
+      '0 tasks',
+    ]);
+    expect([plural(1, 'activity', 'activities'), plural(3, 'activity', 'activities')]).toEqual([
+      '1 activity',
+      '3 activities',
+    ]);
+  });
+
+  it('DR-09 describes forecast vs baseline in words', () => {
+    expect(scheduleVarianceLabel(-38)).toEqual({
+      text: '38 days before baseline end',
+      variant: 'success',
+    });
+    expect(scheduleVarianceLabel(-1).text).toBe('1 day before baseline end');
+    expect(scheduleVarianceLabel(1)).toEqual({ text: '1 day late', variant: 'danger' });
+    expect(scheduleVarianceLabel(5).text).toBe('5 days late');
+    expect(scheduleVarianceLabel(0)).toEqual({ text: 'On baseline', variant: 'secondary' });
+  });
+
+  it('§12: Admins and PMs read project Activity logs by default; Members and Viewers do not', () => {
+    const can = (r: keyof typeof DEFAULT_ACCESS_RULES) =>
+      canViewProjectActivity(r, DEFAULT_ACCESS_RULES[r]);
+    expect([can('ADMIN'), can('PROJECT_MANAGER'), can('MEMBER'), can('VIEWER')]).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    // PMs keep it even without the global audit permission.
+    expect(DEFAULT_ACCESS_RULES.PROJECT_MANAGER.audit.view).toBe(false);
   });
 });

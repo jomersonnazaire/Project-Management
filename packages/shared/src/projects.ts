@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { JOB_ROLES } from './roles.js';
+import { JOB_ROLES, type SystemRole } from './roles.js';
 
 /**
  * Milestone 2: implementation templates, projects and tasks (doc 03 TPL/PRJ/TSK, doc 11 FR-PRJ-11..13).
@@ -320,6 +320,36 @@ export function formatVariance(days: number): string {
   return `${days > 0 ? '+' : '−'}${n} day${n === 1 ? '' : 's'}`;
 }
 
+/** "1 task", "2 tasks"; pass `many` for irregular plurals ("1 activity", "3 activities"). DR-10. */
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/**
+ * Forecast vs baseline end in words (DR-09): "3 days before baseline end" (success),
+ * "2 days late" (danger) or "On baseline".
+ */
+export function scheduleVarianceLabel(days: number): {
+  text: string;
+  variant: 'success' | 'danger' | 'secondary';
+} {
+  if (days === 0) return { text: 'On baseline', variant: 'secondary' };
+  if (days < 0) return { text: `${plural(-days, 'day')} before baseline end`, variant: 'success' };
+  return { text: `${plural(days, 'day')} late`, variant: 'danger' };
+}
+
+/**
+ * Who reads a project's Activity log (doc 11 §12): Admins and PMs on any project they can view,
+ * plus anyone the access rules give View on audit. Members and Viewers don't by default. The
+ * global Audit log stays governed by the audit permission alone.
+ */
+export function canViewProjectActivity(
+  role: SystemRole,
+  permissions: { audit: { view: boolean } },
+): boolean {
+  return role === 'ADMIN' || role === 'PROJECT_MANAGER' || permissions.audit.view;
+}
+
 // ---------- Effort (EC-58: a missing estimate is null, never 0) ----------
 export const NO_ESTIMATE_LABEL = 'No estimate';
 
@@ -330,9 +360,10 @@ export function hasEstimate<T extends { estHours?: number | null }>(
 }
 
 /** "–" for tasks without an estimate (EC-58), otherwise the hours. */
+/** Hours with their unit (DR-08): "4h", "2.5h"; a missing value is "–". */
 export function formatHours(h: number | null | undefined): string {
   if (h === null || h === undefined) return '–';
-  return Number.isInteger(h) ? String(h) : h.toFixed(2).replace(/0$/, '');
+  return `${Number.isInteger(h) ? String(h) : h.toFixed(2).replace(/0$/, '')}h`;
 }
 
 /**
@@ -725,7 +756,14 @@ export interface ProjectDto extends ProjectListItemDto {
     changedBy: string | null;
   }[];
   /** What the caller may do on this project; the API checks the same rules on every request. */
-  can: { edit: boolean; archive: boolean; delete: boolean; planTasks: boolean };
+  can: {
+    edit: boolean;
+    archive: boolean;
+    delete: boolean;
+    planTasks: boolean;
+    /** Read the project Activity log (doc 11 §12). */
+    activity: boolean;
+  };
 }
 
 export interface EvidenceDto {
