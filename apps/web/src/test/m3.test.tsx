@@ -159,14 +159,14 @@ describe('My tasks › Due (FR-TSK-20/21/22, AC-TODAY-1, TC-N22)', () => {
     await userEvent.type(within(dialog).getByLabelText('Hours *'), '0');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save entry' }));
     expect(within(dialog).getByText('Enter between 0.25 and 24.')).toBeInTheDocument();
-    // Doc 14 FR-ACT-15: Activity type and Module are required on Log time too.
+    // Doc 14 FR-ACT-15: Activity type is required on Log time too; Module is optional (FR-ACT-20).
     expect(within(dialog).getByText('Choose an activity type.')).toBeInTheDocument();
-    expect(within(dialog).getByText('Choose a module.')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Choose a module.')).toBeNull();
     await userEvent.selectOptions(
       within(dialog).getByLabelText('Activity type *'),
       'Configuration',
     );
-    await userEvent.selectOptions(within(dialog).getByLabelText('Module *'), 'Financials');
+    await userEvent.type(within(dialog).getByLabelText('Module (optional)'), '  Financials  ');
     await userEvent.clear(within(dialog).getByLabelText('Hours *'));
     await userEvent.type(within(dialog).getByLabelText('Hours *'), '1.5');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save entry' }));
@@ -179,7 +179,7 @@ describe('My tasks › Due (FR-TSK-20/21/22, AC-TODAY-1, TC-N22)', () => {
         hours: 1.5,
         type: 'EXECUTION',
         activityTypeId: 'at1',
-        moduleId: 'mod1',
+        module: 'Financials',
         billable: true,
       });
     });

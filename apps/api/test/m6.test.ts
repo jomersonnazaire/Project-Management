@@ -73,7 +73,7 @@ async function sampleDay(s: Awaited<ReturnType<typeof setup>>, date = '2026-10-1
   const a = await manual(w.member.agent, {
     taskId: t1,
     activityTypeId: l.integration,
-    moduleId: l.financials,
+    module: l.financials,
     date,
     timeIn: '08:00',
     timeOut: '12:00',
@@ -197,7 +197,7 @@ describe('TC-R04: day status', () => {
     await w.member.agent.post('/api/v1/tracker/start').set(CSRF).send({
       taskId: t1,
       activityTypeId: l.configuration,
-      moduleId: l.financials,
+      module: l.financials,
       dayLocationId: l.wfh,
     });
     at('2026-10-14T03:00:00Z');
@@ -228,7 +228,7 @@ describe('TC-R05/R10: exports', () => {
       const res = await manual(w.member.agent, {
         taskId: t1,
         activityTypeId: l.configuration,
-        moduleId: l.financials,
+        module: l.financials,
         date: '2026-10-13',
         timeIn: `1${5 + i}:00`,
         timeOut: `1${5 + i}:30`,
@@ -452,7 +452,7 @@ describe('FR-DAR-19: blank remarks fall back to the task name or quick activity 
     const a = await manual(w.member.agent, {
       taskId: t1,
       activityTypeId: l.integration,
-      moduleId: l.financials,
+      module: l.financials,
       date: '2026-10-13',
       timeIn: '08:00',
       timeOut: '09:00',

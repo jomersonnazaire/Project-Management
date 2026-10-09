@@ -655,3 +655,12 @@ $board-gap: 0.75rem;
     }
   }
 }
+
+// DR-38: negative leave balances in a danger red that passes AA (5.7:1 on white, 4.6:1 on the badge).
+.text-negative {
+  color: #c22d0e !important;
+}
+.badge.badge-negative {
+  background-color: #ffe0db;
+  color: #c22d0e;
+}

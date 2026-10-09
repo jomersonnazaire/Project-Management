@@ -27,7 +27,7 @@ const QUICK = '__quick__';
 function fromEntry(e: TrackerEntryDto): EntryFieldValues {
   return {
     activityTypeId: e.activityType?.id ?? '',
-    moduleId: e.module?.id ?? '',
+    module: e.module ?? '',
     locationId: e.locationOverridden ? (e.location?.id ?? '') : '',
     billable: e.billable,
     type: e.type ?? 'EXECUTION',
@@ -133,7 +133,6 @@ export function TrackerEntryModal({
       req = { path: `/entries/${editing.id}`, method: 'PATCH', body };
     } else {
       Object.assign(body, kind === 'QUICK' ? { title: title.trim() } : { taskId: target });
-      if (body.moduleId === null) delete body.moduleId;
       if (body.locationId === null) delete body.locationId;
       if (body.notes === null) delete body.notes;
       req =
@@ -273,9 +272,7 @@ export function TrackerEntryModal({
             errors={errors}
             dayLocation={day.data?.location?.name ?? null}
             hideLocation={needsDayLocation}
-            keep={
-              editing ? { activityType: editing.activityType, module: editing.module } : undefined
-            }
+            keep={editing ? { activityType: editing.activityType } : undefined}
             idPrefix="tracker"
           />
           {mode.kind === 'quick' && (

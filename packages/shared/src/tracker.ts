@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Ref } from './projects.js';
 import type { TimeType } from './m3.js';
-import { TIME_TYPES } from './m3.js';
+import { TIME_TYPES, moduleText } from './m3.js';
 
 /**
  * Milestone 5: Activity Tracker (doc 14 §2, §10, §12). One time-entry model: timed entries
@@ -18,6 +18,12 @@ export const PH_OFFSET_MINUTES = 8 * 60;
 // ---------- Admin lists (FR-ACT-15, §10) ----------
 export const LOOKUP_KINDS = ['ACTIVITY_TYPE', 'LOCATION', 'MODULE'] as const;
 export type LookupKind = (typeof LOOKUP_KINDS)[number];
+/**
+ * The lists Admins edit. Module became free text (FR-ACT-20..22): the old MODULE values stay in
+ * the database untouched and are no longer shown or edited.
+ */
+export const EDITABLE_LOOKUP_KINDS = ['ACTIVITY_TYPE', 'LOCATION'] as const;
+export type EditableLookupKind = (typeof EDITABLE_LOOKUP_KINDS)[number];
 export const LOOKUP_LABELS: Record<LookupKind, { one: string; many: string; path: string }> = {
   ACTIVITY_TYPE: { one: 'activity type', many: 'Activity types', path: 'activity-types' },
   LOCATION: { one: 'location', many: 'Locations', path: 'locations' },
@@ -39,17 +45,8 @@ export const DEFAULT_LOOKUPS: Record<LookupKind, string[]> = {
     'Other',
   ],
   LOCATION: ['Onsite', 'WFH', 'Office'],
-  MODULE: [
-    'Financials',
-    'Inventory',
-    'Master data',
-    'Sales',
-    'Purchasing',
-    'Banking',
-    'ADFS Remote',
-    'Reports',
-    'UAT',
-  ],
+  // Free text since mockup v0.8.9: nothing to seed.
+  MODULE: [],
 };
 export const lookupSchema = z.strictObject({
   name: z.string().trim().min(1, 'Add a name.').max(80),
@@ -78,8 +75,8 @@ export const lookupInUseMessage = (name: string, n: number) =>
 /** Fields every timed entry carries (FR-ACT-15, -16, -17, -18). */
 const entryFields = {
   activityTypeId: objectId,
-  /** Required for project tasks, optional for quick activities. */
-  moduleId: objectId.nullable().optional(),
+  /** Optional free text, max 100 (FR-ACT-20). */
+  module: moduleText,
   /** Null = the day's location (FR-ACT-17). */
   locationId: objectId.nullable().optional(),
   /** Defaults: Yes for project tasks, No for quick activities. */
@@ -138,7 +135,7 @@ export const updateTimedEntrySchema = z
     timeIn: hhmm.optional(),
     timeOut: hhmm.optional(),
     activityTypeId: objectId.optional(),
-    moduleId: objectId.nullable().optional(),
+    module: moduleText,
     locationId: objectId.nullable().optional(),
     billable: z.boolean().optional(),
     type: z.enum(TIME_TYPES).optional(),
@@ -148,6 +145,17 @@ export const updateTimedEntrySchema = z
 export type UpdateTimedEntryInput = z.input<typeof updateTimedEntrySchema>;
 
 export const dayLocationSchema = z.strictObject({ locationId: objectId });
+
+/**
+ * Time out (FR-ACT-02, FR-ACT-23). `entryId` makes it idempotent: the top bar and the Day
+ * timesheet both send it, so a second click returns the already-stopped entry unchanged.
+ */
+export const stopTimerSchema = z.strictObject({
+  entryId: objectId.optional(),
+  /** Accepted for older clients; ignored. */
+  locationId: objectId.optional(),
+});
+export type StopTimerInput = z.input<typeof stopTimerSchema>;
 export const reopenDaySchema = z.strictObject({
   userId: objectId,
   reason: z.string().trim().min(1, 'Add a reason for reopening.').max(500),
@@ -181,7 +189,8 @@ export interface TrackerEntryDto {
   timed: boolean;
   autoStopped: boolean;
   activityType: Ref | null;
-  module: Ref | null;
+  /** Free text (mockup v0.8.9). */
+  module: string | null;
   /** The effective location (the entry's own, or the day's). */
   location: Ref | null;
   locationOverridden: boolean;

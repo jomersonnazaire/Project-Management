@@ -11,8 +11,9 @@ export async function lookups() {
     integration: by('ACTIVITY_TYPE', 'Integration'),
     configuration: by('ACTIVITY_TYPE', 'Configuration'),
     internalMeeting: by('ACTIVITY_TYPE', 'Internal meeting'),
-    financials: by('MODULE', 'Financials'),
-    inventory: by('MODULE', 'Inventory'),
+    // Module is free text (FR-ACT-20).
+    financials: 'Financials',
+    inventory: 'Inventory',
     onsite: by('LOCATION', 'Onsite'),
     wfh: by('LOCATION', 'WFH'),
     office: by('LOCATION', 'Office'),
@@ -22,5 +23,5 @@ export async function lookups() {
 /** The fields Log time now needs on every entry (FR-ACT-15, FR-DAR-09). */
 export async function entryFields() {
   const l = await lookups();
-  return { activityTypeId: l.configuration, moduleId: l.financials };
+  return { activityTypeId: l.configuration, module: l.financials };
 }

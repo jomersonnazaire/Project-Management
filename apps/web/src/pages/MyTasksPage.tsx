@@ -94,7 +94,8 @@ function TodayPlan({
   const minutesOn = (taskId: string) =>
     entries.filter((e) => e.task?.id === taskId).reduce((s, e) => s + entryMinutes(e), 0);
   const loading = hasTracker && !tracker;
-  const runningOn = (taskId: string) => entries.some((e) => e.running && e.task?.id === taskId);
+  const runningEntry = (taskId: string) => entries.find((e) => e.running && e.task?.id === taskId);
+  const runningOn = (taskId: string) => Boolean(runningEntry(taskId));
   const quick = entries.filter((e) => e.kind === 'QUICK');
   const canTime = Boolean(tracker?.can.edit);
   const planned = items.filter((t) => t.section === 'PLANNED');
@@ -131,7 +132,9 @@ function TodayPlan({
             size="sm"
             variant="danger"
             disabled={stop.isPending}
-            onClick={() => stop.mutate({ path: '/stop' })}
+            onClick={() =>
+              stop.mutate({ path: '/stop', body: { entryId: runningEntry(t.id)?.id } })
+            }
           >
             ■ Time out
           </Button>

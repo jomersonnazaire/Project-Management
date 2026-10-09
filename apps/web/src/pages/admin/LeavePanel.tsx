@@ -10,6 +10,7 @@ import {
 } from '../../api/leaveHooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { LeaveBalance } from '../../components/LeaveBalance';
 import { exportCsv } from '../../lib/reportCsv';
 
 /** Admin › Leave: leave types (FR-LV-01) and yearly entitlements (FR-LV-02, EC-79). */
@@ -349,8 +350,7 @@ function EntitlementRow({
         </td>
         <td className="text-end">{row.taken}</td>
         <td className="text-end">
-          {row.balance ?? '–'}
-          {row.negative && <span className="badge bg-label-danger ms-1">Negative</span>}
+          <LeaveBalance value={row.balance ?? null} negative={row.negative} noLimit="–" />
         </td>
         <td className="text-end">
           {canEdit && (

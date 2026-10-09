@@ -1,8 +1,9 @@
-import type { TimeType } from '@xc8/shared';
+import { MODULE_MAX, MODULE_TOO_LONG, type TimeType } from '@xc8/shared';
 
 export interface EntryFieldValues {
   activityTypeId: string;
-  moduleId: string;
+  /** Free text (FR-ACT-20). */
+  module: string;
   /** '' = the day's location (FR-ACT-17). */
   locationId: string;
   billable: boolean;
@@ -12,18 +13,18 @@ export interface EntryFieldValues {
 
 export const emptyFields = (kind: 'TASK' | 'QUICK'): EntryFieldValues => ({
   activityTypeId: '',
-  moduleId: '',
+  module: '',
   locationId: '',
   billable: kind === 'TASK',
   type: 'EXECUTION',
   notes: '',
 });
 
-/** Client-side checks matching the API (FR-ACT-15: Activity type always; Module on project tasks). */
-export function fieldErrors(v: EntryFieldValues, kind: 'TASK' | 'QUICK') {
+/** Client-side checks matching the API (FR-ACT-15 Activity type; FR-ACT-20 Module ≤ 100). */
+export function fieldErrors(v: EntryFieldValues, _kind: 'TASK' | 'QUICK') {
   const e: Record<string, string> = {};
   if (!v.activityTypeId) e.activityTypeId = 'Choose an activity type.';
-  if (kind === 'TASK' && !v.moduleId) e.moduleId = 'Choose a module.';
+  if (v.module.trim().length > MODULE_MAX) e.module = MODULE_TOO_LONG;
   return e;
 }
 
@@ -31,7 +32,7 @@ export function fieldErrors(v: EntryFieldValues, kind: 'TASK' | 'QUICK') {
 export function fieldsBody(v: EntryFieldValues, kind: 'TASK' | 'QUICK') {
   return {
     activityTypeId: v.activityTypeId,
-    moduleId: v.moduleId || null,
+    module: v.module.trim() || null,
     locationId: v.locationId || null,
     billable: v.billable,
     ...(kind === 'TASK' ? { type: v.type } : {}),

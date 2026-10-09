@@ -10,6 +10,7 @@ import { hoursLabel, shortDate, weekRangeShort } from '../../lib/format';
 import { useIsCompact } from '../../lib/useMediaQuery';
 import { TIME_TYPE_BADGE } from '../../lib/m3ui';
 import { useConfirm } from '../../components/ConfirmModal';
+import { LockedIcon } from '../../components/LockedIcon';
 
 const shift = (date: string, days: number) =>
   toDateOnly(new Date(new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000));
@@ -97,12 +98,7 @@ export function TimePage() {
                           <td data-label="Notes">{e.notes ?? ''}</td>
                           <td className="text-end text-nowrap">
                             {e.locked ? (
-                              <span
-                                className="small text-body-secondary"
-                                title={data.data?.lockDescription ?? 'Locked'}
-                              >
-                                🔒 Locked
-                              </span>
+                              <LockedIcon />
                             ) : (
                               canDelete && (
                                 <Button
@@ -150,7 +146,7 @@ export function TimePage() {
               <p className="small text-body-secondary mt-3 mb-0">
                 {data.data?.lockDescription ??
                   "Last week's entries lock every Monday at 12:00 PM Philippine time."}{' '}
-                Ask your project manager if a locked entry needs changing.
+                Ask an Admin to reopen the day if a locked entry needs changing.
               </p>
             </div>
           </div>

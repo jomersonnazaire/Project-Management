@@ -4,6 +4,7 @@ import {
   addDays,
   formatHHMM,
   formatTime12,
+  moduleLabel,
   parseDateOnly,
   toDateOnly,
   todayPH,
@@ -21,6 +22,7 @@ import {
 } from '../../api/trackerHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { LockedIcon } from '../../components/LockedIcon';
 import { ReasonModal } from '../../components/ReasonModal';
 import {
   TrackerEntryModal,
@@ -129,6 +131,7 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
   const others = (people.data ?? []).filter((p: Ref) => p.id !== user?.id);
   const day = useTrackerDay(date, person || undefined);
   const save = useTrackerMutation();
+  const stop = useTrackerMutation();
   const [modal, setModal] = useState<TrackerModalMode | null>(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [reopening, setReopening] = useState(false);
@@ -268,7 +271,19 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
                         {e.startAt ? formatTime12(e.startAt) : 'Hours only'}
                       </td>
                       <td data-label="Time out">
-                        {e.running ? (
+                        {e.running && d.own ? (
+                          // FR-ACT-23: same as the top-bar Time out (server time; idempotent).
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            className="text-nowrap"
+                            aria-label={`Time out on ${entryName(e)}`}
+                            disabled={stop.isPending}
+                            onClick={() => stop.mutate({ path: '/stop', body: { entryId: e.id } })}
+                          >
+                            ■ Time out
+                          </Button>
+                        ) : e.running ? (
                           <span className="badge bg-label-success">Running</span>
                         ) : e.endAt ? (
                           formatTime12(e.endAt)
@@ -304,10 +319,10 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
                       </td>
                       <td data-label="Billable">{e.billable ? 'Yes' : 'No'}</td>
                       <td data-label="Module · Remarks">
-                        {e.module?.name ?? '–'} · {e.notes ?? '–'}
+                        {moduleLabel(e.module)} · {e.notes ?? '–'}
                       </td>
                       <td className="text-end">
-                        {d.can.edit && (
+                        {d.can.edit ? (
                           <Button
                             size="sm"
                             variant="link"
@@ -316,6 +331,9 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
                           >
                             ✎
                           </Button>
+                        ) : (
+                          // FR-ACT-24: a locked own day shows a lock, not Edit / Delete.
+                          d.own && (d.status === 'SUBMITTED' || d.weekLocked) && <LockedIcon />
                         )}
                       </td>
                     </tr>

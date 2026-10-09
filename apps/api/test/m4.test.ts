@@ -398,7 +398,7 @@ describe('Time lock setting (Q-09)', () => {
         .post('/api/v1/time')
         .set(CSRF)
         .send({ taskId: kickoff._id.toString(), workDate: '2026-10-16', hours: 1, ...fields });
-    expect((await log()).body.error.code).toBe('TIME_LOCKED');
+    expect((await log()).body.error.code).toBe('DAY_LOCKED');
     // Thursday 5 PM: last week is still open on Wednesday.
     const put = await w.admin.agent
       .put('/api/v1/settings/time-lock')

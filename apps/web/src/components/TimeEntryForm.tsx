@@ -63,7 +63,7 @@ export function TimeEntryForm({
           hours: h,
           type: fields.type,
           activityTypeId: fields.activityTypeId,
-          moduleId: fields.moduleId,
+          module: fields.module.trim() || null,
           billable: fields.billable,
           ...(fields.locationId ? { locationId: fields.locationId } : {}),
           ...(fields.notes.trim() ? { notes: fields.notes.trim() } : {}),

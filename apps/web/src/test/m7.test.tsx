@@ -233,7 +233,7 @@ describe('TC-S06: Team on leave', () => {
     const row = (await screen.findByText('Personal appointment')).closest('tr')!;
     expect(row).toHaveTextContent('Ken L.');
     expect(row).toHaveTextContent('Half day AM');
-    expect(screen.getByText('−2').closest('td')).toHaveClass('text-danger');
+    expect(screen.getByText('−2')).toHaveClass('text-negative');
     // DR-38: a real minus sign and the Negative badge, as in My balances.
     expect(screen.getByText('−2').closest('td')).toHaveTextContent('−2Negative');
   });
@@ -309,7 +309,6 @@ describe('TC-S09: timer on a half-day leave', () => {
       within(dialog).getByLabelText('Activity type *'),
       'Configuration',
     );
-    await userEvent.selectOptions(within(dialog).getByLabelText('Module *'), 'Financials');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Start timer' }));
     expect(
       await within(dialog).findByText('You have half-day leave (AM) on Oct 9. Log time anyway?'),
@@ -340,7 +339,7 @@ describe('TC-S07: Admin entitlements', () => {
               negative: true,
             },
             warning:
-              'A. Reyes has already taken 6 days of Vacation. Setting 4 makes the balance -2. The balance is flagged (EC-79).',
+              'A. Reyes has already taken 6 days of Vacation. Setting 4 makes the balance −2. The balance is flagged (EC-79).',
           },
         };
       if (url.includes('/leave/entitlements'))
@@ -374,7 +373,7 @@ describe('TC-S07: Admin entitlements', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(
       await screen.findByText(
-        /A\. Reyes has already taken 6 days of Vacation\. Setting 4 makes the balance -2/,
+        /A\. Reyes has already taken 6 days of Vacation\. Setting 4 makes the balance −2/,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();

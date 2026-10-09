@@ -2,6 +2,7 @@ import {
   DAR_COLUMNS,
   DAR_FOOTER,
   DAR_TITLE,
+  moduleLabel,
   SAVED_EARLIER,
   SAVED_LATEST,
   generatedRangeLabel,
@@ -53,7 +54,7 @@ export function DarReportView({ report }: { report: DarReportDto }) {
                 <td>{r.activityType}</td>
                 <td>{r.location}</td>
                 <td>{r.billable}</td>
-                <td>{r.module}</td>
+                <td>{r.leave ? r.module : moduleLabel(r.module)}</td>
                 <td className="dar-remarks">{r.remarks}</td>
               </tr>
             ))}

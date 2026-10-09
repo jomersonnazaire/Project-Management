@@ -1,11 +1,12 @@
 import {
   DAY_LOCKED,
   DAY_LOCKED_ADMIN,
-  LOOKUP_KINDS,
+  EDITABLE_LOOKUP_KINDS,
   LOOKUP_LABELS,
   STOP_TIMER_FIRST,
   WHERE_WORKING,
   dayLocationSchema,
+  stopTimerSchema,
   dayQuerySchema,
   lookupInUseMessage,
   lookupSchema,
@@ -77,7 +78,10 @@ function noFuture(date: Date) {
   }
 }
 
-const KIND_BY_PATH = new Map(LOOKUP_KINDS.map((k) => [LOOKUP_LABELS[k].path, k]));
+// FR-ACT-22: Modules are no longer an Admin list. The stored values stay in the database untouched,
+// so only Activity types and Locations are reachable here.
+const KIND_BY_PATH = new Map(EDITABLE_LOOKUP_KINDS.map((k) => [LOOKUP_LABELS[k].path, k]));
+const isEditableKind = (k: string) => (EDITABLE_LOOKUP_KINDS as readonly string[]).includes(k);
 function kindParam(req: Request): LookupKind {
   const k = KIND_BY_PATH.get(String(req.params.kind));
   if (!k) throw notFound();
@@ -86,7 +90,8 @@ function kindParam(req: Request): LookupKind {
 
 interface FieldInput {
   activityTypeId?: string;
-  moduleId?: string | null;
+  /** Free text, already trimmed by the schema; null = blank (FR-ACT-20). */
+  module?: string | null;
   locationId?: string | null;
   billable?: boolean;
   type?: 'EXECUTION' | 'WAITING' | 'REWORK';
@@ -110,18 +115,9 @@ async function resolveFields(input: FieldInput, kind: 'TASK' | 'QUICK', current?
       'VALIDATION_ERROR',
     );
   }
-  if (input.moduleId) {
-    out.moduleId = await assertLookup(input.moduleId, 'MODULE', 'moduleId', current?.moduleId);
-  } else if (input.moduleId === null || (!current && input.moduleId === undefined)) {
-    if (kind === 'TASK') {
-      throw badRequest(
-        'Choose a module.',
-        [{ path: 'moduleId', message: 'Choose a module.' }],
-        'VALIDATION_ERROR',
-      );
-    }
-    out.moduleId = null;
-  }
+  // FR-ACT-20: optional free text on every entry; blank or spaces-only saves as blank.
+  if (input.module !== undefined) out.module = input.module || null;
+  else if (!current) out.module = null;
   if (input.locationId) {
     out.locationId = await assertLookup(
       input.locationId,
@@ -323,15 +319,29 @@ export function trackerRouter(registry: RouteRegistry) {
 
   // Time out.
   r.post('/stop', perm('activities', 'edit'), async (req, res) => {
-    parseBody(dayLocationSchema.partial().strict(), req);
+    const input = parseBody(stopTimerSchema, req);
     const user = currentUser(req);
     const now = new Date();
     await sweepAutoStop(now, user._id);
-    const current = await TimeEntryModel.findOne({ userId: user._id, running: true })
-      .select('_id')
-      .lean();
-    if (!current) throw unprocessable('No timer is running.', 'NO_TIMER');
-    const done = (await stopEntry(current._id, now))!;
+    // FR-ACT-23: stopping a named entry is idempotent. If it has already stopped (the other
+    // Time out button, a double click, or the 23:59 auto-stop), return it unchanged.
+    const current = input.entryId
+      ? ((await TimeEntryModel.findOne({
+          _id: input.entryId,
+          userId: user._id,
+        }).lean()) as EntryDoc | null)
+      : await TimeEntryModel.findOne({ userId: user._id, running: true }).select('_id').lean();
+    if (!current) {
+      if (input.entryId) throw notFound();
+      throw unprocessable('No timer is running.', 'NO_TIMER');
+    }
+    const done = await stopEntry(current._id, now);
+    if (!done) {
+      const already = (await TimeEntryModel.findById(current._id).lean()) as EntryDoc | null;
+      const [same] = await toTrackerDtos([already!]);
+      res.json({ entry: same });
+      return;
+    }
     await audit({
       actorId: user._id,
       entityType: 'time',
@@ -577,6 +587,9 @@ export function trackerRouter(registry: RouteRegistry) {
     const isAdmin = actor.systemRole === 'ADMIN';
     const isSupervisor = Boolean(target.supervisorId?.equals(actor._id));
     if (!isAdmin && !isSupervisor) {
+      // FR-ACT-25 (NFR-25): a user outside the caller's scope is "not found" whether or not they
+      // exist; 403 only when the caller can see them (e.g. a Member reopening their own day).
+      if (!(await canViewPerson(actor, userId))) throw notFound();
       throw forbidden('Only their supervisor or an Admin can reopen this day.', 'NOT_SUPERVISOR');
     }
     const state = await dayState(userId, date);
@@ -619,13 +632,12 @@ export function trackerRouter(registry: RouteRegistry) {
     res.json({
       activityTypes: pick('ACTIVITY_TYPE'),
       locations: pick('LOCATION'),
-      modules: pick('MODULE'),
     });
   });
 
   async function usage(ids: Id[]) {
     const counts = new Map<string, number>();
-    for (const field of ['activityTypeId', 'moduleId', 'locationId'] as const) {
+    for (const field of ['activityTypeId', 'locationId'] as const) {
       const rows = await TimeEntryModel.aggregate<{ _id: Id; n: number }>([
         { $match: { [field]: { $in: ids } } },
         { $group: { _id: `$${field}`, n: { $sum: 1 } } },
@@ -714,7 +726,8 @@ export function trackerRouter(registry: RouteRegistry) {
   l.patch('/:id', perm('settings', 'edit'), async (req, res) => {
     const input = parseBody(updateLookupSchema, req);
     const doc = await LookupModel.findById(idParam(req));
-    if (!doc) throw notFound();
+    // FR-ACT-22: the old Modules list stays in the database untouched.
+    if (!doc || !isEditableKind(doc.kind)) throw notFound();
     const user = currentUser(req);
     const changes: { field: string; old: unknown; new: unknown }[] = [];
     if (input.name && input.name !== doc.name) {
@@ -751,7 +764,8 @@ export function trackerRouter(registry: RouteRegistry) {
   // In-use values can only be deactivated (§10).
   l.delete('/:id', perm('settings', 'edit'), async (req, res) => {
     const doc = await LookupModel.findById(idParam(req));
-    if (!doc) throw notFound();
+    // FR-ACT-22: the old Modules list stays in the database untouched.
+    if (!doc || !isEditableKind(doc.kind)) throw notFound();
     const n = (await usage([doc._id])).get(doc._id.toString()) ?? 0;
     if (n > 0) throw conflictWith(lookupInUseMessage(doc.name, n), 'LOOKUP_IN_USE', { usedBy: n });
     await doc.deleteOne();

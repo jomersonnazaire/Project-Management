@@ -6,6 +6,7 @@ import { addMissingRecordTypes, applyAccessDefaultChanges } from './services/acc
 import { ensureDefaultAccessRules } from './services/accessRules.js';
 import { runIssueSweeps } from './services/issues.js';
 import { ensureLaunchTemplate } from './services/launchTemplate.js';
+import { migrateModuleText } from './services/moduleText.js';
 import { migrateProjectCodes } from './services/projectCodes.js';
 import { ensureDefaultLookups, sweepAutoStop } from './services/tracker.js';
 import { ensureDefaultLeaveTypes } from './services/leave.js';
@@ -24,8 +25,10 @@ await applyAccessDefaultChanges(logger);
 await ensureLaunchTemplate(logger);
 // DR-23: every project gets a unique code and issues use it as their ID prefix (idempotent).
 await migrateProjectCodes(logger);
-// M5/M7: seed the Activity types, Locations and Modules lists, and the leave types, once.
+// M5/M7: seed the Activity types and Locations lists, and the leave types, once.
 await ensureDefaultLookups(logger);
+// FR-ACT-21: Module is free text; copy old Modules-list names into it (idempotent).
+await migrateModuleText(logger);
 await ensureDefaultLeaveTypes(logger);
 const app = createApp(config, logger);
 const server = app.listen(config.PORT, () => {

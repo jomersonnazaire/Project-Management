@@ -15,10 +15,9 @@ import { api, qs } from './client';
 export interface LookupOptions {
   activityTypes: Ref[];
   locations: Ref[];
-  modules: Ref[];
 }
 
-/** Active Activity types, Locations and Modules for entry forms. */
+/** Active Activity types and Locations for entry forms (Module is free text, FR-ACT-20). */
 export function useLookups() {
   return useQuery({
     queryKey: ['lookups'],

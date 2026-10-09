@@ -1,4 +1,4 @@
-import { LOOKUP_LABELS, type LookupDto, type LookupKind } from '@xc8/shared';
+import { LOOKUP_LABELS, type EditableLookupKind, type LookupDto } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
@@ -7,13 +7,11 @@ import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { shortDate } from '../../lib/format';
 
-const NOTES: Record<LookupKind, string> = {
+const NOTES: Record<EditableLookupKind, string> = {
   ACTIVITY_TYPE:
     "One list for every time entry, project tasks and quick activities alike. Required on each entry; shown in the report's Activity Type column.",
   LOCATION:
     'Asked once per day at the first Time in ("Where are you working today?"); entries inherit it and one entry can be changed. Report column "Location".',
-  MODULE:
-    'Specific area of work, e.g. SAP B1 modules. Required for project tasks, optional for quick activities.',
 };
 
 const entries = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
@@ -26,10 +24,10 @@ type Dialog =
   | { kind: 'delete'; item: LookupDto };
 
 /**
- * Admin › Settings › Activity types / Locations / Modules (doc 14 FR-ACT-15, -17, §10; mockup
- * v0.8.7 actcat, setloc, setmod). In use: deactivate, not delete. Every change is audited.
+ * Admin › Settings › Activity types / Locations (doc 14 FR-ACT-15, -17, §10; mockup v0.8.9
+ * actcat, setloc; Modules removed by FR-ACT-22). In use: deactivate, not delete. Every change is audited.
  */
-export function LookupsPanel({ kind }: { kind: LookupKind }) {
+export function LookupsPanel({ kind }: { kind: EditableLookupKind }) {
   const labels = LOOKUP_LABELS[kind];
   const list = useAdminLookups(kind);
   const save = useLookupMutation();

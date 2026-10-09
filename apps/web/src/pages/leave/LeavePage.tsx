@@ -29,10 +29,11 @@ import {
 import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
-import { shortDate } from '../../lib/format';
+import { LeaveBalance } from '../../components/LeaveBalance';
+import { daysLabel, shortDate } from '../../lib/format';
 
-/** Days with a real minus sign (DR-38): -3.5 → "−3.5". */
-const num = (n: number | null) => (n === null ? '–' : n < 0 ? `−${Math.abs(n)}` : String(n));
+/** Days with a real minus sign (DR-38): the shared helper. */
+const num = daysLabel;
 
 /** DR-33: a merged AM + PM row reads "Full day (AM + PM)". */
 const dayPartLabel = (l: LeaveRow) => (l.halves ? FULL_DAY_AM_PM : DAY_PART_LABELS[l.dayPart]);
@@ -244,8 +245,7 @@ function BalancesTable({ items }: { items: LeaveBalanceDto[] }) {
                   <td className="text-end">{b.type.paid ? b.carryOver : '–'}</td>
                   <td className="text-end">{b.recorded}</td>
                   <td className="text-end">
-                    {b.balance === null ? 'No limit' : num(b.balance)}
-                    {b.negative && <span className="badge bg-label-danger ms-1">Negative</span>}
+                    <LeaveBalance value={b.balance} negative={b.negative} />
                   </td>
                 </>
               )}
@@ -535,9 +535,8 @@ function TeamLeaveTab() {
                       )}
                     </td>
                     {p.items.map((b) => (
-                      <td key={b.type.id} className={`text-end ${b.negative ? 'text-danger' : ''}`}>
-                        <span>{num(b.balance)}</span>
-                        {b.negative && <span className="badge bg-label-danger ms-1">Negative</span>}
+                      <td key={b.type.id} className="text-end">
+                        <LeaveBalance value={b.balance} negative={b.negative} noLimit="–" />
                       </td>
                     ))}
                   </tr>

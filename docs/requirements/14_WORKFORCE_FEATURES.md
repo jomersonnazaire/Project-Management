@@ -1,6 +1,6 @@
 # 14 — Microsoft Sign-in, Activity Tracker, Daily Activity Report, Leave, PM View
 
-**Status:** v0.9.5 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.9.7 (Module free text, timesheet Time out button) · v0.9.5 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson via Lean (room, 8:19 PM); Deven's and UIE's technical and design points.
 Nothing here is built until Jomerson approves. Items marked **⚑** change an existing design decision.
 
@@ -154,7 +154,7 @@ Nothing here is built until Jomerson approves. Items marked **⚑** change an ex
 ### 12.1 New time-entry fields (from the sample report)
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-ACT-15 | Every time entry (project task or quick activity) gets **Location** (from an Admin list, e.g. "Office", "Client site", "Offsite - WFH"), **Billable** (Yes/No; defaults to Yes for client-project tasks and No for quick activities, editable) and **Module** (from an Admin list, e.g. SAP B1 modules; optional for quick activities). Lists are edited under Admin › Settings, and in-use values are deactivated rather than deleted. | Must |
+| FR-ACT-15 | Every time entry (project task or quick activity) gets **Location** (from an Admin list, e.g. "Office", "Client site", "Offsite - WFH"), **Billable** (Yes/No; defaults to Yes for client-project tasks and No for quick activities, editable) and **Module** (*superseded by FR-ACT-20: now optional free text*). Location and Billable lists are edited under Admin › Settings, and in-use values are deactivated rather than deleted. | Must |
 | FR-ACT-16 | Remarks stay free text and separate from Module (Queen's note on the sample). | Must |
 | FR-DAR-07 | The HTML report follows the sample: header block, "Total Activities" count, one row per entry with the sample's columns (including Location, Billable, Module, time in, time out, rendered hours and remarks), a **total rendered hours** row (Queen), and the footer line. UIE's mockup v0.8.2 is the column reference. | Must |
 
@@ -233,3 +233,20 @@ Nothing here is built until Jomerson approves. Items marked **⚑** change an ex
 - **24-hour cap with a running timer:** a running timer's elapsed time counts toward the day's 24-hour cap (Deven, fix round c81519c).
 - **Hours display:** HH:MM everywhere on screen and in CSV exports, replacing DR-08's "4h" style.
 - **My tasks tab order (Jomerson):** Today, Day timesheet, Due, Assigned to me, I'm accountable, To review, Completed (FR-TSK-22). Time in/out on a task fills the Day timesheet automatically, with no typing (FR-ACT-02, FR-ACT-10).
+
+## Day timesheet polish (v0.9.7, Jomerson; Lean's call, 2026-10-09)
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-ACT-20 | **Module is an optional free-text box** in every time-entry form (Add entry, edit entry, quick activity, Time in), replacing the dropdown. Leading and trailing spaces are trimmed; a blank or spaces-only value saves as blank and shows "–" on screen, in the report, PDF and Excel. Max **100 characters** after trimming, enforced by UI and API (API returns 400 `VALIDATION_ERROR`); a counter appears from 80 characters and the inline error reads "Keep the module under 100 characters." Typed HTML is stored and shown as plain text, never rendered. | Must |
+| FR-ACT-21 | **Migration:** a one-time, idempotent update copies each existing entry's module name into the new text field, so every entry and saved report keeps its module name. | Must |
+| FR-ACT-22 | The **Admin › Settings › Modules** screen is removed from the app. The stored Modules list stays in the database untouched (possible future suggestions; permanent removal is on Lean's handoff list). | Must |
+| FR-ACT-23 | The **running row** on the Day timesheet has its own **Time out** button. It behaves exactly like the top-bar Time out: stops the timer at the current server time, fills end time and HH:MM rendered hours. Stopping is idempotent: if both buttons are clicked, or one is clicked twice, the entry is stopped once and the second request returns the already-stopped entry with no change. | Must |
+
+- **AC-ACT-20.1** Given a 101-character Module, save is refused by UI and API; 100 characters saves.
+- **AC-ACT-20.2** Given Module "   ", the entry saves with blank Module and the report shows "–".
+- **AC-ACT-20.3** Given Module `<b>x</b>`, the timesheet, report, PDF and Excel show the literal text.
+- **AC-ACT-21.1** After migration, every pre-existing entry shows the same module name as before, including in report exports.
+- **AC-ACT-23.1** Given a running timer, clicking the row's Time out then the top-bar Time out gives one stopped entry with the same end time and HH:MM as a top-bar-only stop.
+| FR-ACT-24 | **One lock rule on every route (v0.9.8, Queen's Q1):** in a locked day or week, non-Admins (PMs included) can't create, edit or delete their entries through any endpoint (`/time` or `/tracker/entries`); all return 422 `DAY_LOCKED`. Only Admins change locked entries, after reopening. Enforce it in one shared check. In the UI, non-Admins see no Edit or Delete on locked rows (Time logging and Day timesheet); a lock icon shows instead, with the tooltip "Locked. Ask an Admin to reopen this day." (UIE) | Must |
+| FR-ACT-25 | **Reopen requests don't reveal users (v0.9.8, Queen's Q2):** a reopen or other per-user request naming a user outside the caller's scope returns 404, whether that user exists or not, in line with NFR-25. 403 stays only for a caller who can see the target but lacks the action (for example, a Member reopening their own day). | Must |

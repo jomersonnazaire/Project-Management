@@ -3,6 +3,7 @@ import {
   DAR_FOOTER,
   DAR_TITLE,
   generatedRangeLabel,
+  moduleLabel,
   type DarReportDto,
   type DarRowDto,
 } from '@xc8/shared';
@@ -23,7 +24,7 @@ function cells(r: DarRowDto): string[] {
     r.activityType,
     r.location,
     r.billable,
-    r.module,
+    r.leave ? r.module : moduleLabel(r.module),
     r.remarks,
   ];
 }

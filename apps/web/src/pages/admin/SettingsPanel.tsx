@@ -157,7 +157,7 @@ const SETTINGS_TABS = [
   { key: 'general', label: 'General' },
   { key: 'ACTIVITY_TYPE', label: 'Activity types' },
   { key: 'LOCATION', label: 'Locations' },
-  { key: 'MODULE', label: 'Modules' },
+  // FR-ACT-22: no Modules screen; Module is free text on each entry (FR-ACT-20).
 ] as const;
 
 /** Admin › Settings with the tracker lists (doc 14 FR-ACT-15, mockup v0.8.7). */

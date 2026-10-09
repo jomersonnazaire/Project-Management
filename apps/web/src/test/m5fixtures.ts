@@ -18,7 +18,7 @@ export const entry = (over: Partial<TrackerEntryDto> = {}): TrackerEntryDto => (
   timed: true,
   autoStopped: false,
   activityType: { id: 'at1', name: 'Configuration' },
-  module: { id: 'mod1', name: 'Financials' },
+  module: 'Financials',
   location: { id: 'loc2', name: 'WFH' },
   locationOverridden: false,
   billable: true,

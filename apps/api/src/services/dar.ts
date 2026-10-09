@@ -82,7 +82,8 @@ export async function buildDar(
       activityType: e.activityType?.name ?? '',
       location: e.location?.name ?? '',
       billable: e.billable ? 'Yes' : 'No',
-      module: e.module?.name ?? '',
+      // FR-ACT-20: free text; a blank module shows as "–" when rendered (moduleLabel).
+      module: e.module ?? '',
       remarks,
     };
   });

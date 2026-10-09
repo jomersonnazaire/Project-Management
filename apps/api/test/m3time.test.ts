@@ -91,12 +91,13 @@ describe('FR-TIME-01/02/07: logging', () => {
 });
 
 describe('FR-TIME-04/06: weekly lock and own entries', () => {
-  it('last week is locked for members from Monday 12:00 Manila; PMs can still fix theirs', async () => {
+  it('last week is locked from Monday 12:00 Manila for everyone, PMs included (FR-ACT-24)', async () => {
     const { w, t1 } = await setup();
-    const locked = await log(w.member.agent, t1, '2026-10-09', 1);
-    expect(locked.status).toBe(422);
-    expect(locked.body.error.code).toBe('TIME_LOCKED');
-    expect((await log(w.pm.agent, t1, '2026-10-09', 1)).status).toBe(201);
+    for (const a of [w.member.agent, w.pm.agent]) {
+      const locked = await log(a, t1, '2026-10-09', 1);
+      expect(locked.status).toBe(422);
+      expect(locked.body.error.code).toBe('DAY_LOCKED');
+    }
     // Monday 11:59 Manila: last week is still open.
     vi.setSystemTime(new Date('2026-10-12T03:59:00Z'));
     expect((await log(w.member.agent, t1, '2026-10-09', 1)).status).toBe(201);

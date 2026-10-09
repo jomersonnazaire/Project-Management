@@ -59,7 +59,7 @@ async function setup() {
 const task = (l: L, taskId: string, extra = {}) => ({
   taskId,
   activityTypeId: l.configuration,
-  moduleId: l.financials,
+  module: l.financials,
   ...extra,
 });
 const start = (a: Agent, body: object) => a.post('/api/v1/tracker/start').set(CSRF).send(body);
@@ -190,7 +190,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
       workDate: '2026-10-13',
       hours: 2,
       activityTypeId: l.configuration,
-      moduleId: l.financials,
+      module: l.financials,
     });
     expect(hoursOnly.status).toBe(201);
     // A manual entry can't end in the future.
@@ -211,7 +211,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
         workDate: '2026-10-13',
         hours: h,
         activityTypeId: l.configuration,
-        moduleId: l.financials,
+        module: l.financials,
       });
     }
     const res = await manual(w.member.agent, {
@@ -322,14 +322,14 @@ describe('TC-Q08: location per day', () => {
   });
 });
 
-describe('TC-Q09: Activity types, Locations and Modules lists', () => {
+describe('TC-Q09: Activity types and Locations lists', () => {
   it('Admin-only edits; in-use values deactivate, not delete; past entries keep the label', async () => {
     const { w, l, t1 } = await setup();
     expect(
       (await w.member.agent.post('/api/v1/lookups/activity-types').set(CSRF).send({ name: 'X' }))
         .status,
     ).toBe(403);
-    expect((await w.pm.agent.get('/api/v1/lookups/modules/all')).status).toBe(403);
+    expect((await w.pm.agent.get('/api/v1/lookups/locations/all')).status).toBe(403);
     const all = await w.admin.agent.get('/api/v1/lookups/locations/all');
     expect(all.body.items.map((i: { name: string }) => i.name)).toEqual([
       'Onsite',
@@ -343,7 +343,7 @@ describe('TC-Q09: Activity types, Locations and Modules lists', () => {
     expect(dup.status).toBe(409);
     expect(dup.body.error.message).toBe('"WFH" already exists.');
     const created = await w.admin.agent
-      .post('/api/v1/lookups/modules')
+      .post('/api/v1/lookups/activity-types')
       .set(CSRF)
       .send({ name: 'Production' });
     expect(created.status).toBe(201);
@@ -416,7 +416,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
       workDate: '2026-10-14',
       hours: 1,
       activityTypeId: l.integration,
-      moduleId: l.financials,
+      module: l.financials,
     });
     expect(time.body.error.code).toBe('DAY_LOCKED');
     // Late submission of an earlier day this week is fine.
@@ -433,7 +433,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
     const body = { userId: w.member.user._id.toString(), reason: 'Missing afternoon entries' };
     const url = '/api/v1/tracker/days/2026-10-13/reopen';
     expect((await w.member.agent.post(url).set(CSRF).send(body)).status).toBe(403);
-    expect((await w.pm2.agent.post(url).set(CSRF).send(body)).status).toBe(403);
+    expect((await w.pm2.agent.post(url).set(CSRF).send(body)).status).toBe(404); // FR-ACT-25: outside pm2's scope
     expect(
       (
         await w.pm.agent
@@ -585,7 +585,7 @@ describe('TC-Q05 mixed: hours-only entries, timed entries and a running timer sh
         workDate: '2026-10-14',
         hours,
         activityTypeId: l.configuration,
-        moduleId: l.financials,
+        module: l.financials,
       });
     expect((await hoursOnly(18)).status).toBe(201);
     expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(

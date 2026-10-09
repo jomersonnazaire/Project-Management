@@ -117,3 +117,6 @@ export function whereWorkingQuestion(date: string, today: string): string {
     ? `Where were you working on ${day}?`
     : `Where will you be working on ${day}?`;
 }
+
+/** Leave days with a real minus sign (DR-38): the shared helper. */
+export { leaveDaysLabel as daysLabel } from '@xc8/shared';

@@ -1,4 +1,12 @@
-import { TIME_TYPES, TIME_TYPE_LABELS, toDateOnly, todayPH, type TimeType } from '@xc8/shared';
+import {
+  MODULE_COUNTER_FROM,
+  MODULE_MAX,
+  TIME_TYPES,
+  TIME_TYPE_LABELS,
+  toDateOnly,
+  todayPH,
+  type TimeType,
+} from '@xc8/shared';
 import { Form } from 'react-bootstrap';
 import { useLookups } from '../../api/trackerHooks';
 import { whereWorkingQuestion } from '../../lib/format';
@@ -27,7 +35,6 @@ export function EntryFields({
   /** Values the entry already has (shown even when inactive). */
   keep?: {
     activityType?: { id: string; name: string } | null;
-    module?: { id: string; name: string } | null;
   };
   idPrefix: string;
   /** DR-30: the entry that sets the day's location doesn't ask for a per-entry one too. */
@@ -39,7 +46,7 @@ export function EntryFields({
     kept?: { id: string; name: string } | null,
   ) => (kept && !items.some((i) => i.id === kept.id) ? [...items, kept] : items);
   const activityTypes = withKept(lists.data?.activityTypes ?? [], keep?.activityType);
-  const modules = withKept(lists.data?.modules ?? [], keep?.module);
+  const moduleLength = values.module.trim().length;
   return (
     <>
       <div className="row g-3 mb-3">
@@ -123,21 +130,29 @@ export function EntryFields({
           </Form.Text>
         </Form.Group>
       </div>
+      {/* FR-ACT-20: optional free text, max 100 after trimming; React shows it as plain text. */}
       <Form.Group className="mb-3" controlId={`${idPrefix}-module`}>
-        <Form.Label>{kind === 'TASK' ? 'Module *' : 'Module (optional)'}</Form.Label>
-        <Form.Select
-          value={values.moduleId}
-          isInvalid={Boolean(errors.moduleId)}
-          onChange={(e) => onChange({ moduleId: e.target.value })}
-        >
-          <option value="">{kind === 'TASK' ? 'Choose…' : 'None'}</option>
-          {modules.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </Form.Select>
-        <Form.Control.Feedback type="invalid">{errors.moduleId}</Form.Control.Feedback>
+        <Form.Label>Module (optional)</Form.Label>
+        <Form.Control
+          value={values.module}
+          placeholder="e.g. ADFS Remote"
+          autoComplete="off"
+          isInvalid={Boolean(errors.module)}
+          aria-describedby={
+            moduleLength >= MODULE_COUNTER_FROM ? `${idPrefix}-module-count` : undefined
+          }
+          onChange={(e) => onChange({ module: e.target.value })}
+        />
+        <Form.Control.Feedback type="invalid">{errors.module}</Form.Control.Feedback>
+        {moduleLength >= MODULE_COUNTER_FROM && (
+          <Form.Text
+            id={`${idPrefix}-module-count`}
+            className={moduleLength > MODULE_MAX ? 'text-danger' : undefined}
+            aria-live="polite"
+          >
+            {moduleLength}/{MODULE_MAX}
+          </Form.Text>
+        )}
       </Form.Group>
       <Form.Group className="mb-3" controlId={`${idPrefix}-notes`}>
         <Form.Label>Remarks</Form.Label>
