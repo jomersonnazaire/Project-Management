@@ -9,3 +9,4 @@ export * from './phHolidays.js';
 export * from './issues.js';
 export * from './reports.js';
 export * from './tracker.js';
+export * from './dar.js';

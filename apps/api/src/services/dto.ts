@@ -20,6 +20,7 @@ interface UserLike {
   teamIds?: Id[] | null;
   weeklyCapacityHours?: number | null;
   supervisorId?: Id | null;
+  reportCc?: string[] | null;
   active?: boolean | null;
   mustChangePassword?: boolean | null;
   passwordHash?: string | null;
@@ -46,6 +47,7 @@ export function toUserDto(u: UserLike): UserDto {
     teamIds: (u.teamIds ?? []).map((t) => t.toString()),
     weeklyCapacityHours: u.weeklyCapacityHours ?? 40,
     supervisorId: u.supervisorId ? u.supervisorId.toString() : null,
+    reportCc: [...(u.reportCc ?? [])],
     status: userStatus(u),
     active: Boolean(u.active),
     mustChangePassword: Boolean(u.mustChangePassword),

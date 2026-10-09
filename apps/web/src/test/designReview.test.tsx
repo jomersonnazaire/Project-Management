@@ -14,6 +14,7 @@ const user = (over: Partial<UserDto> = {}): UserDto => ({
   teamIds: [],
   weeklyCapacityHours: 40,
   supervisorId: null,
+  reportCc: [],
   status: 'ACTIVE',
   active: true,
   mustChangePassword: false,

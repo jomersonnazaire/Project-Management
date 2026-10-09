@@ -57,3 +57,25 @@ const timesheetDaySchema = new Schema(
 timesheetDaySchema.index({ userId: 1, date: 1 }, { unique: true });
 export type TimesheetDay = InferSchemaType<typeof timesheetDaySchema>;
 export const TimesheetDayModel = model('TimesheetDay', timesheetDaySchema);
+
+/**
+ * A saved Daily Accomplishment Report (doc 14 §15, FR-DAR-11 to -16): a read-only copy of exactly
+ * what the preview showed. Private to the saver; never updated or deleted.
+ */
+const savedReportSchema = new Schema(
+  {
+    userId: { type: ObjectId, ref: 'User', required: true, immutable: true },
+    from: { type: String, required: true, immutable: true },
+    to: { type: String, required: true, immutable: true },
+    savedAt: { type: Date, required: true, immutable: true },
+    totalActivities: { type: Number, required: true, immutable: true },
+    totalMinutes: { type: Number, required: true, immutable: true },
+    /** The DarReportDto as rendered at save time. */
+    report: { type: Schema.Types.Mixed, required: true, immutable: true },
+  },
+  { strict: 'throw', collection: 'savedReports', versionKey: false },
+);
+savedReportSchema.index({ userId: 1, savedAt: -1 });
+savedReportSchema.index({ userId: 1, from: 1, to: 1, savedAt: -1 });
+export type SavedReport = InferSchemaType<typeof savedReportSchema>;
+export const SavedReportModel = model('SavedReport', savedReportSchema);
