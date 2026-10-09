@@ -12,7 +12,7 @@ import {
 } from '@xc8/shared';
 import { useState, type DragEvent } from 'react';
 import { useEdgeFade } from '../../lib/useEdgeFade';
-import { Button, Form } from 'react-bootstrap';
+import { Button, Dropdown, Form } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import {
   useContactOptions,
@@ -173,6 +173,11 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                       <th scope="col">Due</th>
                       <th scope="col">Est. / actual</th>
                       <th scope="col">Status</th>
+                      {canPlan && (
+                        <th scope="col">
+                          <span className="visually-hidden">Actions</span>
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -216,6 +221,41 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                         <td data-label="Status">
                           <TaskStatusBadge status={t.status} />
                         </td>
+                        {canPlan && (
+                          <td className="text-end cell-actions">
+                            {/* Touch and non-drag alternative to ⋮⋮ (FR-PRJ-18). Same reorder call;
+                                moving to another phase stays in Edit task. */}
+                            <Dropdown align="end">
+                              <Dropdown.Toggle
+                                variant="link"
+                                size="sm"
+                                className="hide-arrow p-0 text-body"
+                                aria-label={`Actions for ${t.name}`}
+                              >
+                                <i
+                                  className="bx bx-dots-vertical-rounded fs-5"
+                                  aria-hidden="true"
+                                />
+                              </Dropdown.Toggle>
+                              <Dropdown.Menu>
+                                <Dropdown.Item
+                                  as="button"
+                                  disabled={i === 0 || reorder.isPending}
+                                  onClick={() => move(ph, i, i - 1)}
+                                >
+                                  Move up
+                                </Dropdown.Item>
+                                <Dropdown.Item
+                                  as="button"
+                                  disabled={i === group.length - 1 || reorder.isPending}
+                                  onClick={() => move(ph, i, i + 1)}
+                                >
+                                  Move down
+                                </Dropdown.Item>
+                              </Dropdown.Menu>
+                            </Dropdown>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

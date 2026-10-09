@@ -340,6 +340,54 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     ).toBeInTheDocument();
   });
 
+  it('FR-PRJ-18 each row’s ⋮ menu has Move up / Move down, greyed out at the ends of a phase', async () => {
+    const fetchMock = checklistApi();
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Kickoff' }));
+    expect(await screen.findByRole('button', { name: 'Move up' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Move down' })).not.toHaveAttribute('aria-disabled');
+    // A greyed-out item does nothing.
+    await userEvent.click(screen.getByRole('button', { name: 'Move up' }));
+    expect(calls(fetchMock, '/tasks/reorder')).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Kickoff' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Move down' }));
+    await waitFor(() =>
+      expect(calls(fetchMock, '/tasks/reorder')).toEqual([
+        { phase: 'Discovery', taskIds: ['k2', 'k1'] },
+      ]),
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Moved Kickoff to position 2 of 2 in Discovery.',
+    );
+  });
+
+  it('FR-PRJ-18 Move up on the last row of a phase; a single-row phase has both greyed out', async () => {
+    const fetchMock = checklistApi();
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Extra' }));
+    expect(await screen.findByRole('button', { name: 'Move down' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Move up' }));
+    await waitFor(() =>
+      expect(calls(fetchMock, '/tasks/reorder')).toEqual([{ phase: null, taskIds: ['k5', 'k4'] }]),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Configure' }));
+    const menu = screen.getByRole('button', { name: 'Actions for Configure' }).parentElement!;
+    expect(within(menu).getByRole('button', { name: 'Move up' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(within(menu).getByRole('button', { name: 'Move down' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
   it('"+ Add activity to Phase N" adds a task in that phase with no phase picker', async () => {
     const fetchMock = checklistApi();
     renderAt(`/projects/${PID}`, <App />);
@@ -367,6 +415,7 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     const { unmount } = renderAt(`/projects/${PID}`, <App />);
     await screen.findByText('Kickoff');
     expect(screen.queryByRole('button', { name: /^Reorder / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Add activity/ })).not.toBeInTheDocument();
     // Opening and closing phases is for everyone.
     expect(screen.getByRole('button', { name: /Discovery/ })).toHaveAttribute('aria-expanded');
@@ -377,5 +426,6 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     renderAt(`/projects/${PID}`, <App />);
     await screen.findByText('Kickoff');
     expect(screen.queryByRole('button', { name: /^Reorder / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument();
   });
 });
