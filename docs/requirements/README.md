@@ -1,6 +1,6 @@
 # Phase 1 Requirements: AI-Powered Implementation Project Tracker
 
-**Status:** v0.3.5, approved by Jomerson for the Phase 1 build (2026-10-09) · **Author:** Rich (Research & Requirements) · **Date:** 2026-10-09
+**Status:** v0.4.2 (Milestone 1.5 model approved); Phase 1 v0.3.6, approved by Jomerson for the Phase 1 build (2026-10-09) · **Author:** Rich (Research & Requirements) · **Date:** 2026-10-09
 **Sources:** Product blueprint PDF ("AI-Powered Implementation Project Tracker"), UI mockup v0.4 by UIE, Sneat style (incl. Documents, Login, My tasks, Admin, Template editor, dialogs, empty/error states), competitor research.
 
 | # | Document | Primary reader |
@@ -31,3 +31,7 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.3.3 | 2026-10-09 | Milestone 1 decisions: 8-character password minimum; sign-in lands on My tasks until Milestone 4; invite and reset links are single-use and shared by hand (72 hours and 24 hours), with emailed reset deferred. |
 | v0.3.4 | 2026-10-09 | PR #1 deviations accepted: passwords need a number and a symbol, and sessions have a 12-hour absolute cap. |
 | v0.3.5 | 2026-10-09 | Lean's calls on QA findings: silent lockout (AC-01.3), invite and reset tokens in a POST body, rate limiter tech debt TD-01. |
+| v0.3.6 | 2026-10-09 | From M1 testing: 429 sign-in copy (AC-01.3) and trusted client-IP rule for the rate limiter (NFR-05). |
+| v0.4.0 draft | 2026-10-09 | Doc 11: access rules module per Access role (Milestone 1.5), Clients › Contacts tab, project Active contacts (M2). |
+| v0.4.1 | 2026-10-09 | Jomerson: four fixed Access roles (no custom roles); Q-26 only Admins delete projects, PMs archive; Q-27 PMs can't see access rules. |
+| v0.4.2 | 2026-10-09 | Client Projects tab (FR-CLI-11) with Member scope rule (FR-CLI-12), AC-35.2, AC-35.3. |
