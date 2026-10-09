@@ -22,6 +22,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | FR-USR-03 | Job roles (descriptive): Consultant, Developer, Researcher/BA, Support, QA/Tester, Technical/Data Specialist, Project Manager. | BR-04 | Must |
 | FR-USR-04 | Teams (Consulting, Development, Support, QA, Technical…) are admin-managed; a user can be in several teams. | BR-04 | Must |
 | FR-USR-05 | Only Admin can change system roles; a user can't change their own role (server). | BR-12 | Must |
+| FR-USR-06 | Admins can edit a user's email. It must be valid and unique among users (case-insensitive). The change is audited (old and new value), ends the user's other sessions, and cancels any unused invite or reset links (Lean confirmed). Saving asks for confirmation ("Change <name>'s email?"); a duplicate shows "Another user already has this email." Non-Admins can't change Admins' emails (doc 11 §11). (Jomerson, 2026-10-09) | BR-12 | Must |
 
 ## CLI · Clients & client contacts
 | ID | Requirement | BR | Pri |

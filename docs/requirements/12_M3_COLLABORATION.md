@@ -29,6 +29,7 @@
 | FR-TPL-12 | Each phase in the template editor has "+ Add activity"; the new activity is created in that phase at the end of its list. | Must |
 | FR-PRJ-18 | Each Checklist row's ⋮ menu has **Move up / Move down** (greyed out at the ends of a phase) for touch screens and non-drag users (UIE, Lean). Moving across phases stays in Edit task. | Must |
 | FR-PRJ-19 | **DEF-003 fix (Lean):** task Owner and Assignees list only project members. PMs and Admins get "+ Add someone to this project…" at the bottom of the list, which adds the person as a project member and assigns them in one step, audited, with a confirmation naming them. Members and Viewers see "Only project members can be assigned". The template field is labelled **Default job role**. | Must |
+| FR-PRJ-20 | Each Checklist row has a visible icon-only pencil **Edit task** button (tooltip and screen-reader label "Edit task") in a fixed column before the ⋮ menu, shown only to users who can edit that task, and always visible on phones (Jomerson, UIE). | Must |
 | FR-TPL-13 | Activities can be reordered by drag-and-drop within a phase and moved between phases; a keyboard alternative ("Move up/down/to phase…") is provided. | Must |
 | FR-PRJ-14 | On the project Checklist, clicking anywhere on a phase card header expands or collapses it; the expanded state is remembered per user per project. | Must |
 | FR-PRJ-15 | Users with Edit on the project can reorder activities in the Checklist (drag-and-drop plus keyboard alternative). | Must |
