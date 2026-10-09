@@ -10,9 +10,10 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
-  MONGODB_DB_NAME: z.string().optional(),
-  /** Public URL of the web app, used to build invite links. */
-  WEB_APP_URL: z.string().url().default('http://localhost:5173'),
+  /** Database name, e.g. the production one or `pm-staging` (NFR-26). Required in production. */
+  MONGODB_DB_NAME: z.string().trim().optional(),
+  /** Public URL of the web app, used to build invite links. Required in production (NFR-26). */
+  WEB_APP_URL: z.string().url().optional(),
   /**
    * Comma-separated list of allowed browser origins. `*` wildcards are allowed inside a
    * host label, e.g. `https://xc8-pm-*.vercel.app` for Vercel preview deployments.
@@ -66,13 +67,33 @@ const EnvSchema = z.object({
    */
   AZURE_STORAGE_ACCOUNT: z.string().trim().optional(),
   AZURE_STORAGE_CONNECTION_STRING: z.string().trim().optional(),
-  AZURE_STORAGE_CONTAINER: z.string().trim().default('project-documents'),
+  /** Blob container for this environment (NFR-26: staging uses its own). Required in production. */
+  AZURE_STORAGE_CONTAINER: z.string().trim().optional(),
   /** Lifetime of the write-only upload link given to the browser. */
   UPLOAD_LINK_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
-export type AppConfig = z.infer<typeof EnvSchema>;
+type ParsedEnv = z.infer<typeof EnvSchema>;
+export type AppConfig = Omit<ParsedEnv, 'WEB_APP_URL' | 'AZURE_STORAGE_CONTAINER'> & {
+  WEB_APP_URL: string;
+  AZURE_STORAGE_CONTAINER: string;
+};
+
+/**
+ * NFR-26: production and staging differ only by their settings. Nothing that picks the
+ * environment's data (database, blob container, web URL for links) has a production default; a
+ * production process missing one refuses to start. Local development and tests get local defaults.
+ */
+export const ENVIRONMENT_SETTINGS = [
+  'MONGODB_DB_NAME',
+  'AZURE_STORAGE_CONTAINER',
+  'WEB_APP_URL',
+] as const;
+const LOCAL_DEFAULTS = {
+  WEB_APP_URL: 'http://localhost:5173',
+  AZURE_STORAGE_CONTAINER: 'project-documents',
+};
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = EnvSchema.safeParse(env);
@@ -80,7 +101,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid environment configuration: ${issues}`);
   }
-  const cfg = parsed.data;
+  const env0 = parsed.data;
+  if (env0.NODE_ENV === 'production') {
+    const missing = ENVIRONMENT_SETTINGS.filter((k) => !env0[k]);
+    if (missing.length) {
+      throw new Error(
+        `Invalid environment configuration: ${missing.join(', ')} must be set in production (NFR-26)`,
+      );
+    }
+  }
+  const cfg: AppConfig = {
+    ...env0,
+    WEB_APP_URL: env0.WEB_APP_URL ?? LOCAL_DEFAULTS.WEB_APP_URL,
+    AZURE_STORAGE_CONTAINER: env0.AZURE_STORAGE_CONTAINER ?? LOCAL_DEFAULTS.AZURE_STORAGE_CONTAINER,
+  };
   if (cfg.COOKIE_SAMESITE === 'none' && !cfg.COOKIE_SECURE) {
     throw new Error('COOKIE_SAMESITE=none requires COOKIE_SECURE=true');
   }

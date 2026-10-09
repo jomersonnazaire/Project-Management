@@ -1,14 +1,18 @@
 /**
- * Vercel Routing Middleware for the /api proxy (DEF-002).
+ * Vercel Routing Middleware: the /api proxy (DEF-002, NFR-26).
  *
- * vercel.json rewrites /api/* to the Azure API, so Azure sees Vercel's (rotating) egress
- * address as the client. Here we pass the real visitor IP in `x-xc8-client-ip` together with
+ * NFR-26: previews must never reach production data. vercel.json rewrites can't read env vars,
+ * so the API origin is picked here from VERCEL_ENV: production → the production API, anything
+ * else (preview, development) → STAGING_API_URL. A preview without STAGING_API_URL answers 503
+ * instead of falling back to production.
+ *
+ * Azure would otherwise see Vercel's (rotating) egress address as the client. Here we pass the real visitor IP in `x-xc8-client-ip` together with
  * a shared secret (`EDGE_PROXY_SECRET`, set on both Vercel and Azure). The API trusts the
  * visitor IP only when the secret matches; anything else falls back to the address Azure's
  * front end appended. Any incoming copies of these headers are dropped first, so a browser
  * can't inject them.
  */
-import { next } from '@vercel/functions/middleware';
+import { rewrite } from '@vercel/functions/middleware';
 
 export const config = { matcher: '/api/:path*' };
 
@@ -36,6 +40,30 @@ function env(name: string): string | undefined {
   return g.process?.env?.[name] || undefined;
 }
 
+export const PRODUCTION_API_URL = 'https://xc8-projectmgmt-api-tc3w.azurewebsites.net';
+
+/** The API origin for this deployment, or null when a non-production one has no staging API. */
+export function apiOrigin(vercelEnv: string | undefined, stagingUrl: string | undefined) {
+  if (vercelEnv === 'production') return PRODUCTION_API_URL;
+  const staging = stagingUrl?.trim().replace(/\/+$/, '');
+  return staging ? staging : null;
+}
+
 export default function middleware(request: Request): Response {
-  return next({ request: { headers: edgeRequestHeaders(request, env('EDGE_PROXY_SECRET')) } });
+  const origin = apiOrigin(env('VERCEL_ENV'), env('STAGING_API_URL'));
+  if (!origin) {
+    return Response.json(
+      {
+        error: {
+          code: 'STAGING_API_NOT_CONFIGURED',
+          message: 'This preview has no staging API yet (STAGING_API_URL is not set).',
+        },
+      },
+      { status: 503 },
+    );
+  }
+  const url = new URL(request.url);
+  return rewrite(new URL(url.pathname + url.search, origin), {
+    request: { headers: edgeRequestHeaders(request, env('EDGE_PROXY_SECRET')) },
+  });
 }
