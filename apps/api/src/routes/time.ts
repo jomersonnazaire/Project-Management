@@ -1,9 +1,9 @@
 import {
   OPEN_TASK_STATUSES,
   addDays,
+  describeTimeLock,
   parseDateOnly,
   timeEntrySchema,
-  timeLockBoundary,
   timeWeekQuerySchema,
   toDateOnly,
   todayPH,
@@ -29,6 +29,7 @@ import {
   type TimeEntry,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { currentLockBoundary, loadTimeLock } from '../services/timeLock.js';
 import { recomputeProject } from '../services/projectService.js';
 import { isProjectMember, type ScopeUser } from '../services/scope.js';
 import { loadProject } from './projects.js';
@@ -69,7 +70,7 @@ async function toDtos(entries: EntryDoc[]): Promise<TimeEntryDto[]> {
   const name = (list: { _id: Id; name: string }[]) =>
     new Map(list.map((x) => [x._id.toString(), x.name]));
   const [pn, tn, un] = [name(projects), name(tasks), name(users)];
-  const boundary = timeLockBoundary();
+  const boundary = await currentLockBoundary();
   return entries.map((e) => ({
     id: e._id.toString(),
     user: { id: e.userId.toString(), name: un.get(e.userId.toString()) ?? 'Unknown user' },
@@ -93,7 +94,7 @@ async function assertDateAndCap(user: ScopeUser, workDate: Date, hours: number, 
       'VALIDATION_ERROR',
     );
   }
-  if (workDate < timeLockBoundary() && !canBypassLock(user)) {
+  if (workDate < (await currentLockBoundary()) && !canBypassLock(user)) {
     throw unprocessable(
       'That week is locked. Ask your project manager to change it.',
       'TIME_LOCKED',
@@ -155,6 +156,7 @@ export function timeRouter(registry: RouteRegistry) {
       items,
       total: items.reduce((s, e) => s + e.hours, 0),
       capacity: user.weeklyCapacityHours ?? 40,
+      lockDescription: describeTimeLock((await loadTimeLock()).policy),
     };
     res.json(body);
   });
@@ -226,7 +228,7 @@ export function timeRouter(registry: RouteRegistry) {
     const entry = await TimeEntryModel.findById(idParam(req));
     const user = currentUser(req);
     if (!entry || !entry.userId.equals(user._id)) throw notFound();
-    if (entry.workDate < timeLockBoundary() && !canBypassLock(user)) {
+    if (entry.workDate < (await currentLockBoundary()) && !canBypassLock(user)) {
       throw unprocessable(
         'That week is locked. Ask your project manager to change it.',
         'TIME_LOCKED',

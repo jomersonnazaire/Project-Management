@@ -27,3 +27,9 @@
 | ID | Severity | Title |
 |---|---|---|
 | DEF-006 | Low | An outsider calling DELETE `/issues/:id` gets 403 instead of 404, which confirms the issue exists. This is the same pattern as DEF-005: run the scope check before the Delete permission check. |
+
+## Follow-up: PR #8. Result: PASS (API)
+| Check | Result |
+|---|---|
+| DEF-006 / NFR-25 outsider sweep | 37 calls as outsider@ across projects, tasks, status, follow-ups, evidence, issues (get, edit, delete, status, comments, activity), documents, folders and folder access, requests, conversation, hide and time. All returned 404. DEF-006 closed |
+| AC-44.1 | On "QA M3.5 – Completed with open issue", creating an issue gives 201 and updating one gives 200, while editing a task gives 422 PROJECT_COMPLETED | Pass |

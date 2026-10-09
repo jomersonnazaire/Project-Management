@@ -19,6 +19,18 @@ const settingSchema = new Schema(
   {
     key: { type: String, required: true, unique: true },
     workingDays: { type: [Number], default: undefined },
+    /** Q-09: `timeLock` key — when last week's entries lock (Admin setting, no approval step). */
+    timeLock: {
+      type: new Schema(
+        {
+          enabled: { type: Boolean, required: true },
+          weekday: { type: Number, min: 0, max: 6, required: true },
+          hour: { type: Number, min: 0, max: 23, required: true },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     version: { type: Number, default: 0 },
     updatedBy: { type: ObjectId, ref: 'User', default: null },
   },

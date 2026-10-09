@@ -603,9 +603,25 @@ export const updateTemplateSchema = z
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), 'Nothing to update.');
 
+// ---------- DR-23: project codes (issue ID prefix) ----------
+export const PROJECT_CODE_TAKEN =
+  'This code is already used by another project. Codes must be unique.';
+export const PROJECT_CODE_LOCKED =
+  "Can't change once the project has issues, so issue IDs stay the same.";
+/** 2–20 letters, numbers and single hyphens, stored in capitals ("acme-sap" → "ACME-SAP"). */
+export const projectCodeSchema = z
+  .string()
+  .trim()
+  .min(2, 'Use at least 2 characters.')
+  .max(20, 'Use 20 characters or fewer.')
+  .regex(/^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/, 'Use letters, numbers and single hyphens.')
+  .transform((v) => v.toUpperCase());
+
 export const createProjectSchema = z
   .strictObject({
     name: requiredText('Project name', 160),
+    /** DR-23: unique ignoring case; suggested from the client and type when left out. */
+    code: projectCodeSchema.optional(),
     clientId: objectId,
     managerId: objectId,
     type: z.enum(TEMPLATE_TYPES).optional(),
@@ -626,6 +642,8 @@ export type CreateProjectInput = z.input<typeof createProjectSchema>;
 export const updateProjectSchema = z
   .strictObject({
     name: requiredText('Project name', 160).optional(),
+    /** DR-23: can't change once the project has issues. */
+    code: projectCodeSchema.optional(),
     description: optionalText(4000),
     type: z.enum(TEMPLATE_TYPES).nullable().optional(),
     managerId: objectId.optional(),
@@ -638,6 +656,8 @@ export const updateProjectSchema = z
     reason: optionalText(500),
     /** Confirms that changing the client clears the active contacts (FR-PRJ-13). */
     confirmClearContacts: z.boolean().optional(),
+    /** EC-68: confirms the client change although issues keep contacts from the old client. */
+    confirmIssueContacts: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
@@ -834,6 +854,8 @@ export interface UserRefDto extends Ref {
 export interface ProjectListItemDto {
   id: string;
   name: string;
+  /** DR-23: the issue ID prefix, e.g. "ACME-SAP". */
+  code: string | null;
   clientId: string;
   clientName: string;
   managerId: string | null;
@@ -863,6 +885,8 @@ export interface ActiveContactDto {
 }
 
 export interface ProjectDto extends ProjectListItemDto {
+  /** DR-23: true once the project has issues; the code is then read-only. */
+  codeLocked: boolean;
   description: string | null;
   type: TemplateType | null;
   manager: UserRefDto | null;

@@ -54,3 +54,16 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.7.0 | 2026-10-09 | PR #7 calls confirmed: My tasks tabs after Due, PMs view-only on other projects' issues, phase deletion rule, M3.5 items deferred to M4. |
 | v0.7.1 | 2026-10-09 | NFR-25: out-of-scope records return 404 on every method (after DEF-005 and DEF-006). |
 | v0.7.2 | 2026-10-09 | Q-08 resolved, Q-09 as setting; NFR-26 separate staging environment. |
+| v0.8.0 draft | 2026-10-09 | Doc 14: Microsoft sign-in (M5), Activity Tracker (M6), Daily Activity Report (M7), Leave (M8), PM view folded into M4. Q-36 to Q-47. |
+| v0.8.1 | 2026-10-09 | Doc 14: daily timesheet with Submit day, reopen and weekly-lock flag (FR-ACT-10 to 14); DAR fallback for non-Outlook users (FR-DAR-04b). |
+| v0.8.2 | 2026-10-09 | Doc 14 §10 Lean's calls on mockup gaps; §11 message wording draft. |
+| v0.8.3 | 2026-10-09 | Doc 14 §12: Jomerson's Q-36/37/41/46 decisions, Location/Billable/Module fields, exact-minute rendered time (proposed), wording fixes. |
+| v0.8.4 | 2026-10-09 | Doc 14 §12.4: location once per day (FR-ACT-17), exact report layout (FR-DAR-08), column mapping; Lean confirmed exact minutes and Admin-only reopen after lock. |
+| v0.8.5 | 2026-10-09 | FR-DAR-09: Activity Type is a category on every entry (UIE). |
+| v0.8.6 | 2026-10-09 | Time type kept on project entries (FR-ACT-18); no-supervisor rules for report and leave (FR-DAR-10, FR-LV-10). |
+| v0.8.7 | 2026-10-09 | Sent reports record with saved copies (FR-DAR-11 to 16), Q-48 retention. |
+| v0.9.0 | 2026-10-09 | Microsoft sign-in on hold (roadmap); milestones renumbered M5 tracker, M6 report, M7 leave, M8 regression; company sender with server-built recipients (FR-DAR-17); roadmap v1.1. |
+| v0.9.1 | 2026-10-09 | Q-49 resolved: report view/export only; sending and Sent reports record move to the Microsoft sign-in roadmap item. |
+| v0.9.2 | 2026-10-09 | Saved reports (FR-DAR-11 to 16, 18): save is final, supervisor sees all saves, no deletes, Latest/Earlier version. |
+| v0.9.3 | 2026-10-09 | Saved reports private to the owner (FR-DAR-14); no purge; Q-48 deferred. |
+| v0.9.4 | 2026-10-09 | Doc 14 approved for build; FR-LV-11 same-day AM+PM leave rule. |

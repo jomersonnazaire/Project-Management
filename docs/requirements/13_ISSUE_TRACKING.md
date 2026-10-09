@@ -18,7 +18,7 @@ Out (Phase 2+): client self-service portal or raising issues by email, SLA clock
 ## 3. Issue record
 | Field | Rules |
 |-------|-------|
-| ID | Per project, e.g. `ACME-SAP-ISS-012` (project code + running number); never reused |
+| ID | Per project, e.g. `ACME-SAP-ISS-012` (**project code** + running number, not the client code; DR-23); never reused. Project codes must be unique (case-insensitive), and a project's code can't change once it has issues. |
 | Title | Required, up to 150 characters |
 | Description | Required, plain text up to 10,000 characters |
 | Stage | **Before go-live** or **After go-live**; defaults from project status (Completed → After go-live), editable |

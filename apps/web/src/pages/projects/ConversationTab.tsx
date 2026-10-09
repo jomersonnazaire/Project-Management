@@ -16,6 +16,8 @@ import { Button, Form } from 'react-bootstrap';
 import { useHideMessage, useMessages, usePostMessage } from '../../api/m3Hooks';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { ReasonModal } from '../../components/ReasonModal';
+import { useCan } from '../../auth/useCan';
+import { LinkIssueModal } from './LinkIssueModal';
 import { dayLabel, initials, shortDate, timeOfDay } from '../../lib/format';
 
 /** Message text as plain text: links become anchors, nothing is ever rendered as HTML (FR-CNV-04). */
@@ -40,11 +42,13 @@ function Message({
   canHide,
   onHide,
   onOpenTask,
+  onLinkIssue,
 }: {
   m: MessageDto;
   canHide: boolean;
   onHide: () => void;
   onOpenTask: (id: string) => void;
+  onLinkIssue?: () => void;
 }) {
   if (m.hidden) {
     return (
@@ -75,11 +79,22 @@ function Message({
             {MESSAGE_TYPE_LABELS[m.type]}
           </span>
           <small className="text-body-secondary">{timeOfDay(m.at)}</small>
+          {onLinkIssue && (
+            <Button
+              variant="link"
+              size="sm"
+              className={`p-0 text-body-secondary ${canHide ? 'ms-auto me-2' : 'ms-auto'}`}
+              onClick={onLinkIssue}
+            >
+              <i className="bx bx-flag me-1" aria-hidden="true" />
+              Link to issue
+            </Button>
+          )}
           {canHide && (
             <Button
               variant="link"
               size="sm"
-              className="p-0 ms-auto text-body-secondary"
+              className={`p-0 text-body-secondary ${onLinkIssue ? '' : 'ms-auto'}`}
               onClick={onHide}
             >
               Hide
@@ -139,6 +154,8 @@ export function ConversationTab({
     contactId: '',
   });
   const [missing, setMissing] = useState(false);
+  const [linking, setLinking] = useState<MessageDto | null>(null);
+  const canLink = useCan('issues', 'edit') && !project.archived;
   const items = list.data?.items ?? [];
   const can = list.data?.can;
   const contacts = project.activeContacts.filter((c) => c.active);
@@ -235,6 +252,7 @@ export function ConversationTab({
                         canHide={Boolean(can?.hide)}
                         onHide={() => setHiding(m)}
                         onOpenTask={onOpenTask}
+                        onLinkIssue={canLink ? () => setLinking(m) : undefined}
                       />
                     </div>
                   );
@@ -329,6 +347,9 @@ export function ConversationTab({
           </div>
         </div>
       </div>
+      {linking && (
+        <LinkIssueModal projectId={project.id} message={linking} onClose={() => setLinking(null)} />
+      )}
       {hiding && (
         <ReasonModal
           title="Hide message"

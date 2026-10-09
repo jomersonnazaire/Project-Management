@@ -39,8 +39,8 @@ const SETUP: NavItem[] = [
     any: [['templates', 'view']],
   },
   { to: '/clients', label: 'Clients', icon: 'bx-buildings', any: [['clients', 'view']] },
-  { to: '/workload', label: 'Team & workload', icon: 'bx-group', soon: true },
-  { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', soon: true },
+  { to: '/workload', label: 'Team & workload', icon: 'bx-group', any: [['reports', 'view']] },
+  { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', any: [['reports', 'view']] },
   {
     to: '/admin',
     label: 'Admin',

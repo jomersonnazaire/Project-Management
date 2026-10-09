@@ -16,6 +16,7 @@ import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js'
 import { currentUser } from '../middleware/auth.js';
 import { TeamModel, UserModel, type User, type UserDoc } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { notifyOwnerNeeded } from '../services/issues.js';
 import { toUserDto } from '../services/dto.js';
 import { revokeUserSessions } from '../services/sessions.js';
 import { newToken, sha256 } from '../services/tokens.js';
@@ -191,6 +192,8 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
         action: 'user_deactivated',
         changes: [{ field: 'active', old: true, new: false }],
       });
+      // EC-66: their open issues need a new owner; tell each project's PM.
+      await notifyOwnerNeeded({ ownerIds: [user._id], actorId: admin._id });
     }
     res.json({ user: toUserDto(user) });
   });

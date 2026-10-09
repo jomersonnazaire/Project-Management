@@ -89,7 +89,7 @@ export function LoginPage() {
         </Button>
       </Form>
       <p className="small text-body-secondary text-center mt-3 mb-1">
-        You&apos;ll land on My tasks.
+        You&apos;ll land on your Dashboard.
       </p>
       <p className="small text-body-secondary text-center mb-3">
         Forgot your password? Ask an Admin for a reset link.

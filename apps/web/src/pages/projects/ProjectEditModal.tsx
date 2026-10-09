@@ -1,4 +1,6 @@
 import {
+  PROJECT_CODE_LOCKED,
+  projectCodeSchema,
   PROJECT_STATUS_LABELS,
   PROJECT_STATUSES,
   plural,
@@ -32,6 +34,7 @@ export function ProjectEditModal({
   const people = usePeople();
   const clients = useClients();
   const [name, setName] = useState(project.name);
+  const [code, setCode] = useState(project.code ?? '');
   const [description, setDescription] = useState(project.description ?? '');
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const [managerId, setManagerId] = useState(project.managerId ?? '');
@@ -41,6 +44,7 @@ export function ProjectEditModal({
   const [plannedEndDate, setPlannedEndDate] = useState(project.plannedEndDate ?? '');
   const [reason, setReason] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmIssues, setConfirmIssues] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const datesChanged =
@@ -50,17 +54,28 @@ export function ProjectEditModal({
   const err = (k: string) => errors[k] ?? serverErrors[k];
   const needsConfirm =
     update.error instanceof ApiError && update.error.code === 'CONFIRM_CLEAR_CONTACTS';
+  // EC-68: issues keep contacts from the old client; the PM confirms the client change.
+  const issueWarning =
+    update.error instanceof ApiError && update.error.code === 'ISSUE_CONTACTS_OLD_CLIENT'
+      ? update.error
+      : null;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Project name is required.';
+    const codeChanged = !project.codeLocked && code.trim().toUpperCase() !== (project.code ?? '');
+    if (codeChanged) {
+      const check = projectCodeSchema.safeParse(code);
+      if (!check.success) next.code = check.error.issues[0]?.message ?? 'Invalid code.';
+    }
     if (plannedEndDate <= startDate) next.plannedEndDate = END_AFTER_START;
     if (datesChanged && !reason.trim()) next.reason = 'Give a reason for changing the baseline.';
     setErrors(next);
     if (Object.keys(next).length) return;
     const body: UpdateProjectInput = {};
     if (name.trim() !== project.name) body.name = name.trim();
+    if (codeChanged) body.code = code.trim().toUpperCase();
     if ((description.trim() || null) !== project.description)
       body.description = description.trim() || null;
     if (status !== project.status) body.status = status;
@@ -70,6 +85,7 @@ export function ProjectEditModal({
     if (clientChanged) {
       body.clientId = clientId;
       if (confirmClear) body.confirmClearContacts = true;
+      if (confirmIssues) body.confirmIssueContacts = true;
     }
     if (datesChanged) {
       body.startDate = startDate;
@@ -103,10 +119,22 @@ export function ProjectEditModal({
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {update.error && !Object.keys(serverErrors).length && !needsConfirm ? (
+          {update.error && !Object.keys(serverErrors).length && !needsConfirm && !issueWarning ? (
             <Alert variant="danger">{saveErrorMessage(update.error)}</Alert>
           ) : null}
           {needsConfirm && <Alert variant="warning">{(update.error as ApiError).message}</Alert>}
+          {issueWarning && clientChanged && (
+            <Alert variant="warning">
+              <p className="mb-2">{issueWarning.message}</p>
+              <Form.Check
+                type="checkbox"
+                id="edit-prj-confirm-issues"
+                label="Change the client anyway"
+                checked={confirmIssues}
+                onChange={(e) => setConfirmIssues(e.target.checked)}
+              />
+            </Alert>
+          )}
           <div className="row g-3">
             <Form.Group className="col-md-8" controlId="edit-prj-name">
               <Form.Label>Project name</Form.Label>
@@ -116,6 +144,25 @@ export function ProjectEditModal({
                 isInvalid={Boolean(err('name'))}
               />
               <Form.Control.Feedback type="invalid">{err('name')}</Form.Control.Feedback>
+            </Form.Group>
+            <Form.Group className="col-md-4" controlId="edit-prj-code">
+              <Form.Label>Project code</Form.Label>
+              <Form.Control
+                value={code}
+                readOnly={project.codeLocked}
+                maxLength={20}
+                style={{ textTransform: 'uppercase' }}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                isInvalid={Boolean(err('code'))}
+                aria-describedby={project.codeLocked ? 'edit-prj-code-hint' : undefined}
+              />
+              <Form.Control.Feedback type="invalid">{err('code')}</Form.Control.Feedback>
+              {project.codeLocked && (
+                <Form.Text id="edit-prj-code-hint">
+                  <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+                  {PROJECT_CODE_LOCKED}
+                </Form.Text>
+              )}
             </Form.Group>
             <Form.Group className="col-md-4" controlId="edit-prj-status">
               <Form.Label>Status</Form.Label>

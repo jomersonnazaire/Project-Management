@@ -1,5 +1,5 @@
 import type { ProjectDto, SystemRole, TaskDto } from '@xc8/shared';
-import { ACME, meBody } from './fixtures';
+import { ACME, emptyDashboard, meBody } from './fixtures';
 import { mockApi } from './utils';
 
 /** Milestone 2 fixtures shared by the project and follow-up tests. */
@@ -9,6 +9,8 @@ export const ME_PM = 'me-PROJECT_MANAGER';
 export const project = (over: Partial<ProjectDto> = {}): ProjectDto => ({
   id: PID,
   name: 'SAP B1 Rollout',
+  code: 'ACME-SAP',
+  codeLocked: false,
   clientId: ACME.id,
   clientName: ACME.name,
   managerId: ME_PM,
@@ -87,6 +89,9 @@ export type Route = (url: string, init?: RequestInit) => Reply | undefined;
 export function api(role: SystemRole, route: Route = () => undefined) {
   return mockApi((url, init) => {
     if (url.endsWith('/auth/me')) return { status: 200, body: meBody(role) };
-    return route(url, init) ?? { status: 200, body: { items: [] } };
+    const routed = route(url, init);
+    if (routed) return routed;
+    if (/\/api\/v1\/dashboard(\?|$)/.test(url)) return { status: 200, body: emptyDashboard() };
+    return { status: 200, body: { items: [] } };
   });
 }

@@ -161,6 +161,8 @@ export interface TimeWeekDto {
   items: TimeEntryDto[];
   total: number;
   capacity: number;
+  /** Q-09: the Admin-set lock in words, e.g. "Last week's entries lock every Monday at 12:00 PM Philippine time." */
+  lockDescription?: string;
 }
 
 export interface LoggableTaskDto {
@@ -175,15 +177,65 @@ export function weekStartOf(d: Date): Date {
 }
 
 /**
- * FR-TIME-04 / Q-09 default: last week's entries lock on Monday at 12:00 Philippine time.
- * Returns the first work date that is still open; anything earlier is read-only (except PM/Admin).
+ * Q-09 (built as an Admin setting, v0.7.2): the previous week locks every week at `weekday`
+ * (0 = Sunday … 6 = Saturday) and `hour` Philippine time. Default: Monday 12:00 PM. There is no
+ * approval step. With `enabled` off nothing locks.
  */
-export function timeLockBoundary(now = new Date()): Date {
+export interface TimeLockPolicy {
+  enabled: boolean;
+  weekday: number;
+  hour: number;
+}
+export const DEFAULT_TIME_LOCK: TimeLockPolicy = { enabled: true, weekday: 1, hour: 12 };
+export const timeLockSchema = z.object({
+  enabled: z.boolean(),
+  weekday: z.number().int().min(0).max(6),
+  hour: z.number().int().min(0).max(23),
+  version: z.number().int().min(0),
+});
+export type TimeLockInput = z.infer<typeof timeLockSchema>;
+export interface TimeLockDto {
+  policy: TimeLockPolicy;
+  version: number;
+  /** First work date still open now (YYYY-MM-DD), or null when locking is off. */
+  boundary: string | null;
+  description: string;
+}
+const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
+export function formatHour12(hour: number): string {
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h}:00 ${hour < 12 ? 'AM' : 'PM'}`;
+}
+/** "Last week locks every Monday at 12:00 PM Philippine time." */
+export function describeTimeLock(p: TimeLockPolicy): string {
+  if (!p.enabled) return 'Time entries never lock.';
+  return `Last week's entries lock every ${WEEKDAY_NAMES[p.weekday]} at ${formatHour12(p.hour)} Philippine time.`;
+}
+
+/**
+ * FR-TIME-04 / Q-09: returns the first work date that is still open; anything earlier is read-only
+ * (except PM/Admin). Weeks run Monday to Sunday. The previous week locks at this week's lock moment
+ * (weekday + hour, Philippine time). With locking off, nothing is locked (the epoch is returned).
+ */
+export function timeLockBoundary(
+  now = new Date(),
+  policy: TimeLockPolicy = DEFAULT_TIME_LOCK,
+): Date {
+  if (!policy.enabled) return new Date(0);
   const ph = new Date(now.getTime() + 8 * 3_600_000);
   const today = new Date(`${ph.toISOString().slice(0, 10)}T00:00:00.000Z`);
   const monday = weekStartOf(today);
-  const afterNoonMonday = today.getTime() > monday.getTime() || ph.getUTCHours() >= 12;
-  return afterNoonMonday ? monday : new Date(monday.getTime() - 7 * 86_400_000);
+  const lockAt =
+    monday.getTime() + ((policy.weekday + 6) % 7) * 86_400_000 + policy.hour * 3_600_000;
+  return ph.getTime() >= lockAt ? monday : new Date(monday.getTime() - 7 * 86_400_000);
 }
 
 // ---------- Uploads (FR-EVD-01..08, FR-DOC-13) ----------

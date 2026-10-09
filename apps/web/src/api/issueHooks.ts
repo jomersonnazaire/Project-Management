@@ -166,3 +166,23 @@ export function useDeletePhase(projectId: string) {
     },
   });
 }
+
+/**
+ * Link a conversation message to an issue from the Conversation tab (M4, FR-ISS links). Reads the
+ * issue first so existing links and the version are kept; a 409 means someone else changed it.
+ */
+export function useLinkMessageToIssue() {
+  const done = useInvalidateIssues();
+  return useMutation({
+    mutationFn: async ({ issueId, messageId }: { issueId: string; messageId: string }) => {
+      const { issue } = await api<{ issue: IssueDto }>(`/issues/${issueId}`);
+      const ids = issue.links.messages.map((m) => m.id);
+      if (ids.includes(messageId)) return issue;
+      const body: UpdateIssueInput = { version: issue.version, messageIds: [...ids, messageId] };
+      return api<{ issue: IssueDto }>(`/issues/${issueId}`, { method: 'PATCH', body }).then(
+        (r) => r.issue,
+      );
+    },
+    onSettled: done,
+  });
+}

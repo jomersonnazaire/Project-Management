@@ -152,6 +152,8 @@ describe('Route policy table', () => {
       'GET /audit audit.view',
       'GET /settings/calendar settings.view',
       'PUT /settings/working-days settings.edit',
+      'GET /settings/time-lock settings.view',
+      'PUT /settings/time-lock settings.edit',
       'GET /settings/holidays/impact settings.view',
       'POST /settings/holidays settings.edit',
       'PATCH /settings/holidays/:id settings.edit',
@@ -204,6 +206,14 @@ describe('Route policy table', () => {
       'POST /issues/:id/status issues.edit',
       'POST /issues/:id/comments issues.view',
       'DELETE /issues/:id issues.delete',
+      'GET /dashboard reports.view',
+      'GET /dashboard/my-projects reports.view',
+      'GET /workload reports.view',
+      'GET /reports/effort-variance reports.view',
+      'GET /reports/overdue reports.view',
+      'GET /reports/timesheets reports.view',
+      'GET /reports/project-status reports.view',
+      'GET /reports/issues reports.view',
     ]);
   });
 });

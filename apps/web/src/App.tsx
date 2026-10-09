@@ -20,6 +20,9 @@ import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { TimePage } from './pages/time/TimePage';
 import { AllIssuesPage } from './pages/issues/AllIssuesPage';
 import { IssueDetailPage } from './pages/issues/IssueDetailPage';
+import { ReportsPage } from './pages/reports/ReportsPage';
+import { WorkloadPage } from './pages/workload/WorkloadPage';
+import { useCan } from './auth/useCan';
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
@@ -35,6 +38,12 @@ function ContactsRedirect() {
   );
 }
 
+/** AC-01.1: land on the Dashboard now that it has shipped (M4); without Reports view, My tasks. */
+function Landing() {
+  const dashboard = useCan('reports', 'view');
+  return <Navigate to={dashboard ? '/dashboard' : '/my-tasks'} replace />;
+}
+
 export function App() {
   return (
     <AuthProvider>
@@ -43,7 +52,7 @@ export function App() {
         <Route path="/setup-password" element={<SetupPasswordPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
-            <Route index element={<Navigate to="/my-tasks" replace />} />
+            <Route index element={<Landing />} />
             <Route path="/my-tasks" element={<MyTasksPage />} />
             <Route path="/contacts" element={<ContactsRedirect />} />
             <Route
@@ -139,6 +148,22 @@ export function App() {
               element={
                 <RequirePermission any={[['time', 'view']]}>
                   <TimePage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/workload"
+              element={
+                <RequirePermission any={[['reports', 'view']]}>
+                  <WorkloadPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <RequirePermission any={[['reports', 'view']]}>
+                  <ReportsPage />
                 </RequirePermission>
               }
             />

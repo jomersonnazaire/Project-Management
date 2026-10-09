@@ -14,6 +14,12 @@ import {
   phDateOf,
   scheduleFromOffsets,
   timeLockBoundary,
+  describeTimeLock,
+  DEFAULT_TIME_LOCK,
+  effortVariance,
+  formatSignedHours,
+  formatOverrun,
+  utilizationPct,
   toDateOnly,
   todayPH,
   validatePermissionGrid,
@@ -108,6 +114,49 @@ describe('Time lock boundary (FR-TIME-04, Q-09)', () => {
     // Mon Oct 12, 12:00 Manila → only this week open.
     expect(iso(timeLockBoundary(new Date('2026-10-12T04:00:00Z')))).toBe('2026-10-12');
     expect(iso(timeLockBoundary(new Date('2026-10-14T00:00:00Z')))).toBe('2026-10-12');
+  });
+});
+
+describe('Time lock as an Admin setting (Q-09, v0.7.2)', () => {
+  it('a Wednesday 5 PM policy keeps last week open until then; off locks nothing', () => {
+    const wed5 = { enabled: true, weekday: 3, hour: 17 };
+    // Wed Oct 14, 16:59 Manila → last week still open.
+    expect(iso(timeLockBoundary(new Date('2026-10-14T08:59:00Z'), wed5))).toBe('2026-10-05');
+    expect(iso(timeLockBoundary(new Date('2026-10-14T09:00:00Z'), wed5))).toBe('2026-10-12');
+    // Sunday lock: the Sunday ending the current week.
+    const sun = { enabled: true, weekday: 0, hour: 0 };
+    expect(iso(timeLockBoundary(new Date('2026-10-17T15:59:00Z'), sun))).toBe('2026-10-05');
+    expect(iso(timeLockBoundary(new Date('2026-10-17T16:00:00Z'), sun))).toBe('2026-10-12');
+    expect(timeLockBoundary(new Date(), { ...wed5, enabled: false }).getTime()).toBe(0);
+  });
+
+  it('describes the policy in words, default Monday 12:00 PM', () => {
+    expect(describeTimeLock(DEFAULT_TIME_LOCK)).toBe(
+      "Last week's entries lock every Monday at 12:00 PM Philippine time.",
+    );
+    expect(describeTimeLock({ enabled: false, weekday: 1, hour: 12 })).toBe(
+      'Time entries never lock.',
+    );
+  });
+});
+
+describe('Report formulas (FR-RPT-01, AC-22.1, FR-WL-02)', () => {
+  it('effort variance and overrun as in AC-22.1', () => {
+    const row = (est: number | null, act: number) => {
+      const v = effortVariance({ estHours: est, actualHours: act });
+      return [formatSignedHours(v.variance), formatOverrun(v.overrunPct)];
+    };
+    expect(row(8, 12)).toEqual(['+4', '+50%']);
+    expect(row(16, 14)).toEqual(['−2', '−12.5%']);
+    expect(row(10, 18)).toEqual(['+8', '+80%']);
+    expect(row(0, 2)).toEqual(['+2', 'No estimate']);
+    expect(row(null, 2)).toEqual(['–', 'No estimate']);
+  });
+
+  it('utilization = recorded ÷ capacity × 100', () => {
+    expect(utilizationPct(34, 40)).toBe(85);
+    expect(utilizationPct(52, 40)).toBe(130);
+    expect(utilizationPct(5, 0)).toBeNull();
   });
 });
 
