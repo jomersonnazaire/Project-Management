@@ -29,6 +29,8 @@ export interface DashboardProjectDto {
   name: string;
   client: Ref;
   template: string | null;
+  /** FR-PTY-07: current name (null = Not set). */
+  projectType: string | null;
   status: ProjectStatus;
   progress: number;
   health: Health;
@@ -188,6 +190,8 @@ export interface ProjectStatusRowDto {
   id: string;
   name: string;
   client: Ref;
+  /** FR-PTY-07: current name (null = Not set). */
+  projectType: string | null;
   status: ProjectStatus;
   progress: number;
   health: Health;

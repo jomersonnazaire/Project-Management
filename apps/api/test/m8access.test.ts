@@ -4,7 +4,7 @@ import { AccessRuleModel, ActivityLogModel, ProjectModel, TaskModel } from '../s
 import { addMissingCells, addMissingRecordTypes } from '../src/services/accessDefaults.js';
 import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { grant, world } from './m2helpers.js';
+import { grant, world, ptypeId } from './m2helpers.js';
 import { entryFields } from './trackerHelpers.js';
 
 /**
@@ -33,15 +33,19 @@ async function setup() {
     id: string;
   }[];
   // A second project the Member doesn't belong to.
-  const other = await w.pm2.agent.post('/api/v1/projects').set(CSRF).send({
-    name: 'Other Q',
-    clientId: w.other.client.id,
-    managerId: w.pm2.user._id.toString(),
-    memberIds: [],
-    startDate: '2026-10-12',
-    plannedEndDate: '2026-12-18',
-    templateId: w.template.id,
-  });
+  const other = await w.pm2.agent
+    .post('/api/v1/projects')
+    .set(CSRF)
+    .send({
+      projectTypeId: await ptypeId(),
+      name: 'Other Q',
+      clientId: w.other.client.id,
+      managerId: w.pm2.user._id.toString(),
+      memberIds: [],
+      startDate: '2026-10-12',
+      plannedEndDate: '2026-12-18',
+      templateId: w.template.id,
+    });
   expect(other.status).toBe(201);
   const fields = await entryFields();
   const log = (a: typeof w.pm.agent, hours: number) =>

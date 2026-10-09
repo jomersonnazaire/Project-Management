@@ -2,7 +2,8 @@ import type { Express } from 'express';
 import type { TemplateInput } from '@xc8/shared';
 import type request from 'supertest';
 import { expect } from 'vitest';
-import { AccessRuleModel } from '../src/models/index.js';
+import { AccessRuleModel, ProjectTypeModel } from '../src/models/index.js';
+import { ensureDefaultProjectTypes } from '../src/services/projectTypes.js';
 import { CSRF, createUser, login, signedInAs } from './helpers.js';
 
 type Agent = ReturnType<typeof request.agent>;
@@ -104,6 +105,7 @@ export async function world(app: Express) {
     .set(CSRF)
     .send({
       name: 'Rollout P',
+      projectTypeId: await ptypeId(),
       clientId: acme.client.id,
       managerId: pm.user._id.toString(),
       memberIds: [member.user._id.toString()],
@@ -143,3 +145,11 @@ export async function grant(
 }
 
 export const resetRules = () => AccessRuleModel.deleteMany({});
+
+/** A seeded project type's id (FR-PTY-02: every new project needs one). */
+export async function ptypeId(name = 'Implementation'): Promise<string> {
+  await ensureDefaultProjectTypes();
+  const doc = await ProjectTypeModel.findOne({ nameKey: name.toLowerCase() }).lean();
+  if (!doc) throw new Error(`No project type ${name}`);
+  return doc._id.toString();
+}

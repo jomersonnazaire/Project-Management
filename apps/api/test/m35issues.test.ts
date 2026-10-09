@@ -18,7 +18,7 @@ import {
 } from '../src/models/index.js';
 import { defaultIssueDue, runIssueSweeps } from '../src/services/issues.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { resetRules, world } from './m2helpers.js';
+import { resetRules, world, ptypeId } from './m2helpers.js';
 import { FILES } from './m3helpers.js';
 
 /** Milestone 3.5 issue tracking (doc 13): AC-42.x to AC-45.x, EC-66/69/70, FR-ISS-06/10/13/15. */
@@ -238,15 +238,19 @@ describe('AC-43.x: lists and scope', () => {
     const w = await world(app);
     const mine = await raised(w.member.agent, w);
     // A second project the member isn't on.
-    const other = await w.pm.agent.post('/api/v1/projects').set(CSRF).send({
-      name: 'Rollout Q',
-      clientId: w.acme.client.id,
-      managerId: w.pm.user._id.toString(),
-      memberIds: [],
-      startDate: '2026-10-12',
-      plannedEndDate: '2026-12-18',
-      templateId: w.template.id,
-    });
+    const other = await w.pm.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        projectTypeId: await ptypeId(),
+        name: 'Rollout Q',
+        clientId: w.acme.client.id,
+        managerId: w.pm.user._id.toString(),
+        memberIds: [],
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        templateId: w.template.id,
+      });
     const hidden = (
       await w.pm.agent
         .post(`/api/v1/projects/${other.body.project.id}/issues`)

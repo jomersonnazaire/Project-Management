@@ -210,6 +210,8 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     });
     renderAt(`/projects/new?clientId=${ACME.id}`, <App />);
     await userEvent.selectOptions(await screen.findByLabelText('Template'), 't1');
+    await screen.findByRole('option', { name: 'Implementation' });
+    await userEvent.selectOptions(screen.getByLabelText('Project type *'), 'pt1');
     // DR-10 in the template preview.
     expect(screen.getByTestId('template-preview')).toHaveTextContent(
       'Generates 1 activity, 1 dependency and 1 deliverable.',

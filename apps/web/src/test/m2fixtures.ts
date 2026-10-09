@@ -1,4 +1,10 @@
-import type { ProjectDto, SystemRole, TaskDto } from '@xc8/shared';
+import type {
+  ProjectDto,
+  ProjectTypeDto,
+  ProjectTypePreselectDto,
+  SystemRole,
+  TaskDto,
+} from '@xc8/shared';
 import { ACME, emptyDashboard, meBody } from './fixtures';
 import { mockApi } from './utils';
 
@@ -25,6 +31,7 @@ export const project = (over: Partial<ProjectDto> = {}): ProjectDto => ({
   archived: false,
   templateName: 'SAP B1 Implementation',
   templateVersion: 1,
+  projectType: { id: 'pt1', name: 'Implementation', active: true },
   taskCount: 2,
   unestimatedTaskCount: 1,
   description: null,
@@ -86,12 +93,37 @@ export const task = (over: Partial<TaskDto> = {}): TaskDto => ({
 export type Reply = { status: number; body?: unknown };
 export type Route = (url: string, init?: RequestInit) => Reply | undefined;
 
+export const PROJECT_TYPES: ProjectTypeDto[] = [
+  ['pt1', 'Implementation'],
+  ['pt2', 'Support'],
+].map(([id, name]) => ({
+  id: id!,
+  name: name!,
+  active: true,
+  defaultActivityType: null,
+  usedBy: null,
+  deactivatedAt: null,
+  deactivatedBy: null,
+  createdAt: '2026-10-01T00:00:00.000Z',
+}));
+export const PRESELECT: ProjectTypePreselectDto = {
+  projectName: 'SAP B1 Rollout',
+  projectType: { id: 'pt1', name: 'Implementation', active: true },
+  activityType: { id: 'at1', name: 'Configuration' },
+  inactiveDefault: null,
+};
+
 export function api(role: SystemRole, route: Route = () => undefined) {
   return mockApi((url, init) => {
     if (url.endsWith('/auth/me')) return { status: 200, body: meBody(role) };
     const routed = route(url, init);
     if (routed) return routed;
     if (/\/api\/v1\/dashboard(\?|$)/.test(url)) return { status: 200, body: emptyDashboard() };
+    // Doc 14 FR-PTY: project types and the Time in preselect (Implementation → Configuration).
+    if (url.includes('/project-types/preselect'))
+      return { status: 200, body: { preselect: PRESELECT } };
+    if (/\/api\/v1\/project-types(\?|$)/.test(url))
+      return { status: 200, body: { items: PROJECT_TYPES } };
     return { status: 200, body: { items: [] } };
   });
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ActivityLogModel, HolidayModel, SettingModel, TaskModel } from '../src/models/index.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
-import { resetRules, world } from './m2helpers.js';
+import { resetRules, world, ptypeId } from './m2helpers.js';
 
 /** Working-day calendar and the Today view (doc 12 §3.1b, TC-N16..N20, FR-CAL-01..05). */
 useDatabase();
@@ -21,6 +21,7 @@ async function newProject(w: W, startDate: string) {
     .post('/api/v1/projects')
     .set(CSRF)
     .send({
+      projectTypeId: await ptypeId(),
       name: `Cal ${startDate} ${Math.random()}`,
       clientId: w.acme.client.id,
       managerId: w.pm.user._id.toString(),
