@@ -5,6 +5,7 @@ import {
   SYSTEM_ROLES,
   SYSTEM_ROLE_LABELS,
   inviteUserSchema,
+  plural,
   updateUserSchema,
   type InviteResultDto,
   type TeamDto,
@@ -202,7 +203,7 @@ function InviteUserModal({ teams, onClose }: { teams: TeamDto[]; onClose: () => 
             <div className="mt-4">
               <CopyLinkField
                 id="invite-link"
-                label={`Invite link for ${created.user.name} (single use, expires in ${hoursUntil(created.inviteExpiresAt)} hours, share it yourself)`}
+                label={`Invite link for ${created.user.name} (single use, expires in ${plural(hoursUntil(created.inviteExpiresAt), 'hour')}, share it yourself)`}
                 url={created.inviteUrl}
               />
             </div>

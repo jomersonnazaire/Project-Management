@@ -269,11 +269,55 @@ a:focus-visible,
 }
 
 // ---------- Milestone 2: board and task cards ----------
+// DR-11: the five columns share the width and fit side by side from 1280px (260px menu + 48px
+// padding leaves ~970px; 5 × 176px + 4 × 12px = 928px). Narrower, the board scrolls with a visible
+// scrollbar and a right-edge fade while more columns are hidden.
+$board-col-min: 176px;
+$board-gap: 0.75rem;
+
+.board-wrap {
+  position: relative;
+
+  &.is-overflowing::after {
+    content: '';
+    position: absolute;
+    inset-block: 0 0.75rem;
+    inset-inline-end: 0;
+    inline-size: 3rem;
+    pointer-events: none;
+    background: linear-gradient(to right, rgba(245, 245, 249, 0), #f5f5f9 85%);
+  }
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax($board-col-min, 1fr));
+  gap: $board-gap;
+  overflow-x: auto;
+  padding-block-end: 0.75rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(67, 89, 113, 0.4) transparent;
+
+  &::-webkit-scrollbar {
+    block-size: 8px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(67, 89, 113, 0.4);
+    border-radius: 4px;
+  }
+}
+
 .board-column {
   background: var(--bs-gray-100, #f5f5f9);
   border-radius: 0.5rem;
   padding: 0.75rem;
   min-height: 12rem;
+  min-width: 0;
+
+  .card-body {
+    overflow-wrap: anywhere;
+  }
 }
 
 .avatar-initials {

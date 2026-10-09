@@ -1,4 +1,4 @@
-import { PROJECT_FILTER_LABELS, PROJECT_FILTERS, formatVariance } from '@xc8/shared';
+import { PROJECT_FILTER_LABELS, PROJECT_FILTERS } from '@xc8/shared';
 import { useState } from 'react';
 import { Form, Nav } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
@@ -6,7 +6,7 @@ import { useProjects } from '../../api/projectHooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
-import { ProgressBar, ProjectBadge } from '../../components/ProjectBadges';
+import { ProgressBar, ProjectBadge, ScheduleVariance } from '../../components/ProjectBadges';
 import { shortDate } from '../../lib/format';
 
 /**
@@ -124,11 +124,9 @@ export function ProjectsPage() {
                       </td>
                       <td data-label="Forecast" className="text-nowrap">
                         {shortDate(p.forecastEnd)}
-                        {p.scheduleVarianceDays !== 0 && (
-                          <div className="small text-body-secondary">
-                            {formatVariance(p.scheduleVarianceDays)}
-                          </div>
-                        )}
+                        <div>
+                          <ScheduleVariance days={p.scheduleVarianceDays} />
+                        </div>
                       </td>
                       <td data-label="Progress">
                         <ProgressBar value={p.progress} label={`${p.name} progress`} />

@@ -4,17 +4,19 @@ import {
   TASK_TRANSITIONS,
   effortSummary,
   formatHours,
+  plural,
   type ProjectDto,
   type TaskDto,
   type TaskStatus,
 } from '@xc8/shared';
 import { useState, type DragEvent } from 'react';
+import { useEdgeFade } from '../../lib/useEdgeFade';
 import { Button, Form } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useContactOptions, useProjectActivity, useProjectContact } from '../../api/projectHooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
-import { EstAct, Estimate, TaskStatusBadge } from '../../components/ProjectBadges';
+import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
 import { dateTime, initials, shortDate } from '../../lib/format';
 import { moveLabel, useStatusMove } from './useStatusMove';
 
@@ -50,7 +52,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
     <>
       <p className="small text-body-secondary">
         Estimated {formatHours(summary.estimatedHours)} across{' '}
-        {tasks.length - summary.unestimatedCount} tasks ·{' '}
+        {plural(tasks.length - summary.unestimatedCount, 'task')} ·{' '}
         <span data-testid="unestimated-count">{summary.unestimatedCount}</span> without an estimate
       </p>
       {phases.map((ph) => (
@@ -116,6 +118,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
 export function BoardTab({ project, tasks, onOpen }: TabProps) {
   const [assignee, setAssignee] = useState('');
   const status = useStatusMove(project);
+  const { ref: boardRef, fade, update: updateFade } = useEdgeFade<HTMLDivElement>();
   const team = [project.manager, ...project.members].filter(
     (u, i, all): u is NonNullable<typeof u> =>
       Boolean(u) && all.findIndex((x) => x?.id === u!.id) === i,
@@ -149,75 +152,84 @@ export function BoardTab({ project, tasks, onOpen }: TabProps) {
         </Form.Select>
         <span className="small text-body-secondary">Drag a card, or use its Move to… menu.</span>
       </div>
-      <div className="board d-flex gap-4 overflow-auto pb-2">
-        {BOARD_COLUMNS.map((col) => {
-          const items = shown.filter((t) => t.status === col);
-          return (
-            <section
-              key={col}
-              className="board-column flex-shrink-0"
-              style={{ width: 260 }}
-              aria-label={`${TASK_STATUS_LABELS[col]} (${items.length})`}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => drop(e, col)}
-            >
-              <h3 className="h6 d-flex justify-content-between">
-                {TASK_STATUS_LABELS[col]}
-                <span className="badge bg-label-secondary">{items.length}</span>
-              </h3>
-              {items.map((t) => (
-                <div
-                  key={t.id}
-                  className="card mb-3"
-                  draggable={t.can.status && !project.archived}
-                  onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}
-                >
-                  <div className="card-body p-3">
-                    <Button
-                      variant="link"
-                      className="p-0 text-start fw-medium text-heading"
-                      onClick={() => onOpen(t.id)}
-                    >
-                      #{t.order} {t.name}
-                    </Button>
-                    {t.phase && <div className="small text-body-secondary">{t.phase}</div>}
-                    <div className="d-flex justify-content-between align-items-center mt-2 small">
-                      <DueCell t={t} />
-                      <Estimate hours={t.estHours} />
-                      {t.owner && (
-                        <span
-                          className="avatar-initials"
-                          title={t.owner.name}
-                          aria-label={`Owner ${t.owner.name}`}
-                        >
-                          {initials(t.owner.name)}
-                        </span>
-                      )}
-                    </div>
-                    {t.can.status && !project.archived && TASK_TRANSITIONS[t.status].length > 0 && (
-                      <Form.Select
-                        size="sm"
-                        className="mt-2"
-                        aria-label={`Move ${t.name} to`}
-                        value=""
-                        onChange={(e) =>
-                          e.target.value && status.move(t, e.target.value as TaskStatus)
-                        }
+      <div className={`board-wrap${fade ? ' is-overflowing' : ''}`} data-testid="board-wrap">
+        <div
+          className="board"
+          ref={boardRef}
+          onScroll={updateFade}
+          tabIndex={0}
+          aria-label="Task board"
+        >
+          {BOARD_COLUMNS.map((col) => {
+            const items = shown.filter((t) => t.status === col);
+            return (
+              <section
+                key={col}
+                className="board-column"
+                aria-label={`${TASK_STATUS_LABELS[col]} (${items.length})`}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => drop(e, col)}
+              >
+                <h3 className="h6 d-flex justify-content-between">
+                  {TASK_STATUS_LABELS[col]}
+                  <span className="badge bg-label-secondary">{items.length}</span>
+                </h3>
+                {items.map((t) => (
+                  <div
+                    key={t.id}
+                    className="card mb-3"
+                    draggable={t.can.status && !project.archived}
+                    onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}
+                  >
+                    <div className="card-body p-3">
+                      <Button
+                        variant="link"
+                        className="p-0 text-start fw-medium text-heading"
+                        onClick={() => onOpen(t.id)}
                       >
-                        <option value="">Move to…</option>
-                        {TASK_TRANSITIONS[t.status].map((to) => (
-                          <option key={to} value={to}>
-                            {moveLabel(t, to)}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    )}
+                        #{t.order} {t.name}
+                      </Button>
+                      {t.phase && <div className="small text-body-secondary">{t.phase}</div>}
+                      <div className="d-flex justify-content-between align-items-center mt-2 small">
+                        <DueCell t={t} />
+                        <EstAct est={t.estHours} act={t.actualHours} />
+                        {t.owner && (
+                          <span
+                            className="avatar-initials"
+                            title={t.owner.name}
+                            aria-label={`Owner ${t.owner.name}`}
+                          >
+                            {initials(t.owner.name)}
+                          </span>
+                        )}
+                      </div>
+                      {t.can.status &&
+                        !project.archived &&
+                        TASK_TRANSITIONS[t.status].length > 0 && (
+                          <Form.Select
+                            size="sm"
+                            className="mt-2"
+                            aria-label={`Move ${t.name} to`}
+                            value=""
+                            onChange={(e) =>
+                              e.target.value && status.move(t, e.target.value as TaskStatus)
+                            }
+                          >
+                            <option value="">Move to…</option>
+                            {TASK_TRANSITIONS[t.status].map((to) => (
+                              <option key={to} value={to}>
+                                {moveLabel(t, to)}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </section>
-          );
-        })}
+                ))}
+              </section>
+            );
+          })}
+        </div>
       </div>
     </>
   );

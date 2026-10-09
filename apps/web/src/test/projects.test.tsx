@@ -1,97 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  END_AFTER_START,
-  type ProjectDto,
-  type SystemRole,
-  type TaskDto,
-  type TemplateDto,
-} from '@xc8/shared';
+import { END_AFTER_START, type ProjectDto, type SystemRole, type TemplateDto } from '@xc8/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
-import { ACME, meBody, rulesBody } from './fixtures';
-import { mockApi, renderAt } from './utils';
+import { ACME, rulesBody } from './fixtures';
+import { ME_PM, PID, api, project, task, type Route } from './m2fixtures';
+import { renderAt } from './utils';
 
 afterEach(() => vi.unstubAllGlobals());
-
-const PID = 'bbbbbbbbbbbbbbbbbbbbbbbb';
-const ME_PM = 'me-PROJECT_MANAGER';
-
-const project = (over: Partial<ProjectDto> = {}): ProjectDto => ({
-  id: PID,
-  name: 'SAP B1 Rollout',
-  clientId: ACME.id,
-  clientName: ACME.name,
-  managerId: ME_PM,
-  managerName: 'Me PM',
-  startDate: '2026-10-12',
-  plannedEndDate: '2026-12-18',
-  forecastEnd: '2026-12-18',
-  scheduleVarianceDays: 0,
-  progress: 10,
-  status: 'ACTIVE',
-  health: 'ON_TRACK',
-  archived: false,
-  templateName: 'SAP B1 Implementation',
-  templateVersion: 1,
-  taskCount: 2,
-  unestimatedTaskCount: 1,
-  description: null,
-  type: 'SAP_B1',
-  manager: { id: ME_PM, name: 'Me PM', active: true },
-  members: [{ id: 'u2', name: 'Maria Member', active: true }],
-  activeContacts: [],
-  templateId: 't1',
-  baselineHistory: [],
-  can: { edit: true, archive: true, delete: false, planTasks: true },
-  ...over,
-});
-
-const task = (over: Partial<TaskDto> = {}): TaskDto => ({
-  id: 'k1',
-  projectId: PID,
-  order: 1,
-  name: 'Kickoff',
-  phase: 'Phase 1',
-  taskType: null,
-  priority: 'MEDIUM',
-  mandatory: false,
-  party: 'INTERNAL',
-  teamId: null,
-  owner: { id: 'u2', name: 'Maria Member', active: true },
-  assignees: [],
-  clientContact: null,
-  plannedStart: '2026-10-12',
-  dueDate: '2026-10-16',
-  estHours: 8,
-  actualHours: 0,
-  status: 'TODO',
-  previousStatus: null,
-  dependsOn: [],
-  deliverable: null,
-  blockerReason: null,
-  requiresApproval: false,
-  reviewer: null,
-  approval: { state: 'NONE', decidedBy: null, decidedAt: null, comment: null },
-  evidence: [],
-  followUps: [],
-  isMilestone: false,
-  overdue: false,
-  daysLate: 0,
-  version: 0,
-  can: { edit: true, plan: true, status: true, approve: false },
-  ...over,
-});
-
-type Reply = { status: number; body?: unknown };
-type Route = (url: string, init?: RequestInit) => Reply | undefined;
-
-function api(role: SystemRole, route: Route = () => undefined) {
-  return mockApi((url, init) => {
-    if (url.endsWith('/auth/me')) return { status: 200, body: meBody(role) };
-    return route(url, init) ?? { status: 200, body: { items: [] } };
-  });
-}
 
 describe('Navigation (M2)', () => {
   it('Projects, Task board and Templates are enabled for roles that can view them', async () => {
@@ -300,7 +216,9 @@ describe('Project detail (FR-PRJ-13, FR-TSK-10)', () => {
     vi.unstubAllGlobals();
     // Viewers can't create contacts: no link.
     projectApi(
-      project({ can: { edit: false, archive: false, delete: false, planTasks: false } }),
+      project({
+        can: { edit: false, archive: false, delete: false, planTasks: false, activity: false },
+      }),
       'VIEWER',
     );
     renderAt(`/projects/${PID}/contacts`, <App />);
@@ -310,7 +228,9 @@ describe('Project detail (FR-PRJ-13, FR-TSK-10)', () => {
 
   it('actions follow the project’s can flags: no Edit, Add task or Delete for a Member', async () => {
     projectApi(
-      project({ can: { edit: false, archive: false, delete: false, planTasks: false } }),
+      project({
+        can: { edit: false, archive: false, delete: false, planTasks: false, activity: false },
+      }),
       'MEMBER',
     );
     renderAt(`/projects/${PID}`, <App />);

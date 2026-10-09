@@ -1,4 +1,4 @@
-import type { InviteResultDto } from '@xc8/shared';
+import { plural, type InviteResultDto } from '@xc8/shared';
 import { Button, Modal } from 'react-bootstrap';
 import { CopyLinkField } from './CopyLinkField';
 import { hoursUntil } from './linkExpiry';
@@ -38,7 +38,7 @@ export function InviteLinkModal({
         )}
         <CopyLinkField
           id="invite-link"
-          label={`${reset ? 'Reset' : 'Invite'} link (single use, expires in ${hours} hours)`}
+          label={`${reset ? 'Reset' : 'Invite'} link (single use, expires in ${plural(hours, 'hour')})`}
           url={result.inviteUrl}
         />
         <p className="form-text mt-2 mb-0">

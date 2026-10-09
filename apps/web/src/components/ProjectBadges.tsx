@@ -5,6 +5,7 @@ import {
   TASK_STATUS_VARIANTS,
   formatHours,
   projectBadge,
+  scheduleVarianceLabel,
   type Health,
   type ProjectStatus,
   type TaskStatus,
@@ -53,21 +54,34 @@ export function Estimate({ hours }: { hours: number | null }) {
   if (hours === null) {
     return (
       <span title={NO_ESTIMATE_LABEL}>
-        –<span className="visually-hidden"> ({NO_ESTIMATE_LABEL})</span>
-        <small className="d-block text-body-secondary no-estimate">{NO_ESTIMATE_LABEL}</small>
+        –<small className="d-block text-body-secondary no-estimate">{NO_ESTIMATE_LABEL}</small>
       </span>
     );
   }
   return <>{formatHours(hours)}</>;
 }
 
-/** "Est / Act" cell; variance only for tasks that have an estimate (EC-58). */
+/**
+ * "Est / Act" cell with units ("4h / 6h"). A task with no estimate reads "– / –" on one line with
+ * a small "No estimate" note beneath (DR-08, EC-58).
+ */
 export function EstAct({ est, act }: { est: number | null; act: number }) {
   return (
-    <span className="text-nowrap">
-      {est === null ? <Estimate hours={null} /> : formatHours(est)} / {act ? formatHours(act) : '–'}
+    <span className="est-act d-inline-block">
+      <span className="text-nowrap">
+        {formatHours(est)} / {act ? formatHours(act) : '–'}
+      </span>
+      {est === null && (
+        <small className="d-block text-body-secondary no-estimate">{NO_ESTIMATE_LABEL}</small>
+      )}
     </span>
   );
+}
+
+/** Forecast vs baseline end in words, coloured (DR-09). */
+export function ScheduleVariance({ days }: { days: number }) {
+  const v = scheduleVarianceLabel(days);
+  return <span className={`small text-${v.variant}`}>{v.text}</span>;
 }
 
 const TEMPLATE_STATUS_VARIANT: Record<TemplateStatus, string> = {

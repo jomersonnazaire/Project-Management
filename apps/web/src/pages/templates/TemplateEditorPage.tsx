@@ -8,6 +8,7 @@ import {
   PRIORITY_LABELS,
   TEMPLATE_TYPE_LABELS,
   TEMPLATE_TYPES,
+  plural,
   type TemplateActivityDto,
   type TemplateDto,
   type TemplatePhaseDto,
@@ -361,11 +362,16 @@ export function TemplateEditorPage() {
             <div className="card-body">
               <h2 className="h6">Summary</h2>
               <p className="mb-1">
-                {draft.activities.length} activities in {draft.phases.length} phases
+                {plural(draft.activities.length, 'activity', 'activities')} in{' '}
+                {plural(draft.phases.length, 'phase')}
               </p>
               <p className="mb-1">
-                {draft.activities.reduce((n, a) => n + a.dependsOn.length, 0)} dependencies ·{' '}
-                {draft.activities.filter((a) => a.deliverable).length} deliverables
+                {plural(
+                  draft.activities.reduce((n, a) => n + a.dependsOn.length, 0),
+                  'dependency',
+                  'dependencies',
+                )}{' '}
+                · {plural(draft.activities.filter((a) => a.deliverable).length, 'deliverable')}
               </p>
               <p className="mb-0 text-body-secondary small">
                 {draft.activities.filter((a) => a.estHours === null).length} without an estimate
