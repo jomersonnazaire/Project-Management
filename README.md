@@ -92,7 +92,7 @@ Configuration comes from environment variables only. See `apps/api/.env.example`
 | `COOKIE_SAMESITE`                                                   | `lax`                   | `lax` behind the Vercel rewrite (default). `none` if the web app calls the API cross-site |
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS`                   | `30` / `12`             | Idle timeout (FR-AUTH-06) and hard cap                                                    |
 | `LOCKOUT_THRESHOLD` / `LOCKOUT_MINUTES`                             | `5` / `15`              | Per-account lockout (FR-AUTH-07). Silent: a locked account gets the same generic 401      |
-| `AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_MINUTES`            | `20` / `15`             | Per-IP limit on sign-in and password setup                                                |
+| `AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_MINUTES`            | `20` / `15`             | Per-IP limit on sign-in and link verify/setup. In memory: one instance only (TD-01)       |
 | `INVITE_TTL_HOURS` / `RESET_TTL_HOURS`                              | `72` / `24`             | Lifetime of single-use invite links and Admin-issued reset links                          |
 | `TRUST_PROXY_HOPS`                                                  | `0`                     | `1` when browsers call Azure directly. `2` behind the Vercel rewrite                      |
 | `LOG_LEVEL`                                                         | `info`                  | pino level                                                                                |
@@ -124,7 +124,7 @@ Only `VITE_*` variables reach the browser. Never put secrets in them.
 - `.github/workflows/deploy-api.yml` deploys on pushes to `main` that touch the API or the shared package, and can also be run manually. It needs the repository secret **`AZURE_WEBAPP_PUBLISH_PROFILE`** (download the publish profile from the Web App's Overview page). If the secret isn't set, the job logs a notice and skips the deploy.
 - To build the same package by hand: `npm run build --workspace @xc8/api && node apps/api/scripts/prepare-deploy.mjs`, then run `npm install --omit=dev` inside `apps/api/deploy`.
 - To seed a deployed database, run `npm run seed` from the App Service SSH console (`node dist/seed.js`) with the seed variables set.
-- The sign-in rate limiter keeps its counters in memory. That is fine for a single instance; scale-out would need a shared store.
+- **Pin the App Service to ONE instance** (instance count 1, autoscale off). The per-IP sign-in rate limiter (NFR-05) keeps its counters in the API process's memory, so with two or more instances each one counts separately and the limit stops working as intended. **Tech debt TD-01:** move the limiter (and the lockout counters) to a shared store such as MongoDB or Redis before scaling out. Don't scale out until TD-01 is done.
 
 ## Security notes
 

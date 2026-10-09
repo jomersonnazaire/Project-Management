@@ -51,6 +51,10 @@ export function createApp(config: AppConfig, logger: Logger = createLogger(confi
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
 
+  // Per-IP limiter on sign-in and password setup (NFR-05). Its counters live in this process's
+  // memory (the default MemoryStore), so the App Service must stay pinned to ONE instance.
+  // Tech debt TD-01: move the limiter (and lockout counters) to a shared store such as MongoDB
+  // or Redis before scaling out to more than one instance.
   const authLimiter = rateLimit({
     windowMs: config.AUTH_RATE_LIMIT_WINDOW_MINUTES * 60_000,
     limit: config.AUTH_RATE_LIMIT_MAX,
