@@ -6,7 +6,10 @@ import {
 } from '@xc8/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AccessRuleModel, ActivityLogModel, MigrationModel } from '../src/models/index.js';
-import { applyAccessDefaultChanges } from '../src/services/accessDefaults.js';
+import {
+  addMissingRecordTypes,
+  applyAccessDefaultChanges,
+} from '../src/services/accessDefaults.js';
 import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 
@@ -166,5 +169,49 @@ describe('Access default changes (doc 11 §12): Member Delete on time', () => {
         expect(DEFAULT_ACCESS_RULES[cell.role][cell.record][cell.action]).toBe(cell.to);
         expect(cell.from).not.toBe(cell.to);
       }
+  });
+});
+
+describe('New record types after go-live (e.g. Issues)', () => {
+  it('adds the default row only where it is missing, keeps Admin values, audits and bumps the version', async () => {
+    await ensureDefaultAccessRules();
+    // A grid saved before M3.5: no Issues row; an Admin had changed Member View on clients.
+    await AccessRuleModel.updateOne(
+      { role: 'MEMBER' },
+      {
+        $unset: { 'permissions.issues': 1 },
+        $set: { 'permissions.clients.view': false, version: 5 },
+      },
+    );
+    await AccessRuleModel.updateOne({ role: 'VIEWER' }, { $unset: { 'permissions.issues': 1 } });
+    const { agent } = await signedInAs(app, 'ADMIN');
+    const added = await addMissingRecordTypes();
+    expect(added).toEqual(
+      expect.arrayContaining([
+        { role: 'MEMBER', record: 'issues' },
+        { role: 'VIEWER', record: 'issues' },
+      ]),
+    );
+    expect(added).toHaveLength(2);
+    const member = (await AccessRuleModel.findOne({ role: 'MEMBER' }).lean())!;
+    expect(member.version).toBe(6);
+    const perms = member.permissions as unknown as Record<string, Record<string, boolean>>;
+    expect(perms.issues).toEqual({ view: true, create: true, edit: true, delete: false });
+    expect(perms.clients!.view).toBe(false);
+    const roles = (await agent.get('/api/v1/access-rules')).body.roles;
+    expect(roles.find((r: { role: string }) => r.role === 'VIEWER').permissions.issues).toEqual({
+      view: true,
+      create: false,
+      edit: false,
+      delete: false,
+    });
+    expect(
+      await ActivityLogModel.countDocuments({
+        action: 'access_rule_row_added',
+        'meta.recordType': 'issues',
+      }),
+    ).toBe(2);
+    // Idempotent.
+    expect(await addMissingRecordTypes()).toEqual([]);
   });
 });

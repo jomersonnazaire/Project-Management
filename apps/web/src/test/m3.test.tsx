@@ -163,6 +163,7 @@ const note = (i: number, read = false): NotificationDto => ({
   actor: { id: 'u2', name: 'Maria Perez' },
   task: { id: 'k1', name: 'Kickoff' },
   project: { id: PID, name: 'SAP B1 Rollout' },
+  issue: null,
   read,
   at: new Date().toISOString(),
 });

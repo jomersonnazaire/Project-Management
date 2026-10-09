@@ -17,6 +17,9 @@ const projectSchema = new Schema(
     status: { type: String, enum: PROJECT_STATUSES, default: 'PLANNING', index: true },
     archived: { type: Boolean, default: false },
     archivedAt: { type: Date, default: null },
+    /** Issue ids (doc 13 §3): prefix fixed at the first issue, running number never reused. */
+    issuePrefix: { type: String, default: null },
+    issueSeq: { type: Number, default: 0 },
     startDate: { type: Date, default: null },
     plannedEndDate: { type: Date, default: null },
     baselineHistory: {

@@ -13,6 +13,7 @@ import {
   fileExtension,
   folderAccessSchema,
   folderSchema,
+  issueAttachmentUploadSchema,
   malwareMessage,
   notRealTypeMessage,
   parseDateOnly,
@@ -67,6 +68,9 @@ import { MemoryBlobStore } from '../storage/blobStore.js';
 import { detectFileType, malwareVerdict, sha256Hex } from '../storage/fileCheck.js';
 import { assertNotArchived, loadProject } from './projects.js';
 import { assertCan, loadTask, respondTask, type TaskDoc } from './tasks.js';
+import { assertCanEditIssue, loadIssue } from './issues.js';
+import { IssueModel } from '../models/index.js';
+import { toIssueDto, type IssueDoc } from '../services/issues.js';
 
 /**
  * Documents (doc 10) and task evidence uploads (doc 12 §3.2). Files never pass through the API:
@@ -158,6 +162,38 @@ export async function ensureDefaultFolders(project: ProjectDoc): Promise<void> {
     }).catch((e: { code?: number }) => {
       if (e.code !== 11000) throw e; // created concurrently
     });
+  }
+}
+
+/** The project's "Issues" folder for issue attachments (FR-ISS-08), created on first use. */
+async function issuesFolder(project: ProjectDoc): Promise<FolderDoc> {
+  const existing = await FolderModel.findOne({ projectId: project._id, kind: 'ISSUES' }).lean();
+  if (existing) return existing as FolderDoc;
+  let name = 'Issues';
+  for (
+    let n = 2;
+    await FolderModel.exists({ projectId: project._id, parentId: null, nameKey: nameKey(name) });
+    n++
+  ) {
+    name = `Issues (${n})`;
+  }
+  try {
+    return (
+      await FolderModel.create({
+        projectId: project._id,
+        name,
+        nameKey: nameKey(name),
+        kind: 'ISSUES',
+        phase: null,
+        order: 98,
+      })
+    ).toObject() as FolderDoc;
+  } catch (e) {
+    if ((e as { code?: number }).code !== 11000) throw e;
+    return (await FolderModel.findOne({
+      projectId: project._id,
+      kind: 'ISSUES',
+    }).lean()) as FolderDoc;
   }
 }
 
@@ -426,7 +462,7 @@ export function documentsRouter(
           restricted: Boolean(f.restricted),
           restrictedByParent: underRestricted(f),
           allowedUserIds: manage ? (f.allowedUserIds ?? []).map(String) : [],
-          canRestrict: manage && f.kind !== 'PHASE',
+          canRestrict: manage && f.kind !== 'PHASE' && f.kind !== 'ISSUES',
         });
         visit(f._id.toString());
       }
@@ -581,6 +617,12 @@ export function documentsRouter(
       throw unprocessable(
         'Phase folders hold task evidence, so everyone on the project keeps access.',
         'PHASE_FOLDER_OPEN',
+      );
+    }
+    if (folder.kind === 'ISSUES') {
+      throw unprocessable(
+        'The Issues folder holds issue attachments, so everyone who can see the issues keeps access.',
+        'ISSUES_FOLDER_OPEN',
       );
     }
     const members = new Set([
@@ -1076,7 +1118,36 @@ export function documentsRouter(
     res.json(await downloadLink(pd, doc));
   });
 
-  // ----- Upload completion (both kinds) -----
+  // ----- Issue attachments (FR-ISS-08: M3 rules, stored in the project's "Issues" folder) -----
+  const i = registry.router('/issues');
+
+  i.post('/:id/attachments/uploads', perm('issues', 'edit'), async (req, res) => {
+    const input = parseBody(issueAttachmentUploadSchema, req);
+    const { issue, project } = await loadIssue(req);
+    assertCanEditIssue(req, project, issue);
+    for (const f of input.files) fileIssue(f, 'ISSUE');
+    const items: UploadTicketDto[] = [];
+    for (const f of input.files) {
+      items.push(await ticket(req, project as ProjectDoc, 'ISSUE', f, { issueId: issue._id }));
+    }
+    res.status(201).json({ uploads: items });
+  });
+
+  i.get('/:id/attachments/:documentId/download', perm('issues', 'view'), async (req, res) => {
+    const { issue, project } = await loadIssue(req);
+    const item = issue.attachments.find(
+      (a) => a.documentId.toString() === idParam(req, 'documentId'),
+    );
+    if (!item) throw notFound();
+    const doc = (await DocumentModel.findOne({
+      _id: item.documentId,
+      projectId: project._id,
+    }).lean()) as DocDoc | null;
+    if (!doc) throw notFound();
+    res.json(await downloadLink(project as ProjectDoc, doc));
+  });
+
+  // ----- Upload completion (all kinds) -----
   const u = registry.router('/uploads');
 
   if (store instanceof MemoryBlobStore) {
@@ -1110,9 +1181,13 @@ export function documentsRouter(
     const perms = currentPermissions(req);
     // Re-check the right to write: access may have changed since the ticket was issued.
     let task: Awaited<ReturnType<typeof loadTask>>['task'] | null = null;
+    let issue: IssueDoc | null = null;
     if (up.purpose === 'EVIDENCE') {
       ({ task } = await loadTask(req, up.taskId!.toString()));
       assertCan(req, project, task.toObject() as TaskDoc, 'status');
+    } else if (up.purpose === 'ISSUE') {
+      ({ issue } = await loadIssue(req, up.issueId!.toString()));
+      assertCanEditIssue(req, project, issue);
     } else if (!canWriteDocs(user, perms, project)) {
       throw forbidden();
     }
@@ -1162,11 +1237,14 @@ export function documentsRouter(
           : notRealTypeMessage(up.fileName);
       throw await reject(422, 'INVALID_FILE_TYPE', message, detected.reason);
     }
-    if (up.purpose === 'EVIDENCE' && detected.kind === 'IMAGE') {
+    if (up.purpose !== 'DOCUMENT' && detected.kind === 'IMAGE') {
       throw await reject(
         422,
         'INVALID_FILE_TYPE',
-        `${up.fileName} can't be added. Evidence must be a PDF, Word or Excel file.`,
+        checkFileRules({ name: 'x.png', size: 1 }, up.purpose as UploadPurpose)!.message.replace(
+          'x.png',
+          up.fileName,
+        ),
         'image',
       );
     }
@@ -1252,6 +1330,54 @@ export function documentsRouter(
           task!.approval?.reviewerId,
           fresh.managerId,
         ],
+      });
+    } else if (up.purpose === 'ISSUE') {
+      const folder = await issuesFolder(project);
+      const name = await freeName(project._id, folder._id, up.fileName);
+      doc = await DocumentModel.create({
+        projectId: project._id,
+        folderId: folder._id,
+        name,
+        nameKey: nameKey(name),
+        kind: detected.kind,
+        status: 'SUBMITTED',
+        source: 'ISSUE',
+        versions: [{ ...version, version: 1, status: 'SUBMITTED' }],
+        events: [
+          {
+            event: 'SUBMITTED',
+            actorId: user._id,
+            at: new Date(),
+            version: 1,
+            note: `Attachment on ${issue!.key}`,
+          },
+        ],
+        createdBy: user._id,
+      });
+      await IssueModel.updateOne(
+        { _id: issue!._id },
+        {
+          $push: {
+            attachments: {
+              documentId: doc._id,
+              name,
+              size: info.size,
+              mimeType: detected.mimeType,
+              uploadedBy: user._id,
+              at: new Date(),
+            },
+          },
+          $inc: { version: 1 },
+        },
+      );
+      await audit({
+        actorId: user._id,
+        entityType: 'issue',
+        entityId: issue!._id,
+        projectId: project._id,
+        action: 'issue_attachment_added',
+        changes: [{ field: 'attachments', old: null, new: name }],
+        meta: { documentId: doc._id.toString(), sha256: version.sha256, size: info.size },
       });
     } else if (up.fulfilsDocumentId) {
       // FR-DOC-21/22: the file becomes v1 of the request, which moves forward to Submitted or
@@ -1388,9 +1514,15 @@ export function documentsRouter(
     up.documentId = doc._id;
     await up.save();
     if (task) return respondTask(req, res, project, task._id, 201);
+    if (issue) {
+      const fresh = (await IssueModel.findById(issue._id).lean()) as IssueDoc;
+      return res.status(201).json({
+        issue: await toIssueDto(user, perms, project as Parameters<typeof toIssueDto>[2], fresh),
+      });
+    }
     const [dto] = await toDocDtos(req, project, [doc.toObject() as DocDoc]);
     res.status(201).json({ document: dto });
   });
 
-  return [p.router, t.router, u.router];
+  return [p.router, t.router, i.router, u.router];
 }

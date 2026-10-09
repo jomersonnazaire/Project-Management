@@ -14,6 +14,7 @@ export async function notify(input: {
   type: NotificationType;
   project: { _id: Id; managerId?: Id | null; memberIds?: Id[] | null };
   taskId?: Id | null;
+  issueId?: Id | null;
   actorId: Id | null;
   recipients: (Id | null | undefined)[];
 }): Promise<number> {
@@ -40,6 +41,7 @@ export async function notify(input: {
       userId: u._id,
       projectId: input.project._id,
       taskId: input.taskId ?? null,
+      issueId: input.issueId ?? null,
       type: input.type,
       actorId: input.actorId,
     })),

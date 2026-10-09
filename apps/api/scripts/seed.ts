@@ -32,7 +32,10 @@ import {
 } from '../src/models/index.js';
 import { LAUNCH_TEMPLATE_KEY, ensureLaunchTemplate } from '../src/services/launchTemplate.js';
 import { buildPlanTasks, recomputeProject } from '../src/services/projectService.js';
-import { applyAccessDefaultChanges } from '../src/services/accessDefaults.js';
+import {
+  addMissingRecordTypes,
+  applyAccessDefaultChanges,
+} from '../src/services/accessDefaults.js';
 import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { loadOfficialHolidays } from '../src/services/officialHolidays.js';
 import { hashPassword } from '../src/services/passwords.js';
@@ -191,6 +194,7 @@ async function main() {
   // Default access rules (doc 11 §6); never overwrites rules an Admin has changed.
   const seededRules = await ensureDefaultAccessRules();
   console.log(`Access rules: ${seededRules ? `seeded ${seededRules} role(s)` : 'already present'}`);
+  await addMissingRecordTypes();
   // Later default changes (doc 11 §12), e.g. Member Delete on time; only cells still at the old default.
   for (const m of await applyAccessDefaultChanges()) {
     const switched = m.cells.filter((c) => c.outcome === 'switched').length;

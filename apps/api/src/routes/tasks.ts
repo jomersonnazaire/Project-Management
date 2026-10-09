@@ -54,7 +54,7 @@ import {
   projectScopeFilter,
   type ScopeUser,
 } from '../services/scope.js';
-import { assertNotArchived, loadProject } from './projects.js';
+import { assertNotArchived, assertPlanOpen, loadProject } from './projects.js';
 
 /**
  * Tasks: board, checklist, task details and My tasks (FR-TSK-01..14, workflow §2). The gate checks
@@ -76,7 +76,7 @@ export function taskCan(
   project: ProjectDoc,
   t: TaskDoc,
 ): TaskDto['can'] {
-  const open = !project.archived;
+  const open = !project.archived && project.status !== 'COMPLETED';
   const plan = open && perms.tasks.edit && isPlanner(user, project);
   const status = open && perms.tasks.edit && (plan || isMine(user, t));
   const reviewer = Boolean(t.approval?.reviewerId?.equals(user._id));
@@ -208,6 +208,7 @@ export function assertCan(
   what: keyof TaskDto['can'],
 ) {
   assertNotArchived(project);
+  assertPlanOpen(project);
   if (!taskCan(currentUser(req), currentPermissions(req), project, task)[what]) {
     throw forbidden(
       what === 'plan'
@@ -469,6 +470,7 @@ export function tasksRouter(registry: RouteRegistry) {
     const input = parseBody(createTaskSchema, req);
     const project = await loadProject(req, 'view');
     assertNotArchived(project);
+    assertPlanOpen(project);
     if (!isPlanner(currentUser(req), project)) {
       throw forbidden('Only the project manager can add tasks.');
     }
@@ -516,6 +518,7 @@ export function tasksRouter(registry: RouteRegistry) {
     const input = parseBody(reorderTasksSchema, req);
     const project = await loadProject(req, 'view');
     assertNotArchived(project);
+    assertPlanOpen(project);
     if (!isPlanner(currentUser(req), project)) {
       throw forbidden('Only the project manager can reorder tasks.');
     }

@@ -1,4 +1,11 @@
-import { ACCESS_DEFAULT_CHANGES, type AccessDefaultChange, type SystemRole } from '@xc8/shared';
+import {
+  ACCESS_ACTIONS,
+  ACCESS_DEFAULT_CHANGES,
+  RECORD_TYPE_KEYS,
+  defaultPermissions,
+  type AccessDefaultChange,
+  type SystemRole,
+} from '@xc8/shared';
 import { Types } from 'mongoose';
 import type { Logger } from 'pino';
 import { AccessRuleModel, ActivityLogModel, MigrationModel } from '../models/index.js';
@@ -140,4 +147,51 @@ export async function applyAccessDefaultChanges(
     results.push(result);
   }
   return results;
+}
+
+const spec = (row: Record<string, boolean>) =>
+  ACCESS_ACTIONS.filter((a) => row[a])
+    .map((a) => a[0]!.toUpperCase())
+    .join('') || '–';
+
+/**
+ * A record type added after go-live (e.g. `issues` in M3.5) has no row in the saved grids yet.
+ * Mongoose would fill such a row with "all off" when a grid is loaded for editing, so the Access
+ * rules screen would show it unticked and the next save would store that. This writes the seeded
+ * default row once, only where the row is missing (never over an Admin's values), bumps the
+ * version and audits each added row. Runs on API start before the default changes.
+ */
+export async function addMissingRecordTypes(
+  logger?: Logger,
+): Promise<{ role: SystemRole; record: string }[]> {
+  const added: { role: SystemRole; record: string }[] = [];
+  const docs = await AccessRuleModel.find().select('role permissions').lean();
+  for (const doc of docs) {
+    const role = doc.role as SystemRole;
+    const stored = (doc.permissions ?? {}) as Record<string, unknown>;
+    const missing = RECORD_TYPE_KEYS.filter((k) => stored[k] === undefined);
+    if (!missing.length) continue;
+    const defaults = defaultPermissions(role);
+    for (const record of missing) {
+      const path = `permissions.${record}`;
+      const saved = await AccessRuleModel.findOneAndUpdate(
+        { _id: doc._id, [path]: { $exists: false } },
+        { $set: { [path]: defaults[record] }, $inc: { version: 1 } },
+        { new: true },
+      );
+      if (!saved) continue; // added concurrently
+      await audit({
+        actorId: null,
+        entityType: 'accessRule',
+        entityId: saved._id,
+        action: 'access_rule_row_added',
+        changes: [{ field: record, old: null, new: spec(defaults[record]) }],
+        reason: 'New record type: seeded default row',
+        meta: { role, recordType: record },
+      });
+      added.push({ role, record });
+    }
+  }
+  if (added.length) logger?.info({ added }, 'Added default rows for new record types');
+  return added;
 }

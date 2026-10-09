@@ -208,7 +208,8 @@ export const DOWNLOAD_LINK_MINUTES = 5;
 export const FILE_KINDS = ['PDF', 'WORD', 'EXCEL', 'IMAGE'] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
 
-export const UPLOAD_PURPOSES = ['EVIDENCE', 'DOCUMENT'] as const;
+/** ISSUE: issue attachments (doc 13 FR-ISS-08), same rules as evidence. */
+export const UPLOAD_PURPOSES = ['EVIDENCE', 'DOCUMENT', 'ISSUE'] as const;
 export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
 
 const EVIDENCE_EXT: Record<string, FileKind> = {
@@ -273,7 +274,7 @@ export function checkFileRules(
   purpose: UploadPurpose,
 ): FileRuleIssue | null {
   const ext = fileExtension(file.name);
-  const allowed = purpose === 'EVIDENCE' ? EVIDENCE_EXT : DOCUMENT_EXT;
+  const allowed = purpose === 'DOCUMENT' ? DOCUMENT_EXT : EVIDENCE_EXT;
   if (MACRO_EXT.has(ext)) {
     const plain = ext.startsWith('d') ? 'docx' : 'xlsx';
     return {
@@ -289,7 +290,9 @@ export function checkFileRules(
       message:
         purpose === 'EVIDENCE'
           ? `${file.name} can't be added. Evidence must be a PDF, Word or Excel file.`
-          : `${file.name} can't be added. That file type isn't allowed.`,
+          : purpose === 'ISSUE'
+            ? `${file.name} can't be added. Attachments must be a PDF, Word or Excel file.`
+            : `${file.name} can't be added. That file type isn't allowed.`,
     };
   }
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -442,7 +445,7 @@ export interface FolderDto {
   id: string;
   name: string;
   parentId: string | null;
-  kind: 'CONTRACTS' | 'PHASE' | 'CUSTOM';
+  kind: 'CONTRACTS' | 'PHASE' | 'CUSTOM' | 'ISSUES';
   depth: number;
   documentCount: number;
   /** FR-DOC-43: restricted to the PM, Admins and `allowedUserIds`. */
@@ -491,7 +494,7 @@ export interface DocumentDto {
   signedVersion: number | null;
   latestVersion: number;
   task: Ref | null;
-  source: 'DOCUMENT' | 'EVIDENCE';
+  source: 'DOCUMENT' | 'EVIDENCE' | 'ISSUE';
   archived: boolean;
   archivedReason: string | null;
   updatedAt: string;
@@ -563,6 +566,13 @@ export const NOTIFICATION_TYPES = [
   'APPROVED',
   'REJECTED',
   'EVIDENCE',
+  // Issues (doc 13 FR-ISS-10)
+  'ISSUE_CREATED',
+  'ISSUE_ASSIGNED',
+  'ISSUE_STATUS',
+  'ISSUE_COMMENT',
+  'ISSUE_OVERDUE',
+  'ISSUE_OWNER_NEEDED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -576,6 +586,8 @@ export interface NotificationDto {
   type: NotificationType;
   actor: Ref | null;
   task: Ref | null;
+  /** Issue notifications: the issue's key and title. */
+  issue: { id: string; key: string; title: string } | null;
   project: Ref;
   read: boolean;
   at: string;
@@ -601,6 +613,12 @@ export const NOTIFICATION_VERBS: Record<NotificationType, string> = {
   APPROVED: 'approved',
   REJECTED: 'sent back',
   EVIDENCE: 'uploaded evidence on',
+  ISSUE_CREATED: 'raised',
+  ISSUE_ASSIGNED: 'assigned you',
+  ISSUE_STATUS: 'changed the status of',
+  ISSUE_COMMENT: 'commented on',
+  ISSUE_OVERDUE: 'Overdue:',
+  ISSUE_OWNER_NEEDED: 'Owner needed:',
 };
 
 // ---------- Project conversation (FR-CNV-01..08) ----------

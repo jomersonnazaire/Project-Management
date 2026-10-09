@@ -2,7 +2,7 @@ import {
   ACCESS_ACTIONS,
   ACCESS_ACTION_LABELS,
   FIXED_SCOPES,
-  LOCKED_OFF_REASON,
+  lockedOffReason,
   NOT_APPLICABLE_REASON,
   RECORD_TYPES,
   SYSTEM_ROLES,
@@ -444,7 +444,7 @@ function Cell({
   }
   if (isLockedOff(role, record, action)) {
     return (
-      <span className="d-inline-flex align-items-center gap-1" title={LOCKED_OFF_REASON}>
+      <span className="d-inline-flex align-items-center gap-1" title={lockedOffReason(record)}>
         <input
           type="checkbox"
           className="form-check-input"

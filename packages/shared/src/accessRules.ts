@@ -65,6 +65,12 @@ export const RECORD_TYPES = [
     notes: 'Signed versions stay locked regardless',
   },
   {
+    key: 'issues',
+    label: 'Issues',
+    actions: ALL,
+    notes: 'Delete is Admin-only by default; closing as duplicate is the normal path (FR-ISS-15)',
+  },
+  {
     key: 'conversations',
     label: 'Project conversations',
     actions: VIEW_CREATE,
@@ -135,6 +141,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     time: 'VCED',
     documents: 'VCED',
+    issues: 'VCED',
     conversations: 'VC',
     notifications: 'V',
     reports: 'V',
@@ -153,6 +160,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     time: 'VCED',
     documents: 'VCED',
+    issues: 'VCE',
     conversations: 'VC',
     notifications: 'V',
     reports: 'V',
@@ -172,6 +180,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     // Delete on own entries only (FR-TIME-06; doc 11 §6, Lean 2026-10-09). Was 'VCE' before v0.6.8.
     time: 'VCED',
     documents: 'VC',
+    issues: 'VCE',
     conversations: 'VC',
     notifications: 'V',
     reports: 'V',
@@ -190,6 +199,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: '',
     time: '',
     documents: 'V',
+    issues: 'V',
     conversations: 'V',
     notifications: 'V',
     reports: 'V',
@@ -257,15 +267,24 @@ export function lockedOnReason(record: RecordType): string {
   return ALWAYS_ON_RECORDS.includes(record) ? NOTIFICATIONS_LOCKED_REASON : LOCKED_ON_REASON;
 }
 
-/** Q-26: only Admins delete projects (PMs archive instead). Fixed in code, can't be granted. */
+/**
+ * Q-26: only Admins delete projects (PMs archive instead). Doc 13 §7: Viewers can never delete
+ * issues. Fixed in code, can't be granted.
+ */
 export function isLockedOff(role: SystemRole, record: RecordType, action: AccessAction): boolean {
+  if (role === 'VIEWER' && record === 'issues' && action === 'delete') return true;
   return role !== 'ADMIN' && record === 'projects' && action === 'delete';
+}
+
+export function lockedOffReason(record: RecordType): string {
+  return record === 'issues' ? ISSUES_LOCKED_OFF_REASON : LOCKED_OFF_REASON;
 }
 
 export const LOCKED_ON_REASON = 'Locked so nobody can lock every Admin out';
 export const NOTIFICATIONS_LOCKED_REASON =
   'Everyone sees only their own notifications; not configurable';
 export const LOCKED_OFF_REASON = 'Only Admins can delete projects (Q-26)';
+export const ISSUES_LOCKED_OFF_REASON = 'Viewers can never delete issues (doc 13 §7)';
 export const NOT_APPLICABLE_REASON = "Doesn't apply to this record type";
 
 /** Read-only "Scope (fixed)" column: limits fixed in code that a grant can never widen (FR-ACL-07). */
@@ -274,6 +293,7 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     projects: 'View all; edit and archive only projects they manage (Q-12)',
     tasks: 'Plan changes only in projects they manage',
     approvals: 'Own projects only',
+    issues: 'Edit issues on projects they manage',
   },
   MEMBER: {
     clients: 'Clients of projects they belong to',
@@ -283,6 +303,7 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     approvals: 'Designated reviewer only',
     time: 'Own entries only',
     documents: 'Projects they belong to',
+    issues: 'Projects they belong to; edit issues they own or reported',
     conversations: 'Projects they belong to',
   },
 };
@@ -360,7 +381,7 @@ export function validatePermissionGrid(role: SystemRole, grid: PermissionGrid): 
             : `Admin access to ${recordTypeInfo(record).label} is locked so nobody can lock every Admin out.`,
         });
       } else if (isLockedOff(role, record, action) && v) {
-        issues.push({ code: 'LOCKED_PERMISSION', path, message: LOCKED_OFF_REASON + '.' });
+        issues.push({ code: 'LOCKED_PERMISSION', path, message: lockedOffReason(record) + '.' });
       }
     }
     if (actionApplies(record, 'view') && !row?.view && (row?.create || row?.edit || row?.delete)) {
