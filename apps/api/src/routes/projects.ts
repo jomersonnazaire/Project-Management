@@ -1,5 +1,7 @@
 import {
   END_AFTER_START,
+  canViewProjectActivity,
+  type SystemRole,
   PROJECT_FILTERS,
   createProjectSchema,
   parseDateOnly,
@@ -14,7 +16,7 @@ import {
 import type { Request } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
 import { perm, type RouteRegistry } from '../access/registry.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith, unprocessable } from '../lib/http422.js';
 import { paginate } from '../lib/pagination.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
@@ -281,6 +283,18 @@ export function projectsRouter(registry: RouteRegistry) {
         tasks: tasks.length,
       },
     });
+    // Creating a project for another manager hands it over at once (doc 11 §12): audit it.
+    if (!managerId.equals(user._id)) {
+      await audit({
+        actorId: user._id,
+        entityType: 'project',
+        entityId: projectId,
+        projectId,
+        action: 'project_handover',
+        changes: [{ field: 'managerId', old: user._id.toString(), new: managerId.toString() }],
+        meta: { atCreation: true },
+      });
+    }
 
     // Non-blocking warnings (EC-13, EC-27, EC-29).
     const warnings: string[] = [];
@@ -331,6 +345,7 @@ export function projectsRouter(registry: RouteRegistry) {
       track('type', project.type, input.type);
       project.type = input.type;
     }
+    const previousManager = project.managerId?.toString() ?? null;
     if (input.managerId !== undefined && input.managerId !== project.managerId?.toString()) {
       await assertInternalUsers([input.managerId], 'The project manager', [
         'ADMIN',
@@ -476,6 +491,18 @@ export function projectsRouter(registry: RouteRegistry) {
         reason: datesChanged ? (input.reason ?? undefined) : undefined,
       });
     }
+    // PM handover (doc 11 §12): a separate, explicit entry in the audit trail.
+    const newManager = project.managerId?.toString() ?? null;
+    if (newManager !== previousManager) {
+      await audit({
+        actorId: user._id,
+        entityType: 'project',
+        entityId: project._id,
+        projectId: project._id,
+        action: 'project_handover',
+        changes: [{ field: 'managerId', old: previousManager, new: newManager }],
+      });
+    }
     const fresh = await ProjectModel.findById(project._id).lean();
     res.json({ project: await toProjectDto(fresh as ProjectDoc, user, currentPermissions(req)) });
   });
@@ -613,9 +640,15 @@ export function projectsRouter(registry: RouteRegistry) {
     });
   });
 
-  // ----- Activity log tab (FR-AUD-02): needs View on audit, plus the project scope -----
-  r.get('/:id/activity', perm('audit', 'view'), async (req, res) => {
+  // ----- Activity log tab (FR-AUD-02, doc 11 §12): Admins and PMs on any project they can view,
+  // or anyone with View on audit. The global Audit log stays governed by the audit permission. -----
+  r.get('/:id/activity', perm('projects', 'view'), async (req, res) => {
     const project = await loadProject(req, 'view');
+    if (
+      !canViewProjectActivity(currentUser(req).systemRole as SystemRole, currentPermissions(req))
+    ) {
+      throw forbidden();
+    }
     const entries = await ActivityLogModel.find({ projectId: project._id })
       .sort({ at: -1 })
       .limit(200)

@@ -175,6 +175,8 @@ describe('Project scope (FR-ACL-07, Q-12, Q-26)', () => {
       archive: false,
       delete: false,
       planTasks: false,
+      // doc 11 §12: PMs read the Activity log of any project they can view.
+      activity: true,
     });
     expect(
       (await pm2.agent.patch(`/api/v1/projects/${project.id}`).set(CSRF).send({ name: 'Hijack' }))
@@ -193,6 +195,7 @@ describe('Project scope (FR-ACL-07, Q-12, Q-26)', () => {
       archive: true,
       delete: false,
       planTasks: true,
+      activity: true,
     });
   });
 

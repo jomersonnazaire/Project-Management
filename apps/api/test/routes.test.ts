@@ -142,7 +142,7 @@ describe('Route policy table', () => {
       'GET /projects/:id/contact-options projects.edit',
       'POST /projects/:id/contacts projects.edit',
       'DELETE /projects/:id/contacts/:contactId projects.edit',
-      'GET /projects/:id/activity audit.view',
+      'GET /projects/:id/activity projects.view',
       'GET /access-rules accessRules.view',
       'PUT /access-rules/:role accessRules.edit',
       'POST /access-rules/:role/reset accessRules.edit',

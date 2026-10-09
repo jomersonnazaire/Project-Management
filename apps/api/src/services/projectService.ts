@@ -4,7 +4,9 @@ import {
   todayUtc,
   toDateOnly,
   type ActiveContactDto,
+  canViewProjectActivity,
   type Health,
+  type SystemRole,
   type PermissionGrid,
   type ProjectDto,
   type ProjectListItemDto,
@@ -163,6 +165,7 @@ export async function toProjectDto(
       archive: perms.projects.edit && editScope,
       delete: perms.projects.delete && user.systemRole === 'ADMIN',
       planTasks: perms.tasks.edit && isPlanner(user, project),
+      activity: canViewProjectActivity(user.systemRole as SystemRole, perms),
     },
   };
 }

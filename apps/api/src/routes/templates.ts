@@ -16,7 +16,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { unprocessable } from '../lib/http422.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
-import { currentUser } from '../middleware/auth.js';
+import { currentPermissions, currentUser } from '../middleware/auth.js';
 import { ProjectModel, TemplateModel, type Template } from '../models/index.js';
 import { audit } from '../services/audit.js';
 import { projectScopeFilter } from '../services/scope.js';
@@ -128,6 +128,14 @@ async function projectCounts(req: Request, keys: string[]) {
   return new Map(rows.map((r) => [r._id, r.n]));
 }
 
+/**
+ * Draft (and archived) templates are visible only to roles with Edit on templates; everyone else
+ * sees published versions only (doc 11 §12). Read from the access rules on every request.
+ */
+function seesDrafts(req: Request): boolean {
+  return currentPermissions(req).templates.edit;
+}
+
 async function draftIds(keys: string[]) {
   const drafts = await TemplateModel.find({ templateKey: { $in: keys }, status: 'DRAFT' })
     .select('templateKey')
@@ -138,8 +146,11 @@ async function draftIds(keys: string[]) {
 export async function toTemplateDto(req: Request, t: TemplateDoc): Promise<TemplateDto> {
   const [pc, drafts, versions] = await Promise.all([
     projectCounts(req, [t.templateKey]),
-    draftIds([t.templateKey]),
-    TemplateModel.find({ templateKey: t.templateKey })
+    seesDrafts(req) ? draftIds([t.templateKey]) : new Map<string, string>(),
+    TemplateModel.find({
+      templateKey: t.templateKey,
+      ...(seesDrafts(req) ? {} : { status: 'PUBLISHED' }),
+    })
       .select('version status superseded publishedAt')
       .sort({ version: -1 })
       .lean(),
@@ -179,7 +190,7 @@ export async function toTemplateDto(req: Request, t: TemplateDoc): Promise<Templ
 
 async function loadTemplate(req: Request) {
   const t = await TemplateModel.findById(idParam(req));
-  if (!t) throw notFound();
+  if (!t || (t.status !== 'PUBLISHED' && !seesDrafts(req))) throw notFound();
   return t;
 }
 
@@ -195,13 +206,20 @@ export function templatesRouter(registry: RouteRegistry) {
     const q = parseQuery(listQuery, req);
     const filter: FilterQuery<Template> = { superseded: { $ne: true } };
     if (q.status) filter.status = q.status;
+    if (!seesDrafts(req)) {
+      // A non-editor asking for Drafts or Archived gets an empty list, not an error.
+      filter.status = !q.status || q.status === 'PUBLISHED' ? 'PUBLISHED' : { $in: [] };
+    }
     if (q.q) filter.name = new RegExp(escapeRegex(q.q), 'i');
     const items = (await TemplateModel.find(filter)
       .sort({ name: 1, version: -1 })
       .limit(500)
       .lean()) as TemplateDoc[];
     const keys = [...new Set(items.map((t) => t.templateKey))];
-    const [pc, drafts] = await Promise.all([projectCounts(req, keys), draftIds(keys)]);
+    const [pc, drafts] = await Promise.all([
+      projectCounts(req, keys),
+      seesDrafts(req) ? draftIds(keys) : new Map<string, string>(),
+    ]);
     res.json({
       items: items.map((t) => {
         const draftId = drafts.get(t.templateKey) ?? null;
