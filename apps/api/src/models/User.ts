@@ -41,6 +41,8 @@ const userSchema = new Schema(
     },
     /** Direct supervisor (doc 14 §5): DAR, leave notices, "my team" views. */
     supervisorId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    /** Report CC emails (FR-DAR-01), up to 5; set by Admins. */
+    reportCc: { type: [String], default: [] },
     lastLoginAt: { type: Date, default: null },
     deactivatedAt: { type: Date, default: null },
   },

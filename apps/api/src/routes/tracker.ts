@@ -34,6 +34,7 @@ import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
 import { LookupModel, TimeEntryModel, TimesheetDayModel, UserModel } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { leaveLabelFor } from '../services/leaveHook.js';
 import { notifyPersonal } from '../services/notify.js';
 import { userRefs } from '../services/projectService.js';
 import {
@@ -57,13 +58,6 @@ import {
 import { loadLoggableTask } from './time.js';
 
 type Id = Types.ObjectId;
-
-/** Hook for M7: the leave label of a day ("On leave", "Half day leave (AM)"), if any. */
-export type LeaveLabeler = (userId: Id, date: Date) => Promise<string | null>;
-let leaveLabel: LeaveLabeler = async () => null;
-export function setLeaveLabeler(fn: LeaveLabeler) {
-  leaveLabel = fn;
-}
 
 function dateParam(req: Request): Date {
   const v = req.params.date;
@@ -237,7 +231,7 @@ async function buildDay(
       submit: own && state.editable && status !== 'SUBMITTED' && date <= todayPH(),
       reopen: canReopenRole && lockedNow && (!state.weekLocked || isAdmin),
     },
-    leave: await leaveLabel(userId, date),
+    leave: await leaveLabelFor(userId, date),
   };
 }
 

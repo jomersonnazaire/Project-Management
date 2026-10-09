@@ -148,7 +148,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
     for (const [field, value] of Object.entries(input) as [keyof typeof input, unknown][]) {
       const old = user.get(field);
       const same =
-        field === 'teamIds'
+        field === 'teamIds' || field === 'reportCc'
           ? JSON.stringify((old as unknown[]).map(String)) === JSON.stringify(value)
           : field === 'supervisorId'
             ? String(old ?? null) === String(value ?? null)
@@ -157,7 +157,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
         changes.push({
           field,
           old:
-            field === 'teamIds'
+            field === 'teamIds' || field === 'reportCc'
               ? (old as unknown[]).map(String)
               : field === 'supervisorId'
                 ? ((old as Types.ObjectId | null)?.toString() ?? null)

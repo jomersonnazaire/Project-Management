@@ -12,6 +12,8 @@ export interface UserDto {
   weeklyCapacityHours: number;
   /** Direct supervisor (doc 14 §5); null = "Supervisor needed" (FR-LV-10). */
   supervisorId: string | null;
+  /** Report CC emails (FR-DAR-01), Admin-managed. */
+  reportCc: string[];
   status: UserStatus;
   active: boolean;
   mustChangePassword: boolean;
