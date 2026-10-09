@@ -205,3 +205,65 @@ a:focus-visible,
     }
   }
 }
+
+// --- Tab rows scroll sideways instead of clipping the last tab on phones (DR-05) ---
+.nav-tabs.nav-scrollable {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  .nav-item {
+    flex: 0 0 auto;
+  }
+  .nav-link {
+    white-space: nowrap;
+  }
+  @include media-breakpoint-down(sm) {
+    .nav-link {
+      padding-inline: 0.75rem;
+    }
+  }
+}
+
+// --- Standard modal header: the close (×) button sits inside the dialog corner (DR-06) ---
+// Sneat floats .btn-close outside the dialog (translate(23px, -25px)); keep it in the header.
+.modal .modal-header {
+  align-items: center;
+  .btn-close {
+    position: static;
+    inset: auto;
+    transform: none;
+    box-shadow: none;
+    background-color: transparent;
+    margin: 0 0 0 auto;
+    padding: 0.5rem;
+    &:hover,
+    &:focus {
+      transform: none;
+    }
+  }
+}
+
+// --- Access rules grid (mockup v0.5.2) ---
+.acl-table {
+  th,
+  td {
+    vertical-align: middle;
+  }
+  .form-check-input {
+    width: 1.0625rem;
+    height: 1.0625rem;
+    margin: 0;
+    cursor: pointer;
+    &:disabled {
+      cursor: not-allowed;
+    }
+  }
+}
+.acl-savebar {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 5;
+  box-shadow: $box-shadow-lg;
+}

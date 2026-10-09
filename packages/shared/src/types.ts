@@ -31,6 +31,8 @@ export interface ClientDto {
   notes: string | null;
   active: boolean;
   contactCount: number;
+  /** Projects of this client within the caller's project scope (FR-CLI-12). */
+  projectCount: number;
 }
 
 export interface ContactDto {
@@ -75,4 +77,38 @@ export interface InviteResultDto {
   purpose: 'INVITE' | 'RESET';
   /** True when an earlier unused link existed and has now been cancelled. */
   replacedPrevious: boolean;
+}
+
+export const PROJECT_STATUSES = ['ACTIVE', 'DELAYED', 'ON_HOLD', 'COMPLETED'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  ACTIVE: 'Active',
+  DELAYED: 'Delayed',
+  ON_HOLD: 'On hold',
+  COMPLETED: 'Completed',
+};
+
+/** A row in Clients › Projects (FR-CLI-11). */
+export interface ProjectSummaryDto {
+  id: string;
+  name: string;
+  clientId: string;
+  managerName: string | null;
+  startDate: string | null;
+  plannedEndDate: string | null;
+  progress: number;
+  status: ProjectStatus;
+  archived: boolean;
+}
+
+export interface AuditEntryDto {
+  id: string;
+  at: string;
+  actor: { id: string; name: string } | null;
+  entityType: string;
+  entityId: string;
+  action: string;
+  changes: { field: string; old: unknown; new: unknown }[];
+  meta: Record<string, unknown> | null;
 }

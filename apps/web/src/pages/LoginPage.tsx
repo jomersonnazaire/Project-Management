@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, type LoginInput, type UserDto } from '@xc8/shared';
+import { loginSchema, type LoginInput, type PermissionGrid, type UserDto } from '@xc8/shared';
 import { useState } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
@@ -10,7 +10,7 @@ import { AuthCard, safeNext } from '../components/AuthCard';
 import { BrandLogo } from '../components/BrandLogo';
 
 export function LoginPage() {
-  const { user, setUser } = useAuth();
+  const { user, setSession } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +25,12 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
     try {
-      const res = await api<{ user: UserDto }>('/auth/login', {
+      const res = await api<{ user: UserDto; permissions?: PermissionGrid }>('/auth/login', {
         method: 'POST',
         body: values,
         quiet401: true,
       });
-      setUser(res.user);
+      setSession(res);
       navigate(safeNext(params.get('next')), { replace: true });
     } catch (e) {
       setError(authErrorMessage(e));

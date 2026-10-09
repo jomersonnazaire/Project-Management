@@ -5,7 +5,7 @@ Given/When/Then. Each `AC-xx.y` maps to `US-xx`. "API" criteria must be verified
 ## US-01 Sign in
 - **AC-01.1** Given an active user, when they enter correct credentials, then they land on **My tasks** (until the Dashboard ships in Milestone 4, then the Dashboard).
 - **AC-01.2** Given wrong credentials, then a generic "Email or password is incorrect" message shows (no hint which one).
-- **AC-01.3** Given 5 consecutive failures on one account (from any IP), then that account is locked for 15 minutes **silently**: further attempts, even with the correct password, return the same HTTP 401 "Email or password is incorrect" (never 423 or any "locked" wording), and a correct sign-in succeeds once the 15 minutes pass. **(API)** Excess attempts from one IP across many accounts are rate-limited (HTTP 429).
+- **AC-01.3** Given 5 consecutive failures on one account (from any IP), then that account is locked for 15 minutes **silently**: further attempts, even with the correct password, return the same HTTP 401 "Email or password is incorrect" (never 423 or any "locked" wording), and a correct sign-in succeeds once the 15 minutes pass. **(API)** Excess attempts from one IP across many accounts are rate-limited (HTTP 429 `RATE_LIMITED` with `Retry-After`), and the sign-in screen shows "Too many sign-in attempts. Please wait 15 minutes and try again." in the alert area.
 - **AC-01.4** Given a deactivated user, when they sign in with correct credentials, then access is denied.
 - **AC-01.5b** Given an active session older than 12 hours, the next request returns 401 and the user must sign in again.
 - **AC-01.5** Given a session idle for more than 30 minutes, when the user acts, then they're redirected to sign-in and no data is returned by the API (401).

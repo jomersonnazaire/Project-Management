@@ -19,6 +19,7 @@ import {
 } from '@xc8/shared';
 import { connectDb, disconnectDb } from '../src/db.js';
 import { ClientContactModel, ClientModel, TeamModel, UserModel } from '../src/models/index.js';
+import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { hashPassword } from '../src/services/passwords.js';
 import { newToken, sha256 } from '../src/services/tokens.js';
 
@@ -166,6 +167,9 @@ async function main() {
   }
 
   await connectDb(uri, process.env.MONGODB_DB_NAME);
+  // Default access rules (doc 11 §6); never overwrites rules an Admin has changed.
+  const seededRules = await ensureDefaultAccessRules();
+  console.log(`Access rules: ${seededRules ? `seeded ${seededRules} role(s)` : 'already present'}`);
 
   const teamIds = new Map<string, string>();
   for (const name of TEAMS) {

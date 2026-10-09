@@ -72,7 +72,10 @@ describe('Role-gated UI', () => {
     renderAt('/admin/users', <App />);
     expect(await screen.findByText('403')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Admin/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Client contacts/ })).toBeInTheDocument();
+    // Clients replaces the old Client contacts page (FR-CLI-09); Access rules is Admin-only (Q-27).
+    expect(screen.getByRole('link', { name: /^Clients/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Client contacts/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Access rules/ })).not.toBeInTheDocument();
   });
 
   it('an Admin opens the invite form with separate Access role and Job role fields (TC-B09)', async () => {

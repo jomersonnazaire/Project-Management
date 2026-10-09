@@ -14,3 +14,12 @@ Preview: PR #1 @ 424ea75. Compared against mockup v0.4.2 and THEME_TOKENS.md. Vi
 | DR-02 | Low | All pages | Top bar is empty and the page title sits in a second card below it, using ~70px of extra height. | Put the page title (and primary action) in the top bar, as in the mockup. |
 | DR-03 | Low | Admin > Users (390) | Table scrolls sideways on mobile, hiding Access, Status and actions. | Below 768px, render each user as a stacked card (name, email, badges, actions). |
 | DR-04 | Low | Admin > Users | Teams show "Management , Consulting" with a space before the comma. | Join with ", ". |
+
+## Re-check on 8671d68 (Oct 9, 2026, 1:50 PM SGT)
+- DR-01 fixed: invite form is a modal; table fits its card at 1440 (1080/1080) and 1200 (840/840).
+- DR-02 fixed: title "Admin" and "+ Invite user" in the top bar.
+- DR-03 fixed: stacked user cards at 390px.
+- DR-04 fixed: "Management, Consulting".
+- 429 copy: not observed (sign-in succeeded first try); accepted on Deven's and Queen's confirmation.
+- **DR-05 (Low):** at 390px the Admin tab row is 382px in a 358px container with overflow visible, so "Settings" is clipped. Fix: `overflow-x:auto; flex-wrap:nowrap` on the tab row (Sneat `nav-scrollable` pattern), or shorten padding below 576px.
+- **DR-06 (Low):** the invite modal's close (×) button sits outside the dialog's top-right corner. Fix: use the standard `modal-header` with `btn-close` inside it.

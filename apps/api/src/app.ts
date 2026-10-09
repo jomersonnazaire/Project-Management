@@ -1,6 +1,7 @@
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
+import { PUBLIC, RouteRegistry } from './access/registry.js';
 import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import type { Logger } from 'pino';
@@ -9,6 +10,7 @@ import { dbState } from './db.js';
 import { HttpError } from './lib/errors.js';
 import { createLogger, httpLogger } from './logger.js';
 import { rateLimitKey, resolveClientIp } from './middleware/clientIp.js';
+import { authorize } from './middleware/authorize.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import {
   CSRF_HEADER,
@@ -17,12 +19,19 @@ import {
   rejectOperatorKeys,
 } from './middleware/security.js';
 import './models/index.js';
+import { accessRulesRouter } from './routes/accessRules.js';
+import { auditRouter } from './routes/audit.js';
 import { authRouter } from './routes/auth.js';
 import { clientsRouter, contactsRouter } from './routes/clients.js';
 import { teamsRouter } from './routes/teams.js';
 import { usersRouter } from './routes/users.js';
 
-export function createApp(config: AppConfig, logger: Logger = createLogger(config.LOG_LEVEL)) {
+export function createApp(
+  config: AppConfig,
+  logger: Logger = createLogger(config.LOG_LEVEL),
+  /** Test hook: mount extra routes (used to prove undeclared routes are denied). */
+  extraRoutes?: (registry: RouteRegistry) => Router,
+) {
   const app = express();
   app.disable('x-powered-by');
   // We resolve client IPs ourselves (see clientIp.ts); keep Express from trusting XFF.
@@ -78,22 +87,36 @@ export function createApp(config: AppConfig, logger: Logger = createLogger(confi
       ),
   });
 
-  const api = Router();
-  api.use(rejectOperatorKeys);
-  api.use(csrfProtection(isAllowedOrigin));
-  api.get('/health', (_req, res) => {
+  // Every route is declared with its access policy; the central gate checks it before any
+  // handler runs, and requests matching no declared route are denied (doc 11 §8).
+  const registry = new RouteRegistry();
+  const health = registry.router();
+  health.get('/health', PUBLIC, (_req, res) => {
     const db = dbState();
     res.status(db === 'up' ? 200 : 503).json({ status: db === 'up' ? 'ok' : 'degraded', db });
   });
-  api.use('/auth', authRouter(config, authLimiter));
-  api.use('/users', usersRouter(config));
-  api.use('/teams', teamsRouter(config));
-  api.use('/clients', clientsRouter(config));
-  api.use('/contacts', contactsRouter(config));
+  const routers = [
+    health.router,
+    authRouter(config, registry, authLimiter),
+    usersRouter(config, registry),
+    teamsRouter(registry),
+    clientsRouter(registry),
+    contactsRouter(registry),
+    accessRulesRouter(registry),
+    auditRouter(registry),
+    ...(extraRoutes ? [extraRoutes(registry)] : []),
+  ];
+
+  const api = Router();
+  api.use(rejectOperatorKeys);
+  api.use(csrfProtection(isAllowedOrigin));
+  api.use(authorize(config, registry));
+  for (const router of routers) api.use(router);
 
   app.use('/api/v1', api);
   app.get('/', (_req, res) => res.json({ name: 'xc8-projectmgmt-api', docs: '/api/v1/health' }));
   app.use(notFoundHandler);
   app.use(errorHandler);
+  app.locals.routes = registry.entries;
   return app;
 }

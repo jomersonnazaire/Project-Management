@@ -228,10 +228,10 @@ describe('Teams (US-03)', () => {
     expect(all.body.items.map((t: { name: string }) => t.name)).toContain('Customer Support');
   });
 
-  it('non-Admins can read teams but not manage them', async () => {
+  it('non-Admins can neither read nor manage teams with the default access rules (doc 11 §6)', async () => {
     for (const role of ['PROJECT_MANAGER', 'MEMBER', 'VIEWER'] as const) {
       const { agent } = await signedInAs(app, role);
-      expect((await agent.get('/api/v1/teams')).status).toBe(200);
+      expect((await agent.get('/api/v1/teams')).status).toBe(403);
       expect(
         (
           await agent
