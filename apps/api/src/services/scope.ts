@@ -88,3 +88,15 @@ export function isPlanner(user: ScopeUser, project: ProjectLike): boolean {
   const r = role(user);
   return r === 'ADMIN' || (r === 'PROJECT_MANAGER' && canEditProjectScope(user, project));
 }
+
+/**
+ * Who may add people to a project's members from the task form (FR-PRJ-19, DEF-003): Admins and
+ * PMs who may edit the project (Q-12 scope), with Edit on projects in the access rules.
+ */
+export function canAddProjectMembers(
+  user: ScopeUser,
+  perms: { projects: { edit: boolean } },
+  project: ProjectLike & { archived?: boolean | null },
+): boolean {
+  return !project.archived && perms.projects.edit && isPlanner(user, project);
+}

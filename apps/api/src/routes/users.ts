@@ -10,6 +10,7 @@ import type { FilterQuery } from 'mongoose';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import type { AppConfig } from '../config.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { conflictWith } from '../lib/http422.js';
 import { paginate } from '../lib/pagination.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
@@ -106,7 +107,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
     const id = idParam(req);
     const input = parseBody(updateUserSchema, req);
     const admin = currentUser(req);
-    const user = await UserModel.findById(id).select('+passwordHash');
+    const user = await UserModel.findById(id).select('+passwordHash +invite');
     if (!user) throw notFound();
     assertMayManageAdmins(admin, user.systemRole, input.systemRole);
 
@@ -118,6 +119,10 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
       if (user.systemRole === 'ADMIN' && user.active) await assertNotLastAdmin(user);
     }
     if (input.teamIds) await assertTeamsExist(input.teamIds);
+    const emailChanged = input.email !== undefined && input.email !== user.email;
+    if (emailChanged && (await UserModel.exists({ email: input.email, _id: { $ne: user._id } }))) {
+      throw emailInUse();
+    }
 
     const changes: { field: string; old: unknown; new: unknown }[] = [];
     for (const [field, value] of Object.entries(input) as [keyof typeof input, unknown][]) {
@@ -136,7 +141,23 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
       }
     }
     if (changes.length) {
-      await user.save();
+      try {
+        await user.save();
+      } catch (err) {
+        if ((err as { code?: number }).code === 11000) throw emailInUse();
+        throw err;
+      }
+      // FR-USR-06: the password stays valid; the user's sessions end (an Admin changing their own
+      // email keeps the current one) and any unused invite or reset link is cancelled.
+      if (emailChanged) {
+        await revokeUserSessions(
+          user._id,
+          user._id.equals(admin._id) ? req.auth?.sessionId : undefined,
+        );
+        const hadLink = !!user.invite?.tokenHash && user.invite.expiresAt > new Date();
+        await UserModel.updateOne({ _id: user._id }, { $set: { invite: null } });
+        if (hadLink) changes.push({ field: 'previousLink', old: 'unused', new: 'cancelled' });
+      }
       await audit({
         actorId: admin._id,
         entityType: 'user',
@@ -238,6 +259,13 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
   });
 
   return router.router;
+}
+
+/** 409 with a field error so the form can show it under Email. */
+function emailInUse() {
+  return conflictWith('Email already in use', 'EMAIL_IN_USE', [
+    { path: 'email', message: 'Another user already has this email.' },
+  ]);
 }
 
 /** Only Admins may create, change or remove Admin accounts or grant the Admin role. */

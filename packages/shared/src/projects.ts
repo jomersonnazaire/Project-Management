@@ -565,6 +565,13 @@ const taskFields = {
   isMilestone: z.boolean(),
 };
 
+/**
+ * FR-PRJ-19 (DEF-003): people to add to the project's members in the same save that assigns them
+ * (owner, assignee or reviewer). Admins and PMs who can edit the project only; audited as a
+ * project member add. Not a plan field.
+ */
+const addMemberIds = z.array(objectId).max(20).optional();
+
 const datesInOrder = (v: { plannedStart?: string | null; dueDate?: string | null }) =>
   !v.plannedStart || !v.dueDate || v.dueDate >= v.plannedStart;
 
@@ -585,6 +592,7 @@ export const createTaskSchema = z
     requiresApproval: taskFields.requiresApproval.default(false),
     reviewerId: taskFields.reviewerId.optional(),
     isMilestone: taskFields.isMilestone.default(false),
+    addMemberIds,
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
 export type CreateTaskInput = z.input<typeof createTaskSchema>;
@@ -593,8 +601,10 @@ export const updateTaskSchema = z
   .strictObject({
     ...Object.fromEntries(Object.entries(taskFields).map(([k, s]) => [k, s.optional()])),
     version: z.number().int().min(0),
+    addMemberIds,
   } as { [K in keyof typeof taskFields]: z.ZodOptional<(typeof taskFields)[K]> } & {
     version: z.ZodNumber;
+    addMemberIds: typeof addMemberIds;
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
@@ -761,6 +771,8 @@ export interface ProjectDto extends ProjectListItemDto {
     archive: boolean;
     delete: boolean;
     planTasks: boolean;
+    /** Add people to the project from the task form (FR-PRJ-19): Admins and PMs who can edit it. */
+    addMembers: boolean;
     /** Read the project Activity log (doc 11 §12). */
     activity: boolean;
   };

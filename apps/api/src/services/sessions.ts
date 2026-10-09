@@ -44,6 +44,12 @@ export function clearSessionCookie(config: AppConfig, res: Response): void {
   res.clearCookie(cookieName(config), cookieOptions(config));
 }
 
-export async function revokeUserSessions(userId: Types.ObjectId | string): Promise<void> {
-  await SessionModel.deleteMany({ userId });
+/** Ends a user's sessions, optionally keeping one (e.g. the caller's own current session). */
+export async function revokeUserSessions(
+  userId: Types.ObjectId | string,
+  exceptSessionId?: string,
+): Promise<void> {
+  await SessionModel.deleteMany(
+    exceptSessionId ? { userId, _id: { $ne: exceptSessionId } } : { userId },
+  );
 }

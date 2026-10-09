@@ -1,6 +1,6 @@
 # 13 — Project Issue Tracking (Milestone 3.5)
 
-**Status:** v0.6.0 draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.6.0 approved by Jomerson with Q-32 to Q-35 defaults (2026-10-09) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson ("monitor all issues raised before and after the services"); Deven (scope); Queen (access grid, completed projects); Lean (decisions: grid rows; Completed = issues open, Archived = read-only); UIE (v0.7 plan).
 **Reference practice:** issue/ticket handling in tools like Jira Service Management, Zendesk and SAP Solution Manager: severity-based response targets, a status workflow with a "waiting on customer" state, and separating implementation issues from post-go-live support.
 

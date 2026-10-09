@@ -203,6 +203,14 @@ a:focus-visible,
       white-space: normal !important;
       padding-top: 0.5rem;
     }
+    // FR-PRJ-20: the Edit pencil and the ⋮ menu sit side by side at the foot of the card.
+    td.cell-edit,
+    td.cell-edit + td.cell-actions {
+      display: inline-block;
+      width: auto !important;
+      padding-top: 0.5rem;
+      padding-right: 0.75rem;
+    }
   }
 }
 

@@ -662,7 +662,7 @@ function ActivityModal({
               </Form.Select>
             </Form.Group>
             <Form.Group className="col-md-4" controlId="act-role">
-              <Form.Label>Default role</Form.Label>
+              <Form.Label>Default job role</Form.Label>
               <Form.Select
                 value={a.defaultJobRole ?? ''}
                 onChange={(e) =>

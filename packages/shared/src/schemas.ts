@@ -73,6 +73,8 @@ export type InviteUserInput = z.input<typeof inviteUserSchema>;
 export const updateUserSchema = z
   .strictObject({
     name: requiredText('Full name', 120).optional(),
+    /** Admin-only in practice (needs Edit on Users). Staff emails stay unique among users. */
+    email: emailSchema.optional(),
     systemRole: systemRoleSchema.optional(),
     jobRole: jobRoleSchema.optional(),
     teamIds: z.array(objectId).max(50).optional(),
