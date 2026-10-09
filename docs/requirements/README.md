@@ -48,3 +48,5 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.6.4 | 2026-10-09 | Doc 12 approved (Q-29 to Q-31 defaults); FR-PRJ-19 adds on save. PR #4 merged. |
 | v0.6.5 | 2026-10-09 | Doc 12 §3.1b: Today tab (FR-TSK-20/21, Philippine time), holiday calendar rules (FR-CAL-01 to 04), Lean's calls. |
 | v0.6.6 | 2026-10-09 | FR-CAL-05 Working days setting with at-least-one-day guard; FR-CAL-02 uses it. |
+| v0.6.7 | 2026-10-09 | Doc 12 aligned with M3 build calls: Holidays tab, 90-day notifications label, PMs read-only on others' conversations; Defender pending. |
+| v0.6.8 | 2026-10-09 | M3 done: phase folders unrestrictable, official holidays loading + later proclamations, Members delete own time (doc 11 §6). |

@@ -85,7 +85,7 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 | projects | VCED | VCE + archive (own for E/archive) | V | V |
 | tasks | VCED | VCED | VE (own tasks) | V |
 | approvals | E | E (own projects) | E (designated reviewer only) | – |
-| time | VCED | VCED | VCE (own entries) | – |
+| time | VCED | VCED | VCED (own entries; Lean, 2026-10-09) | – |
 | documents | VCED | VCED | VC | V |
 | reports | V | V | V | V |
 | audit | V | – | – | – |
@@ -142,3 +142,5 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 - **Decided (Lean, 2026-10-09):** PMs can read the project Activity log (FR-AUD-02) on projects they can view, without the global Audit log. Members and Viewers stay hidden.
 - **Decided (Lean, 2026-10-09):** Draft templates are visible only to roles with Edit on `templates`.
 - **Decided (Lean, 2026-10-09):** a PM may set another PM as manager (handover); the change is audited and the confirmation reads "Hand over this project to <name>?" / "After this, only <name> and Admins can edit or archive it. You'll still be able to view it." (UIE).
+
+- **Default changes after go-live (Queen, 2026-10-09):** a change to the §6 defaults ships as a one-time data migration that updates only cells still at their old default value. Cells an Admin has changed are left alone, and the migration is audited. First case: Member Delete on `time`.
