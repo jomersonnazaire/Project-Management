@@ -470,10 +470,11 @@ export function hasEstimate<T extends { estHours?: number | null }>(
 }
 
 /** "–" for tasks without an estimate (EC-58), otherwise the hours. */
-/** Hours with their unit (DR-08): "4h", "2.5h"; a missing value is "–". */
+/** Hours as HH:MM (DR-25 supersedes DR-08's "4h"): "04:00", "02:30"; a missing value is "–". */
 export function formatHours(h: number | null | undefined): string {
   if (h === null || h === undefined) return '–';
-  return `${Number.isInteger(h) ? String(h) : h.toFixed(2).replace(/0$/, '')}h`;
+  const m = Math.max(0, Math.round(h * 60));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
 /**

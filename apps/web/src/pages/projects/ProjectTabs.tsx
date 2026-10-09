@@ -32,6 +32,7 @@ import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
 import { dateTime, initials, shortDate } from '../../lib/format';
 import { moveLabel, useStatusMove } from './useStatusMove';
+import { useConfirm } from '../../components/ConfirmModal';
 
 interface TabProps {
   project: ProjectDto;
@@ -375,39 +376,50 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
 
 /** Delete phase: shown when allowed (with a confirm); otherwise disabled with the reason. */
 function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto }) {
+  const [confirm, confirmDialog] = useConfirm();
   const del = useDeletePhase(projectId);
   if (!phase.deletable && !phase.deleteBlockedReason) return null;
   return (
-    <span className="d-inline-flex flex-wrap align-items-center gap-2 ms-auto">
-      <Button
-        variant="outline-danger"
-        size="sm"
-        disabled={!phase.deletable || del.isPending}
-        aria-describedby={
-          phase.deletable ? undefined : `phase-blocked-${phase.name.replace(/\W+/g, '-')}`
-        }
-        onClick={() => {
-          if (window.confirm(`Delete the phase "${phase.name}"? This cannot be undone.`)) {
-            del.mutate(phase.name);
+    <>
+      {confirmDialog}
+      <span className="d-inline-flex flex-wrap align-items-center gap-2 ms-auto">
+        <Button
+          variant="outline-danger"
+          size="sm"
+          disabled={!phase.deletable || del.isPending}
+          aria-describedby={
+            phase.deletable ? undefined : `phase-blocked-${phase.name.replace(/\W+/g, '-')}`
           }
-        }}
-      >
-        Delete phase
-      </Button>
-      {!phase.deletable && (
-        <small
-          className="text-body-secondary"
-          id={`phase-blocked-${phase.name.replace(/\W+/g, '-')}`}
+          onClick={async () => {
+            if (
+              await confirm({
+                title: `Delete the phase "${phase.name}"?`,
+                body: 'This cannot be undone.',
+                confirmLabel: 'Delete phase',
+                danger: true,
+              })
+            ) {
+              del.mutate(phase.name);
+            }
+          }}
         >
-          {phase.deleteBlockedReason}
-        </small>
-      )}
-      {del.error instanceof ApiError && (
-        <small className="text-danger" role="alert">
-          ⚠ {del.error.message}
-        </small>
-      )}
-    </span>
+          Delete phase
+        </Button>
+        {!phase.deletable && (
+          <small
+            className="text-body-secondary"
+            id={`phase-blocked-${phase.name.replace(/\W+/g, '-')}`}
+          >
+            {phase.deleteBlockedReason}
+          </small>
+        )}
+        {del.error instanceof ApiError && (
+          <small className="text-danger" role="alert">
+            ⚠ {del.error.message}
+          </small>
+        )}
+      </span>
+    </>
   );
 }
 

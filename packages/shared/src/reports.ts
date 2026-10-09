@@ -222,12 +222,14 @@ export interface ReportList<T> {
   items: T[];
 }
 
-/** FR-RPT-01 / AC-22.1: "+4", "−2", "0"; null (no estimate) is "–". */
+/** FR-RPT-01 / AC-22.1 in HH:MM (DR-25): "+04:00", "−02:00", "00:00"; null (no estimate) is "–". */
 export function formatSignedHours(v: number | null): string {
   if (v === null) return '–';
-  const r = Math.round(v * 100) / 100;
-  if (r === 0) return '0';
-  return `${r > 0 ? '+' : '−'}${Math.abs(r)}`;
+  const m = Math.round(v * 60);
+  if (m === 0) return '00:00';
+  const a = Math.abs(m);
+  const hhmm = `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
+  return `${m > 0 ? '+' : '−'}${hhmm}`;
 }
 /** AC-22.1: "+50%", "−12.5%", or "No estimate". */
 export function formatOverrun(pct: number | null): string {

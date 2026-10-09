@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { HEALTH_LABELS, HEALTH_VALUES, type Health, type MyProjectRowDto } from '@xc8/shared';
 import { useMyProjects } from '../../api/m4Hooks';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
-import { ProgressBar, ProjectBadge } from '../../components/ProjectBadges';
+import { HealthBadge, ProgressBar, ProjectStatusBadge } from '../../components/ProjectBadges';
 import { shortDate } from '../../lib/format';
 
 type Sort = 'late' | 'name' | 'health';
@@ -123,12 +123,14 @@ export function MyProjectsView() {
                 <tr>
                   <th>Project</th>
                   <th>Health</th>
+                  <th>Status</th>
                   <th>Progress</th>
                   <th>Go-live</th>
                   <th>Schedule</th>
                   <th className="text-end">Overdue</th>
                   <th className="text-end">Blocked</th>
                   <th className="text-end">Open issues</th>
+                  <th className="text-end">Waiting on client</th>
                   <th>Follow up</th>
                 </tr>
               </thead>
@@ -181,7 +183,10 @@ function MyProjectRow({
           <div className="small text-body-secondary">{p.client.name}</div>
         </td>
         <td>
-          <ProjectBadge status={p.status} health={p.health} />
+          <HealthBadge health={p.health} />
+        </td>
+        <td>
+          <ProjectStatusBadge status={p.status} />
         </td>
         <td>
           <ProgressBar value={p.progress} label={`${p.name} progress`} />
@@ -203,6 +208,24 @@ function MyProjectRow({
             <div className="small text-danger">{p.openCriticalHighIssues} critical/high</div>
           )}
         </td>
+        <td className="text-end">
+          {p.waitingOnClient > 0 ? (
+            <a
+              href="#waiting-on-client"
+              aria-label={`${p.waitingOnClient} waiting on client for ${p.name}`}
+              onClick={(e) => {
+                e.preventDefault();
+                document
+                  .getElementById('waiting-on-client')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              {p.waitingOnClient}
+            </a>
+          ) : (
+            <span className="text-body-secondary">0</span>
+          )}
+        </td>
         <td>
           {total === 0 ? (
             <span className="text-body-secondary small">No one</span>
@@ -222,7 +245,7 @@ function MyProjectRow({
       </tr>
       {expanded && (
         <tr className="table-light">
-          <td colSpan={9}>
+          <td colSpan={11}>
             <div className="row g-4">
               <div className="col-md-6">
                 <h3 className="h6">Team members</h3>

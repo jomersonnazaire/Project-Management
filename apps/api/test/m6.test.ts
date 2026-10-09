@@ -135,7 +135,7 @@ describe('TC-R01/R02: preview matches the sample', () => {
       location: 'Onsite',
       billable: 'No',
       module: '',
-      remarks: 'Client meeting – Acme weekly status call',
+      remarks: 'Acme weekly status call',
     });
     // No Time type column in the report (FR-ACT-18).
     expect(Object.keys(r.rows[0])).not.toContain('type');
@@ -442,5 +442,47 @@ describe('FR-DAR-01: Report CC emails on the profile', () => {
     expect((await w.member.agent.patch(url).set(CSRF).send({ reportCc: [] })).status).toBe(403);
     const r = (await w.member.agent.get('/api/v1/dar')).body.report;
     expect(r.cc).toEqual(['lead@acme.example', 'hr@xceler8.example']);
+  });
+});
+
+describe('FR-DAR-19: blank remarks fall back to the task name or quick activity title', () => {
+  it('uses the name with no prefix in the preview, PDF and Excel', async () => {
+    const s = await setup();
+    const { w, l, t1 } = s;
+    const a = await manual(w.member.agent, {
+      taskId: t1,
+      activityTypeId: l.integration,
+      moduleId: l.financials,
+      date: '2026-10-13',
+      timeIn: '08:00',
+      timeOut: '09:00',
+      dayLocationId: l.wfh,
+    });
+    expect(a.status).toBe(201);
+    const b = await manual(w.member.agent, {
+      title: 'Weekly team stand-up',
+      activityTypeId: l.internalMeeting,
+      date: '2026-10-13',
+      timeIn: '09:00',
+      timeOut: '09:30',
+    });
+    expect(b.status).toBe(201);
+    const taskName = a.body.entry.task.name as string;
+    const report = (await dar(w.member.agent, '2026-10-13', '2026-10-13')).body.report;
+    expect(report.rows.map((r: { remarks: string }) => r.remarks)).toEqual([
+      taskName,
+      'Weekly team stand-up',
+    ]);
+    const built = await buildDar(w.member.user._id, '2026-10-13', '2026-10-13');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await darToXlsx(built)) as never);
+    const ws = wb.getWorksheet('Report')!;
+    expect([ws.getCell('K6').value, ws.getCell('K7').value]).toEqual([
+      taskName,
+      'Weekly team stand-up',
+    ]);
+    const pdf = (await darToPdf(built, { compress: false })).toString('latin1');
+    // The band is drawn in navy before the white title (DR-26).
+    expect(pdf).toMatch(/0 0\.2745\d* 0\.498\d* scn/);
   });
 });

@@ -15,6 +15,7 @@ export function EntryFields({
   dayLocation,
   keep,
   idPrefix,
+  hideLocation = false,
 }: {
   kind: 'TASK' | 'QUICK';
   values: EntryFieldValues;
@@ -28,6 +29,8 @@ export function EntryFields({
     module?: { id: string; name: string } | null;
   };
   idPrefix: string;
+  /** DR-30: the entry that sets the day's location doesn't ask for a per-entry one too. */
+  hideLocation?: boolean;
 }) {
   const lists = useLookups();
   const withKept = (
@@ -73,23 +76,25 @@ export function EntryFields({
         )}
       </div>
       <div className="row g-3 mb-3">
-        <Form.Group className="col-sm-6" controlId={`${idPrefix}-location`}>
-          <Form.Label>Location</Form.Label>
-          <Form.Select
-            value={values.locationId}
-            onChange={(e) => onChange({ locationId: e.target.value })}
-          >
-            <option value="">
-              {dayLocation ? `Today's location (${dayLocation})` : "The day's location"}
-            </option>
-            {(lists.data?.locations ?? []).map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
+        {!hideLocation && (
+          <Form.Group className="col-sm-6" controlId={`${idPrefix}-location`}>
+            <Form.Label>Location</Form.Label>
+            <Form.Select
+              value={values.locationId}
+              onChange={(e) => onChange({ locationId: e.target.value })}
+            >
+              <option value="">
+                {dayLocation ? `Today's location (${dayLocation})` : "The day's location"}
               </option>
-            ))}
-          </Form.Select>
-          <Form.Text>Change for this entry only</Form.Text>
-        </Form.Group>
+              {(lists.data?.locations ?? []).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </Form.Select>
+            <Form.Text>Change for this entry only</Form.Text>
+          </Form.Group>
+        )}
         <Form.Group className="col-sm-6">
           <Form.Label as="div" id={`${idPrefix}-billable-label`}>
             Billable

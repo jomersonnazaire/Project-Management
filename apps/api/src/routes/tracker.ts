@@ -34,7 +34,7 @@ import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
 import { LookupModel, TimeEntryModel, TimesheetDayModel, UserModel } from '../models/index.js';
 import { audit } from '../services/audit.js';
-import { leaveLabelFor } from '../services/leaveHook.js';
+import { assertLeaveAllowsTime, leaveLabelFor } from '../services/leaveHook.js';
 import { notifyPersonal } from '../services/notify.js';
 import { userRefs } from '../services/projectService.js';
 import {
@@ -277,6 +277,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const fields = await resolveFields(input, target.kind);
     const date = todayPH(now);
     await assertDayEditable(user._id, date);
+    await assertLeaveAllowsTime(user._id, date, input.confirmLeave);
     const { inherit } = await ensureDayLocation(
       user._id,
       date,
@@ -289,6 +290,8 @@ export function trackerRouter(registry: RouteRegistry) {
       .lean();
     if (current) await stopEntry(current._id, now);
     await assertNoOverlap(user._id, now, new Date(now.getTime() + 60_000));
+    // TC-Q05: no new timer on a day that already has 24 hours.
+    await assertDailyCap(user._id, date, 1);
     const entry = await TimeEntryModel.create({
       userId: user._id,
       ...target,
@@ -359,6 +362,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const target = await resolveTarget(req, input);
     const fields = await resolveFields(input, target.kind);
     await assertDayEditable(user._id, date);
+    await assertLeaveAllowsTime(user._id, date, input.confirmLeave);
     const minutes = minutesBetween(startAt, endAt);
     await assertNoOverlap(user._id, startAt, endAt);
     await assertDailyCap(user._id, date, minutes);

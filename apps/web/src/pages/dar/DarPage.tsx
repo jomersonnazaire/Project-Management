@@ -35,7 +35,7 @@ const savedOn = (iso: string) =>
 
 function Tabs({ active }: { active: 'report' | 'saved' }) {
   return (
-    <ul className="nav nav-tabs mb-0">
+    <ul className="nav nav-tabs nav-scrollable mb-0">
       <li className="nav-item">
         <NavLink end to="/dar" className={`nav-link ${active === 'report' ? 'active' : ''}`}>
           Report
@@ -144,7 +144,7 @@ export function DarPage() {
               />
               <Form.Control.Feedback type="invalid">{fieldErrors.to}</Form.Control.Feedback>
             </Form.Group>
-            <div className="d-flex gap-2 align-self-end">
+            <div className="d-flex flex-wrap gap-2 align-self-end dar-actions">
               <Button
                 variant="outline-secondary"
                 onClick={() => {

@@ -8,6 +8,7 @@ import { runIssueSweeps } from './services/issues.js';
 import { ensureLaunchTemplate } from './services/launchTemplate.js';
 import { migrateProjectCodes } from './services/projectCodes.js';
 import { ensureDefaultLookups, sweepAutoStop } from './services/tracker.js';
+import { ensureDefaultLeaveTypes } from './services/leave.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
@@ -23,8 +24,9 @@ await applyAccessDefaultChanges(logger);
 await ensureLaunchTemplate(logger);
 // DR-23: every project gets a unique code and issues use it as their ID prefix (idempotent).
 await migrateProjectCodes(logger);
-// M5: seed the Activity types, Locations and Modules lists once (FR-ACT-15).
+// M5/M7: seed the Activity types, Locations and Modules lists, and the leave types, once.
 await ensureDefaultLookups(logger);
+await ensureDefaultLeaveTypes(logger);
 const app = createApp(config, logger);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'API listening');

@@ -12,3 +12,4 @@ export * from './M3.js';
 export * from './Migration.js';
 export * from './Issue.js';
 export * from './Tracker.js';
+export * from './Leave.js';

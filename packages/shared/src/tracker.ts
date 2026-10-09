@@ -104,7 +104,13 @@ const TARGET_MESSAGE = 'Choose a task, or give the quick activity a title.';
  * first entry of the day.
  */
 export const startTimerSchema = z
-  .strictObject({ ...target, ...entryFields, dayLocationId: objectId.optional() })
+  .strictObject({
+    ...target,
+    ...entryFields,
+    dayLocationId: objectId.optional(),
+    /** Confirms the half-day leave warning (FR-LV-06). */
+    confirmLeave: z.boolean().optional(),
+  })
   .refine(oneTarget, { message: TARGET_MESSAGE, path: ['taskId'] });
 export type StartTimerInput = z.input<typeof startTimerSchema>;
 
@@ -117,6 +123,7 @@ export const timedEntrySchema = z
     timeIn: hhmm,
     timeOut: hhmm,
     dayLocationId: objectId.optional(),
+    confirmLeave: z.boolean().optional(),
   })
   .refine(oneTarget, { message: TARGET_MESSAGE, path: ['taskId'] })
   .refine((v) => v.timeOut > v.timeIn, {
@@ -222,6 +229,14 @@ export interface RunningDto {
 export function formatHHMM(minutes: number): string {
   const m = Math.max(0, Math.floor(minutes));
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+/**
+ * Decimal hours → HH:MM (DR-25, 12.2): 0.0333 → "00:02", 4.8833 → "04:53", 40 → "40:00".
+ * Hours stored as decimals come from exact minutes, so rounding to the minute is lossless.
+ */
+export function hoursHHMM(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined || Number.isNaN(hours)) return '–';
+  return formatHHMM(Math.round(hours * 60));
 }
 /** 1510 → "25h 10m" (24-hour cap message, 12.3). */
 export function formatHoursMinutes(minutes: number): string {

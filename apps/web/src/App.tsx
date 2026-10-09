@@ -6,6 +6,7 @@ import { AccessRulesPage } from './pages/AccessRulesPage';
 import { ForbiddenPage, NotFoundPage } from './pages/ErrorPages';
 import { LoginPage } from './pages/LoginPage';
 import { DarPage, SavedReportsPage } from './pages/dar/DarPage';
+import { LeavePage } from './pages/leave/LeavePage';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { SetupPasswordPage } from './pages/SetupPasswordPage';
 import { AdminPage } from './pages/admin/AdminPage';
@@ -165,6 +166,14 @@ export function App() {
               element={
                 <RequirePermission any={[['activities', 'view']]}>
                   <SavedReportsPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/leave"
+              element={
+                <RequirePermission any={[['leave', 'view']]}>
+                  <LeavePage />
                 </RequirePermission>
               }
             />

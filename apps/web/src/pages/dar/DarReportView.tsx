@@ -8,7 +8,6 @@ import {
   type DarReportDto,
   type SavedTag,
 } from '@xc8/shared';
-import { Table } from 'react-bootstrap';
 
 /**
  * The report as the sample shows it (FR-DAR-07, -08): header, Total Activities, the 11 columns,
@@ -18,17 +17,25 @@ export function DarReportView({ report }: { report: DarReportDto }) {
   const to = report.shownTo ?? report.to;
   return (
     <div className="dar-report" data-testid="dar-report">
-      <h2 className="h5 mb-1">{DAR_TITLE}</h2>
-      <div className="small">{generatedRangeLabel(report.from, to)}</div>
-      <div className="small mb-3">
-        Total Activities: <strong>{report.totalActivities}</strong>
+      {/* DR-26: the sample's navy band with the white title and the range (FR-DAR-08). */}
+      <div className="dar-band">
+        <h2>{DAR_TITLE}</h2>
+        <div>{generatedRangeLabel(report.from, to)}</div>
       </div>
-      <div className="table-responsive">
-        <Table size="sm" bordered className="mb-2 align-top">
+      <div className="dar-count">
+        <strong>Total Activities:</strong> {report.totalActivities}
+      </div>
+      <div className="dar-table-wrap">
+        <table className="table table-sm dar-table mb-0">
+          <colgroup>
+            {DAR_COL_WIDTHS.map((w, i) => (
+              <col key={i} style={{ width: `${w}%` }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               {DAR_COLUMNS.map((c) => (
-                <th key={c} scope="col" className="text-nowrap dar-head">
+                <th key={c} scope="col" className="dar-head">
                   {c}
                 </th>
               ))}
@@ -36,7 +43,7 @@ export function DarReportView({ report }: { report: DarReportDto }) {
           </thead>
           <tbody>
             {report.rows.map((r, i) => (
-              <tr key={i} className={r.leave ? 'table-info' : undefined}>
+              <tr key={i} className={r.leave ? 'dar-leave' : undefined}>
                 <td className="text-nowrap">{r.date}</td>
                 <td className="text-nowrap">{r.timeIn}</td>
                 <td className="text-nowrap">{r.timeOut}</td>
@@ -47,23 +54,26 @@ export function DarReportView({ report }: { report: DarReportDto }) {
                 <td>{r.location}</td>
                 <td>{r.billable}</td>
                 <td>{r.module}</td>
-                <td style={{ whiteSpace: 'pre-wrap' }}>{r.remarks}</td>
+                <td className="dar-remarks">{r.remarks}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="fw-semibold">
+            <tr className="dar-total">
               <td colSpan={3}>Total rendered hours</td>
               <td>{report.totalRendered}</td>
               <td colSpan={7} />
             </tr>
           </tfoot>
-        </Table>
+        </table>
       </div>
-      <p className="small text-body-secondary fst-italic mb-0">{DAR_FOOTER}</p>
+      <p className="dar-footer mb-0">{DAR_FOOTER}</p>
     </div>
   );
 }
+
+/** Column widths (%) that fit all 11 columns from 1200px with Remarks wrapping (DR-26). */
+const DAR_COL_WIDTHS = [8.5, 7.5, 7.5, 7.5, 11, 10, 8.5, 7.5, 7, 8, 17];
 
 export function SavedTagBadge({ tag }: { tag: SavedTag }) {
   if (tag === 'LATEST') return <span className="badge bg-label-success">{SAVED_LATEST}</span>;

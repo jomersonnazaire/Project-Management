@@ -144,6 +144,17 @@ describe('Dashboard (FR-DASH-01..06) and My projects (doc 14 FR-PMV-01..04)', ()
     expect(screen.getByText('Phase 2')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Issues' })).toBeInTheDocument();
 
+    // DR-27: Health is a health badge; Status and Waiting on client have their own columns.
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(expect.arrayContaining(['Health', 'Status', 'Waiting on client']));
+    const sapRow = (await screen.findByText('SAP Rollout', { selector: 'a.fw-medium' })).closest(
+      'tr',
+    )!;
+    expect(within(sapRow).getByText('Delayed')).toHaveClass('bg-label-danger');
+    expect(within(sapRow).getByText('Active')).toBeInTheDocument();
+    expect(
+      within(sapRow).getByRole('link', { name: '1 waiting on client for SAP Rollout' }),
+    ).toHaveAttribute('href', '#waiting-on-client');
     const late = await screen.findByText('9 days late');
     expect(late).toHaveClass('text-danger');
     expect(screen.getByText('On time')).toBeInTheDocument();
@@ -193,7 +204,7 @@ describe('Team & workload (FR-WL-01..03)', () => {
     items: [
       {
         person: { id: 'u2', name: 'Maria Member', email: 'm@x.example', active: true },
-        jobRole: 'Consultant',
+        jobRole: 'PROJECT_MANAGER',
         teams: [ref('t1', 'SAP')],
         capacityHours: 40,
         assignedHours: 50,
@@ -216,12 +227,59 @@ describe('Team & workload (FR-WL-01..03)', () => {
     expect(await screen.findByText('Over capacity')).toBeInTheDocument();
     expect(screen.getByText('125%')).toHaveClass('text-danger');
     expect(screen.getByText('75%')).toBeInTheDocument();
-    expect(screen.getByText('3.0')).toBeInTheDocument();
+    expect(screen.getByText('03:00')).toBeInTheDocument();
+    // DR-34: the job role label, not the code.
+    expect(screen.getByText('Project Manager')).toBeInTheDocument();
+    expect(screen.queryByText('PROJECT_MANAGER')).not.toBeInTheDocument();
     expect(screen.getByText(/aren't used as a performance score/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Previous week' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([u]) => String(u).includes('week=2026-10-12'))).toBe(true),
     );
+  });
+});
+
+describe('DR-29: Team & workload for Members', () => {
+  it("doesn't ask for /teams and builds the team filter from the rows", async () => {
+    const row = (id: string, teams: { id: string; name: string }[]) => ({
+      person: { id, name: `Person ${id}`, email: `${id}@x.example`, active: true },
+      jobRole: 'CONSULTANT',
+      teams,
+      capacityHours: 40,
+      assignedHours: 0,
+      recordedHours: 0.03333333333333333,
+      waitingHours: 0,
+      utilizationPct: 0,
+      assignedPct: 0,
+      overAssigned: false,
+    });
+    const fetchMock = api('MEMBER', (url) =>
+      url.includes('/workload')
+        ? {
+            status: 200,
+            body: {
+              weekStart: '2026-10-19',
+              weekEnd: '2026-10-25',
+              note: 'n',
+              items: [row('a', [ref('t1', 'SAP')]), row('b', [ref('t2', 'Data')])],
+            },
+          }
+        : url.endsWith('/teams')
+          ? { status: 403, body: { error: { code: 'FORBIDDEN', message: 'No' } } }
+          : undefined,
+    );
+    renderAt('/workload', <App />);
+    expect(await screen.findByText('Person a')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/teams'))).toBe(false);
+    const filter = screen.getByLabelText('Team');
+    expect(
+      within(filter)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['All teams', 'Data', 'SAP']);
+    // DR-25: hours from timed entries show as HH:MM, not raw decimals.
+    expect(screen.getAllByText('00:02').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/0\.0333/)).not.toBeInTheDocument();
   });
 });
 
@@ -276,19 +334,17 @@ describe('Reports (FR-RPT-01..06, FR-ISS-16)', () => {
       },
     );
     renderAt('/reports', <App />);
-    expect(await screen.findByText('+4')).toBeInTheDocument();
+    expect(await screen.findByText('+04:00')).toBeInTheDocument();
     expect(screen.getByText('+50%')).toBeInTheDocument();
     expect(screen.getAllByText('No estimate', { selector: 'td' })).toHaveLength(2);
     await userEvent.selectOptions(screen.getByLabelText('Owners'), 'u2');
     expect(screen.queryByText('Design')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Export CSV/ }));
     const lines = csv.replace('\ufeff', '').split('\r\n');
-    expect(lines[0]).toBe(
-      'Task,Project,Client,Owner,Status,Estimate (h),Actual (h),Variance (h),Overrun',
-    );
+    expect(lines[0]).toBe('Task,Project,Client,Owner,Status,Estimate,Actual,Variance,Overrun');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('Kickoff,SAP Rollout,"Acme, Inc.",Maria Member');
-    expect(lines[1]).toContain(',+4,+50%');
+    expect(lines[1]).toContain(',08:00,12:00,+04:00,+50%');
   });
 
   it('the issues tab shows the FR-ISS-16 summary; Timesheets is hidden without Time view', async () => {

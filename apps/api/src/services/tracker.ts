@@ -150,13 +150,27 @@ export async function touchDay(userId: Id, date: Date) {
 }
 
 // ---------- Rules ----------
+/**
+ * Minutes already on a day: every entry (timed, quick and hours-only, TC-Q05 mixed) plus a running
+ * timer's elapsed minutes up to now, so the 24-hour cap can't be dodged while a timer runs.
+ */
+export async function dayMinutes(userId: Id, date: Date, ignoreId?: Id, now = new Date()) {
+  const entries = await TimeEntryModel.find({
+    userId,
+    workDate: date,
+    ...(ignoreId ? { _id: { $ne: ignoreId } } : {}),
+  })
+    .select('hours minutes running startAt')
+    .lean();
+  return entries.reduce((n, e) => {
+    if (e.running && e.startAt) return n + Math.max(0, minutesBetween(e.startAt, now));
+    return n + (typeof e.minutes === 'number' ? e.minutes : Math.round((e.hours ?? 0) * 60));
+  }, 0);
+}
+
 /** 24-hour cap in exact minutes (FR-TIME-03, 12.3). */
 export async function assertDailyCap(userId: Id, date: Date, addMinutes: number, ignoreId?: Id) {
-  const [sum] = await TimeEntryModel.aggregate<{ total: number }>([
-    { $match: { userId, workDate: date, ...(ignoreId ? { _id: { $ne: ignoreId } } : {}) } },
-    { $group: { _id: null, total: { $sum: '$hours' } } },
-  ]);
-  const total = Math.round((sum?.total ?? 0) * 60) + Math.round(addMinutes);
+  const total = (await dayMinutes(userId, date, ignoreId)) + Math.round(addMinutes);
   if (total > 24 * 60) {
     throw unprocessable(dailyCapMessage(dateKey(date), total), 'DAILY_LIMIT');
   }
@@ -193,7 +207,16 @@ export async function stopEntry(id: Id, at: Date, opts: { auto?: boolean } = {})
   const e = (await TimeEntryModel.findById(id).lean()) as EntryDoc | null;
   if (!e || !e.running || !e.startAt) return null;
   const cap = autoStopAt(dateKey(e.workDate));
-  const endAt = at > cap ? cap : at < e.startAt ? e.startAt : at;
+  let endAt = at > cap ? cap : at < e.startAt ? e.startAt : at;
+  // TC-Q05: with hours-only entries on the same day, a timer stops where the day reaches 24:00
+  // (flagged "Auto-stopped – please check") rather than pushing the total past 24 hours.
+  const others = await dayMinutes(e.userId, e.workDate, e._id, endAt);
+  const room = Math.max(0, 24 * 60 - others);
+  let capped = false;
+  if (minutesBetween(e.startAt, endAt) > room) {
+    endAt = new Date(e.startAt.getTime() + room * 60_000);
+    capped = true;
+  }
   const minutes = minutesBetween(e.startAt, endAt);
   const done = (await TimeEntryModel.findOneAndUpdate(
     { _id: id, running: true },
@@ -203,7 +226,7 @@ export async function stopEntry(id: Id, at: Date, opts: { auto?: boolean } = {})
         endAt,
         minutes,
         hours: minutes / 60,
-        autoStopped: Boolean(opts.auto) || at > cap,
+        autoStopped: Boolean(opts.auto) || at > cap || capped,
       },
     },
     { new: true },

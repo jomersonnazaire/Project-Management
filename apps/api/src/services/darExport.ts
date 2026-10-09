@@ -95,9 +95,29 @@ export function darToPdf(report: DarReportDto, opts: { compress?: boolean } = {}
   const pad = 3;
   const fontSize = 7.5;
 
-  doc.font('Helvetica-Bold').fontSize(14).text(DAR_TITLE, left);
-  doc.font('Helvetica').fontSize(9).text(generatedRangeLabel(from, to));
-  doc.text(`Total Activities: ${report.totalActivities}`);
+  // DR-26: the sample's navy band with the white title and the range, centred.
+  const bandTop = doc.page.margins.top;
+  const bandHeight = 54;
+  doc.rect(left, bandTop, usable, bandHeight).fill(`#${NAVY}`);
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(16)
+    .fillColor('#ffffff')
+    .text(DAR_TITLE, left, bandTop + 12, { width: usable, align: 'center' });
+  doc
+    .font('Helvetica')
+    .fontSize(10)
+    .fillColor('#ffffff')
+    .text(generatedRangeLabel(from, to), left, bandTop + 33, { width: usable, align: 'center' });
+  doc.x = left;
+  doc.y = bandTop + bandHeight + 8;
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(9)
+    .fillColor('#222222')
+    .text('Total Activities: ', left, doc.y, { continued: true })
+    .font('Helvetica')
+    .text(String(report.totalActivities));
   doc.moveDown(0.6);
 
   const rowHeight = (vals: string[], w: number[], font: string) => {
@@ -143,7 +163,11 @@ export function darToPdf(report: DarReportDto, opts: { compress?: boolean } = {}
     span: 3,
   });
   doc.moveDown(1);
-  doc.font('Helvetica-Oblique').fontSize(8).fillColor('#4b5563').text(DAR_FOOTER, left);
+  doc
+    .font('Helvetica-Oblique')
+    .fontSize(8)
+    .fillColor('#4b5563')
+    .text(DAR_FOOTER, left, doc.y, { width: usable, align: 'center' });
   doc.end();
   return done;
 }

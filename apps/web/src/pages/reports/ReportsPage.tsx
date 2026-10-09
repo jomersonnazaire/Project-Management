@@ -200,7 +200,7 @@ export function ReportsPage() {
   return (
     <>
       <PageHeader title="Reports" />
-      <ul className="nav nav-tabs mb-0" role="tablist">
+      <ul className="nav nav-tabs nav-scrollable mb-0" role="tablist">
         {tabs.map((t) => (
           <li key={t.key} className="nav-item">
             <button
@@ -344,19 +344,19 @@ function EffortTab({
     { label: 'Owner', value: (r) => r.owner?.name ?? '' },
     { label: 'Status', value: (r) => TASK_STATUS_LABELS[r.status] },
     {
-      label: 'Estimate (h)',
-      value: (r) => r.estHours ?? '',
+      label: 'Estimate',
+      value: (r) => (r.estHours === null ? '' : hoursLabel(r.estHours)),
       end: true,
       render: (r) => (r.estHours === null ? 'No estimate' : hoursLabel(r.estHours)),
     },
     {
-      label: 'Actual (h)',
-      value: (r) => r.actualHours,
+      label: 'Actual',
+      value: (r) => hoursLabel(r.actualHours),
       end: true,
       render: (r) => hoursLabel(r.actualHours),
     },
     {
-      label: 'Variance (h)',
+      label: 'Variance',
       value: (r) => formatSignedHours(r.variance),
       end: true,
       render: (r) => (
@@ -446,7 +446,12 @@ function TimesheetsTab({ filters }: { filters: Filters }) {
     { label: 'Project', value: (r) => r.project.name, render: (r) => projectLink(r.project) },
     { label: 'Task', value: (r) => r.task.name, render: (r) => taskLink(r.project, r.task) },
     { label: 'Type', value: (r) => TIME_TYPE_LABELS[r.type] },
-    { label: 'Hours', value: (r) => r.hours, end: true, render: (r) => hoursLabel(r.hours) },
+    {
+      label: 'Hours',
+      value: (r) => hoursLabel(r.hours),
+      end: true,
+      render: (r) => hoursLabel(r.hours),
+    },
     { label: 'Note', value: (r) => r.note ?? '' },
   ];
   return (
@@ -454,9 +459,7 @@ function TimesheetsTab({ filters }: { filters: Filters }) {
       <div className="d-flex flex-wrap gap-3 align-items-center mb-3">
         <Select label="People" value={person} onChange={setPerson} options={people} />
         <span className="small">
-          {TIME_TYPES.map(
-            (k) => `${TIME_TYPE_LABELS[k]} ${hoursLabel(Math.round(totals[k]! * 100) / 100)}`,
-          ).join(' · ')}
+          {TIME_TYPES.map((k) => `${TIME_TYPE_LABELS[k]} ${hoursLabel(totals[k]!)}`).join(' · ')}
         </span>
       </div>
       <ReportTable

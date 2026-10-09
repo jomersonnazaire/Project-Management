@@ -66,6 +66,13 @@ export const RECORD_TYPES = [
       'Own timers, timesheet days and quick activities. Supervisors and Admins view their team’s, never edit (FR-ACT-07)',
   },
   {
+    key: 'leave',
+    label: 'Leave',
+    actions: ALL,
+    notes:
+      'Record and cancel own leave (no approval, Q-46). Supervisors see their team’s; Admins manage types and entitlements under Settings (FR-LV-01..11)',
+  },
+  {
     key: 'documents',
     label: 'Documents & folders',
     actions: ALL,
@@ -148,6 +155,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     time: 'VCED',
     activities: 'VCED',
+    leave: 'VCED',
     documents: 'VCED',
     issues: 'VCED',
     conversations: 'VC',
@@ -168,6 +176,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     time: 'VCED',
     activities: 'VCED',
+    leave: 'VCED',
     documents: 'VCED',
     issues: 'VCE',
     conversations: 'VC',
@@ -189,6 +198,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     // Delete on own entries only (FR-TIME-06; doc 11 §6, Lean 2026-10-09). Was 'VCE' before v0.6.8.
     time: 'VCED',
     activities: 'VCED',
+    leave: 'VCED',
     documents: 'VC',
     issues: 'VCE',
     conversations: 'VC',
@@ -209,6 +219,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: '',
     time: '',
     activities: 'VCED',
+    leave: 'VCED',
     documents: 'V',
     issues: 'V',
     conversations: 'V',
@@ -306,6 +317,7 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     approvals: 'Own projects only',
     issues: 'Edit issues on projects they manage',
     activities: 'Own; view (not edit) their direct reports',
+    leave: 'Own; view their direct reports’ leave',
   },
   MEMBER: {
     clients: 'Clients of projects they belong to',
@@ -318,9 +330,11 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     issues: 'Projects they belong to; edit issues they own or reported',
     conversations: 'Projects they belong to',
     activities: 'Own; view (not edit) their direct reports',
+    leave: 'Own; view their direct reports’ leave',
   },
   VIEWER: {
     activities: 'Own; view (not edit) their direct reports',
+    leave: 'Own; view their direct reports’ leave',
   },
 };
 

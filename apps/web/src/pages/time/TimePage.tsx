@@ -8,6 +8,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { TimeEntryForm } from '../../components/TimeEntryForm';
 import { hoursLabel, shortDate } from '../../lib/format';
 import { TIME_TYPE_BADGE } from '../../lib/m3ui';
+import { useConfirm } from '../../components/ConfirmModal';
 
 const shift = (date: string, days: number) =>
   toDateOnly(new Date(new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000));
@@ -19,6 +20,7 @@ export function TimePage() {
   const remove = useTimeMutation();
   // Members delete their own entries (doc 11 §6 v0.6.8); the API returns 404 for anyone else's.
   const canDelete = useCan('time', 'delete');
+  const [confirm, confirmDialog] = useConfirm();
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
@@ -101,9 +103,16 @@ export function TimePage() {
                                   size="sm"
                                   variant="link"
                                   className="p-0 text-danger"
-                                  aria-label={`Delete ${hoursLabel(e.hours)}h on ${e.task.name}`}
-                                  onClick={() => {
-                                    if (window.confirm('Delete this time entry?')) {
+                                  aria-label={`Delete ${hoursLabel(e.hours)} on ${e.task.name}`}
+                                  onClick={async () => {
+                                    if (
+                                      await confirm({
+                                        title: 'Delete this time entry?',
+                                        body: `${hoursLabel(e.hours)} on ${e.task.name}, ${shortDate(e.workDate, true)}. This can't be undone.`,
+                                        confirmLabel: 'Delete entry',
+                                        danger: true,
+                                      })
+                                    ) {
                                       remove.mutate({ id: e.id, method: 'DELETE' });
                                     }
                                   }}
@@ -125,7 +134,7 @@ export function TimePage() {
                           <strong>{hoursLabel(w.total)}</strong>
                         </td>
                         <td colSpan={3} className="small text-body-secondary">
-                          of {w.capacity}h available ({pct}% utilization)
+                          of {hoursLabel(w.capacity)} available ({pct}% utilization)
                         </td>
                       </tr>
                     </tfoot>
@@ -149,6 +158,7 @@ export function TimePage() {
           </div>
         </div>
       </div>
+      {confirmDialog}
     </>
   );
 }

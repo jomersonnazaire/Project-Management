@@ -1,13 +1,16 @@
-import { formatTime24, type TrackerEntryDto } from '@xc8/shared';
+import { formatHHMM, formatTime24, type TrackerEntryDto } from '@xc8/shared';
+import { longDayShort } from '../../lib/format';
 import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
 import { useTimeOptions } from '../../api/m3Hooks';
 import { useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
+import { useConfirm } from '../ConfirmModal';
 import { ErrorAlert } from '../Feedback';
 import { DayLocationField, EntryFields } from './EntryFields';
 import { emptyFields, fieldErrors, fieldsBody, type EntryFieldValues } from './entryFieldValues';
 
+type SaveReq = { path: string; method?: 'POST' | 'PATCH'; body: unknown };
 export type TrackerModalMode =
   | {
       kind: 'start';
@@ -49,6 +52,22 @@ export function TrackerEntryModal({
   const options = useTimeOptions(mode.kind === 'add');
   const save = useTrackerMutation();
   const editing = mode.kind === 'edit' ? mode.entry : null;
+  const remove = useTrackerMutation();
+  const [confirm, confirmDialog] = useConfirm();
+  // FR-ACT-19 (DR-35): your own entry on a day that isn't submitted or locked; not while running.
+  const canDelete = Boolean(editing && !editing.running && day.data?.can.edit);
+  const deleteEntry = async () => {
+    if (!editing) return;
+    const what = editing.task?.name ?? editing.title ?? 'this entry';
+    const ok = await confirm({
+      title: 'Delete this entry?',
+      body: `${what} · ${formatHHMM(editing.minutes)} on ${longDayShort(editing.date)}. This can't be undone.`,
+      confirmLabel: 'Delete entry',
+      danger: true,
+    });
+    if (ok)
+      remove.mutate({ path: `/entries/${editing.id}`, method: 'DELETE' }, { onSuccess: onClose });
+  };
   const [target, setTarget] = useState(
     mode.kind === 'quick' ? QUICK : mode.kind === 'start' ? mode.task.id : '',
   );
@@ -97,13 +116,16 @@ export function TrackerEntryModal({
       if (!timeOut) next.timeOut = 'Enter the time out.';
       else if (timeIn && timeOut <= timeIn) next.timeOut = 'Time out must be after time in.';
     }
-    if (needsDayLocation && !dayLocationId && !fields.locationId)
+    if (needsDayLocation && !dayLocationId)
       next.dayLocationId = 'Choose where you’re working today.';
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
     const body: Record<string, unknown> = { ...fieldsBody(fields, kind) };
-    if (needsDayLocation && dayLocationId) body.dayLocationId = dayLocationId;
-    let req: { path: string; method?: 'POST' | 'PATCH'; body: unknown };
+    if (needsDayLocation && dayLocationId) {
+      body.dayLocationId = dayLocationId;
+      delete body.locationId;
+    }
+    let req: SaveReq;
     if (editing) {
       delete body.dayLocationId;
       if (kind === 'QUICK') body.title = title.trim();
@@ -119,10 +141,24 @@ export function TrackerEntryModal({
           ? { path: '/start', body }
           : { path: '/entries', body: { ...body, date, timeIn, timeOut } };
     }
+    send(req);
+  };
+
+  // Half-day leave (FR-LV-06, TC-S09): a warning the user can confirm; a full day is refused.
+  const [leaveWarning, setLeaveWarning] = useState<{ message: string; req: SaveReq } | null>(null);
+  const send = (req: SaveReq) => {
+    setLeaveWarning(null);
     save.mutate(req, {
       onSuccess: onClose,
       onError: (err) => {
         if (err instanceof ApiError) {
+          if (err.code === 'HALF_DAY_LEAVE') {
+            setLeaveWarning({
+              message: err.message,
+              req: { ...req, body: { ...(req.body as object), confirmLeave: true } },
+            });
+            return;
+          }
           const f = err.fieldErrors();
           if (err.code === 'TIME_OVERLAP' || err.code === 'DAILY_LIMIT') return;
           setErrors(f);
@@ -137,7 +173,7 @@ export function TrackerEntryModal({
       : mode.kind === 'quick'
         ? 'Quick activity'
         : mode.kind === 'add'
-          ? `Add entry · ${date}`
+          ? `Add entry · ${longDayShort(date)}`
           : 'Edit entry';
   const timed = editing ? editing.timed && !editing.running : when === 'times';
 
@@ -150,7 +186,19 @@ export function TrackerEntryModal({
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <ErrorAlert error={save.error} action />
+          {leaveWarning ? (
+            <div
+              className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
+              role="alert"
+            >
+              <span className="me-auto">{leaveWarning.message}</span>
+              <Button size="sm" variant="warning" onClick={() => send(leaveWarning.req)}>
+                Log time anyway
+              </Button>
+            </div>
+          ) : (
+            <ErrorAlert error={save.error ?? remove.error} action />
+          )}
           {mode.kind === 'start' && (
             <p className="mb-3">
               <strong>{mode.task.name}</strong>
@@ -223,6 +271,7 @@ export function TrackerEntryModal({
             onChange={change}
             errors={errors}
             dayLocation={day.data?.location?.name ?? null}
+            hideLocation={needsDayLocation}
             keep={
               editing ? { activityType: editing.activityType, module: editing.module } : undefined
             }
@@ -273,7 +322,7 @@ export function TrackerEntryModal({
                 />
                 <Form.Control.Feedback type="invalid">{errors.timeOut}</Form.Control.Feedback>
               </Form.Group>
-              <Form.Text className="col-12 mt-1">Philippine time · {date}</Form.Text>
+              <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
             </div>
           )}
           {stopsRunning && (
@@ -284,6 +333,16 @@ export function TrackerEntryModal({
           )}
         </Modal.Body>
         <Modal.Footer>
+          {canDelete && (
+            <Button
+              variant="outline-danger"
+              className="me-auto"
+              disabled={remove.isPending}
+              onClick={() => void deleteEntry()}
+            >
+              Delete entry
+            </Button>
+          )}
           <Button variant="outline-secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -292,6 +351,7 @@ export function TrackerEntryModal({
           </Button>
         </Modal.Footer>
       </Form>
+      {confirmDialog}
     </Modal>
   );
 }
