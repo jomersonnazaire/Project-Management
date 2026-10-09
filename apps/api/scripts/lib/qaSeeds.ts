@@ -1,5 +1,5 @@
 /**
- * Shared QA seeding (used by seed-qa-project, seed-qa-completed and bootstrap-staging). Everything
+ * Shared QA seeding (used by seed-qa-project and seed-qa-completed). Everything
  * here is idempotent: projects are matched by name and re-runs only fill in what is missing.
  */
 import { issueKey, parseDateOnly, toDateOnly, todayPH } from '@xc8/shared';
@@ -27,16 +27,6 @@ export function need(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Set ${name} first.`);
   return v;
-}
-
-/** NFR-26: QA data goes to staging only. Refuses any database whose name lacks "staging". */
-export function assertStagingDb(dbName: string | undefined): string {
-  if (!dbName || !/staging/i.test(dbName)) {
-    throw new Error(
-      `Refusing to seed QA data into "${dbName ?? '(default)'}": set MONGODB_DB_NAME to a staging database (e.g. pm-staging).`,
-    );
-  }
-  return dbName;
 }
 
 type UserDoc = { _id: Types.ObjectId };

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   QA_COMPLETED_PROJECT_NAME,
-  assertStagingDb,
   qaPeople,
   seedCompletedProject,
 } from '../scripts/lib/qaSeeds.js';
@@ -15,17 +14,11 @@ import {
 import { ensureLaunchTemplate } from '../src/services/launchTemplate.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 
-/** NFR-26 staging seeds and the AC-44.1 Completed project (re-runnable). */
+/** The AC-44.1 Completed QA project seed (re-runnable). */
 useDatabase();
 const app = makeApp();
 
 describe('QA seeds', () => {
-  it('only ever target a staging database', () => {
-    expect(() => assertStagingDb('xceler8_pm')).toThrow(/staging database/);
-    expect(() => assertStagingDb(undefined)).toThrow(/staging database/);
-    expect(assertStagingDb('pm-staging')).toBe('pm-staging');
-  });
-
   it('AC-44.1 seed: a fully Completed project with one open issue; re-running changes nothing', async () => {
     await ensureLaunchTemplate();
     const pm = await signedInAs(app, 'PROJECT_MANAGER');

@@ -4,11 +4,7 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  // NFR-26: the deployment environment, fixed at build time. Vercel sets VERCEL_ENV for every
-  // build (production / preview); anything else is local development.
-  const appEnv = env.VITE_APP_ENV || env.VERCEL_ENV || (mode === 'test' ? '' : 'development');
   return {
-    define: appEnv ? { 'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv) } : {},
     plugins: [react()],
     css: {
       preprocessorOptions: {

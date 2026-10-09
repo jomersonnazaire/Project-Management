@@ -4,10 +4,8 @@ import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
-import { EnvBadge } from '../components/EnvBadge';
 import { NotificationBell } from '../components/NotificationBell';
 import { TopbarContext, type TopbarSlots } from '../components/topbar';
-import { isProductionBuild } from '../lib/appEnv';
 
 interface NavItem {
   to: string;
@@ -193,15 +191,7 @@ export function AppShell() {
               </button>
             </div>
             <div className="navbar-nav-right d-flex align-items-center gap-3 w-100 min-w-0">
-              {isProductionBuild() ? (
-                <div ref={setTitleSlot} className="topbar-title flex-grow-1 min-w-0" />
-              ) : (
-                // NFR-26: non-production deploys show a Staging badge next to the page title.
-                <div className="d-flex align-items-center gap-2 flex-grow-1 min-w-0">
-                  <div ref={setTitleSlot} className="topbar-title min-w-0" />
-                  <EnvBadge />
-                </div>
-              )}
+              <div ref={setTitleSlot} className="topbar-title flex-grow-1 min-w-0" />
               <div
                 ref={setActionsSlot}
                 className="topbar-actions d-flex align-items-center gap-2"
