@@ -267,3 +267,29 @@ a:focus-visible,
   z-index: 5;
   box-shadow: $box-shadow-lg;
 }
+
+// ---------- Milestone 2: board and task cards ----------
+.board-column {
+  background: var(--bs-gray-100, #f5f5f9);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  min-height: 12rem;
+}
+
+.avatar-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 50%;
+  background: rgba(105, 108, 255, 0.16);
+  color: #696cff;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.no-estimate {
+  font-size: 0.7rem;
+  line-height: 1.1;
+}

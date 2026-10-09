@@ -19,14 +19,19 @@ interface NavItem {
 const MAIN: NavItem[] = [
   { to: '/my-tasks', label: 'My tasks', icon: 'bx-check' },
   { to: '/dashboard', label: 'Dashboard', icon: 'bx-grid-alt', soon: true },
-  { to: '/projects', label: 'Projects', icon: 'bx-briefcase', soon: true },
-  { to: '/board', label: 'Task board', icon: 'bx-columns', soon: true },
+  { to: '/projects', label: 'Projects', icon: 'bx-briefcase', any: [['projects', 'view']] },
+  { to: '/board', label: 'Task board', icon: 'bx-columns', any: [['tasks', 'view']] },
   { to: '/documents', label: 'Documents', icon: 'bx-folder', soon: true },
   { to: '/time', label: 'Time logging', icon: 'bx-time-five', soon: true },
 ];
 
 const SETUP: NavItem[] = [
-  { to: '/templates', label: 'Templates', icon: 'bx-book-content', soon: true },
+  {
+    to: '/templates',
+    label: 'Templates',
+    icon: 'bx-book-content',
+    any: [['templates', 'view']],
+  },
   { to: '/clients', label: 'Clients', icon: 'bx-buildings', any: [['clients', 'view']] },
   { to: '/workload', label: 'Team & workload', icon: 'bx-group', soon: true },
   { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', soon: true },
