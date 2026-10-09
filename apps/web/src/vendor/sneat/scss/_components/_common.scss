@@ -1,15 +1,15 @@
 /* Common
 ******************************************************************************* */
 
-@import "../_bootstrap-extended/include";
+@import '../_bootstrap-extended/include';
 
 /* Line Clamp with ellipsis
 ******************************************************************************* */
 
 $clamp-numbers: (
-  "1": 1,
-  "2": 2,
-  "3": 3
+  '1': 1,
+  '2': 2,
+  '3': 3,
 ) !default;
 
 @each $clamp-class, $clamp-value in $clamp-numbers {

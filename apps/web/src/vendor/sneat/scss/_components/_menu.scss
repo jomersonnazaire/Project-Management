@@ -40,10 +40,10 @@
           @include border-radius(50%);
           block-size: 2.25rem;
           clip-path: circle(71% at 0% 50%);
-          content: "";
+          content: '';
           inline-size: 2.25rem;
-          inset-block-start: -.46rem;
-          inset-inline-start: -.5rem;
+          inset-block-start: -0.46rem;
+          inset-inline-start: -0.5rem;
         }
       }
       @include media-breakpoint-down(xl) {
@@ -62,9 +62,9 @@
       position: absolute;
       @include border-radius(50%);
       background-color: var(--#{$prefix}gray-400);
-      block-size: .375rem;
-      content: "";
-      inline-size: .375rem;
+      block-size: 0.375rem;
+      content: '';
+      inline-size: 0.375rem;
       inset-inline-start: 1.4375rem;
       .layout-horizontal & {
         inset-inline-start: 1rem;
@@ -76,7 +76,7 @@
   }
 
   // ? Hide bullet from first child only as we display icon instead (horizontal)
-  &.menu-horizontal .menu-inner > .menu-item > .menu-sub > .menu-item > .menu-link{
+  &.menu-horizontal .menu-inner > .menu-item > .menu-sub > .menu-item > .menu-link {
     padding-inline-start: $menu-horizontal-link-padding-x;
     &::before {
       display: none;
@@ -92,11 +92,11 @@
       background: none;
     }
     .ps__rail-y {
-      inset-inline: auto .25rem !important;
+      inset-inline: auto 0.25rem !important;
     }
     .ps__thumb-y,
     .ps__rail-y {
-      inline-size: .125rem;
+      inline-size: 0.125rem;
     }
 
     .ps__rail-y:hover,
@@ -105,12 +105,12 @@
     .ps__rail-y:hover > .ps__thumb-y,
     .ps__rail-y:focus > .ps__thumb-y,
     .ps__rail-y.ps--clicking > .ps__thumb-y {
-      inline-size: .375rem;
+      inline-size: 0.375rem;
     }
 
     .ps__thumb-y,
     .ps__rail-y.ps--clicking > .ps__thumb-y {
-      opacity: .3;
+      opacity: 0.3;
     }
   }
 }
@@ -160,9 +160,13 @@
   position: absolute;
   z-index: 2;
   display: none;
-  background: linear-gradient(var(--#{$prefix}menu-bg) 41%, rgba(var(--#{$prefix}menu-bg-rgb), .11) 95%, rgba(var(--#{$prefix}menu-bg-rgb), 0));
+  background: linear-gradient(
+    var(--#{$prefix}menu-bg) 41%,
+    rgba(var(--#{$prefix}menu-bg-rgb), 0.11) 95%,
+    rgba(var(--#{$prefix}menu-bg-rgb), 0)
+  );
   inline-size: 100%;
-  inset-block-start: $navbar-height + .35rem;
+  inset-block-start: $navbar-height + 0.35rem;
   pointer-events: none;
   @include media-breakpoint-up($menu-collapsed-layout-breakpoint) {
     block-size: 3rem;
@@ -188,24 +192,23 @@
 /* Horizontal Menu
 ****************************************************************************** */
 .menu.menu-horizontal {
-
   .menu-inner > .menu-item > .menu-link {
     @include border-radius($border-radius);
   }
 
-  .menu-inner > .menu-item.active > .menu-link.menu-toggle{
+  .menu-inner > .menu-item.active > .menu-link.menu-toggle {
     background: var(--#{$prefix}menu-active-bg);
     color: var(--#{$prefix}menu-active-color);
   }
 
-  .menu-inner > .menu-item{
+  .menu-inner > .menu-item {
     margin-block: $menu-horizontal-link-padding-y;
     margin-inline: 0;
     &:not(:first-child) {
-      margin-inline-start: calc($menu-item-spacer + .0625rem);
+      margin-inline-start: calc($menu-item-spacer + 0.0625rem);
     }
     &:not(:last-child) {
-      margin-inline-end: calc($menu-item-spacer + .0625rem);
+      margin-inline-end: calc($menu-item-spacer + 0.0625rem);
     }
     .menu-sub {
       z-index: 1;
@@ -229,7 +232,7 @@
   transition: opacity $menu-animation-duration ease-in-out;
   .menu-header-text {
     color: var(--#{$prefix}gray-400);
-    letter-spacing: .4px;
+    letter-spacing: 0.4px;
     text-transform: uppercase;
     white-space: nowrap;
   }
@@ -270,7 +273,7 @@
 .menu-item.disabled .menu-link,
 .menu-horizontal-prev.disabled,
 .menu-horizontal-next.disabled {
-  opacity: .6;
+  opacity: 0.6;
 }
 
 /* Sub menu */
@@ -305,11 +308,11 @@
   position: absolute;
   display: block;
   border: 2px solid;
-  block-size: .45em;
+  block-size: 0.45em;
   border-block-end: 0;
   border-inline-start: 0;
-  content: "";
-  inline-size: .45em;
+  content: '';
+  inline-size: 0.45em;
   inset-block-start: 49%;
   transform: translateY(-50%) rotate(45deg);
 }
@@ -321,7 +324,6 @@
   border-block-start-color: var(--#{$prefix}menu-divider-color);
   inline-size: 100%;
 }
-
 
 // Vertical Menu
 // ******************************************************************************
@@ -355,8 +357,8 @@
             position: absolute;
             background-color: var(--#{$prefix}primary);
             block-size: 2.6845rem;
-            content: "";
-            inline-size: .25rem;
+            content: '';
+            inline-size: 0.25rem;
             inset-inline-end: 0;
             @include border-top-start-radius($border-radius);
             @include border-bottom-start-radius($border-radius);
@@ -387,13 +389,14 @@
     .menu-inner > .menu-item > .menu-link,
     .menu-inner > .menu-block,
     .menu-inner > .menu-header {
-      padding-inline: calc(#{$menu-vertical-link-padding-x} - 1px) calc(#{var(--#{$prefix}menu-vertical-link-padding-x)} + #{$caret-width * 3.2});
+      padding-inline: calc(#{$menu-vertical-link-padding-x} - 1px)
+        calc(#{var(--#{$prefix}menu-vertical-link-padding-x)} + #{$caret-width * 3.2});
     }
   }
 
   .menu-header {
     position: relative;
-    margin-block: $menu-vertical-header-margin-y $menu-vertical-header-margin-y * .5;
+    margin-block: $menu-vertical-header-margin-y $menu-vertical-header-margin-y * 0.5;
     margin-inline: 0;
     padding-block: calc($menu-vertical-link-padding-y * 2);
     padding-inline: calc($menu-vertical-link-padding-x * 2.133);
@@ -401,7 +404,7 @@
       position: absolute;
       background-color: var(--#{$prefix}gray-200);
       block-size: 1px;
-      content: "";
+      content: '';
       inline-size: 1rem;
       inset-block-start: 50%;
       inset-inline-start: 0;
@@ -421,10 +424,12 @@
 
   .menu-item {
     .menu-toggle {
-      padding-inline-end: calc(#{var(--#{$prefix}menu-vertical-link-padding-x)} + #{$caret-width * 3.2});
+      padding-inline-end: calc(
+        #{var(--#{$prefix}menu-vertical-link-padding-x)} + #{$caret-width * 3.2}
+      );
 
       &::after {
-        inset-inline-end: calc(#{var(--#{$prefix}menu-vertical-link-padding-x)} + .3rem);
+        inset-inline-end: calc(#{var(--#{$prefix}menu-vertical-link-padding-x)} + 0.3rem);
         transition: transform $menu-animation-duration;
       }
     }
@@ -439,9 +444,9 @@
     &.active:not(.open) > .menu-link:not(.menu-toggle)::before {
       /* border: 3px solid var(--#{$prefix}primary-bg-subtle); */
       background-color: var(--#{$prefix}primary);
-      block-size: .5rem;
+      block-size: 0.5rem;
       box-shadow: 0 0 0 3px var(--#{$prefix}primary-bg-subtle);
-      inline-size: .5rem;
+      inline-size: 0.5rem;
       inset-inline-start: 1.4rem;
       .layout-horizontal & {
         inset-inline-start: 1.5rem;
@@ -485,7 +490,7 @@
     flex: none;
   }
 
-  ~ .menu-mobile-toggler{
+  ~ .menu-mobile-toggler {
     display: none;
     .layout-navbar-hidden & {
       position: fixed;
@@ -500,7 +505,8 @@
   }
 
   // Levels
-  $menu-first-level-spacer: $menu-vertical-link-padding-x + $menu-icon-expanded-width + $menu-icon-expanded-spacer;
+  $menu-first-level-spacer: $menu-vertical-link-padding-x + $menu-icon-expanded-width +
+    $menu-icon-expanded-spacer;
 
   .menu-sub .menu-link {
     padding-inline-start: $menu-first-level-spacer;
@@ -508,24 +514,30 @@
 
   // Menu levels loop for padding left/right
   @for $i from 2 through $menu-max-levels {
-    $selector: "";
+    $selector: '';
 
     @for $l from 1 through $i {
-      $selector: "#{$selector} .menu-sub";
+      $selector: '#{$selector} .menu-sub';
     }
     .layout-wrapper:not(.layout-horizontal) & {
       .menu-inner > .menu-item {
         #{$selector} {
           .menu-link {
-            padding-inline-start: $menu-first-level-spacer + ($menu-vertical-menu-level-spacer * ($i)) - .8;
+            padding-inline-start: $menu-first-level-spacer +
+              ($menu-vertical-menu-level-spacer * ($i)) -
+              0.8;
             &::before {
-              inset-inline-start: $menu-icon-expanded-left-spacer + ($menu-vertical-menu-level-spacer * $i) - 1;
+              inset-inline-start: $menu-icon-expanded-left-spacer +
+                ($menu-vertical-menu-level-spacer * $i) -
+                1;
             }
           }
           & > .menu-item.active > {
             .menu-link {
               &::before {
-                inset-inline-start: $menu-icon-expanded-left-spacer + ($menu-vertical-menu-level-spacer * $i) - 1.01;
+                inset-inline-start: $menu-icon-expanded-left-spacer +
+                  ($menu-vertical-menu-level-spacer * $i) -
+                  1.01;
               }
             }
           }
@@ -550,7 +562,8 @@
     position: relative;
     inline-size: var(--#{$prefix}menu-width);
     margin-inline-start: var(--#{$prefix}menu-collapsed-width);
-    padding-inline: $menu-icon-expanded-spacer calc(calc(var(--#{$prefix}menu-vertical-link-padding-x) * 2) - $menu-icon-expanded-spacer);
+    padding-inline: $menu-icon-expanded-spacer
+      calc(calc(var(--#{$prefix}menu-vertical-link-padding-x) * 2) - $menu-icon-expanded-spacer);
     text-indent: -9999px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -562,10 +575,10 @@
     &::before {
       position: absolute;
       display: block;
-      content: "";
-      inline-size: calc(var(--#{$prefix}menu-collapsed-width) * .22);
+      content: '';
+      inline-size: calc(var(--#{$prefix}menu-collapsed-width) * 0.22);
       inset-block: 1.1875rem;
-      inset-inline-start: calc(-1 * calc(var(--#{$prefix}menu-collapsed-width) * .61));
+      inset-inline-start: calc(-1 * calc(var(--#{$prefix}menu-collapsed-width) * 0.61));
       text-align: center;
     }
   }
@@ -573,7 +586,7 @@
   /* Custom for sneat only */
   .menu-block {
     &::before {
-      block-size: .125rem;
+      block-size: 0.125rem;
     }
   }
   .menu-inner > .menu-item div:not(.menu-block) {
@@ -640,7 +653,7 @@
   .menu-item.active > .menu-link:not(.menu-toggle) {
     background: var(--#{$prefix}menu-horizontal-active-bg);
     color: var(--#{$prefix}primary);
-    &::before{
+    &::before {
       background-color: var(--#{$prefix}primary);
       box-shadow: 0 0 0 3px var(--#{$prefix}primary-bg-subtle);
     }
@@ -651,7 +664,7 @@
 
     &::after {
       inset-block-start: 47%;
-      inset-inline-end: calc(#{$menu-horizontal-link-padding-x} + #{.15rem});
+      inset-inline-end: calc(#{$menu-horizontal-link-padding-x} + #{0.15rem});
     }
   }
 
@@ -663,7 +676,7 @@
       position: absolute;
       z-index: 2;
       block-size: $menu-horizontal-link-padding-y;
-      content: "";
+      content: '';
       inline-size: 100%;
       inset-block-start: 100%;
       inset-inline-start: 0;
@@ -689,13 +702,13 @@
     .menu-item {
       /* padding-inline: $menu-link-spacer-x; */
       &:not(:last-child) {
-        margin-block-end: .125rem;
+        margin-block-end: 0.125rem;
       }
       &.open .menu-link > div::after {
         position: absolute;
         z-index: 2;
         block-size: 100%;
-        content: "";
+        content: '';
         inline-size: 1.0625rem;
         inset-inline-end: -1.0625rem;
         pointer-events: auto;
@@ -759,7 +772,7 @@
     border: 1px solid;
     block-size: $menu-control-arrow-size;
     border-block-start: 0;
-    content: "";
+    content: '';
     inline-size: $menu-control-arrow-size;
     inset-block-start: 50%;
     inset-inline-start: 50%;
@@ -783,7 +796,7 @@
 @include keyframes(menuDropdownShow) {
   0% {
     opacity: 0;
-    transform: translateY(-.5rem);
+    transform: translateY(-0.5rem);
   }
 
   100% {

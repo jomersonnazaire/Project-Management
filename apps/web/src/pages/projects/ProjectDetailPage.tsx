@@ -1,4 +1,4 @@
-import { TEMPLATE_TYPE_LABELS, formatVariance } from '@xc8/shared';
+import { TEMPLATE_TYPE_LABELS, plural } from '@xc8/shared';
 import { useState } from 'react';
 import { Alert, Button } from 'react-bootstrap';
 import {
@@ -13,10 +13,9 @@ import {
 } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { useProject, useProjectAction, useProjectTasks } from '../../api/projectHooks';
-import { useCan } from '../../auth/useCan';
 import { ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
-import { ProgressBar, ProjectBadge } from '../../components/ProjectBadges';
+import { ProgressBar, ProjectBadge, ScheduleVariance } from '../../components/ProjectBadges';
 import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 import { ProjectEditModal } from './ProjectEditModal';
@@ -40,7 +39,6 @@ export function ProjectDetailPage() {
   const project = useProject(id);
   const tasks = useProjectTasks(id);
   const action = useProjectAction(id);
-  const canAudit = useCan('audit', 'view');
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const warnings = (location.state as { warnings?: string[] } | null)?.warnings ?? [];
@@ -73,7 +71,8 @@ export function ProjectDetailPage() {
     { to: 'timeline', label: 'Timeline' },
     { to: 'documents', label: 'Documents' },
     { to: 'time', label: 'Time' },
-    ...(canAudit ? [{ to: 'activity', label: 'Activity log' }] : []),
+    // Admins and PMs on any project they can view, or View on audit (doc 11 §12).
+    ...(p.can.activity ? [{ to: 'activity', label: 'Activity log' }] : []),
   ];
 
   return (
@@ -133,10 +132,7 @@ export function ProjectDetailPage() {
             </div>
             <div className="col-sm-6 col-lg-3">
               <div className="small text-body-secondary">Forecast end</div>
-              {shortDate(p.forecastEnd, true)}{' '}
-              <span className="small text-body-secondary">
-                {formatVariance(p.scheduleVarianceDays)}
-              </span>
+              {shortDate(p.forecastEnd, true)} <ScheduleVariance days={p.scheduleVarianceDays} />
             </div>
             <div className="col-sm-6 col-lg-3">
               <div className="small text-body-secondary">Progress</div>
@@ -152,7 +148,7 @@ export function ProjectDetailPage() {
             </div>
             <div className="col-sm-6 col-lg-3">
               <div className="small text-body-secondary">Tasks</div>
-              {p.taskCount} · {p.unestimatedTaskCount} without an estimate
+              {plural(p.taskCount, 'task')} · {p.unestimatedTaskCount} without an estimate
             </div>
           </div>
           {p.description && <p className="mt-4 mb-0">{p.description}</p>}
@@ -220,7 +216,7 @@ export function ProjectDetailPage() {
           <Route path="timeline" element={<ComingSoonTab title="The timeline" />} />
           <Route path="documents" element={<ComingSoonTab title="Documents" />} />
           <Route path="time" element={<ComingSoonTab title="Time logging" />} />
-          {canAudit && <Route path="activity" element={<ActivityTab project={p} />} />}
+          {p.can.activity && <Route path="activity" element={<ActivityTab project={p} />} />}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       )}

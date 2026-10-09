@@ -1,5 +1,5 @@
 /* The color-scheme CSS property https://web.dev/color-scheme/ */
-:root{
+:root {
   // variable prefix
   --prefix: #{$prefix};
 
@@ -55,5 +55,4 @@
   // Tabs & Pills
   --#{$prefix}nav-box-shadow: #{$nav-box-shadow};
   --#{$prefix}nav-border-color: #{$nav-border-color};
-
 }

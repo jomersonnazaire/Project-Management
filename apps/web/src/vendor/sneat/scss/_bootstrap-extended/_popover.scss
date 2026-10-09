@@ -14,14 +14,14 @@
     --#{$prefix}popover-arrow-border: var(--#{$prefix}popover-bg);
   }
 }
-.popover:has([class^="popover-"]):not(.custom-popover) {
+.popover:has([class^='popover-']):not(.custom-popover) {
   --#{$prefix}popover-border-color: transparent;
   --#{$prefix}popover-header-bg: transparent;
   .popover-body {
     background-color: transparent;
   }
 }
-.popover:has([class^="popover-header-"]) {
+.popover:has([class^='popover-header-']) {
   --#{$prefix}popover-border-color: #{$popover-border-color};
   --#{$prefix}popover-body-color: var(--#{$prefix}body-color);
   --#{$prefix}popover-header-bg: var(--#{$prefix}primary);
@@ -36,9 +36,9 @@
 
   &:not(.custom-popover).bs-popover-auto {
     > .popover-arrow::before {
-      --#{$prefix}popover-bg: #{rgba(var(--#{$prefix}white-rgb), .1)};
+      --#{$prefix}popover-bg: #{rgba(var(--#{$prefix}white-rgb), 0.1)};
     }
-    &[data-popper-placement="bottom"] > {
+    &[data-popper-placement='bottom'] > {
       .popover-arrow {
         &::after {
           border-block-end-color: var(--#{$prefix}popover-arrow-border);
@@ -51,7 +51,11 @@
     }
   }
   &.popover-dark {
-    --#{$prefix}popover-bg: color-mix(in sRGB, var(--#{$prefix}base-color) 90%, var(--#{$prefix}paper-bg));
+    --#{$prefix}popover-bg: color-mix(
+      in sRGB,
+      var(--#{$prefix}base-color) 90%,
+      var(--#{$prefix}paper-bg)
+    );
   }
 }
 
@@ -61,7 +65,7 @@
   --#{$prefix}popover-max-width: 200px;
   --#{$prefix}popover-header-color: var(--#{$prefix}white);
   --#{$prefix}popover-body-padding-x: 1rem;
-  --#{$prefix}popover-body-padding-y: .5rem;
+  --#{$prefix}popover-body-padding-y: 0.5rem;
   .popover-header {
     --#{$prefix}popover-header-bg: var(--#{$prefix}primary);
   }

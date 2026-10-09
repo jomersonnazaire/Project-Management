@@ -1,4 +1,4 @@
-import { END_AFTER_START, TEMPLATE_TYPE_LABELS, todayUtc, toDateOnly } from '@xc8/shared';
+import { END_AFTER_START, TEMPLATE_TYPE_LABELS, plural, todayUtc, toDateOnly } from '@xc8/shared';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -7,6 +7,7 @@ import { useClients } from '../../api/hooks';
 import { useCreateProject, usePeople, useTemplates } from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { HandoverModal } from '../../components/HandoverModal';
 import { PageHeader } from '../../components/PageHeader';
 
 const MANAGER_ROLES = new Set(['ADMIN', 'PROJECT_MANAGER']);
@@ -32,6 +33,7 @@ export function NewProjectPage() {
   const [plannedEndDate, setPlannedEndDate] = useState('');
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [confirmHandover, setConfirmHandover] = useState(false);
 
   const activeClients = (clients.data?.items ?? []).filter((c) => c.active);
   const template = templates.data?.items.find((t) => t.id === templateId);
@@ -42,7 +44,7 @@ export function NewProjectPage() {
   const preview = useMemo(
     () =>
       template
-        ? `Generates ${template.activityCount} activities, ${template.dependencyCount} dependencies and ${template.deliverableCount} deliverables.`
+        ? `Generates ${plural(template.activityCount, 'activity', 'activities')}, ${plural(template.dependencyCount, 'dependency', 'dependencies')} and ${plural(template.deliverableCount, 'deliverable')}.`
         : null,
     [template],
   );
@@ -59,6 +61,16 @@ export function NewProjectPage() {
     else if (startDate && plannedEndDate <= startDate) next.plannedEndDate = END_AFTER_START;
     setErrors(next);
     if (Object.keys(next).length) return;
+    // A PM creating a project for another manager hands it over: confirm first (doc 11 §12).
+    if (user?.systemRole === 'PROJECT_MANAGER' && managerId !== user.id) {
+      setConfirmHandover(true);
+      return;
+    }
+    send();
+  };
+
+  const send = () => {
+    setConfirmHandover(false);
     create.mutate(
       {
         name: name.trim(),
@@ -94,6 +106,14 @@ export function NewProjectPage() {
   return (
     <>
       <PageHeader title="New project" />
+      {confirmHandover && (
+        <HandoverModal
+          name={managers.find((m) => m.id === managerId)?.name ?? 'the new manager'}
+          pending={create.isPending}
+          onCancel={() => setConfirmHandover(false)}
+          onConfirm={send}
+        />
+      )}
       <Link to="/projects" className="d-inline-block mb-4">
         ‹ All projects
       </Link>

@@ -1,4 +1,4 @@
-import { TEMPLATE_TYPE_LABELS, TEMPLATE_TYPES, type TemplateType } from '@xc8/shared';
+import { TEMPLATE_TYPE_LABELS, TEMPLATE_TYPES, plural, type TemplateType } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal, Nav } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
@@ -23,6 +23,8 @@ export function TemplatesPage() {
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
   const canCreate = useCan('templates', 'create');
+  // Drafts and archived templates are only shown with Edit on templates (doc 11 §12).
+  const canEdit = useCan('templates', 'edit');
   const templates = useTemplates({ status: status || undefined, q: q || undefined });
   const items = templates.data?.items ?? [];
 
@@ -35,7 +37,7 @@ export function TemplatesPage() {
         <div className="card-body">
           <div className="d-flex flex-wrap align-items-center gap-3 mb-4">
             <Nav variant="pills" activeKey={status} onSelect={(k) => setStatus(k ?? '')}>
-              {TABS.map((t) => (
+              {(canEdit ? TABS : []).map((t) => (
                 <Nav.Item key={t.key}>
                   <Nav.Link eventKey={t.key} as="button">
                     {t.label}
@@ -95,7 +97,8 @@ export function TemplatesPage() {
                         )}
                       </td>
                       <td data-label="Activities">
-                        {t.activityCount} in {t.phaseCount} phases
+                        {plural(t.activityCount, 'activity', 'activities')} in{' '}
+                        {plural(t.phaseCount, 'phase')}
                       </td>
                       <td data-label="Projects">{t.projectCount}</td>
                       <td data-label="Status">

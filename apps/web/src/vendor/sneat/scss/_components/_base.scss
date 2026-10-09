@@ -6,11 +6,11 @@
   z-index: 3;
   background-color: transparent;
   inset: 0;
-  transition: all .25s ease-in-out;
+  transition: all 0.25s ease-in-out;
   visibility: hidden;
 
   &.show {
-    background-color: rgba($black, .5);
+    background-color: rgba($black, 0.5);
     visibility: visible;
   }
 }

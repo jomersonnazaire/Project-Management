@@ -19,7 +19,8 @@
   --#{$prefix}form-check-input-checked-bg: #{$form-check-input-checked-bg-color};
   --#{$prefix}form-check-input-checked-border-color: #{$form-check-input-checked-border-color};
   --#{$prefix}form-check-shadow-color: var(--#{$prefix}primary-rgb);
-  --#{$prefix}form-check-box-shadow: 0 .125rem .25rem 0 rgba(var(--#{$prefix}form-check-shadow-color), .4);
+  --#{$prefix}form-check-box-shadow: 0 0.125rem 0.25rem 0
+    rgba(var(--#{$prefix}form-check-shadow-color), 0.4);
   cursor: $form-check-label-cursor;
   &:disabled {
     --#{$prefix}form-check-bg: #{$form-check-input-disabled-bg};
@@ -30,7 +31,7 @@
     background-color: var(--#{$prefix}form-check-input-checked-bg);
     box-shadow: var(--#{$prefix}form-check-box-shadow);
   }
-  &[type="checkbox"]:indeterminate {
+  &[type='checkbox']:indeterminate {
     border-color: var(--#{$prefix}form-check-input-checked-border-color);
     background-color: var(--#{$prefix}form-check-input-checked-bg);
     box-shadow: var(--#{$prefix}form-check-box-shadow);
@@ -44,10 +45,10 @@
 ? .dt-checkboxes-cell class is used for DataTables checkboxes */
 .form-check:not(.form-switch),
 .dt-checkboxes-cell {
-  .form-check-input[type="radio"] {
+  .form-check-input[type='radio'] {
     background-size: 1.3125rem;
     &:not(:checked) {
-      background-size: .75rem;
+      background-size: 0.75rem;
     }
   }
 }

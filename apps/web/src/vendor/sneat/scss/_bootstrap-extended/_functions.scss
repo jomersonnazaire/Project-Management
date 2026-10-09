@@ -2,7 +2,7 @@
 
 // Remove the unit of a length
 @function strip-unit($number) {
-  @if type-of($number) == "number" and not unitless($number) {
+  @if type-of($number) == 'number' and not unitless($number) {
     @return divide($number, ($number * 0 + 1));
   }
 
@@ -43,7 +43,6 @@
 @function shift-color($color, $weight, $background: null) {
   @return if($weight > 0, shade-color($color, $weight, $background), tint-color($color, -$weight));
 }
-
 
 // RGBA to HEX
 @function rgba-to-hex($color, $background: #fff) {

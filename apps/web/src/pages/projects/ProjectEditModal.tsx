@@ -1,6 +1,7 @@
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUSES,
+  plural,
   END_AFTER_START,
   type ProjectDto,
   type ProjectStatus,
@@ -11,6 +12,8 @@ import { Alert, Button, Form, Modal } from 'react-bootstrap';
 import { ApiError, saveErrorMessage } from '../../api/client';
 import { useClients } from '../../api/hooks';
 import { usePeople, useUpdateProject } from '../../api/projectHooks';
+import { useAuth } from '../../auth/AuthContext';
+import { HandoverModal } from '../../components/HandoverModal';
 
 /**
  * Edit a project (FR-PRJ-11..13): details, team, status, baseline dates (with a reason) and the
@@ -24,6 +27,8 @@ export function ProjectEditModal({
   onClose: () => void;
 }) {
   const update = useUpdateProject(project.id);
+  const { user } = useAuth();
+  const [handover, setHandover] = useState<UpdateProjectInput | null>(null);
   const people = usePeople();
   const clients = useClients();
   const [name, setName] = useState(project.name);
@@ -72,6 +77,16 @@ export function ProjectEditModal({
       body.reason = reason.trim();
     }
     if (!Object.keys(body).length) return onClose();
+    // A PM giving away a project they manage confirms first (doc 11 §12).
+    if (
+      body.managerId &&
+      user?.systemRole === 'PROJECT_MANAGER' &&
+      project.managerId === user.id &&
+      body.managerId !== user.id
+    ) {
+      setHandover(body);
+      return;
+    }
     update.mutate(body, { onSuccess: onClose });
   };
 
@@ -131,7 +146,7 @@ export function ProjectEditModal({
                 <Form.Check
                   className="mt-2"
                   id="edit-prj-confirm-clear"
-                  label={`Remove the ${project.activeContacts.length} active contact(s) from ${project.clientName}`}
+                  label={`Remove the ${plural(project.activeContacts.length, 'active contact')} from ${project.clientName}`}
                   checked={confirmClear}
                   isInvalid={needsConfirm && !confirmClear}
                   onChange={(e) => setConfirmClear(e.target.checked)}
@@ -225,6 +240,19 @@ export function ProjectEditModal({
           </Button>
         </Modal.Footer>
       </Form>
+      {handover && (
+        <HandoverModal
+          name={managers.find((m) => m.id === handover.managerId)?.name ?? 'the new manager'}
+          pending={update.isPending}
+          onCancel={() => setHandover(null)}
+          onConfirm={() =>
+            update.mutate(handover, {
+              onSuccess: onClose,
+              onSettled: () => setHandover(null),
+            })
+          }
+        />
+      )}
     </Modal>
   );
 }

@@ -11,7 +11,7 @@
   --#{$prefix}alert-icon-shadow-scale: 16%;
   --#{$prefix}alert-close-icon: var(--#{$prefix}black);
   line-height: 1.375rem;
-  &[class*="alert-"] {
+  &[class*='alert-'] {
     hr {
       background-color: var(--#{$prefix}alert-hr);
       color: var(--#{$prefix}alert-hr);
@@ -31,13 +31,13 @@
   .btn-close {
     padding: 0;
     background: var(--#{$prefix}alert-close-icon);
-    block-size: .8125rem;
+    block-size: 0.8125rem;
     filter: none;
-    inline-size: .8125rem;
+    inline-size: 0.8125rem;
     inset-inline: auto 0;
     margin-block: calc(#{$alert-padding-y} * 1.37);
-    margin-inline: calc(#{$alert-padding-x} * .9);
-    mask-image: str-replace($btn-close-bg, "#{$btn-close-color}", currentColor);
+    margin-inline: calc(#{$alert-padding-x} * 0.9);
+    mask-image: str-replace($btn-close-bg, '#{$btn-close-color}', currentColor);
     mask-repeat: no-repeat;
     mask-size: 100% 100%;
   }
@@ -48,7 +48,7 @@
 // Generate contextual modifier classes for colorizing the alert
 @each $state in map-keys($theme-colors) {
   .alert-#{$state} {
-    @if $state == "light" {
+    @if $state == 'light' {
       --#{$prefix}alert-color: var(--#{$prefix}#{$state}-contrast);
       --#{$prefix}alert-close-icon: var(--#{$prefix}#{$state}-contrast);
     } @else {
