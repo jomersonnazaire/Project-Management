@@ -162,3 +162,106 @@ describe('PM handover (doc 11 §12)', () => {
     });
   });
 });
+
+describe('Reordering tasks and template activities', () => {
+  const tasksOf = async (agent: Awaited<ReturnType<typeof world>>['pm']['agent'], id: string) =>
+    (await agent.get(`/api/v1/projects/${id}/tasks`)).body.items as {
+      id: string;
+      name: string;
+      order: number;
+      phase: string;
+      dependsOn: string[];
+    }[];
+
+  it('the managing PM reorders a phase; other phases and dependencies stay as they were', async () => {
+    const { admin, pm, project } = await world(app);
+    const before = await tasksOf(pm.agent, project.id);
+    const [kickoff, design, signoff] = before;
+    expect([kickoff!.name, design!.name, signoff!.name]).toEqual([
+      'Kickoff',
+      'Design',
+      'Client sign-off',
+    ]);
+    const res = await pm.agent
+      .post(`/api/v1/projects/${project.id}/tasks/reorder`)
+      .set(CSRF)
+      .send({ phase: 'Phase A', taskIds: [design!.id, kickoff!.id] });
+    expect(res.status).toBe(200);
+    const after = await tasksOf(pm.agent, project.id);
+    expect(after.map((t) => [t.name, t.order])).toEqual([
+      ['Design', 1],
+      ['Kickoff', 2],
+      ['Client sign-off', 3],
+    ]);
+    // AC-38.1: display order only. Apart from `order`, every task is exactly as before:
+    // dependencies, dates, owners, status and version.
+    const withoutOrder = (list: typeof before) =>
+      list.map(({ order: _order, ...rest }) => rest).sort((x, y) => x.id.localeCompare(y.id));
+    expect(withoutOrder(after)).toEqual(withoutOrder(before));
+    expect(after.find((t) => t.id === design!.id)!.dependsOn).toEqual([kickoff!.id]);
+    expect(after.find((t) => t.id === signoff!.id)!.dependsOn).toEqual(signoff!.dependsOn);
+    const log = (await admin.agent.get(`/api/v1/projects/${project.id}/activity`)).body.items;
+    expect(log.map((e: { action: string }) => e.action)).toContain('tasks_reordered');
+  });
+
+  it('only planners in scope reorder; stale lists and archived projects are refused', async () => {
+    const { admin, pm, pm2, member, viewer, outsider, project } = await world(app);
+    const ts = await tasksOf(pm.agent, project.id);
+    const body = { phase: 'Phase A', taskIds: [ts[1]!.id, ts[0]!.id] };
+    const path = `/api/v1/projects/${project.id}/tasks/reorder`;
+    expect((await pm2.agent.post(path).set(CSRF).send(body)).status).toBe(403);
+    expect((await member.agent.post(path).set(CSRF).send(body)).status).toBe(403);
+    expect((await viewer.agent.post(path).set(CSRF).send(body)).status).toBe(403);
+    expect((await outsider.agent.post(path).set(CSRF).send(body)).status).toBe(404);
+    // Missing a task of the phase, or one from another phase: 409.
+    const stale = await pm.agent
+      .post(path)
+      .set(CSRF)
+      .send({ phase: 'Phase A', taskIds: [ts[0]!.id, ts[2]!.id] });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.code).toBe('ORDER_CHANGED');
+    // Without Edit on tasks the PM can't reorder (rules re-read per request).
+    await grant(app, 'PROJECT_MANAGER', { tasks: { view: true, create: true, edit: false } });
+    expect((await pm.agent.post(path).set(CSRF).send(body)).status).toBe(403);
+    await resetRules();
+    expect((await admin.agent.post(path).set(CSRF).send(body)).status).toBe(200);
+    await admin.agent.post(`/api/v1/projects/${project.id}/archive`).set(CSRF).send({});
+    expect((await admin.agent.post(path).set(CSRF).send(body)).status).toBe(409);
+  });
+
+  it('template activity order is saved with the draft and new projects follow it; dependencies unchanged', async () => {
+    const { admin, acme } = await world(app);
+    const created = (
+      await admin.agent
+        .post('/api/v1/templates')
+        .set(CSRF)
+        .send({ ...SMALL_TEMPLATE, name: 'Reorder me' })
+    ).body.template;
+    const [a1, a2, a3] = created.activities;
+    const saved = await admin.agent
+      .patch(`/api/v1/templates/${created.id}`)
+      .set(CSRF)
+      .send({ activities: [a2, a1, a3] });
+    expect(saved.status).toBe(200);
+    expect(saved.body.template.activities.map((a: { id: string }) => a.id)).toEqual([
+      'a2',
+      'a1',
+      'a3',
+    ]);
+    expect(saved.body.template.activities[0].dependsOn).toEqual(['a1']);
+    await admin.agent.post(`/api/v1/templates/${created.id}/publish`).set(CSRF).send({});
+    const p = (
+      await admin.agent.post('/api/v1/projects').set(CSRF).send({
+        name: 'Follows order',
+        clientId: acme.client.id,
+        managerId: admin.user._id.toString(),
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        templateId: created.id,
+      })
+    ).body.project;
+    const tasks = await tasksOf(admin.agent, p.id);
+    expect(tasks.map((t) => t.name)).toEqual(['Design', 'Kickoff', 'Client sign-off']);
+    expect(tasks[0]!.dependsOn).toEqual([tasks[1]!.id]);
+  });
+});

@@ -11,6 +11,8 @@ import {
   formatHours,
   formatVariance,
   plural,
+  moveWithinGroup,
+  reorderTasksSchema,
   scheduleVarianceLabel,
   canViewProjectActivity,
   DEFAULT_ACCESS_RULES,
@@ -243,5 +245,24 @@ describe('M2 follow-ups (DR-09, DR-10, doc 11 §12)', () => {
     ]);
     // PMs keep it even without the global audit permission.
     expect(DEFAULT_ACCESS_RULES.PROJECT_MANAGER.audit.view).toBe(false);
+  });
+});
+
+describe('Reordering (template activities and project tasks)', () => {
+  it('moveWithinGroup reorders one group and leaves the others in place', () => {
+    const items = ['a1', 'b1', 'a2', 'b2', 'a3'];
+    const inA = (x: string) => x.startsWith('a');
+    expect(moveWithinGroup(items, inA, 2, 0)).toEqual(['a3', 'b1', 'a1', 'b2', 'a2']);
+    expect(moveWithinGroup(items, inA, 0, 1)).toEqual(['a2', 'b1', 'a1', 'b2', 'a3']);
+    // Out of range or no move: unchanged copy.
+    expect(moveWithinGroup(items, inA, 0, 5)).toEqual(items);
+    expect(moveWithinGroup(items, inA, 1, 1)).toEqual(items);
+  });
+
+  it('reorderTasksSchema needs task ids and accepts a null phase', () => {
+    expect(reorderTasksSchema.safeParse({ phase: null, taskIds: ['a'.repeat(24)] }).success).toBe(
+      true,
+    );
+    expect(reorderTasksSchema.safeParse({ phase: 'P', taskIds: [] }).success).toBe(false);
   });
 });

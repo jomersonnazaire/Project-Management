@@ -1,5 +1,6 @@
 import {
   OPEN_TASK_STATUSES,
+  reorderTasksSchema,
   TASK_STATUS_LABELS,
   TASK_TRANSITIONS,
   approveTaskSchema,
@@ -364,6 +365,56 @@ export function tasksRouter(registry: RouteRegistry) {
       action: 'task_created',
     });
     await respondTask(req, res, project, _id, 201);
+  });
+
+  // Reorder one phase's tasks (Checklist drag-and-drop / Move up/down). Edit on tasks, and only the
+  // project's planners (Admin, the managing PM, Q-12). Dependencies are untouched: they use ids.
+  p.post('/:id/tasks/reorder', perm('tasks', 'edit'), async (req, res) => {
+    const input = parseBody(reorderTasksSchema, req);
+    const project = await loadProject(req, 'view');
+    assertNotArchived(project);
+    if (!isPlanner(currentUser(req), project)) {
+      throw forbidden('Only the project manager can reorder tasks.');
+    }
+    const phaseTasks = await TaskModel.find({
+      projectId: project._id,
+      phase: input.phase === null ? { $in: [null, ''] } : input.phase,
+    })
+      .select('_id order')
+      .sort({ order: 1 })
+      .lean();
+    const current = phaseTasks.map((t) => t._id.toString());
+    const wanted = input.taskIds;
+    if (
+      new Set(wanted).size !== wanted.length ||
+      wanted.length !== current.length ||
+      !wanted.every((id) => current.includes(id))
+    ) {
+      throw conflict('The task list changed. Refresh to see the latest order.', 'ORDER_CHANGED');
+    }
+    // Reuse the phase's existing order numbers so tasks in other phases keep theirs.
+    const slots = phaseTasks.map((t) => t.order);
+    const ops = wanted
+      .map((id, i) => ({ id, order: slots[i]! }))
+      .filter(({ id, order }) => phaseTasks.find((t) => t._id.toString() === id)!.order !== order)
+      .map(({ id, order }) => ({
+        updateOne: { filter: { _id: new Types.ObjectId(id) }, update: { $set: { order } } },
+      }));
+    if (ops.length) {
+      await TaskModel.bulkWrite(ops);
+      await audit({
+        actorId: currentUser(req)._id,
+        entityType: 'project',
+        entityId: project._id,
+        projectId: project._id,
+        action: 'tasks_reordered',
+        meta: { phase: input.phase, taskIds: wanted },
+      });
+    }
+    const tasks = (await TaskModel.find({ projectId: project._id })
+      .sort({ order: 1 })
+      .lean()) as TaskDoc[];
+    res.json({ items: await toTaskDtos(req, project, tasks) });
   });
 
   const r = registry.router('/tasks');

@@ -866,3 +866,34 @@ export interface PersonDto {
   systemRole: string;
   jobRole: string;
 }
+
+/** POST /projects/:id/tasks/reorder: the new order of one phase's tasks (null = no phase). */
+export const reorderTasksSchema = z.strictObject({
+  phase: z.string().trim().max(120).nullable(),
+  taskIds: z.array(objectId).min(1).max(500),
+});
+export type ReorderTasksInput = z.infer<typeof reorderTasksSchema>;
+
+/**
+ * Moves the item at `from` to `to` among the items that match `inGroup` (e.g. one phase), leaving
+ * every other item where it is. Used to reorder template activities and project tasks.
+ */
+export function moveWithinGroup<T>(
+  items: readonly T[],
+  inGroup: (item: T) => boolean,
+  from: number,
+  to: number,
+): T[] {
+  const slots = items.flatMap((item, i) => (inGroup(item) ? [i] : []));
+  const group = slots.map((i) => items[i]!);
+  if (from < 0 || from >= group.length || to < 0 || to >= group.length || from === to) {
+    return [...items];
+  }
+  const [moved] = group.splice(from, 1);
+  group.splice(to, 0, moved!);
+  const out = [...items];
+  slots.forEach((slot, k) => {
+    out[slot] = group[k]!;
+  });
+  return out;
+}
