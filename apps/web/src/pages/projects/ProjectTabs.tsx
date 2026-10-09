@@ -88,7 +88,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   const showEdit = !project.archived && tasks.some((t) => t.can.edit);
   const editTask = (t: TaskDto) => (t.can.plan ? setEditingTask(t) : onOpen(t.id));
   const [announce, setAnnounce] = useState('');
-  // Planners reorder within a phase with the ⋮⋮ handle (drag, or Alt+↑/↓). Display order only:
+  // Planners reorder within a phase with the grip handle (drag, or Alt+↑/↓). Display order only:
   // dependencies, dates, owners and status never change (FR-PRJ-16).
   const canPlan = project.can.planTasks && !project.archived;
   const move = (ph: string, from: number, to: number) => {
@@ -250,7 +250,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                         )}
                         {canPlan && (
                           <td className="text-end cell-actions">
-                            {/* Touch and non-drag alternative to ⋮⋮ (FR-PRJ-18). Same reorder call;
+                            {/* Touch and non-drag alternative to the grip handle (FR-PRJ-18). Same reorder call;
                                 moving to another phase stays in Edit task. */}
                             <Dropdown align="end">
                               <Dropdown.Toggle

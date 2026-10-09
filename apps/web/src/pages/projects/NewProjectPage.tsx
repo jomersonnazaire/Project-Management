@@ -1,4 +1,4 @@
-import { END_AFTER_START, TEMPLATE_TYPE_LABELS, plural, todayUtc, toDateOnly } from '@xc8/shared';
+import { END_AFTER_START, TEMPLATE_TYPE_LABELS, plural, todayPH, toDateOnly } from '@xc8/shared';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -29,7 +29,7 @@ export function NewProjectPage() {
     user && MANAGER_ROLES.has(user.systemRole) ? user.id : '',
   );
   const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [startDate, setStartDate] = useState(toDateOnly(todayUtc()));
+  const [startDate, setStartDate] = useState(toDateOnly(todayPH()));
   const [plannedEndDate, setPlannedEndDate] = useState('');
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});

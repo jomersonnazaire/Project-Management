@@ -128,7 +128,7 @@ export function TemplateEditorPage() {
     else go();
   };
 
-  // Reorder within a phase (⋮⋮ drag, Alt+↑/↓, or Move up/down); saved with the draft.
+  // Reorder within a phase (grip drag, Alt+↑/↓, or Move up/down); saved with the draft.
   // Dependencies refer to ids, so reordering never changes them (FR-TPL-13, FR-PRJ-16).
   const moveActivity = (phaseId: string, from: number, to: number) =>
     update({

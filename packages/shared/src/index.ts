@@ -4,3 +4,4 @@ export * from './password.js';
 export * from './schemas.js';
 export * from './types.js';
 export * from './projects.js';
+export * from './m3.js';

@@ -58,6 +58,17 @@ const EnvSchema = z.object({
     .or(z.literal('').transform(() => undefined)),
   /** IPv4 addresses in the same /N share one auth rate-limit bucket (IPv6 uses /56). */
   AUTH_RATE_LIMIT_IPV4_PREFIX: z.coerce.number().int().min(8).max(32).default(24),
+  /**
+   * File storage for documents and evidence (doc 10, doc 12 §3.2): private Azure Blob container.
+   * Set AZURE_STORAGE_ACCOUNT to use the App Service's managed identity (user delegation SAS), or
+   * AZURE_STORAGE_CONNECTION_STRING to sign links with the account key. With neither, an in-memory
+   * store is used in development and tests, and uploads are disabled in production.
+   */
+  AZURE_STORAGE_ACCOUNT: z.string().trim().optional(),
+  AZURE_STORAGE_CONNECTION_STRING: z.string().trim().optional(),
+  AZURE_STORAGE_CONTAINER: z.string().trim().default('project-documents'),
+  /** Lifetime of the write-only upload link given to the browser. */
+  UPLOAD_LINK_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 

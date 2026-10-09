@@ -1,0 +1,533 @@
+import { z } from 'zod';
+import { HOLIDAY_TYPES, type HolidayType, type Ref, type UserRefDto } from './projects.js';
+
+/**
+ * Milestone 3 (doc 12, doc 10, FR-TIME): calendar settings, time logging, uploads (evidence and
+ * documents), notifications and project conversations. Shared by the API and the web app.
+ */
+
+const objectId = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
+const requiredText = (label: string, max = 200) =>
+  z.string().trim().min(1, `${label} is required.`).max(max);
+const optionalText = (max = 2000) => z.string().trim().max(max).nullable().optional();
+const dateOnly = (label: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, `Enter a valid ${label}.`)
+    .refine(
+      (s) =>
+        !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) &&
+        new Date(`${s}T00:00:00Z`).toISOString().startsWith(s),
+      `Enter a valid ${label}.`,
+    );
+
+// ---------- Calendar (FR-CAL-01..05) ----------
+export const HOLIDAY_TYPE_LABELS: Record<HolidayType, string> = {
+  REGULAR: 'Regular holiday',
+  SPECIAL_NON_WORKING: 'Special non-working day',
+  SPECIAL_WORKING: 'Special working day',
+};
+/** Short labels for the list's type badges (mockup v0.7.4). */
+export const HOLIDAY_TYPE_SHORT: Record<HolidayType, string> = {
+  REGULAR: 'Regular holiday',
+  SPECIAL_NON_WORKING: 'Special non-working',
+  SPECIAL_WORKING: 'Special working day',
+};
+export const HOLIDAY_TYPE_VARIANTS: Record<HolidayType, string> = {
+  REGULAR: 'danger',
+  SPECIAL_NON_WORKING: 'warning',
+  SPECIAL_WORKING: 'success',
+};
+export const isNonWorkingHoliday = (t: HolidayType) => t !== 'SPECIAL_WORKING';
+
+/** Weekday checkboxes in display order (Mon first); values are getUTCDay numbers. */
+export const WEEKDAYS = [
+  { day: 1, label: 'Mon' },
+  { day: 2, label: 'Tue' },
+  { day: 3, label: 'Wed' },
+  { day: 4, label: 'Thu' },
+  { day: 5, label: 'Fri' },
+  { day: 6, label: 'Sat' },
+  { day: 0, label: 'Sun' },
+] as const;
+
+export const KEEP_ONE_WORKING_DAY = 'Keep at least one working day.';
+export const HOLIDAY_BANNER_NOTE =
+  'New due dates skip today. Tasks already due today keep their date.';
+
+export const holidaySchema = z.strictObject({
+  date: dateOnly('date'),
+  name: requiredText('Name', 120),
+  type: z.enum(HOLIDAY_TYPES, 'Choose a type.'),
+  note: optionalText(300),
+});
+export type HolidayInput = z.input<typeof holidaySchema>;
+export const updateHolidaySchema = holidaySchema.partial();
+
+export const copyHolidaysSchema = z.strictObject({
+  fromYear: z.number().int().min(2000).max(2100),
+  toYear: z.number().int().min(2000).max(2100),
+});
+
+export const workingDaysSchema = z.strictObject({
+  days: z
+    .array(z.number().int().min(0).max(6))
+    .max(7)
+    .refine((d) => new Set(d).size === d.length, 'Each day can be ticked once.'),
+  version: z.number().int().min(0),
+});
+
+export interface HolidayDto {
+  id: string;
+  date: string;
+  name: string;
+  type: HolidayType;
+  note: string | null;
+}
+
+export interface CalendarDto {
+  workingDays: number[];
+  version: number;
+  year: number;
+  holidays: HolidayDto[];
+}
+
+export interface HolidayImpactDto {
+  date: string;
+  count: number;
+  tasks: { id: string; name: string; project: Ref; dueDate: string }[];
+  /** An existing holiday on this date, if any (duplicates are refused). */
+  existing: HolidayDto | null;
+}
+
+// ---------- Time logging (FR-TIME-01..08) ----------
+export const TIME_TYPES = ['EXECUTION', 'WAITING', 'REWORK'] as const;
+export type TimeType = (typeof TIME_TYPES)[number];
+export const TIME_TYPE_LABELS: Record<TimeType, string> = {
+  EXECUTION: 'Execution',
+  WAITING: 'Waiting on client / external',
+  REWORK: 'Rework',
+};
+export const TIME_TYPE_SHORT: Record<TimeType, string> = {
+  EXECUTION: 'Execution',
+  WAITING: 'Waiting',
+  REWORK: 'Rework',
+};
+export const HOURS_MESSAGE = 'Enter between 0.25 and 24.';
+
+const hours = z
+  .number(HOURS_MESSAGE)
+  .min(0.25, HOURS_MESSAGE)
+  .max(24, HOURS_MESSAGE)
+  .refine((h) => Number.isInteger(h * 4), 'Use steps of 0.25 hours.');
+
+export const timeEntrySchema = z.strictObject({
+  taskId: objectId,
+  workDate: dateOnly('work date'),
+  hours,
+  type: z.enum(TIME_TYPES).default('EXECUTION'),
+  notes: optionalText(1000),
+});
+export type TimeEntryInput = z.input<typeof timeEntrySchema>;
+export const updateTimeEntrySchema = z.strictObject({
+  workDate: dateOnly('work date').optional(),
+  hours: hours.optional(),
+  type: z.enum(TIME_TYPES).optional(),
+  notes: optionalText(1000),
+});
+export const timeWeekQuerySchema = z.strictObject({ week: dateOnly('week').optional() });
+
+export interface TimeEntryDto {
+  id: string;
+  user: Ref;
+  project: Ref;
+  task: Ref;
+  workDate: string;
+  hours: number;
+  type: TimeType;
+  notes: string | null;
+  locked: boolean;
+  createdAt: string;
+}
+
+export interface TimeWeekDto {
+  weekStart: string;
+  weekEnd: string;
+  items: TimeEntryDto[];
+  total: number;
+  capacity: number;
+}
+
+export interface LoggableTaskDto {
+  project: Ref;
+  tasks: { id: string; name: string; phase: string | null }[];
+}
+
+/** Monday of the ISO week containing `d` (calendar date at UTC midnight). */
+export function weekStartOf(d: Date): Date {
+  const day = d.getUTCDay();
+  return new Date(d.getTime() - ((day + 6) % 7) * 86_400_000);
+}
+
+/**
+ * FR-TIME-04 / Q-09 default: last week's entries lock on Monday at 12:00 Philippine time.
+ * Returns the first work date that is still open; anything earlier is read-only (except PM/Admin).
+ */
+export function timeLockBoundary(now = new Date()): Date {
+  const ph = new Date(now.getTime() + 8 * 3_600_000);
+  const today = new Date(`${ph.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const monday = weekStartOf(today);
+  const afterNoonMonday = today.getTime() > monday.getTime() || ph.getUTCHours() >= 12;
+  return afterNoonMonday ? monday : new Date(monday.getTime() - 7 * 86_400_000);
+}
+
+// ---------- Uploads (FR-EVD-01..08, FR-DOC-13) ----------
+/** 25 MiB (FR-EVD-03, FR-DOC-13). */
+export const MAX_UPLOAD_BYTES = 26_214_400;
+export const MAX_FILES_PER_UPLOAD = 10;
+/** Signed download links expire within 5 minutes (FR-DOC-41, FR-EVD-04). */
+export const DOWNLOAD_LINK_MINUTES = 5;
+
+export const FILE_KINDS = ['PDF', 'WORD', 'EXCEL', 'IMAGE'] as const;
+export type FileKind = (typeof FILE_KINDS)[number];
+
+export const UPLOAD_PURPOSES = ['EVIDENCE', 'DOCUMENT'] as const;
+export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
+
+const EVIDENCE_EXT: Record<string, FileKind> = {
+  pdf: 'PDF',
+  doc: 'WORD',
+  docx: 'WORD',
+  xls: 'EXCEL',
+  xlsx: 'EXCEL',
+};
+/** Q-30 (approved): images stay allowed in Documents; evidence is PDF, Word and Excel only. */
+const DOCUMENT_EXT: Record<string, FileKind> = {
+  ...EVIDENCE_EXT,
+  png: 'IMAGE',
+  jpg: 'IMAGE',
+  jpeg: 'IMAGE',
+};
+const MACRO_EXT = new Set(['docm', 'dotm', 'xlsm', 'xltm', 'xlsb', 'xlam']);
+
+export const MIME_BY_EXT: Record<string, string> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+};
+
+export const EVIDENCE_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx';
+export const DOCUMENT_ACCEPT = `${EVIDENCE_ACCEPT},.png,.jpg,.jpeg`;
+export const EVIDENCE_TYPES_LABEL = 'PDF, Word or Excel · up to 25 MB each';
+export const DOCUMENT_TYPES_LABEL = 'Up to 25 MB · PDF, DOCX, XLSX, PNG, JPG';
+
+export function fileExtension(name: string): string {
+  const m = /\.([a-z0-9]+)$/i.exec(name.trim());
+  return m ? m[1]!.toLowerCase() : '';
+}
+
+/** "1.8 MB", "640 KB" (1 MB = 1,048,576 bytes, so 25 MiB shows as 25 MB). */
+export function formatBytes(n: number): string {
+  if (n >= 1_048_576) {
+    const mb = n / 1_048_576;
+    return `${mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10} MB`;
+  }
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+export interface FileRuleIssue {
+  status: 413 | 422;
+  code: 'INVALID_FILE_TYPE' | 'FILE_TOO_LARGE' | 'EMPTY_FILE';
+  message: string;
+}
+
+/**
+ * Name and size checks done before upload, in the browser and again by the API. The API also
+ * checks the real type from the file's content after upload (FR-EVD-02).
+ */
+export function checkFileRules(
+  file: { name: string; size: number },
+  purpose: UploadPurpose,
+): FileRuleIssue | null {
+  const ext = fileExtension(file.name);
+  const allowed = purpose === 'EVIDENCE' ? EVIDENCE_EXT : DOCUMENT_EXT;
+  if (MACRO_EXT.has(ext)) {
+    const plain = ext.startsWith('d') ? 'docx' : 'xlsx';
+    return {
+      status: 422,
+      code: 'INVALID_FILE_TYPE',
+      message: `${file.name} can't be added. Save it as .${plain} without macros.`,
+    };
+  }
+  if (!allowed[ext]) {
+    return {
+      status: 422,
+      code: 'INVALID_FILE_TYPE',
+      message:
+        purpose === 'EVIDENCE'
+          ? `${file.name} can't be added. Evidence must be a PDF, Word or Excel file.`
+          : `${file.name} can't be added. That file type isn't allowed.`,
+    };
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return {
+      status: 413,
+      code: 'FILE_TOO_LARGE',
+      message: `${file.name} is ${formatBytes(file.size)}. The limit is 25 MB.`,
+    };
+  }
+  if (file.size <= 0) {
+    return { status: 422, code: 'EMPTY_FILE', message: `${file.name} is empty.` };
+  }
+  return null;
+}
+
+export function fileKindOf(name: string): FileKind | null {
+  return DOCUMENT_EXT[fileExtension(name)] ?? null;
+}
+
+/** Messages for content checks done after upload (FR-EVD-02, Q-29). */
+export const KIND_LABELS: Record<FileKind, string> = {
+  PDF: 'PDF',
+  WORD: 'Word file',
+  EXCEL: 'Excel file',
+  IMAGE: 'image',
+};
+export const notRealTypeMessage = (name: string) => {
+  const k = fileKindOf(name);
+  return `${name} isn't a real ${k ? KIND_LABELS[k] : 'file of that type'}, so it wasn't uploaded.`;
+};
+export const malwareMessage = (name: string) =>
+  `${name} was blocked by the malware scan and wasn't uploaded.`;
+
+const uploadFile = z.strictObject({
+  name: requiredText('File name', 200),
+  size: z.number().int().min(0),
+  contentType: z.string().trim().max(200).optional(),
+});
+
+export const evidenceUploadSchema = z.strictObject({
+  files: z.array(uploadFile).min(1).max(MAX_FILES_PER_UPLOAD, 'Up to 10 files per upload.'),
+});
+
+export const DOCUMENT_STATUSES = ['SUBMITTED', 'SIGNED'] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+  SUBMITTED: 'Submitted',
+  SIGNED: 'Signed',
+};
+
+export const documentUploadSchema = z.strictObject({
+  folderId: objectId,
+  file: uploadFile,
+  status: z.enum(DOCUMENT_STATUSES).default('SUBMITTED'),
+  /** FR-DOC-12: a file named like an existing document is added as a new version unless "Keep both". */
+  onDuplicate: z.enum(['NEW_VERSION', 'KEEP_BOTH']).default('NEW_VERSION'),
+  taskId: objectId.nullable().optional(),
+  note: optionalText(500),
+});
+
+export interface UploadTicketDto {
+  id: string;
+  name: string;
+  /** PUT the file's bytes here (a short-lived write-only link). */
+  uploadUrl: string;
+  /** Headers the PUT must carry. */
+  headers: Record<string, string>;
+  expiresAt: string;
+}
+
+export const folderSchema = z.strictObject({
+  name: requiredText('Folder name', 120),
+  parentId: objectId.nullable().optional(),
+});
+export const renameFolderSchema = z.strictObject({ name: requiredText('Folder name', 120) });
+export const archiveDocumentSchema = z.strictObject({ reason: requiredText('Reason', 500) });
+export const updateDocumentSchema = z.strictObject({
+  folderId: objectId.optional(),
+  taskId: objectId.nullable().optional(),
+});
+export const documentListQuerySchema = z.strictObject({
+  folderId: objectId.optional(),
+  q: z.string().trim().max(100).optional(),
+  status: z.enum(DOCUMENT_STATUSES).optional(),
+  archived: z.enum(['true', 'false']).optional(),
+});
+
+export interface FolderDto {
+  id: string;
+  name: string;
+  parentId: string | null;
+  kind: 'CONTRACTS' | 'PHASE' | 'CUSTOM';
+  depth: number;
+  documentCount: number;
+}
+
+export interface DocumentVersionDto {
+  version: number;
+  fileName: string;
+  size: number;
+  mimeType: string;
+  sha256: string;
+  status: DocumentStatus;
+  uploadedBy: Ref | null;
+  uploadedAt: string;
+  note: string | null;
+}
+
+export interface DocumentDto {
+  id: string;
+  projectId: string;
+  folderId: string;
+  name: string;
+  kind: FileKind;
+  status: DocumentStatus;
+  /** Latest Signed version, kept as the "Signed copy" (FR-DOC-14, FR-DOC-31). */
+  signedVersion: number | null;
+  latestVersion: number;
+  task: Ref | null;
+  source: 'DOCUMENT' | 'EVIDENCE';
+  archived: boolean;
+  archivedReason: string | null;
+  updatedAt: string;
+  uploadedBy: Ref | null;
+  versions: DocumentVersionDto[];
+  events: {
+    event: string;
+    actor: Ref | null;
+    at: string;
+    version: number | null;
+    note: string | null;
+  }[];
+  can: { upload: boolean; edit: boolean; archive: boolean };
+}
+
+export interface DocumentListDto {
+  items: DocumentDto[];
+  counts: { all: number; SUBMITTED: number; SIGNED: number };
+  can: { upload: boolean; createFolder: boolean; archive: boolean };
+}
+
+// ---------- Notifications (FR-NTF-01..06) ----------
+export const NOTIFICATION_TYPES = [
+  'FOLLOW_UP',
+  'ASSIGNED',
+  'FOR_REVIEW',
+  'APPROVED',
+  'REJECTED',
+  'EVIDENCE',
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+/** FR-NTF-06: unread count refresh interval; notifications are kept 90 days. */
+export const NOTIFICATION_POLL_MS = 60_000;
+export const NOTIFICATION_RETENTION_DAYS = 90;
+
+export interface NotificationDto {
+  id: string;
+  type: NotificationType;
+  actor: Ref | null;
+  task: Ref | null;
+  project: Ref;
+  read: boolean;
+  at: string;
+}
+
+export interface NotificationListDto {
+  items: NotificationDto[];
+  unread: number;
+}
+
+/** "Maria P." from "Maria Perez" (mockup style). */
+export function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name.trim();
+  return `${parts[0]} ${parts[parts.length - 1]![0]!.toUpperCase()}.`;
+}
+
+/** The sentence after the actor's name (FR-NTF-03). */
+export const NOTIFICATION_VERBS: Record<NotificationType, string> = {
+  FOLLOW_UP: 'added a follow-up on',
+  ASSIGNED: 'assigned you to',
+  FOR_REVIEW: 'sent for your review',
+  APPROVED: 'approved',
+  REJECTED: 'sent back',
+  EVIDENCE: 'uploaded evidence on',
+};
+
+// ---------- Project conversation (FR-CNV-01..08) ----------
+export const MESSAGE_TYPES = ['NOTE', 'CALL', 'MEETING', 'DECISION'] as const;
+export type MessageType = (typeof MESSAGE_TYPES)[number];
+export const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {
+  NOTE: 'Note',
+  CALL: 'Call',
+  MEETING: 'Meeting',
+  DECISION: 'Decision',
+};
+export const MESSAGE_TYPE_PLURALS: Record<MessageType, string> = {
+  NOTE: 'Notes',
+  CALL: 'Calls',
+  MEETING: 'Meetings',
+  DECISION: 'Decisions',
+};
+export const MESSAGE_TYPE_VARIANTS: Record<MessageType, string> = {
+  NOTE: 'secondary',
+  CALL: 'info',
+  MEETING: 'primary',
+  DECISION: 'success',
+};
+export const MAX_MESSAGE_LENGTH = 5000;
+
+export const postMessageSchema = z.strictObject({
+  text: requiredText('Message', MAX_MESSAGE_LENGTH),
+  type: z.enum(MESSAGE_TYPES).default('NOTE'),
+  taskId: objectId.nullable().optional(),
+  contactIds: z.array(objectId).max(10).default([]),
+});
+export type PostMessageInput = z.input<typeof postMessageSchema>;
+export const hideMessageSchema = z.strictObject({ reason: requiredText('Reason', 500) });
+export const messageQuerySchema = z.strictObject({
+  type: z.enum(MESSAGE_TYPES).optional(),
+  taskId: objectId.optional(),
+  contactId: objectId.optional(),
+  q: z.string().trim().max(100).optional(),
+  from: dateOnly('date').optional(),
+  to: dateOnly('date').optional(),
+});
+
+export interface MessageDto {
+  id: string;
+  /** null when hidden by an Admin (the text is withheld). */
+  text: string | null;
+  type: MessageType;
+  author: UserRefDto | null;
+  at: string;
+  task: Ref | null;
+  contacts: (Ref & { active: boolean })[];
+  hidden: { by: Ref | null; at: string; reason: string } | null;
+}
+
+export interface MessageListDto {
+  items: MessageDto[];
+  can: { post: boolean; hide: boolean };
+}
+
+/** Splits plain text into text and http(s) links (FR-CNV-07); nothing is ever rendered as HTML. */
+export function linkify(text: string): { text: string; href?: string }[] {
+  const out: { text: string; href?: string }[] = [];
+  const re = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/gi;
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    if (m.index! > last) out.push({ text: text.slice(last, m.index) });
+    out.push({ text: m[0], href: m[0] });
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
+}

@@ -1,7 +1,7 @@
 import type { DragEvent } from 'react';
 
 /**
- * HTML5 drag-and-drop for reorderable rows. The ⋮⋮ handle is the drag source; rows (and phase
+ * HTML5 drag-and-drop for reorderable rows. The grip handle is the drag source; rows (and phase
  * cards) are drop targets. A scope keeps drops apart: a row only accepts drags of its own scope.
  */
 const mime = (scope: string) =>

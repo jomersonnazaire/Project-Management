@@ -193,19 +193,60 @@ export function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * DAY);
 }
 
-export function isWorkingDay(d: Date): boolean {
-  const wd = d.getUTCDay();
-  return wd !== 0 && wd !== 6;
+/**
+ * Working-day calendar (Q-07, FR-CAL-01..05). Weekdays use getUTCDay (0 = Sunday … 6 = Saturday)
+ * on calendar dates stored at UTC midnight. Holidays are keyed by YYYY-MM-DD.
+ */
+export const HOLIDAY_TYPES = ['REGULAR', 'SPECIAL_NON_WORKING', 'SPECIAL_WORKING'] as const;
+export type HolidayType = (typeof HOLIDAY_TYPES)[number];
+
+export interface WorkCalendar {
+  /** Weekdays that count as working days (FR-CAL-05); at least one. */
+  workingDays: readonly number[];
+  /** Holiday type per date (YYYY-MM-DD). */
+  holidays?: Readonly<Record<string, HolidayType>>;
 }
 
-/** Mon–Fri working days (Q-07 default; holidays arrive with settings). A weekend start rolls to Monday. */
-export function addWorkingDays(start: Date, n: number): Date {
+export const DEFAULT_WORKING_DAYS: readonly number[] = [1, 2, 3, 4, 5];
+export const DEFAULT_CALENDAR: WorkCalendar = { workingDays: DEFAULT_WORKING_DAYS, holidays: {} };
+
+/**
+ * Hard limit on how many calendar days one date calculation may walk (Queen, FR-CAL-05): ten
+ * years. A calendar can never make the loop run forever; beyond the limit we throw.
+ */
+export const MAX_CALENDAR_SCAN_DAYS = 3660;
+
+export class CalendarLimitError extends Error {
+  constructor() {
+    super('No working day found within the calendar limit. Check the working days and holidays.');
+    this.name = 'CalendarLimitError';
+  }
+}
+
+/** FR-CAL-02: ticked weekdays, minus non-working holidays, plus Special working days. */
+export function isWorkingDay(d: Date, cal: WorkCalendar = DEFAULT_CALENDAR): boolean {
+  const h = cal.holidays?.[toDateOnly(d)];
+  if (h === 'SPECIAL_WORKING') return true;
+  if (h === 'REGULAR' || h === 'SPECIAL_NON_WORKING') return false;
+  return cal.workingDays.includes(d.getUTCDay());
+}
+
+/**
+ * Adds `n` working days. A non-working start rolls forward to the next working day first.
+ * Bounded by MAX_CALENDAR_SCAN_DAYS so it can't loop (FR-CAL-05).
+ */
+export function addWorkingDays(start: Date, n: number, cal: WorkCalendar = DEFAULT_CALENDAR): Date {
   let d = new Date(start.getTime());
-  while (!isWorkingDay(d)) d = addDays(d, 1);
-  let left = n;
-  while (left > 0) {
+  let steps = 0;
+  const step = () => {
     d = addDays(d, 1);
-    if (isWorkingDay(d)) left -= 1;
+    if (++steps > MAX_CALENDAR_SCAN_DAYS) throw new CalendarLimitError();
+  };
+  while (!isWorkingDay(d, cal)) step();
+  let left = Math.max(0, Math.floor(n));
+  while (left > 0) {
+    step();
+    if (isWorkingDay(d, cal)) left -= 1;
   }
   return d;
 }
@@ -215,14 +256,33 @@ export function scheduleFromOffsets(
   baselineStart: Date,
   offsetDays: number,
   durationDays: number,
+  cal: WorkCalendar = DEFAULT_CALENDAR,
 ): { plannedStart: Date; dueDate: Date } {
-  const plannedStart = addWorkingDays(baselineStart, offsetDays);
-  const dueDate = addWorkingDays(plannedStart, Math.max(durationDays, 1) - 1);
+  const plannedStart = addWorkingDays(baselineStart, offsetDays, cal);
+  const dueDate = addWorkingDays(plannedStart, Math.max(durationDays, 1) - 1, cal);
   return { plannedStart, dueDate };
 }
 
+/** Today's calendar date in UTC. Prefer todayPH: "today" is a Philippine date (FR-TSK-21). */
 export function todayUtc(now = new Date()): Date {
   return parseDateOnly(now.toISOString());
+}
+
+/** Business time zone (FR-GEN-02, FR-TSK-21): Asia/Manila, UTC+8 all year (no daylight saving). */
+export const PH_TIME_ZONE = 'Asia/Manila';
+const PH_OFFSET_MS = 8 * 3_600_000;
+
+/**
+ * Today's date in Philippine time, as a calendar date at UTC midnight (FR-TSK-21, AC-TODAY-1):
+ * at 00:30 in Manila (16:30 UTC the day before) this is already the Manila date.
+ */
+export function todayPH(now = new Date()): Date {
+  return parseDateOnly(new Date(now.getTime() + PH_OFFSET_MS).toISOString());
+}
+
+/** The Philippine calendar date of an instant, as YYYY-MM-DD. */
+export function phDateOf(instant: Date): string {
+  return new Date(instant.getTime() + PH_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 // ---------- Calculations (NFR-22) ----------
@@ -647,7 +707,7 @@ export const followUpSchema = z.strictObject({
 });
 
 export const myTasksQuerySchema = z.strictObject({
-  view: z.enum(['assigned', 'accountable', 'review', 'completed']).optional(),
+  view: z.enum(['today', 'assigned', 'accountable', 'review', 'completed']).optional(),
   q: z.string().trim().max(100).optional(),
 });
 
@@ -778,11 +838,20 @@ export interface ProjectDto extends ProjectListItemDto {
   };
 }
 
+/**
+ * Task evidence (FR-EVD-01..07). New evidence is always an uploaded FILE (stored as a document in
+ * the task's phase folder); LINK items are M2 evidence kept readable as "Link (legacy)".
+ */
 export interface EvidenceDto {
   id: string;
-  type: 'LINK';
+  type: 'LINK' | 'FILE';
   name: string;
-  url: string;
+  /** LINK only. */
+  url: string | null;
+  /** FILE only: the document it is stored as. */
+  documentId: string | null;
+  size: number | null;
+  mimeType: string | null;
   addedBy: Ref | null;
   at: string;
 }
@@ -850,6 +919,7 @@ export interface MyTaskDto {
   id: string;
   name: string;
   project: Ref;
+  phase: string | null;
   role: 'ACCOUNTABLE' | 'ASSIGNEE' | 'REVIEWER';
   dueDate: string | null;
   overdue: boolean;
@@ -862,7 +932,13 @@ export interface MyTaskDto {
 
 export interface MyTasksDto {
   items: MyTaskDto[];
+  /** Today's date in Philippine time (FR-TSK-21), YYYY-MM-DD. */
+  today: string;
+  /** Set when today is a holiday in the calendar (Today tab banner). */
+  holiday: { name: string; type: HolidayType } | null;
   counts: {
+    /** Today tab: my open tasks that are overdue or due today (FR-TSK-20). */
+    today: number;
     overdue: number;
     dueThisWeek: number;
     toReview: number;

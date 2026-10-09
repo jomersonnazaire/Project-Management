@@ -382,3 +382,55 @@ $board-gap: 0.75rem;
     height: 0.375rem;
   }
 }
+
+// ----- Milestone 3 -----
+.notif-count {
+  font-size: 0.625rem;
+  padding: 0.2em 0.45em;
+}
+.notif-dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--bs-primary);
+  flex: none;
+}
+.notif-unread {
+  background: rgba(var(--bs-primary-rgb), 0.06);
+}
+.drop-zone {
+  border: 2px dashed var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  &.is-over {
+    border-color: var(--bs-primary);
+    background: rgba(var(--bs-primary-rgb), 0.06);
+  }
+}
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: var(--bs-border-radius);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  flex: none;
+}
+.msg-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.day-sep {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  margin: 1rem 0 0.5rem;
+}
+.folder-tree .list-group-item {
+  border: 0;
+  padding-block: 0.4rem;
+}

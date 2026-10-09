@@ -28,8 +28,9 @@ const ALL = ACCESS_ACTIONS;
 const VIEW_EDIT = ['view', 'edit'] as const;
 const VIEW_ONLY = ['view'] as const;
 const EDIT_ONLY = ['edit'] as const;
+const VIEW_CREATE = ['view', 'create'] as const;
 
-/** The 14 record types of doc 11 §3, in grid order. */
+/** The record types of doc 11 §3 plus M3's conversations and notifications (doc 12 §3.4), in grid order. */
 export const RECORD_TYPES = [
   {
     key: 'users',
@@ -62,6 +63,18 @@ export const RECORD_TYPES = [
     label: 'Documents & folders',
     actions: ALL,
     notes: 'Signed versions stay locked regardless',
+  },
+  {
+    key: 'conversations',
+    label: 'Project conversations',
+    actions: VIEW_CREATE,
+    notes: 'Messages are permanent: no Edit or Delete. Admins can hide abusive messages (Q-31)',
+  },
+  {
+    key: 'notifications',
+    label: 'Notifications',
+    actions: VIEW_ONLY,
+    notes: 'Own notifications only; not configurable',
   },
   { key: 'reports', label: 'Reports & dashboard', actions: VIEW_ONLY },
   {
@@ -122,6 +135,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     time: 'VCED',
     documents: 'VCED',
+    conversations: 'VC',
+    notifications: 'V',
     reports: 'V',
     audit: 'V',
   },
@@ -138,6 +153,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     time: 'VCED',
     documents: 'VCED',
+    conversations: 'VC',
+    notifications: 'V',
     reports: 'V',
     audit: '',
   },
@@ -154,6 +171,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     time: 'VCE',
     documents: 'VC',
+    conversations: 'VC',
+    notifications: 'V',
     reports: 'V',
     audit: '',
   },
@@ -170,6 +189,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: '',
     time: '',
     documents: 'V',
+    conversations: 'V',
+    notifications: 'V',
     reports: 'V',
     audit: '',
   },
@@ -193,8 +214,17 @@ export const DEFAULT_ACCESS_RULES: AccessRulesByRole = Object.fromEntries(
  */
 export const LOCKED_ADMIN_RECORDS: readonly RecordType[] = ['users', 'accessRules'];
 
+/** Record types whose access is fixed on for every role (doc 12 §3.4: own notifications only). */
+export const ALWAYS_ON_RECORDS: readonly RecordType[] = ['notifications'];
+
 export function isLockedOn(role: SystemRole, record: RecordType, action: AccessAction): boolean {
+  if (ALWAYS_ON_RECORDS.includes(record)) return actionApplies(record, action);
   return role === 'ADMIN' && LOCKED_ADMIN_RECORDS.includes(record) && actionApplies(record, action);
+}
+
+/** Why a cell can't be changed, for the grid's tooltip (null when it can be). */
+export function lockedOnReason(record: RecordType): string {
+  return ALWAYS_ON_RECORDS.includes(record) ? NOTIFICATIONS_LOCKED_REASON : LOCKED_ON_REASON;
 }
 
 /** Q-26: only Admins delete projects (PMs archive instead). Fixed in code, can't be granted. */
@@ -203,6 +233,8 @@ export function isLockedOff(role: SystemRole, record: RecordType, action: Access
 }
 
 export const LOCKED_ON_REASON = 'Locked so nobody can lock every Admin out';
+export const NOTIFICATIONS_LOCKED_REASON =
+  'Everyone sees only their own notifications; not configurable';
 export const LOCKED_OFF_REASON = 'Only Admins can delete projects (Q-26)';
 export const NOT_APPLICABLE_REASON = "Doesn't apply to this record type";
 
@@ -221,6 +253,7 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     approvals: 'Designated reviewer only',
     time: 'Own entries only',
     documents: 'Projects they belong to',
+    conversations: 'Projects they belong to',
   },
 };
 
@@ -292,7 +325,9 @@ export function validatePermissionGrid(role: SystemRole, grid: PermissionGrid): 
         issues.push({
           code: 'LOCKED_PERMISSION',
           path,
-          message: `Admin access to ${recordTypeInfo(record).label} is locked so nobody can lock every Admin out.`,
+          message: ALWAYS_ON_RECORDS.includes(record)
+            ? `${NOTIFICATIONS_LOCKED_REASON}.`
+            : `Admin access to ${recordTypeInfo(record).label} is locked so nobody can lock every Admin out.`,
         });
       } else if (isLockedOff(role, record, action) && v) {
         issues.push({ code: 'LOCKED_PERMISSION', path, message: LOCKED_OFF_REASON + '.' });
