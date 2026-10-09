@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { checkPassword, isPasswordValid, type InviteInfoDto, type UserDto } from '@xc8/shared';
+import {
+  checkPassword,
+  isPasswordValid,
+  type InviteInfoDto,
+  type PermissionGrid,
+  type UserDto,
+} from '@xc8/shared';
 import { useState } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
@@ -19,7 +25,7 @@ function readToken(): string {
 /** First-time password setup (and admin-issued reset) via one-time link (FR-AUTH-04). */
 export function SetupPasswordPage() {
   const [token] = useState(readToken);
-  const { setUser } = useAuth();
+  const { setSession } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -44,13 +50,16 @@ export function SetupPasswordPage() {
     if (!isPasswordValid(password) || password !== confirm) return;
     setSaving(true);
     try {
-      const res = await api<{ user: UserDto }>('/auth/setup-password', {
-        method: 'POST',
-        body: { token, password },
-      });
+      const res = await api<{ user: UserDto; permissions?: PermissionGrid }>(
+        '/auth/setup-password',
+        {
+          method: 'POST',
+          body: { token, password },
+        },
+      );
       // Remove the token from the address bar/history.
       window.history.replaceState(null, '', '/setup-password');
-      setUser(res.user);
+      setSession(res);
       navigate('/my-tasks', { replace: true });
     } catch (err) {
       setError(authErrorMessage(err));

@@ -42,8 +42,25 @@ export function onUnauthorized(fn: Listener): () => void {
   return () => unauthorizedListeners.delete(fn);
 }
 
+const forbiddenListeners = new Set<() => void>();
+
+/** Lets the auth layer refresh permissions when a request is refused with 403 (EC-53). */
+export function onForbidden(fn: () => void): () => void {
+  forbiddenListeners.add(fn);
+  return () => forbiddenListeners.delete(fn);
+}
+
+/** Shown on any form whose save returns 403 (mockup v0.5.2, EC-53). */
+export const NO_LONGER_PERMITTED = 'You no longer have permission to do this.';
+
+/** Message for a failed save: the 403 copy from the mockup, otherwise the API's message. */
+export function saveErrorMessage(e: unknown, fallback = 'Could not save.'): string {
+  if (e instanceof ApiError) return e.status === 403 ? NO_LONGER_PERMITTED : e.message;
+  return fallback;
+}
+
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
   /** Don't broadcast 401s (used by the initial /auth/me probe and the sign-in form). */
@@ -86,6 +103,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
       err?.details,
     );
     if (res.status === 401 && !opts.quiet401) unauthorizedListeners.forEach((l) => l(apiError));
+    if (res.status === 403 && apiError.code === 'FORBIDDEN') forbiddenListeners.forEach((l) => l());
     throw apiError;
   }
   return data as T;

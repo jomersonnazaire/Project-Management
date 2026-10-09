@@ -1,5 +1,5 @@
-import { SYSTEM_ROLE_LABELS, type SystemRole } from '@xc8/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { SYSTEM_ROLE_LABELS, hasPermission, type AccessAction, type RecordType } from '@xc8/shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -12,7 +12,8 @@ interface NavItem {
   icon: string;
   /** Not built yet in this milestone; shown disabled so the shell matches mockup v0.4. */
   soon?: boolean;
-  roles?: SystemRole[];
+  /** Shown when the role has any of these permissions (doc 11; the API enforces them). */
+  any?: [RecordType, AccessAction][];
 }
 
 const MAIN: NavItem[] = [
@@ -26,10 +27,25 @@ const MAIN: NavItem[] = [
 
 const SETUP: NavItem[] = [
   { to: '/templates', label: 'Templates', icon: 'bx-book-content', soon: true },
-  { to: '/contacts', label: 'Client contacts', icon: 'bx-phone' },
+  { to: '/clients', label: 'Clients', icon: 'bx-buildings', any: [['clients', 'view']] },
   { to: '/workload', label: 'Team & workload', icon: 'bx-group', soon: true },
   { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', soon: true },
-  { to: '/admin', label: 'Admin', icon: 'bx-cog', roles: ['ADMIN'] },
+  {
+    to: '/admin',
+    label: 'Admin',
+    icon: 'bx-cog',
+    any: [
+      ['users', 'view'],
+      ['teams', 'view'],
+      ['settings', 'view'],
+    ],
+  },
+  {
+    to: '/access-rules',
+    label: 'Access rules',
+    icon: 'bx-shield-quarter',
+    any: [['accessRules', 'view']],
+  },
 ];
 
 function initials(name: string) {
@@ -69,8 +85,17 @@ function MenuItem({ item, active }: { item: NavItem; active: boolean }) {
 
 /** Sneat vertical-menu layout implemented in React (no Sneat jQuery/menu.js). */
 export function AppShell() {
-  const { user, signOut } = useAuth();
+  const { user, permissions, refresh, signOut } = useAuth();
   const location = useLocation();
+  // Re-read permissions on every navigation so changes show up without signing out (FR-ACL-06).
+  const firstPath = useRef(true);
+  useEffect(() => {
+    if (firstPath.current) {
+      firstPath.current = false;
+      return;
+    }
+    refresh();
+  }, [location.pathname, refresh]);
   // The off-canvas menu is open only on the page where it was opened, so navigating closes it.
   const [openedOn, setOpenedOn] = useState<string | null>(null);
   // DOM nodes in the top bar that pages portal their title and primary action into (DR-02).
@@ -91,7 +116,7 @@ export function AppShell() {
 
   if (!user) return null;
   const visible = (items: NavItem[]) =>
-    items.filter((i) => !i.roles || i.roles.includes(user.systemRole));
+    items.filter((i) => !i.any || i.any.some(([r, a]) => hasPermission(permissions, r, a)));
   const isActive = (to: string) =>
     location.pathname === to || location.pathname.startsWith(`${to}/`);
 

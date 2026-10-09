@@ -1,11 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  AccessRulesDto,
   ClientDto,
   ClientInput,
   ContactDto,
   ContactInput,
   InviteResultDto,
   Paginated,
+  PermissionGrid,
+  ProjectSummaryDto,
+  SystemRole,
   TeamDto,
   UpdateUserInput,
   UserDto,
@@ -158,6 +162,87 @@ export function useContactActive() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['contacts'] });
       void qc.invalidateQueries({ queryKey: ['clients'] });
+    },
+  });
+}
+
+// ----- Client detail tabs (FR-CLI-09..12) -----
+export function useClient(id: string) {
+  return useQuery({
+    queryKey: ['clients', 'detail', id],
+    queryFn: () => api<{ client: ClientDto }>(`/clients/${id}`).then((r) => r.client),
+  });
+}
+
+export function useClientContacts(
+  clientId: string,
+  params: { q?: string; status?: 'ACTIVE' | 'INACTIVE' | 'ALL' },
+) {
+  return useQuery({
+    queryKey: ['contacts', 'client', clientId, params],
+    queryFn: () =>
+      api<{ items: ContactDto[] }>(
+        `/clients/${clientId}/contacts${qs({ q: params.q, status: params.status })}`,
+      ),
+  });
+}
+
+export function useClientProjects(clientId: string, params: { q?: string; status?: string }) {
+  return useQuery({
+    queryKey: ['clients', 'projects', clientId, params],
+    queryFn: () =>
+      api<{ items: ProjectSummaryDto[]; total: number }>(
+        `/clients/${clientId}/projects${qs({ q: params.q, status: params.status })}`,
+      ),
+  });
+}
+
+// ----- Access rules (doc 11) -----
+export const ACCESS_RULES_KEY = ['access-rules'] as const;
+
+export function useAccessRules() {
+  return useQuery({
+    queryKey: ACCESS_RULES_KEY,
+    queryFn: () => api<{ roles: AccessRulesDto[] }>('/access-rules'),
+    // Edits in progress must not be replaced by a background refetch.
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useSaveAccessRules() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      role,
+      version,
+      permissions,
+    }: {
+      role: SystemRole;
+      version: number;
+      permissions: Partial<PermissionGrid>;
+    }) =>
+      api<{ rules: AccessRulesDto }>(`/access-rules/${role}`, {
+        method: 'PUT',
+        body: { version, permissions },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ACCESS_RULES_KEY });
+      void qc.invalidateQueries({ queryKey: ['auth', 'me'] });
+    },
+  });
+}
+
+export function useResetAccessRules() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ role, version }: { role: SystemRole; version: number }) =>
+      api<{ rules: AccessRulesDto }>(`/access-rules/${role}/reset`, {
+        method: 'POST',
+        body: { version },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ACCESS_RULES_KEY });
+      void qc.invalidateQueries({ queryKey: ['auth', 'me'] });
     },
   });
 }

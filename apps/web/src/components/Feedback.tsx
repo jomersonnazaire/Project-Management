@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Alert, Spinner } from 'react-bootstrap';
-import { ApiError } from '../api/client';
+import { ApiError, NO_LONGER_PERMITTED } from '../api/client';
 
 export function FullPageSpinner() {
   return (
@@ -46,12 +46,26 @@ export function EmptyState({ icon = 'bx-check', title, children, action }: Empty
   );
 }
 
-export function ErrorAlert({ error, className }: { error: unknown; className?: string }) {
+/**
+ * Error banner. `action` marks errors from a save or other change: a 403 there means the
+ * permission was removed while the page was open (EC-53).
+ */
+export function ErrorAlert({
+  error,
+  className,
+  action = false,
+}: {
+  error: unknown;
+  className?: string;
+  action?: boolean;
+}) {
   if (!error) return null;
   const message =
     error instanceof ApiError
       ? error.status === 403
-        ? "You don't have permission to do this."
+        ? action
+          ? NO_LONGER_PERMITTED
+          : "You don't have permission to do this."
         : error.message
       : 'Something went wrong. Please try again.';
   return (

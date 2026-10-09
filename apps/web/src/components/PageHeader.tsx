@@ -6,9 +6,23 @@ import { TopbarContext } from './topbar';
  * Page title (and optional primary action), shown in the top bar as in mockup v0.4.2 (DR-02).
  * Outside the app shell (no top bar) it falls back to an inline heading.
  */
-export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
+export function PageHeader({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  /** Optional status badge shown after the title (e.g. a client's Active badge). */
+  badge?: ReactNode;
+  children?: ReactNode;
+}) {
   const slots = useContext(TopbarContext);
-  const heading = <h1 className="h5 mb-0 text-truncate page-title">{title}</h1>;
+  const heading = (
+    <h1 className="h5 mb-0 text-truncate page-title">
+      {title}
+      {badge && <span className="ms-2 align-middle">{badge}</span>}
+    </h1>
+  );
   if (!slots.title) {
     return (
       <div className="d-flex flex-wrap align-items-center gap-3 mb-6">

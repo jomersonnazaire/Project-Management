@@ -1,4 +1,4 @@
-import type { SystemRole } from '@xc8/shared';
+import type { AccessAction, RecordType } from '@xc8/shared';
 import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { FullPageSpinner } from '../components/Feedback';
@@ -18,9 +18,18 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
-/** UI-side role gate. The API enforces the same rules; this only avoids dead ends. */
-export function RequireRole({ roles, children }: { roles: SystemRole[]; children: ReactNode }) {
-  const { user } = useAuth();
-  if (!user || !roles.includes(user.systemRole)) return <ForbiddenPage />;
+/**
+ * UI-side permission gate: shows the 403 page unless the role has at least one of `any`.
+ * The API enforces the same rules; this only avoids dead ends.
+ */
+export function RequirePermission({
+  any,
+  children,
+}: {
+  any: [RecordType, AccessAction][];
+  children: ReactNode;
+}) {
+  const { permissions } = useAuth();
+  if (!any.some(([r, a]) => permissions?.[r]?.[a])) return <ForbiddenPage />;
   return <>{children}</>;
 }
