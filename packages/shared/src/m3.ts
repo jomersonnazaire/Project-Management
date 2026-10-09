@@ -69,6 +69,11 @@ export const copyHolidaysSchema = z.strictObject({
   toYear: z.number().int().min(2000).max(2100),
 });
 
+/** Load the official Philippine holidays for a year that has them (PH_OFFICIAL_HOLIDAYS). */
+export const officialHolidaysSchema = z.strictObject({
+  year: z.number().int().min(2000).max(2100),
+});
+
 export const workingDaysSchema = z.strictObject({
   days: z
     .array(z.number().int().min(0).max(6))
@@ -316,12 +321,43 @@ export const evidenceUploadSchema = z.strictObject({
   files: z.array(uploadFile).min(1).max(MAX_FILES_PER_UPLOAD, 'Up to 10 files per upload.'),
 });
 
+/** Status a file is uploaded with (FR-DOC-11, FR-DOC-21). */
 export const DOCUMENT_STATUSES = ['SUBMITTED', 'SIGNED'] as const;
 export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
-export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+/**
+ * A document's lifecycle (FR-DOC-22/23): Requested → Submitted → Signed, or Requested → Cancelled.
+ * Requested and Cancelled documents have no file.
+ */
+export const DOCUMENT_STATES = ['REQUESTED', 'SUBMITTED', 'SIGNED', 'CANCELLED'] as const;
+export type DocumentState = (typeof DOCUMENT_STATES)[number];
+export const DOCUMENT_STATUS_LABELS: Record<DocumentState, string> = {
+  REQUESTED: 'Requested',
   SUBMITTED: 'Submitted',
   SIGNED: 'Signed',
+  CANCELLED: 'Cancelled',
 };
+/** Filter tabs on the Documents list (mockup: All · Requested · Submitted · Signed). */
+export const DOCUMENT_FILTER_STATES = ['REQUESTED', 'SUBMITTED', 'SIGNED'] as const;
+
+/** Someone a document is requested from or signed by: a user or a client contact (FR-DOC-10/25). */
+export const PARTY_KINDS = ['USER', 'CONTACT'] as const;
+export type PartyKind = (typeof PARTY_KINDS)[number];
+export const partyRefSchema = z.strictObject(
+  { kind: z.enum(PARTY_KINDS), id: objectId },
+  'Choose who the document is requested from.',
+);
+export interface PartyDto {
+  kind: PartyKind;
+  id: string;
+  name: string;
+  /** false for a deactivated contact or user (EC-44 shows "(inactive)"). */
+  active: boolean;
+  /** Client company name, for contacts. */
+  company?: string | null;
+}
+export const CLIENT_CONTACT_NOTICE =
+  'Client contacts can be named on a document but have no access.';
+export const REQUEST_CANCELLED_MESSAGE = 'This request was cancelled.';
 
 export const documentUploadSchema = z.strictObject({
   folderId: objectId,
@@ -331,7 +367,26 @@ export const documentUploadSchema = z.strictObject({
   onDuplicate: z.enum(['NEW_VERSION', 'KEEP_BOTH']).default('NEW_VERSION'),
   taskId: objectId.nullable().optional(),
   note: optionalText(500),
+  /** FR-DOC-21: a Requested document in this project that the file fulfils. */
+  fulfilsDocumentId: objectId.nullable().optional(),
+  /** FR-DOC-25: a Signed copy signed by this client contact (recorded by the uploader). */
+  signedByContactId: objectId.nullable().optional(),
 });
+
+/** FR-DOC-20 / AC-26.1: name, folder, due date (today or later) and requested-from are required. */
+export const documentRequestSchema = z.strictObject({
+  name: requiredText('Document name', 200),
+  folderId: objectId,
+  dueDate: dateOnly('due date'),
+  requestedFrom: partyRefSchema,
+  taskId: objectId.nullable().optional(),
+  /** Defaults to on in Contracts and off elsewhere (FR-DOC-20). */
+  requiresSignature: z.boolean().optional(),
+  note: optionalText(500),
+});
+export type DocumentRequestInput = z.input<typeof documentRequestSchema>;
+export const cancelRequestSchema = z.strictObject({ reason: requiredText('Reason', 500) });
+export const DUE_DATE_PAST_MESSAGE = 'The due date can’t be in the past.';
 
 export interface UploadTicketDto {
   id: string;
@@ -352,11 +407,22 @@ export const archiveDocumentSchema = z.strictObject({ reason: requiredText('Reas
 export const updateDocumentSchema = z.strictObject({
   folderId: objectId.optional(),
   taskId: objectId.nullable().optional(),
+  /** Requested documents only: reassign (EC-44) or move the due date. */
+  requestedFrom: partyRefSchema.optional(),
+  dueDate: dateOnly('due date').optional(),
 });
+/** FR-DOC-43: restrict a folder to the PM, Admins and the selected project members. */
+export const folderAccessSchema = z.strictObject({
+  restricted: z.boolean(),
+  memberIds: z.array(objectId).max(200).default([]),
+});
+export type FolderAccessInput = z.input<typeof folderAccessSchema>;
+export const RESTRICTED_FOLDER_NOTE =
+  'Only the project manager, Admins and the people you pick can see this folder and its documents.';
 export const documentListQuerySchema = z.strictObject({
   folderId: objectId.optional(),
   q: z.string().trim().max(100).optional(),
-  status: z.enum(DOCUMENT_STATUSES).optional(),
+  status: z.enum(DOCUMENT_STATES).optional(),
   archived: z.enum(['true', 'false']).optional(),
 });
 
@@ -367,6 +433,14 @@ export interface FolderDto {
   kind: 'CONTRACTS' | 'PHASE' | 'CUSTOM';
   depth: number;
   documentCount: number;
+  /** FR-DOC-43: restricted to the PM, Admins and `allowedUserIds`. */
+  restricted: boolean;
+  /** Restricted, or inside a restricted folder. */
+  restrictedByParent: boolean;
+  /** The picked members; only sent to people who may change the restriction. */
+  allowedUserIds: string[];
+  /** Phase folders hold task evidence, so they can't be restricted. */
+  canRestrict: boolean;
 }
 
 export interface DocumentVersionDto {
@@ -379,6 +453,8 @@ export interface DocumentVersionDto {
   uploadedBy: Ref | null;
   uploadedAt: string;
   note: string | null;
+  /** FR-DOC-25: the client contact who signed; `uploadedBy` is who recorded it. */
+  signedBy: PartyDto | null;
 }
 
 export interface DocumentDto {
@@ -386,8 +462,19 @@ export interface DocumentDto {
   projectId: string;
   folderId: string;
   name: string;
-  kind: FileKind;
-  status: DocumentStatus;
+  /** null for a Requested or Cancelled document with no file yet. */
+  kind: FileKind | null;
+  status: DocumentState;
+  requiresSignature: boolean;
+  /** Request details (FR-DOC-20/23/26); null for a direct upload. */
+  request: {
+    requestedBy: Ref | null;
+    requestedFrom: PartyDto | null;
+    dueDate: string | null;
+    /** Still Requested and due before today (Philippine time). */
+    overdue: boolean;
+    cancelled: { by: Ref | null; at: string; reason: string } | null;
+  } | null;
   /** Latest Signed version, kept as the "Signed copy" (FR-DOC-14, FR-DOC-31). */
   signedVersion: number | null;
   latestVersion: number;
@@ -404,14 +491,56 @@ export interface DocumentDto {
     at: string;
     version: number | null;
     note: string | null;
+    /** The client contact the internal actor acted for (FR-DOC-24/25). */
+    onBehalfOf: PartyDto | null;
   }[];
-  can: { upload: boolean; edit: boolean; archive: boolean };
+  can: { upload: boolean; edit: boolean; archive: boolean; cancel: boolean };
 }
 
 export interface DocumentListDto {
   items: DocumentDto[];
-  counts: { all: number; SUBMITTED: number; SIGNED: number };
-  can: { upload: boolean; createFolder: boolean; archive: boolean };
+  counts: { all: number; REQUESTED: number; SUBMITTED: number; SIGNED: number; CANCELLED: number };
+  can: { upload: boolean; createFolder: boolean; archive: boolean; request: boolean };
+}
+
+/** People a document can be requested from (AC-26.2): project members and active client contacts. */
+export interface RequestPartiesDto {
+  users: PartyDto[];
+  contacts: PartyDto[];
+}
+
+/** One open request in the Dashboard "Waiting on client" list or a user's "Requested from you". */
+export interface DocumentRequestRowDto {
+  id: string;
+  name: string;
+  project: Ref;
+  client: Ref | null;
+  folder: Ref;
+  requestedFrom: PartyDto;
+  requestedBy: Ref | null;
+  dueDate: string;
+  /** Days past the due date (negative = days left; 0 = due today). */
+  daysOverdue: number;
+  overdue: boolean;
+}
+export interface DocumentRequestListDto {
+  items: DocumentRequestRowDto[];
+  overdue: number;
+}
+
+/** "6d overdue", "Due today", "Due tomorrow", "Due Oct 15" (mockup dashboard pills). */
+export function requestDueLabel(daysOverdue: number, dueDate: string): string {
+  if (daysOverdue > 0) return `${daysOverdue}d overdue`;
+  if (daysOverdue === 0) return 'Due today';
+  if (daysOverdue === -1) return 'Due tomorrow';
+  const d = new Date(`${dueDate}T00:00:00Z`);
+  const m = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+  return `Due ${m} ${d.getUTCDate()}`;
+}
+export function partyLabel(p: PartyDto | null): string {
+  if (!p) return '—';
+  const base = p.kind === 'CONTACT' && p.company ? `${p.name} · ${p.company}` : p.name;
+  return p.active ? base : `${base} (inactive)`;
 }
 
 // ---------- Notifications (FR-NTF-01..06) ----------
@@ -426,6 +555,7 @@ export const NOTIFICATION_TYPES = [
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 /** FR-NTF-06: unread count refresh interval; notifications are kept 90 days. */
+export const NOTIFICATION_LIST_NOTE = 'Showing the last 90 days';
 export const NOTIFICATION_POLL_MS = 60_000;
 export const NOTIFICATION_RETENTION_DAYS = 90;
 
