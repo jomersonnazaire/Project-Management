@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PERMISSIONS,
+  DEFAULT_ACCESS_RULES,
+  RECORD_TYPE_KEYS,
   SYSTEM_ROLES,
-  can,
+  actionApplies,
+  effectivePermissions,
+  gridsEqual,
+  hasPermission,
+  isLockedOff,
+  isLockedOn,
+  setGrant,
+  validatePermissionGrid,
+  type AccessAction,
+  type RecordType,
+  type SystemRole,
   checkPassword,
   contactSchema,
   inviteTokenSchema,
@@ -11,28 +22,111 @@ import {
   loginSchema,
 } from '../src/index.js';
 
-describe('permissions (07 §4, NFR-22)', () => {
-  it('only Admin manages users, teams and settings', () => {
-    for (const role of SYSTEM_ROLES) {
-      expect(can(role, 'users:manage')).toBe(role === 'ADMIN');
-      expect(can(role, 'teams:manage')).toBe(role === 'ADMIN');
-      expect(can(role, 'settings:manage')).toBe(role === 'ADMIN');
+describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
+  const g = (role: SystemRole) => DEFAULT_ACCESS_RULES[role];
+  const spec = (row: Record<AccessAction, boolean>) =>
+    (row.view ? 'V' : '') +
+    (row.create ? 'C' : '') +
+    (row.edit ? 'E' : '') +
+    (row.delete ? 'D' : '');
+
+  it('has the 14 record types of §3 in order', () => {
+    expect(RECORD_TYPE_KEYS).toEqual([
+      'users',
+      'teams',
+      'settings',
+      'accessRules',
+      'clients',
+      'contacts',
+      'templates',
+      'projects',
+      'tasks',
+      'approvals',
+      'time',
+      'documents',
+      'reports',
+      'audit',
+    ]);
+  });
+
+  it('seeds the §6 matrix (equal to the M1 fixed rules)', () => {
+    const table: Record<string, [string, string, string, string]> = {
+      users: ['VCED', '', '', ''],
+      teams: ['VCED', '', '', ''],
+      settings: ['VE', '', '', ''],
+      accessRules: ['VE', '', '', ''],
+      clients: ['VCED', 'VCED', 'V', 'V'],
+      contacts: ['VCED', 'VCED', 'V', 'V'],
+      templates: ['VCED', 'VCED', 'V', 'V'],
+      projects: ['VCED', 'VCE', 'V', 'V'],
+      tasks: ['VCED', 'VCED', 'VE', 'V'],
+      approvals: ['E', 'E', 'E', ''],
+      time: ['VCED', 'VCED', 'VCE', ''],
+      documents: ['VCED', 'VCED', 'VC', 'V'],
+      reports: ['V', 'V', 'V', 'V'],
+      audit: ['V', '', '', ''],
+    };
+    for (const [record, expected] of Object.entries(table)) {
+      const got = SYSTEM_ROLES.map((r) => spec(g(r)[record as RecordType]));
+      expect([record, ...got]).toEqual([record, ...expected]);
     }
   });
 
-  it('Admin and PM manage clients; Viewer views all; Member does not view all', () => {
-    expect(can('ADMIN', 'clients:manage')).toBe(true);
-    expect(can('PROJECT_MANAGER', 'clients:manage')).toBe(true);
-    expect(can('MEMBER', 'clients:manage')).toBe(false);
-    expect(can('VIEWER', 'clients:manage')).toBe(false);
-    expect(can('VIEWER', 'clients:read:all')).toBe(true);
-    expect(can('MEMBER', 'clients:read:all')).toBe(false);
+  it('defaults pass their own validation and equal the effective grid', () => {
+    for (const role of SYSTEM_ROLES) {
+      expect(validatePermissionGrid(role, g(role))).toEqual([]);
+      expect(effectivePermissions(role, null)).toEqual(g(role));
+    }
   });
 
-  it('denies unknown or missing roles', () => {
-    expect(can(undefined, 'teams:read')).toBe(false);
-    expect(can(null, 'teams:read')).toBe(false);
-    expect(Object.keys(PERMISSIONS).length).toBeGreaterThan(0);
+  it('n/a actions are never granted, even if stored', () => {
+    const eff = effectivePermissions('ADMIN', {
+      settings: { create: true, delete: true },
+      approvals: { view: true },
+      audit: { edit: true, delete: true },
+    });
+    expect(eff.settings).toMatchObject({ create: false, delete: false });
+    expect(eff.approvals.view).toBe(false);
+    expect(eff.audit).toEqual({ view: true, create: false, edit: false, delete: false });
+    expect(actionApplies('reports', 'edit')).toBe(false);
+  });
+
+  it('FR-ACL-05 locks Admin users/accessRules on; Q-26 locks project delete off for non-Admins', () => {
+    const eff = effectivePermissions('ADMIN', {
+      users: { view: false, create: false, edit: false, delete: false },
+      accessRules: { view: false, edit: false },
+    });
+    expect(eff.users).toEqual({ view: true, create: true, edit: true, delete: true });
+    expect(eff.accessRules).toMatchObject({ view: true, edit: true });
+    const bad = validatePermissionGrid('ADMIN', {
+      ...g('ADMIN'),
+      users: { view: true, create: true, edit: true, delete: false },
+    });
+    expect(bad).toEqual([
+      expect.objectContaining({ code: 'LOCKED_PERMISSION', path: 'users.delete' }),
+    ]);
+    for (const role of ['PROJECT_MANAGER', 'MEMBER', 'VIEWER'] as const) {
+      expect(isLockedOff(role, 'projects', 'delete')).toBe(true);
+      expect(effectivePermissions(role, { projects: { delete: true } }).projects.delete).toBe(
+        false,
+      );
+    }
+    expect(isLockedOn('PROJECT_MANAGER', 'users', 'view')).toBe(false);
+  });
+
+  it('FR-ACL-04 Create/Edit/Delete imply View', () => {
+    const grid = setGrant(g('VIEWER'), 'teams', 'edit', true);
+    expect(grid.teams).toMatchObject({ view: true, edit: true });
+    const issues = validatePermissionGrid('VIEWER', {
+      ...g('VIEWER'),
+      teams: { view: false, create: false, edit: true, delete: false },
+    });
+    expect(issues.map((i) => i.code)).toEqual(['VIEW_REQUIRED']);
+    // Approvals has no View, so Edit alone is valid there.
+    expect(validatePermissionGrid('MEMBER', g('MEMBER'))).toEqual([]);
+    expect(hasPermission(g('MEMBER'), 'approvals', 'edit')).toBe(true);
+    expect(hasPermission(null, 'reports', 'view')).toBe(false);
+    expect(gridsEqual(g('ADMIN'), effectivePermissions('ADMIN', {}))).toBe(true);
   });
 });
 
