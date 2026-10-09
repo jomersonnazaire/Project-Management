@@ -4,6 +4,7 @@ import {
   type SystemRole,
   PROJECT_FILTERS,
   createProjectSchema,
+  issuePrefix,
   parseDateOnly,
   projectContactSchema,
   projectListQuerySchema,
@@ -34,6 +35,13 @@ import {
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
 import { notifyOwnerNeeded } from '../services/issues.js';
+import {
+  assertCodeFree,
+  codeLocked,
+  codeTaken,
+  isDuplicateCode,
+  uniqueCode,
+} from '../services/projectCodes.js';
 import { openIssueKeys } from './issues.js';
 import {
   buildPlanTasks,
@@ -265,6 +273,11 @@ export function projectsRouter(registry: RouteRegistry) {
       );
     }
 
+    // DR-23: the code is the issue ID prefix; unique ignoring case. Suggested when left out.
+    const code =
+      input.code ?? (await uniqueCode(issuePrefix(client.name, input.type ?? template.type)));
+    if (input.code) await assertCodeFree(code);
+
     const start = parseDateOnly(input.startDate);
     const end = parseDateOnly(input.plannedEndDate);
     const projectId = new Types.ObjectId();
@@ -283,6 +296,7 @@ export function projectsRouter(registry: RouteRegistry) {
             {
               _id: projectId,
               name: input.name,
+              code,
               clientId: client._id,
               managerId,
               memberIds,
@@ -306,6 +320,9 @@ export function projectsRouter(registry: RouteRegistry) {
         if (tasks.length) await TaskModel.insertMany(tasks, { session });
         await recomputeProject(projectId, session);
       });
+    } catch (e) {
+      if (isDuplicateCode(e)) throw codeTaken();
+      throw e;
     } finally {
       await session.endSession();
     }
@@ -374,6 +391,13 @@ export function projectsRouter(registry: RouteRegistry) {
     if (input.name !== undefined) {
       track('name', project.name, input.name);
       project.name = input.name;
+    }
+    // DR-23: the code can't change once the project has issues (issue IDs stay the same).
+    if (input.code !== undefined && input.code !== project.code) {
+      if ((project.issueSeq ?? 0) > 0) throw codeLocked();
+      await assertCodeFree(input.code, project._id);
+      track('code', project.code ?? null, input.code);
+      project.code = input.code;
     }
     if (input.description !== undefined) {
       track('description', project.description, input.description || null);
@@ -529,7 +553,10 @@ export function projectsRouter(registry: RouteRegistry) {
       project.status = input.status;
     }
 
-    await project.save();
+    await project.save().catch((e: unknown) => {
+      if (isDuplicateCode(e)) throw codeTaken();
+      throw e;
+    });
     await recomputeProject(project._id);
     // EC-66: open issues owned by people just removed from the project need a new owner.
     if (removedMembers.length) {

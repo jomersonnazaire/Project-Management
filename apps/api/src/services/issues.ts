@@ -1,3 +1,4 @@
+import { ensureProjectCode } from './projectCodes.js';
 import {
   OPEN_ISSUE_STATUSES,
   ISSUE_AUTO_CLOSE_DAYS,
@@ -6,7 +7,6 @@ import {
   addWorkingDays,
   isIssueOpen,
   isIssueOverdue,
-  issuePrefix,
   issueTransition,
   phDateOf,
   parseDateOnly,
@@ -110,24 +110,17 @@ export function defaultIssueDue(severity: IssueSeverity, raisedAt: Date, cal: Wo
   return addWorkingDays(parseDateOnly(phDateOf(raisedAt)), ISSUE_SEVERITY_DUE_DAYS[severity], cal);
 }
 
-/** Next running number and the project's fixed prefix (atomic; numbers are never reused). */
+/**
+ * Next running number and the project's prefix: its code (DR-23). Atomic; numbers are never
+ * reused, and the code can't change once the project has issues.
+ */
 export async function nextIssueNumber(
   p: IssueProject,
 ): Promise<{ number: number; prefix: string }> {
-  let prefix = p.issuePrefix;
-  if (!prefix) {
-    const client = await ClientModel.findById(p.clientId).select('name').lean();
-    prefix = issuePrefix(client?.name ?? p.name, p.type);
-    await ProjectModel.updateOne(
-      { _id: p._id, issuePrefix: null },
-      { $set: { issuePrefix: prefix } },
-    );
-    prefix =
-      (await ProjectModel.findById(p._id).select('issuePrefix').lean())?.issuePrefix ?? prefix;
-  }
+  const prefix = await ensureProjectCode(p);
   const updated = await ProjectModel.findOneAndUpdate(
     { _id: p._id },
-    { $inc: { issueSeq: 1 } },
+    { $inc: { issueSeq: 1 }, $set: { issuePrefix: prefix } },
     { new: true, projection: { issueSeq: 1 } },
   );
   return { number: updated!.issueSeq ?? 1, prefix };

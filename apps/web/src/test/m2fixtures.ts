@@ -9,6 +9,8 @@ export const ME_PM = 'me-PROJECT_MANAGER';
 export const project = (over: Partial<ProjectDto> = {}): ProjectDto => ({
   id: PID,
   name: 'SAP B1 Rollout',
+  code: 'ACME-SAP',
+  codeLocked: false,
   clientId: ACME.id,
   clientName: ACME.name,
   managerId: ME_PM,

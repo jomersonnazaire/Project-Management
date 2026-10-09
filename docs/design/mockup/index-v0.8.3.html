@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<title>Implementation Project Tracker – Mockup v0.8.7</title>
+<title>Implementation Project Tracker – Mockup v0.8.3</title>
 <style>
 :root{--bg:#f5f7fb;--card:#fff;--ink:#1b2333;--mut:#6b7488;--line:#e4e8f0;--pri:#3b5bdb;--pri2:#e8edff;--ok:#2f9e44;--okb:#e6f6ea;--warn:#e8890c;--warnb:#fff3e0;--bad:#e03131;--badb:#ffe8e8;--blue:#1c7ed6;--blueb:#e7f3ff;--pur:#7048e8;--purb:#f0ebff}
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 Inter,system-ui,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg)}
@@ -106,7 +106,6 @@ td{padding:12px 10px;border-color:#e4e6e8}
 .email .ec{background:#fff;padding:12px 14px;margin:10px 0;font-size:16px;color:#222}.email table{background:#fff;font-size:12.5px}.email th{background:#ececec;color:#222;text-transform:none;letter-spacing:0;font-weight:600;font-size:12.5px;padding:9px 8px}.email td{padding:8px;color:#333;border-color:#eee}
 .email tr.etot td{font-weight:700;background:#f7f7f7;color:#222}.email .ef{text-align:center;font-size:11.5px;color:#595959;padding:12px 0 2px}
 #daysheet td:nth-child(-n+3){white-space:nowrap}#dar .email td{white-space:normal!important}#dar .email td:nth-child(-n+4){white-space:nowrap!important}
-#darsent .dsp td:nth-child(-n+3){white-space:nowrap}#darsent .dsp td.note{font-size:12px}
 .daychip{display:inline-flex;align-items:center;gap:6px;background:var(--pri2);color:var(--pri);border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600}.daychip a{font-weight:500;font-size:12px}
 .locopt{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}.locopt label{border:1px solid #c5cad1;border-radius:8px;padding:14px 8px;text-align:center;cursor:pointer;color:var(--ink);font-weight:600}.locopt label.on{border:2px solid var(--pri);background:var(--pri2);color:var(--pri)}.locopt input{display:none}.locopt span{display:block;font-size:22px;margin-bottom:4px}
 .dec{border-left:3px solid var(--ok);background:#f6fcf3}.dec h3{color:#1f5a0f;font-size:14px}
@@ -134,6 +133,8 @@ main{padding:10px}header{flex-wrap:wrap}.search{display:none}.grid,.g2,.g3,.g4{g
 </style></head><body>
 <div class="login" id="login"><div class="lbox">
 <div class="modal"><div class="logo" style="color:var(--ink);padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
+<button class="msbtn" onclick="location.hash='mytasks'"><span class="mslogo"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>Sign in with Microsoft</button><p class="note" style="text-align:center;margin:6px 0 0">Microsoft: Xceler8 accounts only</p>
+<div class="ordiv">or</div>
 <div class="field"><label>Email</label><input value="maria@xceler8.example"></div>
 <div class="field err"><label>Password</label><input type="password" value="xxxxxxxx"><small>Email or password is incorrect.</small></div>
 <button class="btn" style="width:100%" onclick="location.hash='mytasks'">Sign in</button><p class="note" style="text-align:center;margin:6px 0 0">You'll land on My tasks.</p><p class="note" style="text-align:center">Forgot your password? Ask an Admin for a reset link.</p>
@@ -165,12 +166,11 @@ main{padding:10px}header{flex-wrap:wrap}.search{display:none}.grid,.g2,.g3,.g4{g
 <a href="#time" data-p="time">◷ Time logging</a>
 <div class="sec">Workforce (doc 14)</div>
 <a href="#pmview" data-p="pmview">▦ Dashboard · My projects <span class="pill info" style="margin-left:auto">New</span></a>
-<a href="#mslogin" data-p="mslogin">⊞ Microsoft sign-in <span class="pill grey" style="margin-left:auto">Roadmap (on hold)</span></a>
-<a href="#msusers" data-p="msusers">◉ Admin · Users (Microsoft) <span class="pill grey" style="margin-left:auto">Roadmap (on hold)</span></a>
+<a href="#mslogin" data-p="mslogin">⊞ Microsoft sign-in <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#msusers" data-p="msusers">◉ Admin · Users (Microsoft) <span class="pill info" style="margin-left:auto">New</span></a>
 <a href="#tracker" data-p="tracker">⏱ Today · Activity tracker <span class="pill info" style="margin-left:auto">New</span></a>
 <a href="#daysheet" data-p="daysheet">◷ Day timesheet <span class="pill info" style="margin-left:auto">New</span></a>
 <a href="#dar" data-p="dar">✉ Daily Accomplishment Report <span class="pill info" style="margin-left:auto">v0.8.2</span></a>
-<a href="#darsent" data-p="darsent">🗂 My saved reports <span class="pill info" style="margin-left:auto">New</span></a>
 <a href="#leave" data-p="leave">🌴 Leave <span class="pill info" style="margin-left:auto">New</span></a>
 <a href="#leaveq" data-p="leaveq">👥 Team on leave <span class="pill info" style="margin-left:auto">v0.8.2</span></a>
 <a href="#leaveadmin" data-p="leaveadmin">⚙ Admin · Leave <span class="pill info" style="margin-left:auto">New</span></a>
@@ -191,7 +191,7 @@ main{padding:10px}header{flex-wrap:wrap}.search{display:none}.grid,.g2,.g3,.g4{g
 <a href="#login" data-p="login">⎋ Login (sign out)</a>
 </aside>
 <main>
-<div class="banner">Mockup v0.8.7 (Sneat style) for review. v0.8.7: saved reports are private to the user. v0.8.6: Daily Accomplishment Report is view, save and export; Saved reports replace Sent reports. v0.8.5: Microsoft sign-in on hold (<span class="pill grey">Roadmap (on hold)</span>); report sent from a shared company mailbox. v0.8.4: Sent reports page. v0.8.3: doc 14 v0.8.6 §12.5 (Time type on project tasks only; no-supervisor rules). Applies Jomerson's decisions and doc 14 v0.8.5 §12 (sign-in, report, location, activity types, leave without approval). All names and numbers are example data, not live data.</div>
+<div class="banner">Mockup v0.8.3 (Sneat style) for review. v0.8.3: doc 14 v0.8.6 §12.5 (Time type on project tasks only; no-supervisor rules). Applies Jomerson's decisions and doc 14 v0.8.5 §12 (sign-in, report, location, activity types, leave without approval). All names and numbers are example data, not live data.</div>
 
 <!-- DASHBOARD -->
 <section class="page" id="dash">
@@ -816,7 +816,6 @@ main{padding:10px}header{flex-wrap:wrap}.search{display:none}.grid,.g2,.g3,.g4{g
 <!-- M5 · MICROSOFT SIGN-IN (doc 14 §1) -->
 <section class="page" id="mslogin">
 <header><h1>Sign in · Microsoft (review states)</h1><span class="note">The live sign-in page is <a href="#login">Login (sign out)</a>; these are its states side by side.</span></header>
-<div class="banner" style="background:#ebeef0;color:#4b5563"><span class="pill grey">Roadmap (on hold)</span> Microsoft sign-in is on hold and moved to the roadmap. This page is kept for reference; v1 sign-in is email and password only.</div>
 <div class="grid" style="grid-template-columns:repeat(3,1fr)">
 <div class="modal"><div class="logo" style="padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
 <button class="msbtn"><span class="mslogo"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>Sign in with Microsoft</button><p class="note" style="text-align:center;margin:6px 0 0;font-size:12px">Microsoft: Xceler8 accounts only</p>
@@ -850,7 +849,6 @@ main{padding:10px}header{flex-wrap:wrap}.search{display:none}.grid,.g2,.g3,.g4{g
 <!-- M5 · ADMIN USERS WITH MICROSOFT LINK + SUPERVISOR (doc 14 §1, §3, §5) -->
 <section class="page" id="msusers">
 <header><h1>Admin</h1><button class="btn">+ Invite user</button><div class="av">JN</div></header>
-<div class="banner" style="background:#ebeef0;color:#4b5563"><span class="pill grey">Roadmap (on hold)</span> Microsoft sign-in is on hold and moved to the roadmap. This page is kept for reference; v1 sign-in is email and password only.</div>
 <div class="tabs"><span class="on">Users</span><span>Teams</span><span>Clients</span><span onclick="location.hash='actcat'">Settings</span><span onclick="location.hash='holidays'">Holidays</span><span onclick="location.hash='leaveadmin'">Leave</span></div>
 <div class="grid" style="grid-template-columns:1fr 360px"><div class="card"><table><tr><th>Name</th><th>Email</th><th>Access</th><th>Sign-in</th><th>Supervisor</th><th>Status</th><th></th></tr>
 <tr><td>Jomerson Nazaire</td><td>jnazaire@xceler8.example</td><td>Admin</td><td><span class="pill info" title="Linked Oct 9 · Entra object ID stored">⊞ Microsoft linked</span></td><td class="note">–</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost sm">Edit</button></td></tr>
@@ -950,47 +948,33 @@ main{padding:10px}header{flex-wrap:wrap}.search{display:none}.grid,.g2,.g3,.g4{g
 <!-- M7 · DAILY ACTIVITY REPORT (doc 14 §3) -->
 <section class="page" id="dar">
 <header><h1>Daily Accomplishment Report</h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
-<div class="tabs"><span class="on">Report</span><span onclick="location.hash='darsent'">Saved reports <span class="pill grey">5</span></span></div>
-<div class="card"><div class="row" style="flex-wrap:wrap;align-items:flex-end"><div class="field" style="margin:0"><label>From</label><input value="09/30/2026" style="width:130px"></div><div class="field" style="margin:0"><label>To</label><input value="10/02/2026" style="width:130px"></div><button class="btn ghost">Today</button><button class="btn ghost">Preview</button><span class="sp"></span><button class="btn" onclick="saveRep()">Save report</button><button class="btn ghost">Export PDF</button><button class="btn ghost">Export Excel</button></div>
-<div id="savetoast" class="toast" style="display:none;margin-top:10px;width:max-content">✓<div>Report saved. <a href="#darsent">View saved reports</a></div></div>
-<p class="note" style="margin-bottom:0">Default today · max 31 days · Philippine time · future days left out (EC-80)</p>
-<p class="note" style="margin:6px 0 0;background:#f0f1f3;color:#4b5563;border-radius:6px;padding:6px 10px;display:inline-block">Sending to your supervisor is coming with Microsoft sign-in.</p></div>
-<div class="lock" style="margin-top:16px;background:var(--blueb);color:#00586b"><b>Day status in this range (not part of the report):</b> Sep 30 <span class="pill ok">Submitted</span> · Oct 1 <span class="pill info">Reopened</span> by Jomerson Nazaire · Oct 2 <span class="pill warn">Not submitted</span> · No leave days. Days not submitted are still included. A running timer isn't included until you press Time out.</div>
-<div class="card"><div class="row" style="margin-bottom:10px"><h3 style="margin:0">Preview</h3><span class="sp"></span><span class="note">PDF and Excel exports use this layout</span></div>
+<div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1.7fr)">
+<div class="card"><h3>1. Pick a date range</h3><div class="row" style="flex-wrap:wrap;align-items:flex-end"><div class="field" style="margin:0"><label>From</label><input value="09/30/2026" style="width:130px"></div><div class="field" style="margin:0"><label>To</label><input value="10/02/2026" style="width:130px"></div><button class="btn ghost">Today</button><button class="btn ghost">Preview</button></div><p class="note">Default today · max 31 days · Philippine time · future days left out (EC-80)</p></div>
+<div class="card"><h3>2. Check recipients and send</h3>
+<div class="row" style="align-items:flex-start;flex-wrap:wrap"><div class="field sp" style="margin:0"><label>To (your supervisor)</label><input value="Jomerson Nazaire <jnazaire@xceler8.example>" readonly style="background:#f5f5f9"></div><div class="field sp" style="margin:0"><label>CC (from your profile)</label><div><span class="chip">ops@xceler8.example</span><span class="chip">pmo@xceler8.example</span></div></div></div>
+<div class="row" style="margin-top:12px;white-space:nowrap"><button class="btn" onclick="ov('darsend')">Send</button><button class="btn ghost">Export PDF</button><button class="btn ghost">Export Excel</button><span class="sp"></span><span class="note">Sent from your mailbox (maria@xceler8.example). Managed by an Admin (Q-42).</span></div></div></div>
+<div class="lock" style="margin-top:16px;background:var(--blueb);color:#00586b"><b>Day status in this range (not part of the email):</b> Sep 30 <span class="pill ok">Submitted</span> · Oct 1 <span class="pill info">Reopened</span> by Jomerson Nazaire · Oct 2 <span class="pill warn">Not submitted</span> · No leave days. You can send with days not submitted; they stay marked Not submitted. A running timer isn't included until you press Time out.</div>
+<div class="card"><div class="row" style="margin-bottom:10px"><h3 style="margin:0">Email preview</h3><span class="sp"></span><span class="note">Exactly what your supervisor receives (HTML email)</span></div>
 <div class="email"><div class="eh"><h2>Daily Accomplishment Report</h2><div>Generated range: Sep 30, 2026 to Oct 2, 2026</div></div>
 <div class="ec"><b>Total Activities:</b> 7</div>
 <table><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Rendered Hrs</th><th>Client Name</th><th>Project Name</th><th>Activity Type</th><th>Location</th><th>Billable</th><th>Module</th><th>Activity Remarks</th></tr><tr><td>2026-09-30</td><td>08:00 AM</td><td>12:00 PM</td><td>04:00</td><td>AIRSPEED INT</td><td>ADFS Integration to Business One</td><td>Integration</td><td>WFH</td><td>Yes</td><td>ADFS Remote</td><td>Checked JAEIA Logs Issue</td></tr><tr><td>2026-09-30</td><td>01:00 PM</td><td>05:00 PM</td><td>04:00</td><td>AIRSPEED INT</td><td>ADFS Integration to Business One</td><td>Integration</td><td>WFH</td><td>Yes</td><td>Reports</td><td>Checked R&amp;D Status Report</td></tr><tr><td>2026-10-01</td><td>08:30 AM</td><td>12:00 PM</td><td>03:30</td><td>Acme Trading</td><td>SAP B1 Rollout</td><td>Data migration</td><td>Onsite</td><td>Yes</td><td>Inventory</td><td>Validated item import</td></tr><tr><td>2026-10-01</td><td>01:00 PM</td><td>02:00 PM</td><td>01:00</td><td></td><td></td><td>Client meeting</td><td>Onsite</td><td>No</td><td></td><td>Acme weekly status call</td></tr><tr><td>2026-10-01</td><td>02:15 PM</td><td>05:22 PM</td><td>03:07</td><td>Acme Trading</td><td>SAP B1 Rollout</td><td>Data migration</td><td>Onsite</td><td>Yes</td><td>Master data</td><td>Fixed column order in BP template</td></tr><tr><td>2026-10-02</td><td>08:30 AM</td><td>08:58 AM</td><td>00:28</td><td></td><td></td><td>Internal meeting</td><td>WFH</td><td>No</td><td></td><td>Weekly team stand-up</td></tr><tr><td>2026-10-02</td><td>09:00 AM</td><td>11:45 AM</td><td>02:45</td><td>Northwind</td><td>Northwind Upgrade</td><td>Testing / UAT</td><td>WFH</td><td>Yes</td><td>UAT</td><td>Prepared UAT scripts, scenarios 1–6</td></tr>
 <tr class="etot"><td colspan="3">Total rendered hours</td><td>18:50</td><td colspan="7"></td></tr></table>
 <div class="ef">This is an automated email. Generated by Project Activity Tracker Application.</div></div>
-<p class="note">Rendered Hrs = exact minutes from time in to time out, shown as HH:MM. Activity Type is on every row (one Admin list); Client and Project are blank for quick activities; the specific work is in Module and Activity Remarks. Header navy #00467f with white text (9.9:1 contrast).</p></div>
+<p class="note">Rendered Hrs = exact minutes from time in to time out, shown as HH:MM (no rounding; confirmed by Lean). Activity Type is on every row (one Admin list); Client and Project are blank for quick activities; the specific work is in Module and Activity Remarks. Header navy #00467f with white text (9.9:1 contrast).</p></div>
 <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:16px">
+<div class="card"><h3>Sent</h3><div class="toast">✓<div>Report sent to Jomerson Nazaire and 2 CC.</div></div><p class="note">Toast after sending; added to the Sent log.</p></div>
+<div class="card"><h3>Send failed</h3><div class="errbox">We couldn't send your report: Microsoft didn't respond. Try again, or export it and send it yourself.</div></div>
+<div class="card"><h3>Personal email (no mailbox)</h3><div class="lock" style="background:var(--blueb);color:#00586b">You signed in with a personal email, so this app can't email your report. Export it instead. Your supervisor has been notified it's ready.</div><div class="row"><button class="btn ghost sm">Export PDF</button><button class="btn ghost sm">Export Excel</button></div><p class="note">Send is replaced by Export (FR-DAR-04b).</p></div>
+<div class="card"><h3>No supervisor</h3><div class="lock"><span class="pill warn">Supervisor needed</span> Ask an Admin to set your supervisor.</div><button class="btn" disabled style="width:100%" title="Ask an Admin to set your supervisor">Send</button><div class="row" style="margin-top:8px"><button class="btn ghost sm">Export PDF</button><button class="btn ghost sm">Export Excel</button></div><p class="note">Send stays off until a supervisor is set; there's no CC-only send. Export still works. Admin › Users flags the user "Supervisor needed".</p></div>
 <div class="card"><h3>Validation</h3><div class="field err" style="margin:0"><small>The range can be up to 31 days. Pick a shorter range.</small></div><div class="field err" style="margin:6px 0 0"><small>"From" must be on or before "To".</small></div></div>
 <div class="card"><h3>Empty state</h3><div class="empty" style="padding:12px">◷<br><b>No time entries in this range</b><p class="note">Try another date range, or log time in <a href="#tracker">My tasks › Today</a>.</p></div></div>
-<div class="card"><h3>Loading</h3><div class="skel" style="width:60%"></div><div class="skel"></div><div class="skel" style="width:80%"></div></div>
-<div class="card dec"><h3>Decided</h3><p class="note"><span class="pill ok">v1</span>View, save and export (PDF, Excel). Saving keeps a read-only copy in Saved reports. Sending moves to the roadmap with Microsoft sign-in.</p><p class="note"><span class="pill ok">12.2</span>Exact minutes, HH:MM (Lean).</p></div></div>
-</section>
-
-<!-- v0.8.4 · SENT REPORTS -->
-<section class="page" id="darsent">
-<header><h1>My saved reports</h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
-<div class="tabs"><span onclick="location.hash='dar'">Report</span><span class="on">Saved reports <span class="pill grey">5</span></span></div>
-<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
-<div class="dsp" data-i="0"><div class="row" style="margin-bottom:12px;flex-wrap:wrap;align-items:flex-end"><div class="field" style="margin:0"><label>Saved from</label><input value="09/01/2026" style="width:120px"></div><div class="field" style="margin:0"><label>To</label><input value="10/09/2026" style="width:120px"></div><div class="field" style="margin:0"><label>Label</label><select class="sel"><option>All</option><option>Latest</option><option>Earlier version</option></select></div><div class="field sp" style="margin:0"><label>Search</label><input placeholder="Search range or remarks…"></div></div><table><tr><th>Saved on (PH)</th><th>Range</th><th>Activities</th><th>Total hours</th><th>Label</th><th></th></tr><tr style="cursor:pointer" onclick="ov('dsview')"><td style="white-space:nowrap">Oct 3, 2026 · 9:10 AM</td><td style="white-space:nowrap">Sep 30 – Oct 2</td><td>7</td><td>18:50</td><td><span class="pill ok">Latest</span></td><td style="text-align:right"><button class="btn ghost sm">View</button></td></tr><tr style="cursor:pointer" onclick="ov('dsview')"><td style="white-space:nowrap">Oct 2, 2026 · 6:20 PM</td><td style="white-space:nowrap">Sep 30 – Oct 2</td><td>6</td><td>15:43</td><td><span class="pill grey">Earlier version</span></td><td style="text-align:right"><button class="btn ghost sm">View</button></td></tr><tr style="cursor:pointer" onclick="ov('dsview')"><td style="white-space:nowrap">Oct 2, 2026 · 5:40 PM</td><td style="white-space:nowrap">Oct 1 – Oct 2</td><td>4</td><td>06:20</td><td class="note">– <span style="font-size:12px">(overlapping range, separate report)</span></td><td style="text-align:right"><button class="btn ghost sm">View</button></td></tr><tr style="cursor:pointer" onclick="ov('dsview')"><td style="white-space:nowrap">Sep 29, 2026 · 6:05 PM</td><td style="white-space:nowrap">Sep 29</td><td>4</td><td>08:12</td><td><span class="pill ok">Latest</span></td><td style="text-align:right"><button class="btn ghost sm">View</button></td></tr><tr style="cursor:pointer" onclick="ov('dsview')"><td style="white-space:nowrap">Sep 25, 2026 · 5:58 PM</td><td style="white-space:nowrap">Sep 21 – Sep 25</td><td>22</td><td>41:05</td><td><span class="pill ok">Latest</span></td><td style="text-align:right"><button class="btn ghost sm">View</button></td></tr></table>
-<p class="note">Reports you saved, newest first. Each save is final and kept as a read-only copy. When you save exactly the same range again, the newest is "Latest" and older ones are "Earlier version". An overlapping range (e.g. Oct 1 – Oct 2) is a separate report with no tag. Only you can see them. Saved reports can't be edited or deleted.</p></div>
-</div>
-<div><div class="card"><h3>Loading</h3><div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:85%"></div></div>
-<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:12px">🗂<br><b>No saved reports yet</b><p class="note"><a href="#dar">Create a report</a> and press Save report.</p></div></div>
-<div class="card" style="margin-top:16px"><h3>No results</h3><div class="empty" style="padding:12px">⌕<br><b>No saved reports match these filters</b><p class="note"><a href="#darsent">Clear filters</a></p></div></div>
-<div class="card dec" style="margin-top:16px"><h3>Decided</h3><p class="note">Only you can see your saved reports. Supervisor access may come with sending (roadmap).</p><p class="note">Saving is final. "Latest" applies only to exactly matching ranges; overlapping ranges are separate reports.</p></div>
-<div class="card oq" style="margin-top:16px"><h3>Retention</h3><p class="note"><span class="pill warn">Q-48</span>Saved reports kept for 5 years. Pending HR/legal confirmation.</p></div></div></div>
-<div id="dsview" class="ov" style="display:none"><div class="modal" style="width:min(1180px,94vw);max-height:92vh;overflow:auto"><div class="row"><h3 style="margin:0">Saved report · Sep 30 – Oct 2</h3><span class="pill grey">Read-only</span><span class="pill ok">Latest</span><span class="sp"></span><button class="btn ghost sm">Export PDF</button><button class="btn ghost sm">Export Excel</button><span style="cursor:pointer" onclick="cv(this)">✕</span></div>
-<div class="lock" style="background:#f0f1f3;color:#4b5563;margin:10px 0 8px">Saved copy from Oct 3, 2026, 9:10 AM. Later changes to your entries don't change it.</div>
-<div class="lock" style="background:var(--blueb);color:#00586b">ⓘ Oct 1 was changed after saving. <a href="#dar" onclick="cv(this)">Create a new report</a></div>
-<div class="email"><div class="eh"><h2>Daily Accomplishment Report</h2><div>Generated range: Sep 30, 2026 to Oct 2, 2026</div></div>
-<div class="ec"><b>Total Activities:</b> 7</div>
-<table><tr><th>Date</th><th>Time In</th><th>Time Out</th><th>Rendered Hrs</th><th>Client Name</th><th>Project Name</th><th>Activity Type</th><th>Location</th><th>Billable</th><th>Module</th><th>Activity Remarks</th></tr><tr><td>2026-09-30</td><td>08:00 AM</td><td>12:00 PM</td><td>04:00</td><td>AIRSPEED INT</td><td>ADFS Integration to Business One</td><td>Integration</td><td>WFH</td><td>Yes</td><td>ADFS Remote</td><td>Checked JAEIA Logs Issue</td></tr><tr><td>2026-09-30</td><td>01:00 PM</td><td>05:00 PM</td><td>04:00</td><td>AIRSPEED INT</td><td>ADFS Integration to Business One</td><td>Integration</td><td>WFH</td><td>Yes</td><td>Reports</td><td>Checked R&amp;D Status Report</td></tr><tr><td>2026-10-01</td><td>08:30 AM</td><td>12:00 PM</td><td>03:30</td><td>Acme Trading</td><td>SAP B1 Rollout</td><td>Data migration</td><td>Onsite</td><td>Yes</td><td>Inventory</td><td>Validated item import</td></tr><tr><td>2026-10-01</td><td>01:00 PM</td><td>02:00 PM</td><td>01:00</td><td></td><td></td><td>Client meeting</td><td>Onsite</td><td>No</td><td></td><td>Acme weekly status call</td></tr><tr><td>2026-10-01</td><td>02:15 PM</td><td>05:22 PM</td><td>03:07</td><td>Acme Trading</td><td>SAP B1 Rollout</td><td>Data migration</td><td>Onsite</td><td>Yes</td><td>Master data</td><td>Fixed column order in BP template</td></tr><tr><td>2026-10-02</td><td>08:30 AM</td><td>08:58 AM</td><td>00:28</td><td></td><td></td><td>Internal meeting</td><td>WFH</td><td>No</td><td></td><td>Weekly team stand-up</td></tr><tr><td>2026-10-02</td><td>09:00 AM</td><td>11:45 AM</td><td>02:45</td><td>Northwind</td><td>Northwind Upgrade</td><td>Testing / UAT</td><td>WFH</td><td>Yes</td><td>UAT</td><td>Prepared UAT scripts, scenarios 1–6</td></tr>
-<tr class="etot"><td colspan="3">Total rendered hours</td><td>18:50</td><td colspan="7"></td></tr></table>
-<div class="ef">This is an automated email. Generated by Project Activity Tracker Application.</div></div></div></div>
+<div class="card"><h3>Sent log</h3><table><tr><td>Oct 2 · 6:20 PM</td><td>Sep 30 – Oct 2</td><td><a href="#dar">As sent</a></td></tr><tr><td>Oct 3 · 9:10 AM</td><td>Re-sent</td><td><a href="#dar">As sent</a></td></tr></table><p class="note">Each send is logged with sender, time and recipients; the sent copy is kept.</p></div>
+<div class="card dec"><h3>Decided</h3><p class="note"><span class="pill ok">Q-41</span>HTML email like Jomerson's sample, sent through Microsoft from your mailbox. PDF and Excel export stay.</p><p class="note"><span class="pill ok">Q-43</span>Manual Send only.</p><p class="note"><span class="pill ok">12.2</span>Exact minutes, HH:MM (Lean).</p></div></div>
+<div id="darsend" class="ov" style="display:none"><div class="modal" style="width:480px"><div class="row"><h3 style="margin:0">Send this report?</h3><span class="sp"></span><span style="cursor:pointer" onclick="cv(this)">✕</span></div>
+<p>To <b>Jomerson Nazaire</b>, CC ops@xceler8.example, pmo@xceler8.example. The email is the preview you just checked (Sep 30 – Oct 2, 7 activities, 18:50 rendered).</p>
+<div class="lock">⚠ Oct 2 isn't submitted and Oct 1 is reopened. You can still send.</div>
+<div class="errbox">We couldn't send your report: Microsoft didn't respond. Try again, or export it and send it yourself.</div>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn" onclick="cv(this)">Send</button></div></div></div>
 </section>
 
 <!-- M8 · MY LEAVE (doc 14 §4) -->
@@ -1179,8 +1163,6 @@ var locSel='WFH';function pickLoc(l){l.parentNode.querySelectorAll('label').forE
 function setLoc(){document.querySelectorAll('[data-loc]').forEach(e=>e.textContent=locSel)}
 function dpMode(h){document.getElementById('lvto').style.display=h?'none':'';document.getElementById('lvdays').innerHTML=h?'<b>0.5 working day</b> · Oct 29 (half day)':'<b>3 working days</b> · Oct 29, Oct 30, Nov 3. Not counted: Oct 31–Nov 1 (weekend, All Saints\' Day) and Nov 2 (All Souls\' Day).'}
 function ttShow(sel){var q=/Quick activity/.test(sel.value);sel.closest('.modal').querySelectorAll('[data-tt]').forEach(e=>e.style.display=q?'none':'')}
-function dsTab(n){document.querySelectorAll('#dstabs span').forEach((t,k)=>t.classList.toggle('on',k==n));document.querySelectorAll('#darsent .dsp').forEach(d=>d.style.display=d.dataset.i==n?'':'none')}
-function saveRep(){var t=document.getElementById('savetoast');t.style.display='flex';clearTimeout(window._st);window._st=setTimeout(()=>t.style.display='none',4000)}
 function segOn(i){i.closest('.seg').querySelectorAll('label').forEach(l=>l.classList.toggle('on',l.contains(i)))}
 setSubmit();
 window.onhashchange=go;go();

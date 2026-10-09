@@ -1,6 +1,6 @@
 # 14 — Microsoft Sign-in, Activity Tracker, Daily Activity Report, Leave, PM View
 
-**Status:** v0.8.1 draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.9.4 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson via Lean (room, 8:19 PM); Deven's and UIE's technical and design points.
 Nothing here is built until Jomerson approves. Items marked **⚑** change an existing design decision.
 
@@ -118,3 +118,108 @@ Nothing here is built until Jomerson approves. Items marked **⚑** change an ex
 - **A-17** All tracker times are Philippine time; users outside PH aren't in scope.
 - **A-18** Payroll and leave pay calculations are out of scope; the app tracks balances only.
 - **A-19** The Entra app registration is owned by Xceler8's tenant admin, who can grant consent for Graph permissions.
+
+## 10. Decisions on mockup v0.8 gaps (Lean, 2026-10-09)
+- **Late submission:** a past day can be submitted until the weekly lock. Reopening a day sends the user an in-app notification.
+- **DAR status column:** each day shows Submitted, Not submitted or Reopened. Users can send with unsubmitted days; those stay marked Not submitted.
+- **Leave cancelling:** users can cancel their own pending leave, or approved leave that's still in the future. Cancelling restores the balance and notifies the supervisor. Half-days are AM or PM.
+- **Leave decisions:** rejecting requires a comment. The employee is notified of every decision (approved, rejected, cancelled by Admin).
+- **Activity categories:** edited under Admin › Settings › Activity categories. A category in use can be deactivated, not deleted.
+- **Running timer:** shown in the top bar on every page.
+
+## 11. Message wording (draft by Rich, for UIE to check)
+| Case | Message |
+|------|---------|
+| Microsoft account not set up | "Your Microsoft account isn't set up in this app. Ask an Admin for an invite." |
+| Wrong tenant | "This Microsoft account belongs to a different organization. Sign in with your Xceler8 account." |
+| Deactivated user | "Your account has been deactivated. Contact an Admin if you think this is a mistake." |
+| Microsoft sign-in failed or cancelled | "Microsoft sign-in didn't finish. Please try again." |
+| 24-hour daily cap | "This would bring your total for {date} to {hours}h. A day can't exceed 24 hours." |
+| Overlapping entry | "This overlaps {other entry} ({start}–{end}). Adjust the times so they don't overlap." |
+| Submit with timer running | "Stop the running timer before submitting this day." |
+| Day locked | "This day is locked. Ask your supervisor to reopen it." |
+| Day reopened (notification) | "{Name} reopened your timesheet for {date}: {reason}" |
+| Report sent | "Report sent to {supervisor} and {n} CC." |
+| Report send failed | "We couldn't send your report: {reason}. Try again, or export it and send it yourself." |
+| No Outlook mailbox | "Your account can't send email from this app. Export the report instead. Your supervisor has been notified it's ready." |
+| Leave over balance | "You have {n} days of {type} left. This request needs {m}." |
+| Leave overlaps | "You already have leave filed for {dates}." |
+| Leave rejected (notification) | "{Supervisor} rejected your {type} leave for {dates}: {comment}" |
+
+## 12. Jomerson's decisions (2026-10-09, 8:30 PM)
+- **Q-36 / Q-37:** two sign-in options: email and password, or Microsoft. Microsoft accepts only accounts in the Xceler8 tenant, and only for users already in the app (FR-SSO-02, FR-SSO-04 stand).
+- **Q-41:** the user picks a date range and the app generates an **HTML email** laid out like Jomerson's sample. Before sending, a preview shows the To (supervisor) and CC recipients. Send goes through Microsoft Graph from the user's mailbox, and FR-DAR-04b covers users without one. PDF and Excel export stay.
+- **Q-46:** **no leave approval for now.** Employees record leave as **Full day, Half day AM or Half day PM**, and the system shows them as on leave. FR-LV-04 approval, the approval queue and EC-77's pending-leave rule are dropped. FR-LV-05 balance checks and FR-LV-07 privacy stay. Supervisors get an in-app notice when leave is recorded.
+
+### 12.1 New time-entry fields (from the sample report)
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-ACT-15 | Every time entry (project task or quick activity) gets **Location** (from an Admin list, e.g. "Office", "Client site", "Offsite - WFH"), **Billable** (Yes/No; defaults to Yes for client-project tasks and No for quick activities, editable) and **Module** (from an Admin list, e.g. SAP B1 modules; optional for quick activities). Lists are edited under Admin › Settings, and in-use values are deactivated rather than deleted. | Must |
+| FR-ACT-16 | Remarks stay free text and separate from Module (Queen's note on the sample). | Must |
+| FR-DAR-07 | The HTML report follows the sample: header block, "Total Activities" count, one row per entry with the sample's columns (including Location, Billable, Module, time in, time out, rendered hours and remarks), a **total rendered hours** row (Queen), and the footer line. UIE's mockup v0.8.2 is the column reference. | Must |
+
+### 12.2 Rendered time (Queen's and UIE's question)
+- **Proposed:** timed entries keep **exact minutes** from time in to time out, with no rounding. 8:00 to 8:07 is 7 minutes. The 0.25-hour step stays only for hours-only manual entries (existing FR-TIME).
+- Rendered time always shows as **HH:MM** ("04:00", "00:07", total "25:10"), in the app and the report. Reports that sum hours use the exact minutes.
+- **Confirmed by Lean (2026-10-09).**
+
+### 12.3 Wording updates (UIE's check)
+- 24-hour cap: "This would bring your total for {date} to {HHh MMm}. A day can't exceed 24 hours. Shorten or remove an entry."
+- Day locked: "This day is locked. Ask your supervisor or an Admin to reopen it." **Confirmed (Lean):** after the weekly lock, only an Admin can reopen a day.
+- Day reopened: "{Name} reopened your timesheet for {date}: {reason}. Make your changes and submit it again before the weekly lock."
+- No Outlook mailbox: "You signed in with a personal email, so this app can't email your report. Export it instead. Your supervisor has been notified it's ready."
+- Over balance: "You have {n} {day|days} of {type} left, and this needs {m} {day|days}. Choose fewer days or another leave type."
+
+### 12.4 Location per day and report layout (Jomerson, Deven, Queen, Lean)
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-ACT-17 | **Location is set once per day:** the first Time in (or first entry) of the day asks "Where are you working today?" Every entry that day inherits it; a single entry can be changed (e.g. WFH morning, Onsite afternoon). Starting list: **Onsite, WFH, Office** (Admin-editable labels, e.g. rename to "Offsite - WFH"). | Must |
+| FR-DAR-08 | **Report layout (from the sample):** title "Daily Accomplishment Report"; "Generated range: {start} to {end}"; "Total Activities: {n}"; columns in order **Date, Time In, Time Out, Rendered Hrs, Client Name, Project Name, Activity Type, Location, Billable, Module, Activity Remarks**; a total rendered hours row; footer "This is an automated email. Generated by Project Activity Tracker Application." Times in 12-hour format ("08:00 AM"); rendered hours as HH:MM. | Must |
+| FR-DAR-09 | **Column mapping (UIE, from the sample):** **Activity Type** = the activity category on **every** entry, project work and quick activities alike, from one Admin list (e.g. Integration, Configuration, Training, Internal meeting). Each time entry therefore gets a required Activity Type. Client Name and Project Name are blank for quick activities. The specific work goes in Module and Activity Remarks. | Must |
+
+### 12.5 Time type and missing supervisor
+- **FR-ACT-18 Time type stays** (Execution / Waiting / Rework, existing FR-TIME) on **project entries only**, defaulting to Execution, because the M4 variance and rework reports depend on it. Quick activities don't have it. It's separate from Activity Type, and it doesn't appear in the Daily Accomplishment Report.
+- **FR-DAR-10 No supervisor set:** Send is disabled with "Ask an Admin to set your supervisor", and Export still works. Reports can't go to CC only, so they can't skip the supervisor (UIE).
+- **FR-LV-10 No supervisor set:** leave notices go to all Admins. Admin › Users flags users with no supervisor.
+
+### 12.6 Sent reports record (Jomerson, UIE, Queen)
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-DAR-11 | A **Sent reports** page lists every Daily Accomplishment Report the user has sent: date and time sent, range, To, CC and send status (Sent / Failed), newest first, filterable by date. | Must |
+| FR-DAR-12 | Each send stores a **saved, read-only copy** of the exact HTML, subject, recipients and send result at the moment of sending. Opening a row shows that copy, never one rebuilt from current data (Queen). A note reads "Saved copy as sent on {date, time}. Later changes to your entries don't change it." | Must |
+| FR-DAR-13 | If any day in the range was edited after sending, the record shows "{date} was changed after this was sent" with a link to make a new report; the saved copy is never altered. | Should |
+| FR-DAR-14 | **Who sees it (proposed):** the user sees their own; the supervisor sees reports sent to them (as To); Admins see all. Being on CC doesn't give in-app access. | Must |
+| FR-DAR-15 | Failed sends are recorded too, with the error, and can be retried (a retry is a new record). | Must |
+| FR-DAR-16 | **Retention (proposed, Q-48):** records are kept for 5 years and can't be edited or deleted by users; only an Admin purge of records older than the retention period is allowed, and it's audited. | Should |
+
+- **Q-48** How long are sent reports kept? Proposed: 5 years, in line with keeping employment and work records for several years. HR or legal to confirm.
+
+## 13. Change of plan (Jomerson, 2026-10-09, 8:41 PM)
+- **Microsoft sign-in (§1) is on hold** and moved to External integrations in `docs/FEATURES_AND_ROADMAP.md`. Everyone signs in with email and password. FR-ACT-08 (Outlook calendar) waits with it.
+- **Milestones renumbered:** M5 Activity Tracker (§2), M6 Daily Accomplishment Report (§3), M7 Leave (§4), M8 Regression. The PM view stays in M4.
+- **Report sender:** reports go from **one company sender**, not each person's Outlook. The sender address is Jomerson's choice (Q-49): a shared Microsoft 365 mailbox (e.g. reports@), an SMTP account, or export only for now. Until it's set up, Send is disabled with "Sending isn't set up yet" and Export works.
+  - From shows "Xceler8 Reports on behalf of {employee}", and Reply-To is the employee's own address.
+  - FR-DAR-04 (send from own mailbox) and FR-DAR-04b (Gmail fallback) are dropped.
+- **FR-DAR-17 Recipients are built by the server (Queen):** To is always the user's supervisor and CC comes only from the user's profile list. The server never accepts recipient addresses from the browser, so the company sender can't be used to email arbitrary addresses. CC lists are changed only by Admins, and every change is audited. To and CC show read-only in the preview with "Set by Admin".
+- **Q-49 (resolved, Jomerson 2026-10-09):** **view and export only for now.** No company sender. Once Entra ID is set up, reports send from each person's own account (roadmap).
+
+## 14. Report scope for M6 (after Q-49)
+- M6 ships the report as **view and export only** (preview, PDF, Excel). The preview has no Send button and shows "Coming with Microsoft sign-in".
+- Deferred to the Microsoft sign-in roadmap item: FR-DAR-04 (send from own mailbox), FR-DAR-17 recipient rules for sending, and the **Sent reports record (FR-DAR-11 to 16, Q-48)**, which only applies once reports are emailed. Supervisor and CC fields stay on the profile so they're ready.
+- Whether "auto sending" means a scheduled daily send or sending on click is revisited with Q-43 when that item starts.
+
+## 15. Saved reports (Jomerson, Lean, 2026-10-09) — replaces §14's deferral of FR-DAR-11 to 16
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-DAR-11 | **Save report:** after previewing a date range, the user clicks Save report. A **Saved reports** page lists every report they've saved: saved date and time, range, total activities, total rendered hours, and a Latest / Earlier version tag; newest first, filterable by date. | Must |
+| FR-DAR-12 | Saving stores a **read-only copy** of exactly what the report showed (the rendered report, all rows and totals, supervisor and CC on file at that moment). Opening a saved report shows that copy, never one rebuilt from current data. Note: "Saved copy from {date, time}. Later changes to your entries don't change it." Saved copies export to PDF and Excel. | Must |
+| FR-DAR-13 | If any day in the range was edited after saving, the record shows "{date} was changed after this was saved" with a link to save a new version; the saved copy is never altered. | Should |
+| FR-DAR-14 | **Saved reports are private to the person who saved them** (Jomerson): only they can list, open or export them. Supervisors and Admins have no access (API returns 404 to anyone else, per NFR-25). Supervisor visibility may come with sending later. Saving is final; the preview is the draft. | Must |
+| FR-DAR-15 | **No deletes**, including by the owner. The **same date range** can be saved again: the newest save of that exact range is tagged "Latest" and older ones "Earlier version". Overlapping but different ranges are separate reports. | Must |
+| FR-DAR-16 | No Admin purge for now; saved reports are kept. Q-48 (retention) is deferred until sending and supervisor access arrive. | — |
+| FR-DAR-18 | When Microsoft sign-in arrives (roadmap), a saved report gains **Send**; sending reuses FR-DAR-17's server-built recipients. | — |
+
+## 16. Half-day leave on the same day (Lean, 2026-10-09)
+- **FR-LV-11** A user can record Half day AM and Half day PM on the same date. Same leave type: shown and counted as **one full day** (1.0 against that type). Different types: each half counts **0.5 against its own type**, and both show on that day.
+- A second AM, or a second PM, on a date that already has one is refused: "You already have leave recorded for this morning." / "…for this afternoon." A Full day can't be added on a date with any half day (and vice versa).
+- A full day of leave, or both halves, marks the day "On leave" in the timesheet and report (FR-LV-06). One half marks it "Half day leave (AM)" or "(PM)".

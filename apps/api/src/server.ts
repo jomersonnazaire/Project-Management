@@ -6,6 +6,7 @@ import { addMissingRecordTypes, applyAccessDefaultChanges } from './services/acc
 import { ensureDefaultAccessRules } from './services/accessRules.js';
 import { runIssueSweeps } from './services/issues.js';
 import { ensureLaunchTemplate } from './services/launchTemplate.js';
+import { migrateProjectCodes } from './services/projectCodes.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
@@ -19,6 +20,8 @@ await addMissingRecordTypes(logger);
 await applyAccessDefaultChanges(logger);
 // Seed the SAP B1 launch template once (idempotent; never touches it after that, FR-TPL-09).
 await ensureLaunchTemplate(logger);
+// DR-23: every project gets a unique code and issues use it as their ID prefix (idempotent).
+await migrateProjectCodes(logger);
 const app = createApp(config, logger);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'API listening');

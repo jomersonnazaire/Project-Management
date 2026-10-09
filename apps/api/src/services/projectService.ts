@@ -103,6 +103,7 @@ export async function toProjectListItems(projects: ProjectDoc[]): Promise<Projec
     return {
       id: p._id.toString(),
       name: p.name,
+      code: p.code ?? null,
       clientId: p.clientId.toString(),
       clientName: clientNames.get(p.clientId.toString()) ?? '',
       managerId: p.managerId ? p.managerId.toString() : null,
@@ -146,6 +147,7 @@ export async function toProjectDto(
   const editScope = canEditProjectScope(user, project);
   return {
     ...item!,
+    codeLocked: (project.issueSeq ?? 0) > 0,
     description: project.description ?? null,
     type: (project.type ?? null) as TemplateType | null,
     manager: project.managerId ? (users.get(project.managerId.toString()) ?? null) : null,
