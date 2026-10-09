@@ -4,6 +4,8 @@ import {
   type CalendarDto,
   type DocumentDto,
   type DocumentListDto,
+  type DocumentRequestListDto,
+  type RequestPartiesDto,
   type FolderDto,
   type HolidayDto,
   type HolidayImpactDto,
@@ -48,10 +50,13 @@ export function useCalendarMutation() {
       method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
       body?: unknown;
     }) =>
-      api<{ holiday?: HolidayDto; copied?: number; skipped?: number }>(`/settings${req.path}`, {
-        method: req.method ?? 'POST',
-        body: req.body,
-      }),
+      api<{ holiday?: HolidayDto; copied?: number; added?: number; skipped?: number }>(
+        `/settings${req.path}`,
+        {
+          method: req.method ?? 'POST',
+          body: req.body,
+        },
+      ),
     onSettled: () => qc.invalidateQueries({ queryKey: ['calendar'] }),
   });
 }
@@ -182,9 +187,10 @@ export function useFolders(projectId: string) {
   return useQuery({
     queryKey: ['documents', 'folders', projectId],
     queryFn: () =>
-      api<{ items: FolderDto[]; can: { createFolder: boolean; renameDefault: boolean } }>(
-        `/projects/${projectId}/folders`,
-      ),
+      api<{
+        items: FolderDto[];
+        can: { createFolder: boolean; renameDefault: boolean; restrict?: boolean };
+      }>(`/projects/${projectId}/folders`),
   });
 }
 
@@ -201,12 +207,37 @@ export function useDocuments(
 export function useDocumentMutation(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (req: { path: string; method?: 'POST' | 'PATCH' | 'DELETE'; body?: unknown }) =>
+    mutationFn: (req: {
+      path: string;
+      method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+      body?: unknown;
+    }) =>
       api<{ document?: DocumentDto; folder?: { id: string; name: string } }>(
         `/projects/${projectId}${req.path}`,
         { method: req.method ?? 'POST', body: req.body },
       ),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['documents'] }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['documents'] });
+      void qc.invalidateQueries({ queryKey: ['document-requests'] });
+    },
+  });
+}
+
+/** AC-26.2: project members and active contacts of the project's client. */
+export function useRequestParties(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['documents', 'parties', projectId],
+    queryFn: () => api<RequestPartiesDto>(`/projects/${projectId}/request-parties`),
+    enabled,
+  });
+}
+
+/** FR-DOC-26: open requests from client contacts (Dashboard) or from me (My tasks). */
+export function useDocumentRequests(kind: 'waiting-on-client' | 'mine', enabled = true) {
+  return useQuery({
+    queryKey: ['document-requests', kind],
+    queryFn: () => api<DocumentRequestListDto>(`/document-requests/${kind}`),
+    enabled,
   });
 }
 

@@ -434,3 +434,22 @@ $board-gap: 0.75rem;
   border: 0;
   padding-block: 0.4rem;
 }
+
+// Document lifecycle steps (mockup: ✓ Requested › ✓ Submitted › ✓ Signed)
+.doc-steps {
+  .list-inline-item:not(:last-child)::after {
+    content: '›';
+    margin-inline-start: 0.5rem;
+    color: var(--bs-secondary-color);
+  }
+  .doc-step-done {
+    color: var(--bs-success);
+  }
+  .doc-step-current {
+    font-weight: 600;
+    color: var(--bs-primary);
+  }
+  .doc-step-todo {
+    color: var(--bs-secondary-color);
+  }
+}

@@ -8,6 +8,7 @@ import {
   plural,
   type HolidayDto,
   type HolidayType,
+  OFFICIAL_HOLIDAY_YEARS,
 } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
@@ -296,6 +297,23 @@ export function HolidaysPanel() {
       Copy from {year - 1}…
     </Button>
   );
+  // Seed data: the official Philippine holidays for the years we have (2026, 2027).
+  const hasOfficial = OFFICIAL_HOLIDAY_YEARS.includes(year);
+  const loadOfficial = () =>
+    mutation.mutate(
+      { path: '/holidays/official', body: { year } },
+      {
+        onSuccess: (r) =>
+          setCopied(
+            `Added ${plural(r.added ?? 0, 'official holiday')}${r.skipped ? `; ${r.skipped} already on the list were kept` : ''}.`,
+          ),
+      },
+    );
+  const officialButton = canEdit && hasOfficial && (
+    <Button variant="outline-secondary" onClick={loadOfficial} disabled={mutation.isPending}>
+      Load official PH holidays
+    </Button>
+  );
 
   return (
     <div className="row g-6">
@@ -336,6 +354,7 @@ export function HolidaysPanel() {
                   </option>
                 ))}
               </Form.Select>
+              {officialButton}
               {copyButton}
               {canEdit && <Button onClick={() => setEditing('new')}>+ Add holiday</Button>}
             </div>
@@ -352,7 +371,12 @@ export function HolidaysPanel() {
               <EmptyState
                 icon="bx-calendar"
                 title={`No holidays for ${year} yet`}
-                action={copyButton}
+                action={
+                  <div className="d-flex flex-wrap justify-content-center gap-2">
+                    {officialButton}
+                    {copyButton}
+                  </div>
+                }
               >
                 Due dates will count only the working days set here.
               </EmptyState>

@@ -1,7 +1,7 @@
 import type request from 'supertest';
 import { parseDateOnly, toDateOnly, todayPH } from '@xc8/shared';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ActivityLogModel, DocumentModel, HolidayModel, UploadModel } from '../src/models/index.js';
+import { ActivityLogModel, DocumentModel, UploadModel } from '../src/models/index.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 import { resetRules, world } from './m2helpers.js';
 import { FILES, store } from './m3helpers.js';
