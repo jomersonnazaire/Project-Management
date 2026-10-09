@@ -27,6 +27,8 @@
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FR-TPL-12 | Each phase in the template editor has "+ Add activity"; the new activity is created in that phase at the end of its list. | Must |
+| FR-PRJ-18 | Each Checklist row's ⋮ menu has **Move up / Move down** (greyed out at the ends of a phase) for touch screens and non-drag users (UIE, Lean). Moving across phases stays in Edit task. | Must |
+| FR-PRJ-19 | **DEF-003 fix (Lean):** task Owner and Assignees list only project members. PMs and Admins get "+ Add someone to this project…" at the bottom of the list, which adds the person as a project member and assigns them in one step, audited, with a confirmation naming them. Members and Viewers see "Only project members can be assigned". The template field is labelled **Default job role**. | Must |
 | FR-TPL-13 | Activities can be reordered by drag-and-drop within a phase and moved between phases; a keyboard alternative ("Move up/down/to phase…") is provided. | Must |
 | FR-PRJ-14 | On the project Checklist, clicking anywhere on a phase card header expands or collapses it; the expanded state is remembered per user per project. | Must |
 | FR-PRJ-15 | Users with Edit on the project can reorder activities in the Checklist (drag-and-drop plus keyboard alternative). | Must |
@@ -49,7 +51,7 @@
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FR-NTF-01 | When a follow-up note is added to a task, notify the task's **owner, all assignees, the designated reviewer, and the project PM**, except the person who wrote it. | Must |
-| FR-NTF-02 | Channel: **in-app** (bell with unread count, notification list). Email depends on Lean's question to Jomerson (Q-28); if chosen, the same recipients get an email with a link, never the note's client contact details. | Must |
+| FR-NTF-02 | Channel: **in-app** (bell with unread count, notification list). Email is deferred to the External integrations stage (Q-28); build so a channel can be added later. | Must |
 | FR-NTF-03 | A notification reads e.g. "Maria P. added a follow-up on Client master data – Items" with the project name and time; clicking it opens the task and marks it read. "Mark all as read" is available. | Must |
 | FR-NTF-04 | Notifications respect access at read time: if a user loses access to the project, its notifications disappear from their list. | Must |
 | FR-NTF-05 | Also notify on: being assigned a task, a task sent For Review (to reviewer), approved or rejected (to owner). | Should |
@@ -100,7 +102,7 @@ Access rules (doc 11): add record types `notifications` (own only, not configura
 - **EC-65** A tagged client contact is later deactivated: the tag stays, marked inactive.
 
 ## 7. Open questions and assumptions
-- **Q-28** Follow-up channel: in-app only, or in-app and email? *(Lean's question to Jomerson.)* Email needs an email service (e.g. Azure Communication Services) and would also enable emailed invite and reset links.
+- **Q-28 (resolved, Jomerson 2026-10-09):** in-app only. Email notifications move to the External integrations stage in `docs/FEATURES_AND_ROADMAP.md`. Email needs an email service (e.g. Azure Communication Services) and would also enable emailed invite and reset links.
 - **Q-29** Turn on malware scanning for uploads (Microsoft Defender for Storage, per-GB cost)? Proposed: yes for production.
 - **Q-30** Should images (PNG, JPG) still be allowed in Documents, while evidence is limited to PDF, Word and Excel? Proposed: yes.
 - **Q-31** Conversation messages permanent with no edit or delete, matching Lean's default? Proposed: yes; Admins can hide abusive content with an audited "hidden by Admin" marker.

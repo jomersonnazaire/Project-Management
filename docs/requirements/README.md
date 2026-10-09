@@ -42,3 +42,4 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.4.7 | 2026-10-09 | Lean decided the three M2 proposals (PM activity log, draft visibility, PM handover); PH holidays scheduled for M3. |
 | v0.5.0 draft | 2026-10-09 | Doc 12: add-activity, reordering, phase-card click (PR #3); evidence uploads, follow-up notifications, Conversation tab (M3). |
 | v0.6.0 draft | 2026-10-09 | Doc 13: Project Issue Tracking (Milestone 3.5), with access rows for issues, conversations and notifications. |
+| v0.6.1 | 2026-10-09 | Q-28 resolved (in-app only; email in External integrations). FR-PRJ-18 Move up/down, FR-PRJ-19 DEF-003 add-and-assign. M3.5 approved with Q-32 to Q-35 defaults. |
