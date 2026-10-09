@@ -31,6 +31,7 @@ import {
   UserModel,
   type TimeEntry,
 } from '../models/index.js';
+import { assertLeaveAllowsTime } from '../services/leaveHook.js';
 import { assertLookup, getOrCreateDay, loadDay, touchDay } from '../services/tracker.js';
 import { audit } from '../services/audit.js';
 import { currentLockBoundary, loadTimeLock } from '../services/timeLock.js';
@@ -217,6 +218,7 @@ export function timeRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const { task, project } = await loadLoggableTask(req, input.taskId);
     const workDate = parseDateOnly(input.workDate);
+    await assertLeaveAllowsTime(user._id, workDate, input.confirmLeave);
     const activityTypeId = await assertLookup(
       input.activityTypeId,
       'ACTIVITY_TYPE',

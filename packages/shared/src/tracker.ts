@@ -104,7 +104,13 @@ const TARGET_MESSAGE = 'Choose a task, or give the quick activity a title.';
  * first entry of the day.
  */
 export const startTimerSchema = z
-  .strictObject({ ...target, ...entryFields, dayLocationId: objectId.optional() })
+  .strictObject({
+    ...target,
+    ...entryFields,
+    dayLocationId: objectId.optional(),
+    /** Confirms the half-day leave warning (FR-LV-06). */
+    confirmLeave: z.boolean().optional(),
+  })
   .refine(oneTarget, { message: TARGET_MESSAGE, path: ['taskId'] });
 export type StartTimerInput = z.input<typeof startTimerSchema>;
 
@@ -117,6 +123,7 @@ export const timedEntrySchema = z
     timeIn: hhmm,
     timeOut: hhmm,
     dayLocationId: objectId.optional(),
+    confirmLeave: z.boolean().optional(),
   })
   .refine(oneTarget, { message: TARGET_MESSAGE, path: ['taskId'] })
   .refine((v) => v.timeOut > v.timeIn, {

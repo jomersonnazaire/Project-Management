@@ -137,6 +137,8 @@ export const timeEntrySchema = z.strictObject({
   moduleId: objectId,
   locationId: objectId.nullable().optional(),
   billable: z.boolean().default(true),
+  /** Confirms the half-day leave warning (FR-LV-06). */
+  confirmLeave: z.boolean().optional(),
 });
 export type TimeEntryInput = z.input<typeof timeEntrySchema>;
 export const updateTimeEntrySchema = z.strictObject({
