@@ -134,18 +134,33 @@ describe('Sign in (US-01)', () => {
   it('AC-01.3 / NFR-05 rate-limits sign-in attempts per IP across many accounts (429)', async () => {
     const limited = makeApp({ AUTH_RATE_LIMIT_MAX: '20', TRUST_PROXY_HOPS: '1' });
     const statuses: number[] = [];
+    let last: request.Response | undefined;
     for (let i = 0; i < 25; i++) {
-      const r = await loginReq(
+      // Real Azure shape: the front end appends "client:port" with a new port per connection.
+      last = await loginReq(
         limited,
         `user${i}@nowhere.example`,
         'Wrong-password-1!',
-        '203.0.113.7',
+        `203.0.113.7:${40000 + i}`,
       );
-      statuses.push(r.status);
+      statuses.push(last.status);
     }
     expect(statuses.slice(0, 20).every((s) => s === 401)).toBe(true);
     expect(statuses.slice(20).every((s) => s === 429)).toBe(true);
-    // A different client IP is not affected. Azure-style "ip:port" entries are handled.
+    expect(last?.body.error).toEqual({
+      code: 'RATE_LIMITED',
+      message: 'Too many sign-in attempts. Please wait 15 minutes and try again.',
+    });
+    expect(last?.headers['retry-after']).toBeDefined();
+    // A spoofed leading X-Forwarded-For entry does not start a fresh bucket.
+    const spoofed = await loginReq(
+      limited,
+      'x@nowhere.example',
+      'Wrong-password-1!',
+      '9.9.9.9, 203.0.113.7:51234',
+    );
+    expect(spoofed.status).toBe(429);
+    // A different client network is not affected.
     const other = await loginReq(
       limited,
       'x@nowhere.example',
@@ -153,6 +168,36 @@ describe('Sign in (US-01)', () => {
       '198.51.100.9:51234',
     );
     expect(other.status).toBe(401);
+  });
+
+  it('DEF-002 keys Vercel-proxied requests on the edge client IP only with the shared secret', async () => {
+    const secret = 'edge-secret-for-tests-0123456789abcdef';
+    const limited = makeApp({
+      AUTH_RATE_LIMIT_MAX: '3',
+      TRUST_PROXY_HOPS: '1',
+      EDGE_PROXY_SECRET: secret,
+    });
+    // Each request arrives from a different Vercel egress address, like production.
+    const viaEdge = (i: number, extra: Record<string, string> = {}) =>
+      request(limited)
+        .post('/api/v1/auth/login')
+        .set(CSRF)
+        .set({
+          'X-Forwarded-For': `104.28.226.106, 13.212.${i}.174:${30000 + i}`,
+          'X-XC8-Client-IP': '104.28.226.106',
+          'X-XC8-Edge-Secret': secret,
+          ...extra,
+        })
+        .send({ email: 'ratelimit-check@nowhere.example', password: 'Wrong-password-1!' });
+    const statuses = [];
+    for (let i = 0; i < 4; i++) statuses.push((await viaEdge(i)).status);
+    expect(statuses).toEqual([401, 401, 401, 429]);
+    // Forging the edge header without the secret (e.g. direct to Azure) doesn't reuse or reset it.
+    const forged = await viaEdge(9, {
+      'X-XC8-Client-IP': '192.0.2.1',
+      'X-XC8-Edge-Secret': 'guess',
+    });
+    expect(forged.status).toBe(401);
   });
 
   it('AC-01.4 denies a deactivated user and ends their existing sessions', async () => {

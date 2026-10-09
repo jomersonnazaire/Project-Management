@@ -94,7 +94,9 @@ Configuration comes from environment variables only. See `apps/api/.env.example`
 | `LOCKOUT_THRESHOLD` / `LOCKOUT_MINUTES`                             | `5` / `15`              | Per-account lockout (FR-AUTH-07). Silent: a locked account gets the same generic 401      |
 | `AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_MINUTES`            | `20` / `15`             | Per-IP limit on sign-in and link verify/setup. In memory: one instance only (TD-01)       |
 | `INVITE_TTL_HOURS` / `RESET_TTL_HOURS`                              | `72` / `24`             | Lifetime of single-use invite links and Admin-issued reset links                          |
-| `TRUST_PROXY_HOPS`                                                  | `0`                     | `1` when browsers call Azure directly. `2` behind the Vercel rewrite                      |
+| `TRUST_PROXY_HOPS`                                                  | `0`                     | Proxies that append to `X-Forwarded-For` on the direct path: `1` on Azure, `0` locally    |
+| `EDGE_PROXY_SECRET`                                                 | (unset)                 | 32+ char shared secret, same value as on Vercel. See "Client IP and rate limiting"        |
+| `AUTH_RATE_LIMIT_IPV4_PREFIX`                                       | `24`                    | IPv4 addresses in the same /N share one rate-limit bucket (IPv6 always /56)               |
 | `LOG_LEVEL`                                                         | `info`                  | pino level                                                                                |
 | `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`, `SEED_RESET_PASSWORDS` |                         | Seed script only                                                                          |
 
@@ -104,6 +106,7 @@ Configuration comes from environment variables only. See `apps/api/.env.example`
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `VITE_API_BASE_URL`  | Leave empty (recommended) to call `/api/v1` on the same origin, proxied to Azure by `vercel.json`. Or set the API origin to call it cross-site |
 | `VITE_DEV_API_PROXY` | Local dev only: where Vite proxies `/api` (default `http://localhost:4000`)                                                                    |
+| `EDGE_PROXY_SECRET`  | Server-side only (read by `apps/web/middleware.ts`, never bundled). Same value as the API setting. Set it for Preview and Production           |
 
 Only `VITE_*` variables reach the browser. Never put secrets in them.
 
@@ -118,13 +121,34 @@ Only `VITE_*` variables reach the browser. Never put secrets in them.
 ### API on Azure App Service (`xc8-projectmgmt-api-tc3w`)
 
 - Runtime: Linux, Node 22 LTS. Startup command: `npm start` (runs `node dist/server.js`).
-- App settings: the API variables above. At minimum set `NODE_ENV=production`, `MONGODB_URI`, `WEB_APP_URL`, `CORS_ORIGINS`, `COOKIE_SECURE=true` and `TRUST_PROXY_HOPS`. Also set `SCM_DO_BUILD_DURING_DEPLOYMENT=false`, because the workflow ships a ready-to-run package.
+- App settings: the API variables above. At minimum set `NODE_ENV=production`, `MONGODB_URI`, `WEB_APP_URL`, `CORS_ORIGINS`, `COOKIE_SECURE=true`, `TRUST_PROXY_HOPS=1` and `EDGE_PROXY_SECRET`. Also set `SCM_DO_BUILD_DURING_DEPLOYMENT=false`, because the workflow ships a ready-to-run package.
 - Health check path: `/api/v1/health`. It returns `{"status":"ok","db":"up"}` and responds 503 when the database is down.
 - Atlas network access must allow the App Service outbound IPs.
 - `.github/workflows/deploy-api.yml` deploys on pushes to `main` that touch the API or the shared package, and can also be run manually. It needs the repository secret **`AZURE_WEBAPP_PUBLISH_PROFILE`** (download the publish profile from the Web App's Overview page). If the secret isn't set, the job logs a notice and skips the deploy.
 - To build the same package by hand: `npm run build --workspace @xc8/api && node apps/api/scripts/prepare-deploy.mjs`, then run `npm install --omit=dev` inside `apps/api/deploy`.
 - To seed a deployed database, run `npm run seed` from the App Service SSH console (`node dist/seed.js`) with the seed variables set.
 - **Pin the App Service to ONE instance** (instance count 1, autoscale off). The per-IP sign-in rate limiter (NFR-05) keeps its counters in the API process's memory, so with two or more instances each one counts separately and the limit stops working as intended. **Tech debt TD-01:** move the limiter (and the lockout counters) to a shared store such as MongoDB or Redis before scaling out. Don't scale out until TD-01 is done.
+
+### Client IP and rate limiting (DEF-002)
+
+The sign-in limiter (NFR-05) needs one key per client on both routes into the API. We captured real headers on the App Service on 2026-10-09:
+
+| Route                    | What the API receives                                                                                                                                                                                                |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser → Azure          | `X-Forwarded-For: <anything the client sent>, <client>:<port>`. Azure's front end appends the TCP peer as `ip:port`, with a new port on every connection. `X-Client-IP` holds the same peer without the port         |
+| Browser → Vercel → Azure | Vercel **replaces** `X-Forwarded-For` with the visitor IP (and sets `X-Real-IP`, `X-Vercel-Forwarded-For`), then Azure appends **Vercel's** egress `ip:port`. Vercel egress addresses change from request to request |
+
+Root cause: with `TRUST_PROXY_HOPS=2` the direct route took the second entry from the right, which is whatever the client put in `X-Forwarded-For`, so each spoofed value got a fresh bucket. On top of that, the QA machine's egress (a Cloudflare-based tunnel) uses a different address for each connection, within 104.28.194.0/24 and 104.28.226.0/24. Per-address keys therefore split one client across roughly a dozen buckets.
+
+How the API decides (`apps/api/src/middleware/clientIp.ts`):
+
+1. **Through Vercel**: `apps/web/middleware.ts` (Vercel Routing Middleware, `/api/*` only) removes any incoming `x-xc8-client-ip` / `x-xc8-edge-secret`, then adds the visitor IP and `EDGE_PROXY_SECRET`. The API trusts `x-xc8-client-ip` **only** when the secret matches (constant-time comparison). Vercel doesn't publish fixed egress IPs or a verifiable proxy signature, so a shared secret is the simplest signal that a third party can't forge.
+2. **Otherwise** (direct to Azure, or a missing or wrong secret): it uses the entry Azure's front end appended, which is the rightmost `X-Forwarded-For` entry (`TRUST_PROXY_HOPS=1`). Ports, `[v6]:port` brackets and `::ffff:` prefixes are stripped, and entries further left are ignored.
+3. **Fallback**: the socket address.
+
+The key is the client's IPv4 /24 (`AUTH_RATE_LIMIT_IPV4_PREFIX`) or IPv6 /56. Rotating egress pools then count as one client, and a spoofed `X-Forwarded-For` has no effect on either route. Trade-off: people sharing a /24 also share the 20-attempts-per-15-minutes budget. The per-account lockout still applies on its own. A client whose egress spans several /24s (like the QA tunnel, which uses two) gets one bucket per /24. A rate-limited request returns `429 {"error":{"code":"RATE_LIMITED", ...}}` with `Retry-After`. A debug-level log line records the resolved IP, its source (`edge` / `proxy` / `socket`) and the key. Secrets are never logged.
+
+Rotate the secret by setting a new value on Vercel (Preview and Production) and on the App Service, then redeploying the web app. Until both sides match, Vercel traffic falls back to the Vercel egress address. That is weaker, but it still can't be spoofed.
 
 ## Security notes
 

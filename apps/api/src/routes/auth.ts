@@ -87,7 +87,13 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
       { _id: user._id },
       { $set: { failedLogins: 0, lockedUntil: null, lastLoginAt: now } },
     );
-    await createSession(config, user._id, req, res, clientIp(req, config.TRUST_PROXY_HOPS));
+    await createSession(
+      config,
+      user._id,
+      req,
+      res,
+      clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET }),
+    );
     user.lastLoginAt = now;
     res.json({ user: toUserDto(user) });
   });
@@ -154,7 +160,13 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
       entityId: updated._id,
       action: user.invite?.purpose === 'RESET' ? 'password_reset' : 'password_set',
     });
-    await createSession(config, updated._id, req, res, clientIp(req, config.TRUST_PROXY_HOPS));
+    await createSession(
+      config,
+      updated._id,
+      req,
+      res,
+      clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET }),
+    );
     res.json({ user: toUserDto(updated) });
   });
 

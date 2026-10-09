@@ -42,10 +42,22 @@ const EnvSchema = z.object({
   /** Lifetime of password reset links (FR-AUTH-05). */
   RESET_TTL_HOURS: z.coerce.number().int().min(1).default(24),
   /**
-   * Number of reverse proxies in front of the API that append to X-Forwarded-For.
-   * Azure App Service direct = 1; behind the Vercel /api rewrite = 2; local = 0.
+   * Number of trusted reverse proxies that APPEND to X-Forwarded-For on the direct path.
+   * Azure App Service = 1 (its front end appends `client:port`); local = 0. Traffic through
+   * the Vercel /api proxy is identified by EDGE_PROXY_SECRET instead (see README, DEF-002).
    */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  /**
+   * Shared secret the Vercel Routing Middleware sends with the visitor IP. When it matches,
+   * the API trusts `x-xc8-client-ip`; otherwise it uses the IP Azure's front end appended.
+   */
+  EDGE_PROXY_SECRET: z
+    .string()
+    .min(32, 'EDGE_PROXY_SECRET must be at least 32 characters')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  /** IPv4 addresses in the same /N share one auth rate-limit bucket (IPv6 uses /56). */
+  AUTH_RATE_LIMIT_IPV4_PREFIX: z.coerce.number().int().min(8).max(32).default(24),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 

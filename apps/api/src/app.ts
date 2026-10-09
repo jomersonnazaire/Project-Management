@@ -1,14 +1,14 @@
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
-import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
+import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import type { Logger } from 'pino';
 import type { AppConfig } from './config.js';
 import { dbState } from './db.js';
 import { HttpError } from './lib/errors.js';
 import { createLogger, httpLogger } from './logger.js';
-import { clientIp } from './middleware/clientIp.js';
+import { rateLimitKey, resolveClientIp } from './middleware/clientIp.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import {
   CSRF_HEADER,
@@ -55,19 +55,25 @@ export function createApp(config: AppConfig, logger: Logger = createLogger(confi
   // memory (the default MemoryStore), so the App Service must stay pinned to ONE instance.
   // Tech debt TD-01: move the limiter (and lockout counters) to a shared store such as MongoDB
   // or Redis before scaling out to more than one instance.
+  const ipOpts = { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET };
   const authLimiter = rateLimit({
     windowMs: config.AUTH_RATE_LIMIT_WINDOW_MINUTES * 60_000,
     limit: config.AUTH_RATE_LIMIT_MAX,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     validate: false,
-    keyGenerator: (req) => ipKeyGenerator(clientIp(req, config.TRUST_PROXY_HOPS)),
+    keyGenerator: (req) => {
+      const { ip, source } = resolveClientIp(req, ipOpts);
+      const key = rateLimitKey(ip, config.AUTH_RATE_LIMIT_IPV4_PREFIX);
+      req.log?.debug({ rateLimit: { ip, source, key } }, 'auth limiter key');
+      return key;
+    },
     handler: (_req, _res, next) =>
       next(
         new HttpError(
           429,
           'RATE_LIMITED',
-          'Too many attempts. Please wait a few minutes and try again.',
+          `Too many sign-in attempts. Please wait ${config.AUTH_RATE_LIMIT_WINDOW_MINUTES} minutes and try again.`,
         ),
       ),
   });
