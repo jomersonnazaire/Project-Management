@@ -92,7 +92,13 @@ describe('TC-R01/R02/R04/R06: report preview', () => {
     api('MEMBER', darRoute(report()));
     renderAt('/dar?from=2026-09-30&to=2026-10-02', <App />);
     const view = await screen.findByTestId('dar-report');
-    expect(within(view).getByText('Daily Accomplishment Report')).toBeInTheDocument();
+    // DR-26: the navy band carries the white title and the range.
+    const band = view.querySelector('.dar-band')!;
+    expect(
+      within(band as HTMLElement).getByRole('heading', { name: 'Daily Accomplishment Report' }),
+    ).toBeInTheDocument();
+    expect(band).toHaveTextContent('Generated range: Sep 30, 2026 to Oct 2, 2026');
+    expect(view.querySelectorAll('col')).toHaveLength(11);
     expect(
       within(view).getByText('Generated range: Sep 30, 2026 to Oct 2, 2026'),
     ).toBeInTheDocument();

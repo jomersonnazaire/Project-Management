@@ -380,3 +380,29 @@ describe('TC-S07: Admin entitlements', () => {
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
   });
 });
+
+describe('DR-33: AM + PM of the same type show as one full-day row', () => {
+  it('merges the halves in My leave and Team on leave, and cancels each half from the row menu', async () => {
+    const am = leave({ id: 'am1', dayPart: 'AM', from: '2099-10-13', to: '2099-10-13', days: 0.5 });
+    const pm = leave({ id: 'pm1', dayPart: 'PM', from: '2099-10-13', to: '2099-10-13', days: 0.5 });
+    leaveApi({
+      extra: (url, init) =>
+        /\/leave(\?|$)/.test(url) && (!init?.method || init.method === 'GET')
+          ? { status: 200, body: { items: [am, pm] } }
+          : url.includes('/leave/team')
+            ? { status: 200, body: { year: 2026, items: [am, pm], people: [] } }
+            : undefined,
+    });
+    renderAt('/leave', <App />);
+    const cell = await screen.findByText('Full day (AM + PM)');
+    const row = cell.closest('tr')!;
+    expect(row).toHaveTextContent('1');
+    expect(screen.queryByText('Half day AM')).not.toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Cancel' }));
+    expect(await screen.findByRole('button', { name: 'Cancel morning (AM)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel afternoon (PM)' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Team on leave' }));
+    expect(await screen.findByText('Full day (AM + PM)')).toBeInTheDocument();
+    expect(screen.queryByText('Half day PM')).not.toBeInTheDocument();
+  });
+});
