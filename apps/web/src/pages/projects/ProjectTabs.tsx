@@ -636,7 +636,7 @@ export function ActivityTab({ project }: { project: ProjectDto }) {
 
 export function ComingSoonTab({ title }: { title: string }) {
   return (
-    <EmptyState icon="bx-time" title={`${title} arrives in a later milestone`}>
+    <EmptyState icon="bx-time" title={`${title} is coming in a later milestone`}>
       This tab is planned for Milestone 3.
     </EmptyState>
   );

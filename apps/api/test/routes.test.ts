@@ -160,7 +160,7 @@ describe('Route policy table', () => {
       'GET /time/options time.create',
       'POST /time time.create',
       'PATCH /time/:id time.edit',
-      'DELETE /time/:id time.delete',
+      'DELETE /time/:id authenticated',
       'GET /projects/:id/time time.view',
       'GET /projects/:id/folders documents.view',
       'POST /projects/:id/folders documents.create',

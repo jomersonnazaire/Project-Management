@@ -189,6 +189,18 @@ export function timeLockBoundary(now = new Date()): Date {
 // ---------- Uploads (FR-EVD-01..08, FR-DOC-13) ----------
 /** 25 MiB (FR-EVD-03, FR-DOC-13). */
 export const MAX_UPLOAD_BYTES = 26_214_400;
+
+/**
+ * DEF-004: never "report.pdf is 25.0 MB. The limit is 25 MB." for a file just over the limit.
+ * Show the real size when it reads as more than 25 MB, otherwise say "larger than 25 MB".
+ */
+export function tooLargeMessage(name: string, size: number): string {
+  const shown = formatBytes(size);
+  const mb = Number.parseFloat(shown);
+  return shown.endsWith('MB') && mb > 25
+    ? `${name} is ${shown}, larger than the 25 MB limit.`
+    : `${name} is larger than 25 MB, the limit per file.`;
+}
 export const MAX_FILES_PER_UPLOAD = 10;
 /** Signed download links expire within 5 minutes (FR-DOC-41, FR-EVD-04). */
 export const DOWNLOAD_LINK_MINUTES = 5;
@@ -284,7 +296,7 @@ export function checkFileRules(
     return {
       status: 413,
       code: 'FILE_TOO_LARGE',
-      message: `${file.name} is ${formatBytes(file.size)}. The limit is 25 MB.`,
+      message: tooLargeMessage(file.name, file.size),
     };
   }
   if (file.size <= 0) {

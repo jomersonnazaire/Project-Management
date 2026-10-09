@@ -16,11 +16,11 @@ import {
 } from '@xc8/shared';
 import type { Request } from 'express';
 import type { Types } from 'mongoose';
-import { perm, type RouteRegistry } from '../access/registry.js';
+import { AUTHENTICATED, perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { unprocessable } from '../lib/http422.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
-import { currentUser } from '../middleware/auth.js';
+import { currentPermissions, currentUser } from '../middleware/auth.js';
 import {
   ProjectModel,
   TaskModel,
@@ -275,7 +275,12 @@ export function timeRouter(registry: RouteRegistry) {
     res.json({ entry: dto });
   });
 
-  r.delete('/:id', perm('time', 'delete'), async (req, res) => {
+  // DEF-005: someone else's entry (any project) is "not found" before the Delete permission is
+  // checked, so a 403 never confirms that the entry exists. The access rules still apply (403).
+  r.delete('/:id', AUTHENTICATED, async (req, res) => {
+    const found = await TimeEntryModel.findById(idParam(req)).select('userId').lean();
+    if (!found || !found.userId.equals(currentUser(req)._id)) throw notFound();
+    if (!currentPermissions(req).time.delete) throw forbidden();
     const entry = await loadOwn(req);
     await entry.deleteOne();
     await recomputeActualHours(entry.taskId);

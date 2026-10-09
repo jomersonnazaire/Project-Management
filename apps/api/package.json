@@ -13,6 +13,7 @@
     "dev:db": "tsx scripts/dev-db.ts",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
     "seed:holidays": "tsx --env-file-if-exists=.env scripts/seed-holidays.ts",
+    "seed:qa-project": "tsx --env-file-if-exists=.env scripts/seed-qa-project.ts",
     "build": "tsup",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json",

@@ -95,9 +95,7 @@ export function NotificationBell() {
           </ul>
         )}
         {items.length > 0 && (
-          <p className="small text-body-secondary text-center my-2">
-            {NOTIFICATION_LIST_NOTE}
-          </p>
+          <p className="small text-body-secondary text-center my-2">{NOTIFICATION_LIST_NOTE}</p>
         )}
       </Dropdown.Menu>
     </Dropdown>

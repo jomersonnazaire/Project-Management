@@ -22,7 +22,6 @@ const MAIN: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: 'bx-grid-alt', soon: true },
   { to: '/projects', label: 'Projects', icon: 'bx-briefcase', any: [['projects', 'view']] },
   { to: '/board', label: 'Task board', icon: 'bx-columns', any: [['tasks', 'view']] },
-  { to: '/documents', label: 'Documents', icon: 'bx-folder', soon: true },
   { to: '/time', label: 'Time logging', icon: 'bx-time-five', any: [['time', 'view']] },
 ];
 

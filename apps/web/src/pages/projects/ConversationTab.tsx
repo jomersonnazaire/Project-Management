@@ -277,7 +277,7 @@ export function ConversationTab({
                     value={draft.contactId}
                     onChange={(e) => setDraft({ ...draft, contactId: e.target.value })}
                   >
-                    <option value="">Tag a client contact (optional)</option>
+                    <option value="">Tag a contact</option>
                     {contacts.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} · {project.clientName}
