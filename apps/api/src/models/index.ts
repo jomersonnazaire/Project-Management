@@ -6,3 +6,5 @@ export * from './Session.js';
 export * from './ActivityLog.js';
 export * from './AccessRule.js';
 export * from './Project.js';
+export * from './Template.js';
+export * from './Task.js';

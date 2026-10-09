@@ -100,7 +100,8 @@ describe('Clients › Projects tab and counts follow the project scope (FR-CLI-1
         clientId: acme,
         managerId: pm._id,
         memberIds: [member.user._id],
-        status: 'DELAYED',
+        status: 'ACTIVE',
+        computed: { health: 'DELAYED', updatedAt: new Date() },
         progress: 42,
         startDate: new Date('2026-08-18'),
         plannedEndDate: new Date('2026-11-20'),
@@ -127,9 +128,10 @@ describe('Clients › Projects tab and counts follow the project scope (FR-CLI-1
       name: 'SAP B1 Rollout',
       managerName: 'Petra Manager',
       progress: 42,
-      status: 'DELAYED',
+      status: 'ACTIVE',
+      health: 'DELAYED',
       archived: false,
-      startDate: '2026-08-18T00:00:00.000Z',
+      startDate: '2026-08-18',
     });
     expect((await admin.agent.get(`/api/v1/clients/${acme}/projects?status=NOPE`)).status).toBe(
       400,

@@ -1,14 +1,15 @@
 import {
-  PROJECT_STATUSES,
+  OPEN_TASK_STATUSES,
   clientSchema,
   contactSchema,
   listQuerySchema,
   updateClientSchema,
   updateContactSchema,
-  type ProjectStatus,
+  todayUtc,
+  type ContactDto,
 } from '@xc8/shared';
 import type { Request } from 'express';
-import type { FilterQuery, Types } from 'mongoose';
+import mongoose, { type FilterQuery, type Types } from 'mongoose';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { paginate } from '../lib/pagination.js';
@@ -18,13 +19,15 @@ import {
   ClientContactModel,
   ClientModel,
   ProjectModel,
-  UserModel,
+  TaskModel,
   type Client,
   type ClientContact,
   type Project,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
-import { toClientDto, toContactDto, toProjectSummaryDto } from '../services/dto.js';
+import { toClientDto, toContactDto } from '../services/dto.js';
+import { toProjectListItems, type ProjectDoc } from '../services/projectService.js';
+import { applyProjectFilter } from './projects.js';
 import { clientInScope, projectScopeFilter, visibleClientIds } from '../services/scope.js';
 
 /**
@@ -52,12 +55,49 @@ async function projectCounts(req: Request, clientIds: Types.ObjectId[]) {
       $match: {
         ...projectScopeFilter(currentUser(req)),
         clientId: { $in: clientIds },
-        archived: false,
+        archived: { $ne: true },
       },
     },
     { $group: { _id: '$clientId', n: { $sum: 1 } } },
   ]);
   return new Map(counts.map((c) => [String(c._id), c.n]));
+}
+
+/**
+ * Per-contact Projects column and pending / overdue counts (FR-CLI-05, doc 11 deviation 7). Both
+ * follow the caller's project scope, so a Member never sees other projects' names (FR-CLI-12).
+ */
+async function withProjects(req: Request, contacts: ContactDto[]): Promise<ContactDto[]> {
+  if (!contacts.length) return contacts;
+  const ids = contacts.map((c) => new mongoose.Types.ObjectId(c.id));
+  const scope = projectScopeFilter(currentUser(req));
+  const [projects, scoped] = await Promise.all([
+    ProjectModel.find({ ...scope, activeContactIds: { $in: ids }, archived: { $ne: true } })
+      .select('name activeContactIds')
+      .sort({ name: 1 })
+      .lean(),
+    Object.keys(scope).length ? ProjectModel.distinct('_id', scope) : Promise.resolve(null),
+  ]);
+  const tasks = await TaskModel.find({
+    clientContactId: { $in: ids },
+    party: 'CLIENT',
+    status: { $in: OPEN_TASK_STATUSES },
+    ...(scoped ? { projectId: { $in: scoped } } : {}),
+  })
+    .select('clientContactId dueDate')
+    .lean();
+  const today = todayUtc();
+  return contacts.map((c) => {
+    const mine = tasks.filter((t) => t.clientContactId?.toString() === c.id);
+    return {
+      ...c,
+      projects: projects
+        .filter((p) => p.activeContactIds.some((id) => id.toString() === c.id))
+        .map((p) => ({ id: p._id.toString(), name: p.name })),
+      pendingCount: mine.length,
+      overdueCount: mine.filter((t) => t.dueDate && t.dueDate < today).length,
+    };
+  });
 }
 
 async function contactCounts(clientIds: Types.ObjectId[]) {
@@ -180,7 +220,12 @@ export function clientsRouter(registry: RouteRegistry) {
       filter.$or = [{ name: re }, { email: re }, { position: re }, { department: re }];
     }
     const contacts = await ClientContactModel.find(filter).sort({ name: 1 }).lean();
-    res.json({ items: contacts.map((c) => toContactDto(c, client.name)) });
+    res.json({
+      items: await withProjects(
+        req,
+        contacts.map((c) => toContactDto(c, client.name)),
+      ),
+    });
   });
 
   r.post('/:id/contacts', perm('contacts', 'create'), async (req, res) => {
@@ -204,30 +249,12 @@ export function clientsRouter(registry: RouteRegistry) {
       ...projectScopeFilter(currentUser(req)),
       clientId: client._id,
     };
-    if (q.status === 'ARCHIVED') filter.archived = true;
-    else {
-      filter.archived = false;
-      if (q.status) {
-        if (!(PROJECT_STATUSES as readonly string[]).includes(q.status)) {
-          throw badRequest('Unknown status.');
-        }
-        filter.status = q.status as ProjectStatus;
-      }
-    }
+    // Status, Delayed / At risk (health of running projects) or Archived; archived are hidden
+    // unless chosen (FR-CLI-11).
+    applyProjectFilter(filter, q.status);
     if (q.q) filter.name = new RegExp(escapeRegex(q.q), 'i');
     const projects = await ProjectModel.find(filter).sort({ name: 1 }).limit(500).lean();
-    const managers = await UserModel.find({
-      _id: { $in: projects.map((p) => p.managerId).filter(Boolean) },
-    })
-      .select('name')
-      .lean();
-    const names = new Map(managers.map((u) => [u._id.toString(), u.name]));
-    res.json({
-      items: projects.map((p) =>
-        toProjectSummaryDto(p, p.managerId ? (names.get(p.managerId.toString()) ?? null) : null),
-      ),
-      total: projects.length,
-    });
+    res.json({ items: await toProjectListItems(projects as ProjectDoc[]), total: projects.length });
   });
 
   return r.router;
@@ -267,7 +294,10 @@ export function contactsRouter(registry: RouteRegistry) {
       .lean();
     const names = new Map(clients.map((c) => [c._id.toString(), c.name]));
     res.json({
-      items: items.map((c) => toContactDto(c, names.get(c.clientId.toString()) ?? '')),
+      items: await withProjects(
+        req,
+        items.map((c) => toContactDto(c, names.get(c.clientId.toString()) ?? '')),
+      ),
       page: q.page,
       pageSize: q.pageSize,
       total,
