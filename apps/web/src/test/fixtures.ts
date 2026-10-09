@@ -3,6 +3,8 @@ import {
   type AccessRulesDto,
   type ClientDto,
   type ContactDto,
+  type DashboardDto,
+  type IssueSummaryDto,
   type PermissionGrid,
   type SystemRole,
   type UserDto,
@@ -69,3 +71,31 @@ export function rulesBody(version = 1): { roles: AccessRulesDto[] } {
     })),
   };
 }
+
+export const emptyIssueSummary = (): IssueSummaryDto => ({
+  open: 0,
+  overdue: 0,
+  bySeverity: { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 },
+  byStage: { BEFORE_GO_LIVE: 0, AFTER_GO_LIVE: 0 },
+  avgDaysToResolve: null,
+  resolvedCount: 0,
+  perClient: [],
+});
+
+/** An empty M4 dashboard body (FR-DASH-01..06). */
+export const emptyDashboard = (over: Partial<DashboardDto> = {}): DashboardDto => ({
+  kpis: {
+    activeProjects: 0,
+    delayedProjects: 0,
+    overdueTasks: 0,
+    overdueWaitingOnClient: 0,
+    hoursThisWeek: 0,
+    teamUtilizationPct: null,
+  },
+  activeProjects: [],
+  waitingOnClient: [],
+  upcomingMilestones: [],
+  issues: emptyIssueSummary(),
+  myProjects: false,
+  ...over,
+});

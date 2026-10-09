@@ -1,6 +1,7 @@
 import {
   OPEN_TASK_STATUSES,
   addDays,
+  describeTimeLock,
   parseDateOnly,
   timeEntrySchema,
   timeWeekQuerySchema,
@@ -28,7 +29,7 @@ import {
   type TimeEntry,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
-import { currentLockBoundary } from '../services/timeLock.js';
+import { currentLockBoundary, loadTimeLock } from '../services/timeLock.js';
 import { recomputeProject } from '../services/projectService.js';
 import { isProjectMember, type ScopeUser } from '../services/scope.js';
 import { loadProject } from './projects.js';
@@ -155,6 +156,7 @@ export function timeRouter(registry: RouteRegistry) {
       items,
       total: items.reduce((s, e) => s + e.hours, 0),
       capacity: user.weeklyCapacityHours ?? 40,
+      lockDescription: describeTimeLock((await loadTimeLock()).policy),
     };
     res.json(body);
   });

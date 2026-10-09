@@ -91,7 +91,7 @@ export function TimePage() {
                             {e.locked ? (
                               <span
                                 className="small text-body-secondary"
-                                title="Locked after Monday 12:00"
+                                title={data.data?.lockDescription ?? 'Locked'}
                               >
                                 🔒 Locked
                               </span>
@@ -133,8 +133,9 @@ export function TimePage() {
                 </div>
               )}
               <p className="small text-body-secondary mt-3 mb-0">
-                Last week's entries lock on Monday at 12:00 Philippine time. Ask your project
-                manager if a locked entry needs changing.
+                {data.data?.lockDescription ??
+                  "Last week's entries lock every Monday at 12:00 PM Philippine time."}{' '}
+                Ask your project manager if a locked entry needs changing.
               </p>
             </div>
           </div>

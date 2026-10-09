@@ -161,6 +161,8 @@ export interface TimeWeekDto {
   items: TimeEntryDto[];
   total: number;
   capacity: number;
+  /** Q-09: the Admin-set lock in words, e.g. "Last week's entries lock every Monday at 12:00 PM Philippine time." */
+  lockDescription?: string;
 }
 
 export interface LoggableTaskDto {
