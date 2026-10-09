@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { ApiError, api } from '../api/client';
+import { api, authErrorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { AuthCard, safeNext } from '../components/AuthCard';
 import { BrandLogo } from '../components/BrandLogo';
@@ -33,7 +33,7 @@ export function LoginPage() {
       setUser(res.user);
       navigate(safeNext(params.get('next')), { replace: true });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.');
+      setError(authErrorMessage(e));
     }
   });
 

@@ -23,6 +23,16 @@ export class ApiError extends Error {
   }
 }
 
+/** Shown when the API's per-IP sign-in limiter answers 429 (NFR-05). */
+export const RATE_LIMITED_MESSAGE =
+  'Too many sign-in attempts. Please wait 15 minutes and try again.';
+
+/** User-facing message for errors on the sign-in and set-password screens. */
+export function authErrorMessage(e: unknown): string {
+  if (e instanceof ApiError) return e.status === 429 ? RATE_LIMITED_MESSAGE : e.message;
+  return 'Something went wrong. Please try again.';
+}
+
 type Listener = (err: ApiError) => void;
 const unauthorizedListeners = new Set<Listener>();
 

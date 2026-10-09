@@ -3,7 +3,7 @@ import { checkPassword, isPasswordValid, type InviteInfoDto, type UserDto } from
 import { useState } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
-import { ApiError, api } from '../api/client';
+import { ApiError, RATE_LIMITED_MESSAGE, api, authErrorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { LoadingRows } from '../components/Feedback';
 import { AuthCard } from '../components/AuthCard';
@@ -53,11 +53,23 @@ export function SetupPasswordPage() {
       setUser(res.user);
       navigate('/my-tasks', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(authErrorMessage(err));
     } finally {
       setSaving(false);
     }
   };
+
+  if (info.error instanceof ApiError && info.error.status === 429) {
+    return (
+      <AuthCard>
+        <h4 className="mb-2">Please wait</h4>
+        <Alert variant="danger" className="py-2 small">
+          {RATE_LIMITED_MESSAGE}
+        </Alert>
+        <Link to="/login">Back to sign in</Link>
+      </AuthCard>
+    );
+  }
 
   if (!token || info.isError) {
     return (
