@@ -92,6 +92,8 @@ export function usersRouter(config: AppConfig) {
       user: toUserDto(user),
       inviteUrl: setupUrl(config, token),
       inviteExpiresAt: expiresAt.toISOString(),
+      purpose: 'INVITE',
+      replacedPrevious: false,
     };
     res.status(201).json(body);
   });
@@ -188,17 +190,22 @@ export function usersRouter(config: AppConfig) {
   });
 
   /**
-   * Issues a new one-time link: a fresh invite for users who haven't set a password yet,
-   * or a password-reset link for active users (email delivery isn't configured in Phase 1).
+   * Issues a new single-use link (FR-AUTH-04/05, AC-02.6): "New invite link" for users who
+   * haven't set a password yet (expires after INVITE_TTL_HOURS), "Copy reset link" for active
+   * users (expires after RESET_TTL_HOURS). Email delivery is deferred, so the Admin shares it.
+   * A user holds at most one link: storing the new hash cancels any earlier unused link.
    */
   router.post('/:id/invite', async (req, res) => {
     const admin = currentUser(req);
-    const user = await UserModel.findById(idParam(req)).select('+passwordHash');
+    const user = await UserModel.findById(idParam(req)).select('+passwordHash +invite');
     if (!user) throw notFound();
     if (!user.active) throw conflict('Reactivate this user first.', 'USER_DEACTIVATED');
     const purpose = user.passwordHash ? 'RESET' : 'INVITE';
+    const ttlHours = purpose === 'RESET' ? config.RESET_TTL_HOURS : config.INVITE_TTL_HOURS;
+    const now = new Date();
+    const replacedPrevious = !!user.invite?.tokenHash && user.invite.expiresAt > now;
     const token = newToken();
-    const expiresAt = new Date(Date.now() + config.INVITE_TTL_HOURS * 3_600_000);
+    const expiresAt = new Date(now.getTime() + ttlHours * 3_600_000);
     await UserModel.updateOne(
       { _id: user._id },
       { $set: { invite: { tokenHash: sha256(token), expiresAt, invitedBy: admin._id, purpose } } },
@@ -208,11 +215,16 @@ export function usersRouter(config: AppConfig) {
       entityType: 'user',
       entityId: user._id,
       action: purpose === 'RESET' ? 'password_reset_link_issued' : 'invite_reissued',
+      ...(replacedPrevious
+        ? { changes: [{ field: 'previousLink', old: 'unused', new: 'cancelled' }] }
+        : {}),
     });
     const body: InviteResultDto = {
       user: toUserDto(user),
       inviteUrl: setupUrl(config, token),
       inviteExpiresAt: expiresAt.toISOString(),
+      purpose,
+      replacedPrevious,
     };
     res.json(body);
   });

@@ -93,7 +93,7 @@ Configuration comes from environment variables only. See `apps/api/.env.example`
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS`                   | `30` / `12`             | Idle timeout (FR-AUTH-06) and hard cap                                                    |
 | `LOCKOUT_THRESHOLD` / `LOCKOUT_MINUTES`                             | `5` / `15`              | Per-account lockout (FR-AUTH-07)                                                          |
 | `AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_MINUTES`            | `20` / `15`             | Per-IP limit on sign-in and password setup                                                |
-| `INVITE_TTL_HOURS`                                                  | `72`                    | Lifetime of invite and reset links                                                        |
+| `INVITE_TTL_HOURS` / `RESET_TTL_HOURS`                              | `72` / `24`             | Lifetime of single-use invite links and Admin-issued reset links                          |
 | `TRUST_PROXY_HOPS`                                                  | `0`                     | `1` when browsers call Azure directly. `2` behind the Vercel rewrite                      |
 | `LOG_LEVEL`                                                         | `info`                  | pino level                                                                                |
 | `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`, `SEED_RESET_PASSWORDS` |                         | Seed script only                                                                          |
@@ -128,6 +128,7 @@ Only `VITE_*` variables reach the browser. Never put secrets in them.
 
 ## Security notes
 
+- Invite and reset links are single use. Email is deferred, so an Admin copies the link and shares it by hand: "Create invite link" in Admin › Users, "New invite link" for invited users, and "Copy reset link" for active users. Invite links expire after 72 hours and reset links after 24 hours. Each user holds at most one link, so creating a new link cancels any earlier unused one. Used, expired and replaced links all get the same message: "This link has expired. Ask an Admin for a new one." The sign-in page has no self-service reset; it tells people to ask an Admin.
 - Passwords are hashed with argon2id. Sessions are server-side: the httpOnly cookie holds a random token, and the database stores only its SHA-256.
 - Every request reloads the user, so deactivation or a role change takes effect immediately. Deactivating a user also revokes their sessions.
 - State-changing requests need the `X-Requested-With: xc8-web` header and an allowed `Origin` (CSRF defence in depth on top of SameSite).

@@ -1,50 +1,50 @@
 import type { InviteResultDto } from '@xc8/shared';
-import { useState } from 'react';
-import { Button, Form, InputGroup, Modal } from 'react-bootstrap';
+import { Button, Modal } from 'react-bootstrap';
+import { CopyLinkField } from './CopyLinkField';
+import { hoursUntil } from './linkExpiry';
 
 /**
- * Shows the one-time setup link after an invite or reset. Email delivery isn't configured
- * in Phase 1 (Q-02), so the Admin shares the link with the person directly.
+ * Shows a freshly generated single-use link ("Copy reset link" / "New invite link").
+ * Email delivery is deferred (FR-AUTH-05), so the Admin shares the link themselves.
  */
 export function InviteLinkModal({
   result,
+  autoCopied = false,
   onClose,
 }: {
   result: InviteResultDto | null;
+  autoCopied?: boolean;
   onClose: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
   if (!result) return null;
+  const reset = result.purpose === 'RESET';
+  const hours = hoursUntil(result.inviteExpiresAt);
   const expires = new Date(result.inviteExpiresAt).toLocaleString();
-  const reset = result.user.status === 'ACTIVE';
-  const copy = async () => {
-    await navigator.clipboard.writeText(result.inviteUrl);
-    setCopied(true);
-  };
   return (
     <Modal show onHide={onClose} centered>
       <Modal.Header closeButton>
-        <Modal.Title as="h5">{reset ? 'Password reset link' : 'Invite created'}</Modal.Title>
+        <Modal.Title as="h5">{reset ? 'Reset link' : 'New invite link'}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <p>
-          Send this one-time link to <strong>{result.user.name}</strong> ({result.user.email}). They
-          will {reset ? 'choose a new password' : 'set their own password on first sign-in'}.
+          Share this link with <strong>{result.user.name}</strong> ({result.user.email}) yourself.
+          They will {reset ? 'choose a new password' : 'set their own password'}.
         </p>
-        <Form.Label htmlFor="invite-link">Setup link</Form.Label>
-        <InputGroup>
-          <Form.Control
-            id="invite-link"
-            readOnly
-            value={result.inviteUrl}
-            onFocus={(e) => e.target.select()}
-          />
-          <Button variant="outline-primary" onClick={() => void copy()}>
-            <i className="bx bx-copy me-1" aria-hidden="true" />
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        </InputGroup>
-        <p className="form-text mt-2 mb-0">Expires {expires}. It can be used once.</p>
+        {autoCopied && (
+          <p className="text-success small" role="status">
+            <i className="bx bx-check me-1" aria-hidden="true" />
+            Link copied to clipboard.
+          </p>
+        )}
+        <CopyLinkField
+          id="invite-link"
+          label={`${reset ? 'Reset' : 'Invite'} link (single use, expires in ${hours} hours)`}
+          url={result.inviteUrl}
+        />
+        <p className="form-text mt-2 mb-0">
+          Expires {expires}. Creating a new link cancels any earlier unused one.
+          {result.replacedPrevious && ' The previous unused link no longer works.'}
+        </p>
       </Modal.Body>
       <Modal.Footer>
         <Button onClick={onClose}>Done</Button>

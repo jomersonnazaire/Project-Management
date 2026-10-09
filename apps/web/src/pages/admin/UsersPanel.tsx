@@ -26,6 +26,8 @@ import {
 import { useAuth } from '../../auth/AuthContext';
 import { UserStatusBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { CopyLinkField } from '../../components/CopyLinkField';
+import { hoursUntil } from '../../components/linkExpiry';
 import { InviteLinkModal } from '../../components/InviteLinkModal';
 
 type InviteIn = z.input<typeof inviteUserSchema>;
@@ -116,14 +118,9 @@ function RoleSelects({
   );
 }
 
-function InviteUserForm({
-  teams,
-  onInvited,
-}: {
-  teams: TeamDto[];
-  onInvited: (r: InviteResultDto) => void;
-}) {
+function InviteUserForm({ teams }: { teams: TeamDto[] }) {
   const invite = useInviteUser();
+  const [created, setCreated] = useState<InviteResultDto | null>(null);
   const {
     register,
     control,
@@ -146,7 +143,7 @@ function InviteUserForm({
     try {
       const res = await invite.mutateAsync(values);
       reset();
-      onInvited(res);
+      setCreated(res);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'EMAIL_IN_USE')
         setError('email', { message: e.message });
@@ -193,11 +190,22 @@ function InviteUserForm({
       </fieldset>
       {errors.root && <div className="text-danger small mb-2">{errors.root.message}</div>}
       <Button type="submit" className="w-100" disabled={isSubmitting}>
-        {isSubmitting ? 'Sending…' : 'Send invite'}
+        {isSubmitting ? 'Creating…' : 'Create invite link'}
       </Button>
-      <p className="form-text mt-2 mb-0">
-        You&apos;ll get a one-time setup link to share; the person sets their own password.
-      </p>
+      {created ? (
+        <div className="mt-4">
+          <CopyLinkField
+            id="invite-link"
+            label={`Invite link for ${created.user.name} (single use, expires in ${hoursUntil(created.inviteExpiresAt)} hours, share it yourself)`}
+            url={created.inviteUrl}
+          />
+        </div>
+      ) : (
+        <p className="form-text mt-2 mb-0">
+          You&apos;ll get a single-use invite link to share yourself; the person sets their own
+          password.
+        </p>
+      )}
     </Form>
   );
 }
@@ -321,7 +329,18 @@ export function UsersPanel() {
   const teams = useTeams();
   const action = useUserAction();
   const reissue = useReissueLink();
-  const [link, setLink] = useState<InviteResultDto | null>(null);
+  const [link, setLink] = useState<{ result: InviteResultDto; autoCopied: boolean } | null>(null);
+  const issueLink = async (id: string) => {
+    const result = await reissue.mutateAsync(id);
+    let autoCopied = false;
+    try {
+      await navigator.clipboard.writeText(result.inviteUrl);
+      autoCopied = true;
+    } catch {
+      // Clipboard unavailable (e.g. permissions); the modal's Copy button still works.
+    }
+    setLink({ result, autoCopied });
+  };
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [confirm, setConfirm] = useState<UserDto | null>(null);
   const teamName = new Map((teams.data?.items ?? []).map((t) => [t.id, t.name]));
@@ -364,8 +383,7 @@ export function UsersPanel() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Email</th>
+                      <th scope="col">Name / email</th>
                       <th scope="col">Access</th>
                       <th scope="col">Job role</th>
                       <th scope="col">Teams</th>
@@ -378,11 +396,13 @@ export function UsersPanel() {
                   <tbody>
                     {users.data?.items.map((u) => (
                       <tr key={u.id}>
-                        <td className="text-heading">
-                          {u.name}
-                          {u.id === me?.id && <span className="text-body-secondary"> (you)</span>}
+                        <td>
+                          <div className="text-heading">
+                            {u.name}
+                            {u.id === me?.id && <span className="text-body-secondary"> (you)</span>}
+                          </div>
+                          <small className="text-body-secondary">{u.email}</small>
                         </td>
-                        <td>{u.email}</td>
                         <td>{SYSTEM_ROLE_LABELS[u.systemRole]}</td>
                         <td>{JOB_ROLE_LABELS[u.jobRole]}</td>
                         <td>
@@ -394,8 +414,19 @@ export function UsersPanel() {
                         <td>
                           <UserStatusBadge status={u.status} />
                         </td>
-                        <td className="text-end">
-                          <Dropdown align="end">
+                        <td className="text-end text-nowrap">
+                          {u.active && (
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              className="me-2"
+                              disabled={reissue.isPending}
+                              onClick={() => void issueLink(u.id)}
+                            >
+                              {u.status === 'INVITED' ? 'New invite link' : 'Copy reset link'}
+                            </Button>
+                          )}
+                          <Dropdown align="end" className="d-inline-block">
                             <Dropdown.Toggle
                               variant="link"
                               size="sm"
@@ -408,16 +439,6 @@ export function UsersPanel() {
                               <Dropdown.Item as="button" onClick={() => setEditing(u)}>
                                 Edit
                               </Dropdown.Item>
-                              {u.active && (
-                                <Dropdown.Item
-                                  as="button"
-                                  onClick={() => void reissue.mutateAsync(u.id).then(setLink)}
-                                >
-                                  {u.status === 'INVITED'
-                                    ? 'New invite link'
-                                    : 'Password reset link'}
-                                </Dropdown.Item>
-                              )}
                               {u.id !== me?.id &&
                                 (u.active ? (
                                   <Dropdown.Item
@@ -448,7 +469,8 @@ export function UsersPanel() {
             )}
             <p className="small text-body-secondary mt-3 mb-0">
               Client contacts are managed under Clients and never appear here, because they
-              don&apos;t have accounts.
+              don&apos;t have accounts. Reset links are single use and expire in 24 hours. Creating
+              a new link cancels any earlier unused one.
             </p>
           </div>
         </div>
@@ -456,12 +478,16 @@ export function UsersPanel() {
       <div className="col-xxl-4">
         <div className="card">
           <div className="card-body">
-            <InviteUserForm teams={teams.data?.items ?? []} onInvited={setLink} />
+            <InviteUserForm teams={teams.data?.items ?? []} />
           </div>
         </div>
       </div>
 
-      <InviteLinkModal result={link} onClose={() => setLink(null)} />
+      <InviteLinkModal
+        result={link?.result ?? null}
+        autoCopied={link?.autoCopied}
+        onClose={() => setLink(null)}
+      />
       {editing && (
         <EditUserModal
           user={editing}

@@ -14,7 +14,6 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
-  const [showForgot, setShowForgot] = useState(false);
   const {
     register,
     handleSubmit,
@@ -89,22 +88,12 @@ export function LoginPage() {
           {isSubmitting ? 'Signing in…' : 'Sign in'}
         </Button>
       </Form>
-      <p className="text-center mt-3 mb-2">
-        <Button
-          variant="link"
-          size="sm"
-          onClick={() => setShowForgot((v) => !v)}
-          aria-expanded={showForgot}
-        >
-          Forgot password?
-        </Button>
+      <p className="small text-body-secondary text-center mt-3 mb-1">
+        You&apos;ll land on My tasks.
       </p>
-      {showForgot && (
-        <p className="small text-body-secondary">
-          Ask your administrator for a password reset link. (Email reset links arrive in a later
-          release.)
-        </p>
-      )}
+      <p className="small text-body-secondary text-center mb-3">
+        Forgot your password? Ask an Admin for a reset link.
+      </p>
       <p className="small text-body-secondary mb-0">
         Only invited Xceler8 staff can sign in. Client contacts don&apos;t have accounts.
       </p>

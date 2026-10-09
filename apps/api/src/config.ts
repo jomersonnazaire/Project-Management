@@ -37,7 +37,10 @@ const EnvSchema = z.object({
   LOCKOUT_MINUTES: z.coerce.number().int().min(1).default(15),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
+  /** Lifetime of first-time invite links (FR-AUTH-04). */
   INVITE_TTL_HOURS: z.coerce.number().int().min(1).default(72),
+  /** Lifetime of password reset links (FR-AUTH-05). */
+  RESET_TTL_HOURS: z.coerce.number().int().min(1).default(24),
   /**
    * Number of reverse proxies in front of the API that append to X-Forwarded-For.
    * Azure App Service direct = 1; behind the Vercel /api rewrite = 2; local = 0.

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserDto } from '@xc8/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -121,9 +121,9 @@ describe('First-time password setup', () => {
     expect(await screen.findByText(/You were invited by Jomerson Nazaire/)).toBeInTheDocument();
     const newPassword = screen.getByLabelText('New password');
     await userEvent.type(newPassword, 'Ab1!xyz'); // 7 characters
-    expect(screen.getByText('8+ characters').closest('li')).toHaveClass('missing');
+    expect(screen.getByText('At least 8 characters').closest('li')).toHaveClass('missing');
     await userEvent.type(newPassword, 'w'); // 8 characters
-    expect(screen.getByText('8+ characters').closest('li')).not.toHaveClass('missing');
+    expect(screen.getByText('At least 8 characters').closest('li')).not.toHaveClass('missing');
     await userEvent.clear(newPassword);
     await userEvent.type(newPassword, 'Longpassword12');
     expect(screen.getByText(/A symbol/).closest('li')).toHaveClass('missing');
@@ -133,6 +133,120 @@ describe('First-time password setup', () => {
     expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/auth/setup-password'))).toBe(
       false,
     );
+    window.location.hash = '';
+  });
+});
+
+describe('Admin-issued links (FR-AUTH-04/05, TC-A14)', () => {
+  it('the sign-in page has no "Forgot password?" and lands on My tasks (AC-01.1)', async () => {
+    let signedIn = false;
+    mockApi((url) => {
+      if (url.endsWith('/auth/login')) {
+        signedIn = true;
+        return { status: 200, body: { user: user() } };
+      }
+      if (url.endsWith('/auth/me'))
+        return signedIn
+          ? { status: 200, body: { user: user() } }
+          : { status: 401, body: { error: { code: 'UNAUTHENTICATED', message: 'x' } } };
+      return { status: 200, body: { items: [] } };
+    });
+    renderAt('/login', <App />);
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.queryByText(/^Forgot password\?$/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Forgot/ })).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Forgot your password? Ask an Admin for a reset link.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText("You'll land on My tasks.")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Email'), 'member@xceler8.example');
+    await userEvent.type(screen.getByLabelText('Password'), 'Secret-pass-1!');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByRole('heading', { name: 'My tasks' })).toBeInTheDocument();
+  });
+
+  it('shows "Copy reset link" for active users, "New invite link" for invited users, nothing for deactivated', async () => {
+    const people = [
+      user({ id: 'a1', name: 'Active Person', email: 'active@xceler8.example' }),
+      user({
+        id: 'i1',
+        name: 'Invited Person',
+        email: 'invited@xceler8.example',
+        status: 'INVITED',
+      }),
+      user({
+        id: 'd1',
+        name: 'Gone Person',
+        email: 'gone@xceler8.example',
+        status: 'DEACTIVATED',
+        active: false,
+      }),
+    ];
+    const resetUrl =
+      'http://localhost:5173/setup-password#token=reset-token-abcdefghijklmnopqrstuvwxyz';
+    const fetchMock = mockApi((url, init) => {
+      if (url.endsWith('/auth/me'))
+        return { status: 200, body: { user: user({ id: 'me', systemRole: 'ADMIN' }) } };
+      if (url.endsWith('/users/a1/invite') && init?.method === 'POST')
+        return {
+          status: 200,
+          body: {
+            user: people[0],
+            inviteUrl: resetUrl,
+            inviteExpiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+            purpose: 'RESET',
+            replacedPrevious: true,
+          },
+        };
+      if (url.includes('/users'))
+        return { status: 200, body: { items: people, page: 1, pageSize: 100, total: 3 } };
+      return { status: 200, body: { items: [] } };
+    });
+    renderAt('/admin/users', <App />);
+    await screen.findByText('active@xceler8.example');
+    expect(screen.getAllByRole('button', { name: 'Copy reset link' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'New invite link' })).toHaveLength(1);
+    const goneRow = screen.getByText('gone@xceler8.example').closest('tr')!;
+    expect(goneRow.textContent).not.toMatch(/reset link|invite link/);
+    expect(
+      screen.getByText(
+        /Reset links are single use and expire in 24 hours\. Creating a new link cancels any earlier unused one\./,
+      ),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Copy reset link' }));
+    const field = await screen.findByLabelText('Reset link (single use, expires in 24 hours)');
+    expect(field).toHaveValue(resetUrl);
+    expect(
+      within(screen.getByRole('dialog')).getByRole('button', { name: /^(Copy|Copied)$/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/The previous unused link no longer works/)).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([u, i]) => String(u).endsWith('/users/a1/invite') && i?.method === 'POST',
+      ),
+    ).toBe(true);
+  });
+
+  it('an expired, used or replaced link shows the "ask an Admin" message', async () => {
+    window.location.hash = '#token=abcdefghijklmnopqrstuvwxyz0123456789';
+    mockApi((url) =>
+      url.includes('/auth/invite/')
+        ? {
+            status: 400,
+            body: {
+              error: {
+                code: 'INVALID_TOKEN',
+                message: 'This link has expired. Ask an Admin for a new one.',
+              },
+            },
+          }
+        : { status: 401, body: { error: { code: 'UNAUTHENTICATED', message: 'x' } } },
+    );
+    renderAt('/setup-password', <App />);
+    expect(
+      await screen.findByText('This link has expired. Ask an Admin for a new one.'),
+    ).toBeInTheDocument();
     window.location.hash = '';
   });
 });

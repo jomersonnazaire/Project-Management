@@ -63,7 +63,7 @@ export function SetupPasswordPage() {
         <p>
           {info.error instanceof ApiError
             ? info.error.message
-            : 'This link is invalid or has expired. Ask your administrator for a new one.'}
+            : 'This link has expired. Ask an Admin for a new one.'}
         </p>
         <Link to="/login">Back to sign in</Link>
       </AuthCard>

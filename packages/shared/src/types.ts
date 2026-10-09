@@ -71,4 +71,8 @@ export interface InviteResultDto {
   user: UserDto;
   inviteUrl: string;
   inviteExpiresAt: string;
+  /** INVITE for users who haven't set a password yet, RESET for active users. */
+  purpose: 'INVITE' | 'RESET';
+  /** True when an earlier unused link existed and has now been cancelled. */
+  replacedPrevious: boolean;
 }

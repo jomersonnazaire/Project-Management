@@ -177,12 +177,11 @@ function lockedError(until: Date) {
   );
 }
 
+const LINK_EXPIRED_MESSAGE = 'This link has expired. Ask an Admin for a new one.';
+
 function invalidLink() {
-  return badRequest(
-    'This link is invalid or has expired. Ask your administrator for a new one.',
-    undefined,
-    'INVALID_TOKEN',
-  );
+  // Same message for unknown, used, expired and replaced links (AC-02.6), so nothing leaks.
+  return badRequest(LINK_EXPIRED_MESSAGE, undefined, 'INVALID_TOKEN');
 }
 
 async function findByInviteToken(token: unknown) {

@@ -16,7 +16,7 @@ export function checkPassword(password: string): PasswordCheck[] {
   return [
     {
       id: 'length',
-      label: `${PASSWORD_MIN_LENGTH}+ characters`,
+      label: `At least ${PASSWORD_MIN_LENGTH} characters`,
       ok: password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH,
     },
     { id: 'number', label: 'A number', ok: /\d/.test(password) },

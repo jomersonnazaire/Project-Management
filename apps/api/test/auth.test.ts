@@ -1,6 +1,12 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
-import { ClientContactModel, ClientModel, SessionModel, UserModel } from '../src/models/index.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  ActivityLogModel,
+  ClientContactModel,
+  ClientModel,
+  SessionModel,
+  UserModel,
+} from '../src/models/index.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
 
 useDatabase();
@@ -11,6 +17,10 @@ const loginReq = (a: typeof app, email: string, password: string, ip?: string) =
   if (ip) r.set('X-Forwarded-For', ip);
   return r.send({ email, password });
 };
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const LINK_EXPIRED = 'This link has expired. Ask an Admin for a new one.';
+const tokenOf = (inviteUrl: string) => new URL(inviteUrl).hash.replace('#token=', '');
 
 describe('Sign in (US-01)', () => {
   it('AC-01.1 signs in an active user with an httpOnly session cookie and no token in the body', async () => {
@@ -269,7 +279,7 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     expect((await loginReq(app, 'areyes@xceler8.example', 'New-password-123!')).status).toBe(200);
   });
 
-  it('expired links are refused', async () => {
+  it('invite links expire after 72 hours (INVITE_TTL_HOURS, TC-A14)', async () => {
     const admin = await createUser({ systemRole: 'ADMIN' });
     const adminAgent = await login(app, admin.email);
     const invited = await adminAgent.post('/api/v1/users').set(CSRF).send({
@@ -278,12 +288,165 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
       systemRole: 'VIEWER',
       jobRole: 'SUPPORT',
     });
-    const token = new URL(invited.body.inviteUrl).hash.replace('#token=', '');
-    await UserModel.updateOne(
-      { email: 'late@xceler8.example' },
-      { 'invite.expiresAt': new Date(Date.now() - 1000) },
+    expect(invited.body.purpose).toBe('INVITE');
+    const issuedAt = Date.now();
+    const expiresAt = new Date(invited.body.inviteExpiresAt).getTime();
+    expect(Math.abs(expiresAt - issuedAt - 72 * HOUR)).toBeLessThan(10_000);
+    const token = tokenOf(invited.body.inviteUrl);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(expiresAt - MINUTE);
+      expect((await request(app).get(`/api/v1/auth/invite/${token}`)).status).toBe(200);
+      vi.setSystemTime(expiresAt + MINUTE);
+      const late = await request(app).get(`/api/v1/auth/invite/${token}`);
+      expect(late.status).toBe(400);
+      expect(late.body.error).toMatchObject({ code: 'INVALID_TOKEN', message: LINK_EXPIRED });
+      const setup = await request(app)
+        .post('/api/v1/auth/setup-password')
+        .set(CSRF)
+        .send({ token, password: 'Late-password-1!' });
+      expect(setup.status).toBe(400);
+      expect(setup.body.error.message).toBe(LINK_EXPIRED);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reset links expire after 24 hours (RESET_TTL_HOURS, TC-A14)', async () => {
+    const admin = await createUser({ systemRole: 'ADMIN' });
+    const user = await createUser();
+    const adminAgent = await login(app, admin.email);
+    const res = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.purpose).toBe('RESET');
+    const expiresAt = new Date(res.body.inviteExpiresAt).getTime();
+    expect(Math.abs(expiresAt - Date.now() - 24 * HOUR)).toBeLessThan(10_000);
+    const token = tokenOf(res.body.inviteUrl);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(expiresAt - MINUTE);
+      expect((await request(app).get(`/api/v1/auth/invite/${token}`)).status).toBe(200);
+      vi.setSystemTime(expiresAt + MINUTE);
+      const setup = await request(app)
+        .post('/api/v1/auth/setup-password')
+        .set(CSRF)
+        .send({ token, password: 'Late-reset-pass-1!' });
+      expect(setup.status).toBe(400);
+      expect(setup.body.error.message).toBe(LINK_EXPIRED);
+    } finally {
+      vi.useRealTimers();
+    }
+    // The old password still works because the reset never happened.
+    expect((await loginReq(app, user.email, PASSWORD)).status).toBe(200);
+  });
+
+  it('link lifetimes are configurable', async () => {
+    const custom = makeApp({ INVITE_TTL_HOURS: '5', RESET_TTL_HOURS: '2' });
+    const admin = await createUser({ systemRole: 'ADMIN' });
+    const user = await createUser();
+    const agent = request.agent(custom);
+    await agent
+      .post('/api/v1/auth/login')
+      .set(CSRF)
+      .send({ email: admin.email, password: PASSWORD })
+      .expect(200);
+    const reset = await agent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
+    const invite = await agent.post('/api/v1/users').set(CSRF).send({
+      name: 'Configured',
+      email: 'configured@xceler8.example',
+      systemRole: 'MEMBER',
+      jobRole: 'SUPPORT',
+    });
+    const now = Date.now();
+    expect(Math.abs(new Date(reset.body.inviteExpiresAt).getTime() - now - 2 * HOUR)).toBeLessThan(
+      10_000,
     );
-    expect((await request(app).get(`/api/v1/auth/invite/${token}`)).status).toBe(400);
+    expect(Math.abs(new Date(invite.body.inviteExpiresAt).getTime() - now - 5 * HOUR)).toBeLessThan(
+      10_000,
+    );
+  });
+
+  it('a new reset link cancels the earlier unused one (TC-A14)', async () => {
+    const admin = await createUser({ systemRole: 'ADMIN' });
+    const user = await createUser();
+    const adminAgent = await login(app, admin.email);
+    const first = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
+    expect(first.body.replacedPrevious).toBe(false);
+    const second = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
+    expect(second.body.replacedPrevious).toBe(true);
+    const oldToken = tokenOf(first.body.inviteUrl);
+    const newToken = tokenOf(second.body.inviteUrl);
+    expect(newToken).not.toBe(oldToken);
+
+    const old = await request(app)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token: oldToken, password: 'Old-link-pass-1!' });
+    expect(old.status).toBe(400);
+    expect(old.body.error.message).toBe(LINK_EXPIRED);
+    expect((await request(app).get(`/api/v1/auth/invite/${oldToken}`)).status).toBe(400);
+
+    await request(app)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token: newToken, password: 'New-link-pass-1!' })
+      .expect(200);
+    // Single use: the replacement link is spent too.
+    const again = await request(app)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token: newToken, password: 'Third-try-pass-1!' });
+    expect(again.status).toBe(400);
+    expect(again.body.error.message).toBe(LINK_EXPIRED);
+    expect((await loginReq(app, user.email, 'New-link-pass-1!')).status).toBe(200);
+    expect((await loginReq(app, user.email, 'Third-try-pass-1!')).status).toBe(401);
+
+    const log = await ActivityLogModel.find({
+      entityId: user._id,
+      action: 'password_reset_link_issued',
+    }).lean();
+    expect(log).toHaveLength(2);
+  });
+
+  it('a new invite link cancels the original invite (TC-A14)', async () => {
+    const admin = await createUser({ systemRole: 'ADMIN' });
+    const adminAgent = await login(app, admin.email);
+    const invited = await adminAgent.post('/api/v1/users').set(CSRF).send({
+      name: 'Twice Invited',
+      email: 'twice@xceler8.example',
+      systemRole: 'MEMBER',
+      jobRole: 'DEVELOPER',
+    });
+    const again = await adminAgent
+      .post(`/api/v1/users/${invited.body.user.id}/invite`)
+      .set(CSRF)
+      .send({});
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ purpose: 'INVITE', replacedPrevious: true });
+    expect(
+      Math.abs(new Date(again.body.inviteExpiresAt).getTime() - Date.now() - 72 * HOUR),
+    ).toBeLessThan(10_000);
+    expect(
+      (await request(app).get(`/api/v1/auth/invite/${tokenOf(invited.body.inviteUrl)}`)).status,
+    ).toBe(400);
+    expect(
+      (await request(app).get(`/api/v1/auth/invite/${tokenOf(again.body.inviteUrl)}`)).status,
+    ).toBe(200);
+  });
+
+  it('deactivated users cannot get or use links', async () => {
+    const admin = await createUser({ systemRole: 'ADMIN' });
+    const user = await createUser();
+    const adminAgent = await login(app, admin.email);
+    const res = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
+    await adminAgent.post(`/api/v1/users/${user._id}/deactivate`).set(CSRF).send({}).expect(200);
+    expect(
+      (await request(app).get(`/api/v1/auth/invite/${tokenOf(res.body.inviteUrl)}`)).status,
+    ).toBe(400);
+    const blocked = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
+    expect(blocked.status).toBe(409);
   });
 
   it('admin can issue a password reset link for an active user', async () => {
