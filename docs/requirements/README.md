@@ -45,3 +45,6 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.6.1 | 2026-10-09 | Q-28 resolved (in-app only; email in External integrations). FR-PRJ-18 Move up/down, FR-PRJ-19 DEF-003 add-and-assign. M3.5 approved with Q-32 to Q-35 defaults. |
 | v0.6.2 | 2026-10-09 | FR-USR-06: Admins can edit a user's email. |
 | v0.6.3 | 2026-10-09 | FR-PRJ-20 Checklist Edit button; FR-USR-06 confirmed with confirmation wording. |
+| v0.6.4 | 2026-10-09 | Doc 12 approved (Q-29 to Q-31 defaults); FR-PRJ-19 adds on save. PR #4 merged. |
+| v0.6.5 | 2026-10-09 | Doc 12 §3.1b: Today tab (FR-TSK-20/21, Philippine time), holiday calendar rules (FR-CAL-01 to 04), Lean's calls. |
+| v0.6.6 | 2026-10-09 | FR-CAL-05 Working days setting with at-least-one-day guard; FR-CAL-02 uses it. |

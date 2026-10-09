@@ -31,3 +31,48 @@ export function initials(name: string) {
     .map((p) => p[0]?.toUpperCase())
     .join('');
 }
+
+/** "5 min ago", "1 hour ago", "Yesterday, 4:10 PM", "Oct 7" (mockup notifications). */
+export function relativeTime(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  const mins = Math.floor((now.getTime() - d.getTime()) / 60_000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24 && d.getDate() === now.getDate())
+    return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return `Yesterday, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  }
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** "Friday, Oct 9" for a YYYY-MM-DD calendar date. */
+export function longDay(value: string): string {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** "Thu, Oct 8" in local time (conversation day separators). */
+export function dayLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+export function timeOfDay(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+/** 6 → "6.0", 2.25 → "2.25". */
+export function hoursLabel(h: number): string {
+  return Number.isInteger(h) ? h.toFixed(1) : String(h);
+}

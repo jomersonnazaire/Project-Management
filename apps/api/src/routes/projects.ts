@@ -7,7 +7,7 @@ import {
   parseDateOnly,
   projectContactSchema,
   projectListQuerySchema,
-  todayUtc,
+  todayPH,
   toDateOnly,
   updateProjectSchema,
   type ProjectFilter,
@@ -40,6 +40,7 @@ import {
   type ProjectDoc,
 } from '../services/projectService.js';
 import { assertProjectScope, projectScopeFilter } from '../services/scope.js';
+import { loadCalendar } from '../services/calendar.js';
 
 /**
  * Projects (FR-PRJ-01..13, doc 11 FR-PRJ-11..13). The central gate checks `projects.*`; these
@@ -78,7 +79,7 @@ export function assertNotArchived(project: { archived?: boolean | null }) {
 
 /** Refreshes stored health once a day so "overdue" follows the calendar (NFR-13). */
 async function refreshStale(projects: ProjectDoc[]): Promise<ProjectDoc[]> {
-  const today = todayUtc();
+  const today = todayPH();
   const stale = projects.filter((p) => !p.computed?.updatedAt || p.computed.updatedAt < today);
   if (!stale.length) return projects;
   await Promise.all(stale.map((p) => recomputeProject(p._id)));
@@ -235,7 +236,8 @@ export function projectsRouter(registry: RouteRegistry) {
     const memberIds = [...new Set([input.managerId, ...input.memberIds])].map(
       (id) => new Types.ObjectId(id),
     );
-    const tasks = buildPlanTasks(template, projectId, start);
+    // FR-CAL-02/03: dates use the calendar as it is now (working days + holidays).
+    const tasks = buildPlanTasks(template, projectId, start, await loadCalendar());
 
     const session = await mongoose.startSession();
     try {
@@ -306,7 +308,7 @@ export function projectsRouter(registry: RouteRegistry) {
       const days = Math.round((lastDue.getTime() - end.getTime()) / 86_400_000);
       warnings.push(`Plan exceeds baseline end by ${days} day${days === 1 ? '' : 's'}.`);
     }
-    if (end < todayUtc()) warnings.push('The baseline end is in the past.');
+    if (end < todayPH()) warnings.push('The baseline end is in the past.');
     if (
       await ProjectModel.exists({
         _id: { $ne: projectId },

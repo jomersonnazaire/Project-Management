@@ -6,7 +6,6 @@ import {
   approveTaskSchema,
   createTaskSchema,
   daysBetween,
-  evidenceLinkSchema,
   findCycle,
   followUpSchema,
   isOverdue,
@@ -15,9 +14,12 @@ import {
   rejectTaskSchema,
   taskStatusSchema,
   taskVersionSchema,
-  todayUtc,
+  todayPH,
+  toDateOnly,
   updateTaskSchema,
   type MyTaskDto,
+  type HolidayType,
+  type NotificationType,
   type PermissionGrid,
   type TaskDto,
   type TaskStatus,
@@ -32,6 +34,9 @@ import { currentPermissions, currentUser } from '../middleware/auth.js';
 import {
   ActivityLogModel,
   ClientContactModel,
+  DocumentModel,
+  HolidayModel,
+  TimeEntryModel,
   ProjectModel,
   TaskModel,
   TeamModel,
@@ -40,6 +45,7 @@ import {
   type Task,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { notify } from '../services/notify.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
 import {
   canAddProjectMembers,
@@ -58,13 +64,13 @@ import { assertNotArchived, loadProject } from './projects.js';
  *   - approvals: Admin, the managing PM, or the task's designated reviewer.
  */
 type Id = Types.ObjectId;
-type TaskDoc = Task & { _id: Id };
+export type TaskDoc = Task & { _id: Id };
 type ProjectDoc = Project & { _id: Id };
 
 const isMine = (user: ScopeUser, t: TaskDoc) =>
   Boolean(t.ownerId?.equals(user._id)) || (t.assigneeIds ?? []).some((id) => id.equals(user._id));
 
-function taskCan(
+export function taskCan(
   user: ScopeUser,
   perms: PermissionGrid,
   project: ProjectDoc,
@@ -115,7 +121,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
     const u = ref(id);
     return u ? { id: u.id, name: u.name } : null;
   };
-  const today = todayUtc();
+  const today = todayPH();
   return tasks.map((t) => {
     const status = t.status as TaskStatus;
     const overdue = isOverdue({ status, dueDate: t.dueDate }, today);
@@ -156,9 +162,12 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
       },
       evidence: (t.evidence ?? []).map((e) => ({
         id: e._id.toString(),
-        type: 'LINK' as const,
+        type: (e.type === 'FILE' ? 'FILE' : 'LINK') as 'FILE' | 'LINK',
         name: e.name ?? '',
-        url: e.url ?? '',
+        url: e.type === 'FILE' ? null : (e.url ?? ''),
+        documentId: e.documentId ? e.documentId.toString() : null,
+        size: typeof e.size === 'number' ? e.size : null,
+        mimeType: e.mimeType ?? null,
         addedBy: nameRef(e.addedBy),
         at: (e.at ?? new Date()).toISOString(),
       })),
@@ -179,8 +188,8 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
 }
 
 /** Loads a task and its project, applying the project's view scope (404 outside it). */
-async function loadTask(req: Request) {
-  const task = await TaskModel.findById(idParam(req));
+export async function loadTask(req: Request, id = idParam(req)) {
+  const task = await TaskModel.findById(id);
   if (!task) throw notFound();
   const project = await loadProject(req, 'view', task.projectId.toString());
   return { task, project };
@@ -192,7 +201,12 @@ function assertVersion(task: { version?: number | null }, version: number) {
   }
 }
 
-function assertCan(req: Request, project: ProjectDoc, task: TaskDoc, what: keyof TaskDto['can']) {
+export function assertCan(
+  req: Request,
+  project: ProjectDoc,
+  task: TaskDoc,
+  what: keyof TaskDto['can'],
+) {
   assertNotArchived(project);
   if (!taskCan(currentUser(req), currentPermissions(req), project, task)[what]) {
     throw forbidden(
@@ -203,7 +217,7 @@ function assertCan(req: Request, project: ProjectDoc, task: TaskDoc, what: keyof
   }
 }
 
-async function respondTask(
+export async function respondTask(
   req: Request,
   res: Response,
   project: ProjectDoc,
@@ -417,6 +431,25 @@ const fmt = (v: unknown): unknown =>
         ? v.map(fmt)
         : (v ?? null);
 
+/** Notifies against the project's CURRENT members (it may have just gained someone). */
+async function notifyFresh(
+  type: NotificationType,
+  projectId: Id,
+  taskId: Id,
+  actorId: Id,
+  recipients: (Id | string | null | undefined)[],
+) {
+  const project = await ProjectModel.findById(projectId).select('managerId memberIds').lean();
+  if (!project) return;
+  await notify({
+    type,
+    project,
+    taskId,
+    actorId,
+    recipients: recipients.filter(Boolean).map((r) => new Types.ObjectId(String(r))),
+  });
+}
+
 export function tasksRouter(registry: RouteRegistry) {
   const p = registry.router('/projects');
 
@@ -469,6 +502,11 @@ export function tasksRouter(registry: RouteRegistry) {
       projectId: project._id,
       action: 'task_created',
     });
+    // FR-NTF-05: tell the people given the task.
+    await notifyFresh('ASSIGNED', project._id, _id, currentUser(req)._id, [
+      input.ownerId,
+      ...(input.assigneeIds ?? []),
+    ]);
     await respondTask(req, res, project, _id, 201);
   });
 
@@ -549,14 +587,18 @@ export function tasksRouter(registry: RouteRegistry) {
     };
     const base = { projectId: { $in: projectIds } };
     const all = (await TaskModel.find({ ...base, $or: [mine, review] }).lean()) as TaskDoc[];
-    const today = todayUtc();
+    const today = todayPH();
     const weekEnd = new Date(today.getTime() + 7 * 86_400_000);
     const isOpen = (t: TaskDoc) => (OPEN_TASK_STATUSES as string[]).includes(t.status);
     const isReview = (t: TaskDoc) =>
       t.status === 'FOR_REVIEW' &&
       (Boolean(t.approval?.reviewerId?.equals(user._id)) ||
         managed.some((id) => id.equals(t.projectId)));
+    // FR-TSK-20/21: Today = my open tasks overdue or due on today's PHILIPPINE date.
+    const isToday = (t: TaskDoc) =>
+      isMine(user, t) && isOpen(t) && Boolean(t.dueDate) && t.dueDate! <= today;
     const counts = {
+      today: all.filter(isToday).length,
       overdue: all.filter(
         (t) =>
           isMine(user, t) &&
@@ -572,6 +614,9 @@ export function tasksRouter(registry: RouteRegistry) {
     };
     let list: TaskDoc[];
     switch (q.view) {
+      case 'today':
+        list = all.filter(isToday);
+        break;
       case 'accountable':
         list = all.filter((t) => Boolean(t.ownerId?.equals(user._id)) && isOpen(t));
         break;
@@ -596,6 +641,7 @@ export function tasksRouter(registry: RouteRegistry) {
         id: t._id.toString(),
         name: t.name,
         project: { id: t.projectId.toString(), name: names.get(t.projectId.toString()) ?? '' },
+        phase: t.phase ?? null,
         role: t.ownerId?.equals(user._id)
           ? 'ACCOUNTABLE'
           : isMine(user, t)
@@ -610,13 +656,20 @@ export function tasksRouter(registry: RouteRegistry) {
         party: t.party as MyTaskDto['party'],
       };
     });
-    // Overdue first, then by due date (undated last).
+    // Overdue first (most days late first), then by due date (undated last).
     items.sort((a, b) => {
       if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+      if (a.overdue && b.overdue && a.daysLate !== b.daysLate) return b.daysLate - a.daysLate;
       if (!a.dueDate || !b.dueDate) return a.dueDate ? -1 : b.dueDate ? 1 : 0;
       return a.dueDate.localeCompare(b.dueDate);
     });
-    res.json({ items, counts });
+    const h = await HolidayModel.findOne({ date: today }).select('name type').lean();
+    res.json({
+      items,
+      counts,
+      today: toDateOnly(today),
+      holiday: h ? { name: h.name, type: h.type as HolidayType } : null,
+    });
   });
 
   r.get('/:id', perm('tasks', 'view'), async (req, res) => {
@@ -697,6 +750,15 @@ export function tasksRouter(registry: RouteRegistry) {
         changes,
       });
     }
+    // FR-NTF-05: newly assigned people (new owner or added assignees) are told.
+    const before0 = new Set(
+      [task.ownerId, ...(task.assigneeIds ?? [])].filter(Boolean).map(String),
+    );
+    const now = [
+      input.ownerId !== undefined ? input.ownerId : task.ownerId?.toString(),
+      ...(input.assigneeIds ?? (task.assigneeIds ?? []).map(String)),
+    ].filter((x): x is string => Boolean(x) && !before0.has(x as string));
+    await notifyFresh('ASSIGNED', project._id, task._id, currentUser(req)._id, now);
     await respondTask(req, res, project, task._id);
   });
 
@@ -787,7 +849,7 @@ export function tasksRouter(registry: RouteRegistry) {
       // FR-TSK-05, AC-14.2/14.3: goes to For Review, and needs evidence first.
       if (!task.evidence.length) {
         throw unprocessable(
-          'Add evidence (a link) before submitting this task for review.',
+          'Upload evidence (a PDF, Word or Excel file) before submitting this task for review.',
           'EVIDENCE_REQUIRED',
         );
       }
@@ -814,6 +876,12 @@ export function tasksRouter(registry: RouteRegistry) {
       reason,
       meta: Object.keys(meta).length ? meta : null,
     });
+    if (to === 'FOR_REVIEW') {
+      // FR-NTF-05: the designated reviewer (or the PM when there is none).
+      await notifyFresh('FOR_REVIEW', project._id, task._id, user._id, [
+        task.approval?.reviewerId ?? project.managerId,
+      ]);
+    }
     await respondTask(req, res, project, task._id);
   });
 
@@ -885,33 +953,25 @@ export function tasksRouter(registry: RouteRegistry) {
         // EC-20: self-approval is allowed (Q-14) and flagged.
         meta: task.ownerId?.equals(user._id) ? { selfApproval: true } : null,
       });
+      await notifyFresh(
+        decision === 'approve' ? 'APPROVED' : 'REJECTED',
+        project._id,
+        task._id,
+        user._id,
+        [task.ownerId],
+      );
       await respondTask(req, res, project, task._id);
     });
   }
 
-  // Evidence links (FR-TSK-07). File evidence arrives with documents in Milestone 3.
-  r.post('/:id/evidence', perm('tasks', 'edit'), async (req, res) => {
-    const input = parseBody(evidenceLinkSchema, req);
-    const { task, project } = await loadTask(req);
-    assertCan(req, project, task.toObject() as TaskDoc, 'status');
-    task.evidence.push({
-      type: 'LINK',
-      name: input.name,
-      url: input.url,
-      addedBy: currentUser(req)._id,
-      at: new Date(),
-    });
-    task.version = (task.version ?? 0) + 1;
-    await task.save();
-    await audit({
-      actorId: currentUser(req)._id,
-      entityType: 'task',
-      entityId: task._id,
-      projectId: project._id,
-      action: 'task_evidence_added',
-      changes: [{ field: 'evidence', old: null, new: input.name }],
-    });
-    await respondTask(req, res, project, task._id, 201);
+  // FR-EVD-01 / AC-39.1: links are no longer accepted as new evidence; files are uploaded via
+  // POST /tasks/:id/evidence/uploads (routes/documents.ts). Kept to answer with a clear message.
+  r.post('/:id/evidence', perm('tasks', 'edit'), async (req) => {
+    await loadTask(req);
+    throw unprocessable(
+      'Evidence must be an uploaded PDF, Word or Excel file. Links can no longer be added.',
+      'EVIDENCE_FILES_ONLY',
+    );
   });
 
   // EC-31: evidence on a Completed task is removed only by the PM/Admin, and audited.
@@ -922,6 +982,13 @@ export function tasksRouter(registry: RouteRegistry) {
     const evidenceId = idParam(req, 'evidenceId');
     const item = task.evidence.find((e) => e._id.toString() === evidenceId);
     if (!item) throw notFound();
+    // FR-EVD-07: files on a task in For Review or Completed stay until the task is reopened.
+    if (item.type === 'FILE' && (task.status === 'FOR_REVIEW' || task.status === 'COMPLETED')) {
+      throw conflict(
+        'This task is in review or completed. Reopen it before removing its evidence.',
+        'EVIDENCE_LOCKED',
+      );
+    }
     task.evidence.pull({ _id: item._id });
     task.version = (task.version ?? 0) + 1;
     await task.save();
@@ -932,7 +999,20 @@ export function tasksRouter(registry: RouteRegistry) {
       projectId: project._id,
       action: 'task_evidence_removed',
       changes: [{ field: 'evidence', old: item.name, new: null }],
+      meta: item.documentId ? { documentId: item.documentId.toString() } : null,
     });
+    if (item.documentId) {
+      // The file stays in Documents (no hard deletes, FR-DOC-32); it is just unlinked from the task.
+      await DocumentModel.updateOne(
+        { _id: item.documentId, projectId: project._id },
+        {
+          $set: { taskId: null },
+          $push: {
+            events: { event: 'UNLINKED_FROM_TASK', actorId: currentUser(req)._id, at: new Date() },
+          },
+        },
+      );
+    }
     await respondTask(req, res, project, task._id);
   });
 
@@ -966,13 +1046,32 @@ export function tasksRouter(registry: RouteRegistry) {
       projectId: project._id,
       action: 'task_follow_up_added',
     });
+    // FR-NTF-01 / AC-40.1: owner, every assignee, the reviewer and the PM, except the author.
+    await notify({
+      type: 'FOLLOW_UP',
+      project,
+      taskId: task._id,
+      actorId: currentUser(req)._id,
+      recipients: [
+        task.ownerId,
+        ...(task.assigneeIds ?? []),
+        task.approval?.reviewerId,
+        project.managerId,
+      ],
+    });
     await respondTask(req, res, project, task._id, 201);
   });
 
   r.delete('/:id', perm('tasks', 'delete'), async (req, res) => {
     const { task, project } = await loadTask(req);
     assertCan(req, project, task.toObject() as TaskDoc, 'plan');
-    // EC-09 (time entries) applies from Milestone 3; for now tasks can be removed by the PM.
+    // EC-09: a task with logged time can't be deleted (cancel it instead).
+    if (await TimeEntryModel.exists({ taskId: task._id })) {
+      throw conflict(
+        'Time has been logged on this task, so it can’t be deleted. Cancel it instead.',
+        'TASK_HAS_TIME',
+      );
+    }
     await TaskModel.updateMany(
       { projectId: project._id, dependsOn: task._id },
       { $pull: { dependsOn: task._id }, $inc: { version: 1 } },

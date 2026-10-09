@@ -43,7 +43,7 @@ export function ReorderControls({
 }
 
 /**
- * The ⋮⋮ drag handle. Drag it to reorder; from the keyboard, focus it and press Alt+↑ / Alt+↓.
+ * The drag handle (bx-grid-vertical icon, doc 12 M3). Drag it to reorder; from the keyboard, focus it and press Alt+↑ / Alt+↓.
  */
 export function DragHandle({
   name,
@@ -77,7 +77,7 @@ export function DragHandle({
       }}
       {...dragProps}
     >
-      <span aria-hidden="true">⋮⋮</span>
+      <i className="bx bx-grid-vertical fs-5" aria-hidden="true" />
     </button>
   );
 }

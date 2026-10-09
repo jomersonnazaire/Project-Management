@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { ActivityLogModel, TaskModel } from '../src/models/index.js';
+import { FILES, uploadEvidence } from './m3helpers.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world } from './m2helpers.js';
 
@@ -280,22 +281,16 @@ describe('Task state machine (workflow §2, FR-TSK-02..06, TC-F04/F06/F09/F11/F1
     const noEvidence = await move(w.member.agent, t3!.id, { status: 'COMPLETED' });
     expect(noEvidence.status).toBe(422);
     expect(noEvidence.body.error.code).toBe('EVIDENCE_REQUIRED');
-    expect(
-      (
-        await w.member.agent
-          .post(`/api/v1/tasks/${t3!.id}/evidence`)
-          .set(CSRF)
-          .send({ name: 'Sign-off', url: 'javascript:alert(1)' })
-      ).status,
-    ).toBe(400);
-    expect(
-      (
-        await w.member.agent
-          .post(`/api/v1/tasks/${t3!.id}/evidence`)
-          .set(CSRF)
-          .send({ name: 'Sign-off', url: 'https://files.example/signoff.pdf' })
-      ).status,
-    ).toBe(201);
+    // FR-EVD-01: links are refused; evidence is an uploaded file.
+    const link = await w.member.agent
+      .post(`/api/v1/tasks/${t3!.id}/evidence`)
+      .set(CSRF)
+      .send({ name: 'Sign-off', url: 'https://files.example/signoff.pdf' });
+    expect(link.status).toBe(422);
+    expect(link.body.error.code).toBe('EVIDENCE_FILES_ONLY');
+    expect((await uploadEvidence(w.member.agent, t3!.id, 'signoff.pdf', FILES.pdf())).status).toBe(
+      201,
+    );
     const review = await move(w.member.agent, t3!.id, { status: 'COMPLETED' });
     expect(review.body.task).toMatchObject({
       status: 'FOR_REVIEW',
@@ -341,14 +336,14 @@ describe('Task state machine (workflow §2, FR-TSK-02..06, TC-F04/F06/F09/F11/F1
     expect((await w.pm.agent.get(`/api/v1/projects/${w.project.id}`)).body.project.progress).toBe(
       100,
     );
-    // EC-31: evidence on a completed task is removed only by the PM.
+    // EC-31 / FR-EVD-07: a file on a completed task can't be removed without reopening the task.
     const ev = approved.body.task.evidence[0].id;
     expect(
       (await w.member.agent.delete(`/api/v1/tasks/${t3!.id}/evidence/${ev}`).set(CSRF)).status,
     ).toBe(403);
-    expect(
-      (await w.pm.agent.delete(`/api/v1/tasks/${t3!.id}/evidence/${ev}`).set(CSRF)).status,
-    ).toBe(200);
+    const locked = await w.pm.agent.delete(`/api/v1/tasks/${t3!.id}/evidence/${ev}`).set(CSRF);
+    expect(locked.status).toBe(409);
+    expect(locked.body.error.code).toBe('EVIDENCE_LOCKED');
   });
 
   it('FR-TSK-06 Members can’t cancel mandatory tasks; the PM needs a reason; reopening is PM-only', async () => {

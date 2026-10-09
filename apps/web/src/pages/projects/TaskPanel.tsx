@@ -8,10 +8,13 @@ import {
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Form, Offcanvas } from 'react-bootstrap';
 import { useTask, useTaskHistory, useTaskMutation } from '../../api/projectHooks';
+import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
 import { ReasonModal } from '../../components/ReasonModal';
 import { dateTime, shortDate } from '../../lib/format';
+import { followUpRecipients } from '../../lib/m3ui';
+import { EvidenceSection } from './EvidenceSection';
 import { TaskFormModal } from './TaskFormModal';
 import { moveLabel, useStatusMove } from './useStatusMove';
 
@@ -36,16 +39,17 @@ export function TaskPanel({
   tasks: TaskDto[];
   onClose: () => void;
 }) {
+  const { user } = useAuth();
   const task = useTask(taskId);
   const history = useTaskHistory(taskId);
   const mutation = useTaskMutation();
   const status = useStatusMove(project);
   const [editing, setEditing] = useState(false);
   const [rejecting, setRejecting] = useState(false);
-  const [evidence, setEvidence] = useState({ name: '', url: '' });
   const [note, setNote] = useState('');
   const t = task.data;
   const archived = project.archived;
+  const notifies = t ? followUpRecipients(t, project, user?.id) : '';
   const nameOf = (id: string) => {
     const d = tasks.find((x) => x.id === id);
     return d ? `#${d.order} ${d.name}` : 'Removed task';
@@ -54,11 +58,6 @@ export function TaskPanel({
   const post = (path: string, body: unknown, done?: () => void) =>
     mutation.mutate({ path, body }, { onSuccess: () => done?.() });
 
-  const addEvidence = (e: FormEvent) => {
-    e.preventDefault();
-    if (!t) return;
-    post(`/tasks/${t.id}/evidence`, evidence, () => setEvidence({ name: '', url: '' }));
-  };
   const addNote = (e: FormEvent) => {
     e.preventDefault();
     if (!t || !note.trim()) return;
@@ -201,59 +200,7 @@ export function TaskPanel({
               )}
             </dl>
 
-            <h3 className="h6">Evidence</h3>
-            {t.evidence.length === 0 ? (
-              <p className="small text-body-secondary">
-                No evidence yet.{t.requiresApproval && ' Add a link before submitting for review.'}
-              </p>
-            ) : (
-              <ul className="list-unstyled small">
-                {t.evidence.map((ev) => (
-                  <li key={ev.id} className="d-flex justify-content-between gap-2 mb-1">
-                    <a href={ev.url} target="_blank" rel="noopener noreferrer">
-                      {ev.name}
-                    </a>
-                    {t.can.edit && !archived && (
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="p-0 text-danger"
-                        aria-label={`Remove ${ev.name}`}
-                        onClick={() =>
-                          mutation.mutate({
-                            path: `/tasks/${t.id}/evidence/${ev.id}`,
-                            method: 'DELETE',
-                          })
-                        }
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {t.can.edit && !archived && (
-              <Form onSubmit={addEvidence} className="d-flex gap-2 mb-4" noValidate>
-                <Form.Control
-                  size="sm"
-                  placeholder="Name"
-                  aria-label="Evidence name"
-                  value={evidence.name}
-                  onChange={(e) => setEvidence({ ...evidence, name: e.target.value })}
-                />
-                <Form.Control
-                  size="sm"
-                  placeholder="https://…"
-                  aria-label="Evidence link"
-                  value={evidence.url}
-                  onChange={(e) => setEvidence({ ...evidence, url: e.target.value })}
-                />
-                <Button size="sm" type="submit" variant="outline-primary">
-                  Add
-                </Button>
-              </Form>
-            )}
+            <EvidenceSection task={t} archived={archived} />
 
             <h3 className="h6">Follow-ups</h3>
             {t.followUps.length === 0 ? (
@@ -279,10 +226,13 @@ export function TaskPanel({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                 />
-                <Button size="sm" type="submit" variant="outline-primary">
-                  Add
+                <Button size="sm" type="submit" variant="outline-primary" className="text-nowrap">
+                  Post follow-up
                 </Button>
               </Form>
+            )}
+            {t.can.edit && !archived && notifies && (
+              <p className="small text-body-secondary mt-n2 mb-4">Notifies {notifies}</p>
             )}
 
             <h3 className="h6">History</h3>

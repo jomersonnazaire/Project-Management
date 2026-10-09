@@ -1,7 +1,9 @@
 import {
   computeProject,
   scheduleFromOffsets,
-  todayUtc,
+  DEFAULT_CALENDAR,
+  type WorkCalendar,
+  todayPH,
   toDateOnly,
   type ActiveContactDto,
   canViewProjectActivity,
@@ -40,12 +42,12 @@ export async function recomputeProject(projectId: Id | string, session?: ClientS
     .select('status mandatory plannedStart dueDate')
     .session(session ?? null)
     .lean();
-  const baselineEnd = project.plannedEndDate ?? todayUtc();
+  const baselineEnd = project.plannedEndDate ?? todayPH();
   const c = computeProject(
     project.status as ProjectStatus,
     baselineEnd,
     tasks.map((t) => ({ ...t, status: t.status as TaskStatus })),
-    todayUtc(),
+    todayPH(),
   );
   await ProjectModel.updateOne(
     { _id: project._id },
@@ -180,6 +182,7 @@ export function buildPlanTasks(
   template: Pick<Template, 'phases' | 'activities'>,
   projectId: Types.ObjectId,
   start: Date,
+  calendar: WorkCalendar = DEFAULT_CALENDAR,
 ) {
   const phaseNames = new Map(template.phases.map((p) => [p.id, p.name]));
   const taskIds = new Map(template.activities.map((a) => [a.id, new Types.ObjectId()]));
@@ -188,6 +191,7 @@ export function buildPlanTasks(
       start,
       a.offsetDays ?? 0,
       a.durationDays ?? 1,
+      calendar,
     );
     return {
       _id: taskIds.get(a.id)!,

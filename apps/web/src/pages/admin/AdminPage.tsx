@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
 import { ForbiddenPage, NotFoundPage } from '../ErrorPages';
+import { HolidaysPanel } from './HolidaysPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { TeamsPanel } from './TeamsPanel';
 import { UsersPanel } from './UsersPanel';
@@ -11,9 +12,15 @@ const TABS: { path: string; label: string; need: [RecordType, AccessAction] }[] 
   { path: 'users', label: 'Users', need: ['users', 'view'] },
   { path: 'teams', label: 'Teams', need: ['teams', 'view'] },
   { path: 'settings', label: 'Settings', need: ['settings', 'view'] },
+  { path: 'holidays', label: 'Holidays', need: ['settings', 'view'] },
 ];
 
-const PANELS = { users: <UsersPanel />, teams: <TeamsPanel />, settings: <SettingsPanel /> };
+const PANELS = {
+  users: <UsersPanel />,
+  teams: <TeamsPanel />,
+  settings: <SettingsPanel />,
+  holidays: <HolidaysPanel />,
+};
 
 /** Admin area. Tabs follow the access rules (default: Admin only); the API enforces the same. */
 export function AdminPage() {

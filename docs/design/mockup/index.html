@@ -118,6 +118,8 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#issues" data-p="issues">⚑ Project issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
 <a href="#allissues" data-p="allissues">⚑ All issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
 <a href="#issue" data-p="issue">⚑ Issue detail <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#today" data-p="today">☀ My tasks · Today <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#holidays" data-p="holidays">📅 Holidays <span class="pill info" style="margin-left:auto">M3</span></a>
 <a href="#notif" data-p="notif">🔔 Notifications <span class="pill info" style="margin-left:auto">M3</span></a>
 <a href="#pcontacts" data-p="pcontacts">☏ Project contacts <span class="pill info" style="margin-left:auto">M2</span></a>
 <a href="#docs" data-p="docs">🗀 Documents</a>
@@ -136,7 +138,7 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#login" data-p="login">⎋ Login (sign out)</a>
 </aside>
 <main>
-<div class="banner">Mockup v0.7.1 (Sneat style) for review. All names and numbers are example data, not live data.</div>
+<div class="banner">Mockup v0.7.4 (Sneat style) for review. All names and numbers are example data, not live data.</div>
 
 <!-- DASHBOARD -->
 <section class="page" id="dash">
@@ -515,6 +517,52 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <div class="card" style="margin-top:16px"><h3>Closed state</h3><div class="lock" style="background:var(--okb);color:#225e11">✓ Closed Oct 15 by Jomerson N. Resolution: "Mapped the 3 legacy codes to VAT12/VATEX."</div><p class="note">PMs and Admins see "Reopen", which asks for a reason. Only Admins see Delete.</p></div></div></div>
 <div id="resolve" class="ov" style="display:none"><div class="modal" style="width:440px"><h3>Resolve issue</h3><div class="field err"><label>Resolution *</label><textarea rows="3"></textarea><small>Describe how it was fixed before resolving.</small></div><p class="note">It closes automatically in 7 days unless the PM or reporter reopens it.</p><div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Resolve</button></div></div></div>
 </section>
+<!-- MY TASKS TODAY (M3) -->
+<section class="page" id="today">
+<header><h1>My tasks</h1><div class="search">Search my tasks…</div><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
+<div class="tabs"><span class="on">Today <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">This week</span><span>All open</span><span>Completed</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:8px"><b style="color:var(--ink)">Friday, Oct 9</b><span class="note">Philippine time</span></div>
+<h4 style="margin:10px 0 4px;color:var(--bad)">Overdue · 2</h4>
+<table><tr><th>Task</th><th>Due</th><th>Status</th><th></th></tr>
+<tr class="od"><td><a href="#checklist"><b>Client master data – Items</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td style="color:var(--bad);font-weight:600">Oct 3 · 6 days overdue</td><td><span class="pill bad">Blocked</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr class="od"><td><a href="#checklist"><b>Validate imported master data</b></a><div class="note">SAP B1 Rollout · Phase 2</div></td><td style="color:var(--bad);font-weight:600">Oct 8 · 1 day overdue</td><td><span class="pill info">In progress</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<h4 style="margin:16px 0 4px">Due today · 2</h4>
+<table><tr><th>Task</th><th>Due</th><th>Status</th><th></th></tr>
+<tr class=""><td><a href="#checklist"><b>Submit BP tax code mapping</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td style="">Today</td><td><span class="pill info">In progress</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr class=""><td><a href="#checklist"><b>Prepare UAT scripts</b></a><div class="note">Northwind Upgrade · Phase 3</div></td><td style="">Today</td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<p class="note">Open tasks assigned to you (owner or assignee). Overdue tasks are listed first. "Today" uses Philippine time, so it flips at midnight here, not in UTC. Done tasks drop off the list.</p></div>
+<div><div class="card"><h3>Empty state</h3><div class="empty" style="padding:16px">☀<br><b>Nothing due today</b><p class="note">You're clear for today. <a href="#mytasks">See this week</a></p></div></div>
+<div class="card" style="margin-top:16px"><h3>Holiday</h3><div class="lock" style="background:var(--blueb);color:#00586b">📅 Today is Bonifacio Day (regular holiday). New due dates skip today. Tasks already due today keep their date.</div></div></div></div>
+</section>
+<!-- HOLIDAYS (M3) -->
+<section class="page" id="holidays">
+<header><h1>Admin</h1><button class="btn" onclick="document.getElementById('addh').style.display='flex'">+ Add holiday</button><div class="av">AA</div></header>
+<div class="tabs"><span onclick="location.hash='admin'">Users</span><span>Teams</span><span>Clients</span><span>Settings</span><span class="on">Holidays</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:10px"><button class="btn ghost" style="padding:4px 10px">‹</button><b style="color:var(--ink);font-size:16px">2026</b><button class="btn ghost" style="padding:4px 10px">›</button><span class="sp"></span><select class="sel"><option>All types</option><option>Regular holiday</option><option>Special non-working day</option><option>Special working day</option></select><button class="btn ghost">Copy from 2025…</button></div>
+<table><tr><th>Date</th><th>Day</th><th>Name</th><th>Type</th><th>Note</th><th></th></tr>
+<tr><td>Nov 1</td><td class="note">Sun</td><td><b>All Saints' Day</b></td><td><span class="pill warn">Special non-working</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Nov 2</td><td class="note">Mon</td><td><b>All Souls' Day</b></td><td><span class="pill warn">Special non-working</span></td><td class="note">Proclamation no. — (example)</td><td>✎ ⋮</td></tr>
+<tr><td>Nov 30</td><td class="note">Mon</td><td><b>Bonifacio Day</b></td><td><span class="pill bad">Regular holiday</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Dec 8</td><td class="note">Tue</td><td><b>Feast of the Immaculate Conception</b></td><td><span class="pill warn">Special non-working</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Dec 12</td><td class="note">Sat</td><td><b>Make-up workday</b></td><td><span class="pill ok">Special working day</span></td><td class="note">Counts as a workday</td><td>✎ ⋮</td></tr>
+<tr><td>Dec 24</td><td class="note">Thu</td><td><b>Christmas Eve</b></td><td><span class="pill warn">Special non-working</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Dec 25</td><td class="note">Fri</td><td><b>Christmas Day</b></td><td><span class="pill bad">Regular holiday</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+</table><p class="note">Example data only. Admins enter each year's proclaimed holidays. Due dates skip regular holidays and special non-working days. A special working day counts as a workday, even on a Saturday or Sunday.</p></div>
+<div><div class="card" style="margin-bottom:16px"><h3>Working days</h3><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px"><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Mon</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Tue</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Wed</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Thu</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Fri</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox"  class="wd" onchange="wdChk()"> Sat</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox"  class="wd" onchange="wdChk()"> Sun</label></div>
+<div id="wderr" class="field err" style="display:none;margin:8px 0 0"><small>Keep at least one working day.</small></div>
+<p class="note">Due dates count only these days. Holidays still apply on top, and a special working day always counts. Changes affect new due dates only, never ones already set.</p><button class="btn" style="width:100%">Save working days</button></div>
+<div class="card"><h3>What changes</h3><p class="note">Adding a holiday never moves existing due dates; it only affects dates worked out from then on. Every change is logged.</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty year</h3><div class="empty" style="padding:16px">📅<br><b>No holidays for 2027 yet</b><p class="note">Due dates will count only the working days set above.</p><button class="btn ghost">Copy from 2026…</button></div></div></div></div>
+<div id="addh" class="ov" style="display:none"><div class="modal" style="width:440px"><div class="row"><h3 style="margin:0">Add holiday</h3><span class="sp"></span><span style="cursor:pointer" onclick="this.closest('.ov').style.display='none'">✕</span></div><br>
+<div class="field"><label>Date *</label><input value="11/30/2026"></div>
+<div class="field"><label>Name *</label><input value="Bonifacio Day"></div>
+<div class="field"><label>Type *</label><select><option>Regular holiday</option><option>Special non-working day</option><option>Special working day</option></select><small class="note">Regular holidays and special non-working days are skipped in due dates. Special working days count as workdays.</small></div>
+<div class="field err"><label>Note</label><input><small>Nov 30, 2026 already has a holiday ("Bonifacio Day").</small></div>
+<div class="lock" style="background:var(--warnb)">⚠ 12 tasks are due on this day. Their due dates won't change. <a href="#allissues">Review the 12 tasks</a></div>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Save holiday</button></div></div></div>
+</section>
 <!-- NOTIFICATIONS (M3) -->
 <section class="page" id="notif">
 <header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header>
@@ -562,7 +610,7 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <!-- ADMIN -->
 <section class="page" id="admin">
 <header><h1>Admin</h1><button class="btn">+ Invite user</button></header>
-<div class="tabs"><span class="on">Users</span><span>Teams</span><span>Clients</span><span>Settings</span></div>
+<div class="tabs"><span class="on">Users</span><span>Teams</span><span>Clients</span><span>Settings</span><span onclick="location.hash='holidays'">Holidays</span></div>
 <div class="grid g3"><div class="card"><table><tr><th>Name</th><th>Email</th><th>Access</th><th>Job role</th><th>Teams</th><th>Status</th><th></th></tr>
 <tr><td>Jomerson Nazaire</td><td>jnazaire@xceler8.example</td><td>Admin</td><td>Project Manager</td><td>Management</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap">Copy reset link</button></td></tr>
 <tr><td>Maria P.</td><td>maria@xceler8.example</td><td>Member</td><td>Consultant</td><td>Consulting</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap">Copy reset link</button></td></tr>
@@ -659,5 +707,6 @@ document.querySelectorAll('.acl input[data-a]').forEach(c=>c.addEventListener('c
 if(c.dataset.a!='V'&&c.checked&&v)v.checked=true;
 if(c.dataset.a=='V'&&!c.checked&&[...r.querySelectorAll('[data-a]')].some(x=>x.dataset.a!='V'&&x.checked)){c.checked=true;alert('View is included in Create, Edit and Delete. Untick those first.');}
 document.getElementById('savebar').style.display='flex';}));
+function wdChk(){const c=[...document.querySelectorAll('.wd')];if(!c.some(x=>x.checked)){event.target.checked=true;document.getElementById('wderr').style.display='block'}else document.getElementById('wderr').style.display='none'}
 window.onhashchange=go;go();
 </script></body></html>

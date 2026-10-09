@@ -3,7 +3,6 @@ import {
   ACCESS_ACTION_LABELS,
   FIXED_SCOPES,
   LOCKED_OFF_REASON,
-  LOCKED_ON_REASON,
   NOT_APPLICABLE_REASON,
   RECORD_TYPES,
   SYSTEM_ROLES,
@@ -11,6 +10,7 @@ import {
   gridsEqual,
   isLockedOff,
   isLockedOn,
+  lockedOnReason,
   setGrant,
   type AccessAction,
   type AccessRulesDto,
@@ -372,7 +372,7 @@ function RulesTable({
                 <th scope="row" className="fw-normal">
                   <span className="fw-medium text-heading">{rt.label}</span>
                   {locked && (
-                    <span className="ms-1" title={LOCKED_ON_REASON} aria-label="Locked">
+                    <span className="ms-1" title={lockedOnReason(rt.key)} aria-label="Locked">
                       🔒
                     </span>
                   )}
@@ -437,7 +437,7 @@ function Cell({
         checked
         disabled
         readOnly
-        title={LOCKED_ON_REASON}
+        title={lockedOnReason(record)}
         aria-label={`${aria} (locked)`}
       />
     );

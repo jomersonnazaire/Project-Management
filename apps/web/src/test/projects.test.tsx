@@ -50,6 +50,9 @@ describe('My tasks (FR-TSK-13, AC-17.1)', () => {
         : undefined,
     );
     renderAt('/my-tasks', <App />);
+    // Today is the first tab and the default (FR-TSK-20); switch to Assigned to me.
+    await screen.findByText('Oct 5 · 4 days overdue');
+    await userEvent.click(screen.getByRole('button', { name: 'Assigned to me' }));
     const link = await screen.findByRole('link', { name: 'Kickoff' });
     expect(link).toHaveAttribute('href', `/projects/${PID}?task=k1`);
     const overdue = screen.getByText('Overdue').closest<HTMLElement>('.card-body')!;

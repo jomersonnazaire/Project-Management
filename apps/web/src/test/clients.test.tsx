@@ -309,7 +309,7 @@ describe('Design review M1 follow-ups (DR-05, DR-06)', () => {
       within(row)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Users', 'Teams', 'Settings']);
+    ).toEqual(['Users', 'Teams', 'Settings', 'Holidays']);
   });
 
   it('DR-06 the invite modal uses the standard header with × inside it', async () => {

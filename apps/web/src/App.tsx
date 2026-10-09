@@ -16,6 +16,7 @@ import { ProjectDetailPage } from './pages/projects/ProjectDetailPage';
 import { ProjectsPage } from './pages/projects/ProjectsPage';
 import { TemplateEditorPage } from './pages/templates/TemplateEditorPage';
 import { TemplatesPage } from './pages/templates/TemplatesPage';
+import { TimePage } from './pages/time/TimePage';
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
@@ -103,6 +104,14 @@ export function App() {
               element={
                 <RequirePermission any={[['templates', 'view']]}>
                   <TemplateEditorPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/time"
+              element={
+                <RequirePermission any={[['time', 'view']]}>
+                  <TimePage />
                 </RequirePermission>
               }
             />

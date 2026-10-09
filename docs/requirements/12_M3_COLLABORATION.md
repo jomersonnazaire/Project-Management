@@ -1,6 +1,6 @@
 # 12 — Evidence Uploads, Follow-up Notifications, Project Conversation, Checklist UX
 
-**Status:** v0.5.0 draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.5.0 approved by Jomerson with Q-29 to Q-31 defaults; notifications in-app only (2026-10-09) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson's testing feedback (room, 3:52 PM); Queen's test rules; UIE's v0.6 plan; Lean's split (PR #3 vs Milestone 3).
 
 ## 1. Scope
@@ -28,13 +28,29 @@
 |----|-------------|----------|
 | FR-TPL-12 | Each phase in the template editor has "+ Add activity"; the new activity is created in that phase at the end of its list. | Must |
 | FR-PRJ-18 | Each Checklist row's ⋮ menu has **Move up / Move down** (greyed out at the ends of a phase) for touch screens and non-drag users (UIE, Lean). Moving across phases stays in Edit task. | Must |
-| FR-PRJ-19 | **DEF-003 fix (Lean):** task Owner and Assignees list only project members. PMs and Admins get "+ Add someone to this project…" at the bottom of the list, which adds the person as a project member and assigns them in one step, audited, with a confirmation naming them. Members and Viewers see "Only project members can be assigned". The template field is labelled **Default job role**. | Must |
+| FR-PRJ-19 | **DEF-003 fix (Lean):** task Owner and Assignees list only project members. PMs and Admins get "+ Add someone to this project…" at the bottom of the list, which adds the person as a project member and assigns them in one step **when the task is saved** (cancelling adds no one), audited as `project_member_added`, with a confirmation naming them. Members and Viewers see "Only project members can be assigned". The template field is labelled **Default job role**. | Must |
 | FR-PRJ-20 | Each Checklist row has a visible icon-only pencil **Edit task** button (tooltip and screen-reader label "Edit task") in a fixed column before the ⋮ menu, shown only to users who can edit that task, and always visible on phones (Jomerson, UIE). | Must |
 | FR-TPL-13 | Activities can be reordered by drag-and-drop within a phase and moved between phases; a keyboard alternative ("Move up/down/to phase…") is provided. | Must |
 | FR-PRJ-14 | On the project Checklist, clicking anywhere on a phase card header expands or collapses it; the expanded state is remembered per user per project. | Must |
 | FR-PRJ-15 | Users with Edit on the project can reorder activities in the Checklist (drag-and-drop plus keyboard alternative). | Must |
 | FR-PRJ-16 | **Reordering changes display order only (Queen):** dependencies, dates, owners and status are untouched. Moving a task to another phase also moves its future evidence folder target but not files already uploaded. Each reorder is audited. | Must |
 | FR-PRJ-17 | Reordering in a project never changes its template, and reordering a template only affects projects created from a later published version. | Must |
+
+### 3.1b My tasks Today tab and working-day calendar (M3)
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-TSK-20 | My tasks gets a **Today** tab, first in order, with a count: open tasks assigned to me (owner or assignee) that are **overdue first** (red, with days late), then those **due today**. Each row has "Log time". Empty state: "Nothing due today". (Jomerson, Lean) | Must |
+| FR-TSK-21 | "Today" and "overdue" are always computed in **Philippine time (Asia/Manila, UTC+8)**, never server UTC; the tab is labelled "Philippine time" (Queen). | Must |
+| FR-CAL-01 | Admins manage a holiday list per year (Admin › Settings › Holidays): date, name, type **Regular holiday / Special non-working day / Special working day**; duplicate dates refused; "Copy from previous year". | Must |
+| FR-CAL-05 | Admin › Settings has a **Working days** setting: one checkbox per weekday, Mon–Fri ticked by default (Jomerson). **At least one day must stay ticked** (UI and API, 422 otherwise), and the date calculation has a hard iteration limit so it can never loop (Queen). Changes only affect dates computed afterwards, are audited, and need Edit on `settings`. | Must |
+| FR-CAL-02 | Working days = the days ticked in Working days (FR-CAL-05; default Mon–Fri), minus Regular holidays and Special non-working days, **plus Special working days, including ones on a Saturday or Sunday** (Lean). | Must |
+| FR-CAL-03 | **Adding or editing a holiday doesn't move existing due dates** (Lean); it only affects dates computed afterwards. Before saving, show "N tasks are due on this day" with a link to the list so PMs can adjust by hand. | Must |
+| FR-CAL-04 | Calendar changes are audited and limited to roles with Edit on `settings`. | Must |
+
+- **AC-TODAY-1** At 00:30 Philippine time (16:30 UTC the day before), a task due that Philippine date appears in Today; one due the previous date shows as overdue. **(API)**
+- **AC-CAL-1** With a Special working day on Saturday, a 1-working-day offset from Friday lands on that Saturday. **(API)**
+- **AC-CAL-3** Unticking the last working day is refused in the UI ("Keep at least one working day.") and by the API (422). With Saturday ticked, a 1-working-day offset from Friday lands on Saturday. **(API)**
+- **AC-CAL-2** Adding a holiday on a date with 12 due tasks shows the count before saving and leaves those 12 due dates unchanged.
 
 ### 3.2 Evidence uploads (M3) — replaces FR-TSK-07
 | ID | Requirement | Priority |
@@ -104,7 +120,7 @@ Access rules (doc 11): add record types `notifications` (own only, not configura
 
 ## 7. Open questions and assumptions
 - **Q-28 (resolved, Jomerson 2026-10-09):** in-app only. Email notifications move to the External integrations stage in `docs/FEATURES_AND_ROADMAP.md`. Email needs an email service (e.g. Azure Communication Services) and would also enable emailed invite and reset links.
-- **Q-29** Turn on malware scanning for uploads (Microsoft Defender for Storage, per-GB cost)? Proposed: yes for production.
-- **Q-30** Should images (PNG, JPG) still be allowed in Documents, while evidence is limited to PDF, Word and Excel? Proposed: yes.
-- **Q-31** Conversation messages permanent with no edit or delete, matching Lean's default? Proposed: yes; Admins can hide abusive content with an audited "hidden by Admin" marker.
+- **Q-29 (resolved: proposed default approved)** Turn on malware scanning for uploads (Microsoft Defender for Storage, per-GB cost)? Proposed: yes for production.
+- **Q-30 (resolved: proposed default approved)** Should images (PNG, JPG) still be allowed in Documents, while evidence is limited to PDF, Word and Excel? Proposed: yes.
+- **Q-31 (resolved: proposed default approved)** Conversation messages permanent with no edit or delete, matching Lean's default? Proposed: yes; Admins can hide abusive content with an audited "hidden by Admin" marker.
 - **A-14** Old `.doc` and `.xls` formats are accepted as Word and Excel.

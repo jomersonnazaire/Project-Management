@@ -4,6 +4,7 @@ import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
+import { NotificationBell } from '../components/NotificationBell';
 import { TopbarContext, type TopbarSlots } from '../components/topbar';
 
 interface NavItem {
@@ -22,7 +23,7 @@ const MAIN: NavItem[] = [
   { to: '/projects', label: 'Projects', icon: 'bx-briefcase', any: [['projects', 'view']] },
   { to: '/board', label: 'Task board', icon: 'bx-columns', any: [['tasks', 'view']] },
   { to: '/documents', label: 'Documents', icon: 'bx-folder', soon: true },
-  { to: '/time', label: 'Time logging', icon: 'bx-time-five', soon: true },
+  { to: '/time', label: 'Time logging', icon: 'bx-time-five', any: [['time', 'view']] },
 ];
 
 const SETUP: NavItem[] = [
@@ -190,7 +191,10 @@ export function AppShell() {
                 ref={setActionsSlot}
                 className="topbar-actions d-flex align-items-center gap-2"
               />
-              <ul className="navbar-nav flex-row align-items-center">
+              <ul className="navbar-nav flex-row align-items-center gap-3">
+                <li className="nav-item">
+                  <NotificationBell />
+                </li>
                 <li className="nav-item">
                   <Dropdown align="end">
                     <Dropdown.Toggle

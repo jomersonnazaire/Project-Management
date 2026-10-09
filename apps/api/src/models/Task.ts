@@ -26,7 +26,7 @@ const taskSchema = new Schema(
     dueDate: { type: Date, default: null, index: true },
     /** null = no estimate (EC-58), never 0. */
     estHours: { type: Number, min: 0, default: null },
-    /** Denormalized sum of time entries; time logging arrives in Milestone 3. */
+    /** Denormalized sum of all time entries on the task (FR-TIME-07). */
     actualHours: { type: Number, min: 0, default: 0 },
     status: { type: String, enum: TASK_STATUSES, default: 'TODO' },
     previousStatus: { type: String, enum: [...TASK_STATUSES, null], default: null },
@@ -54,9 +54,13 @@ const taskSchema = new Schema(
     evidence: {
       type: [
         new Schema({
-          type: { type: String, enum: ['LINK'], default: 'LINK' },
+          /** LINK = M2 evidence kept as "Link (legacy)"; FILE = an uploaded document (M3). */
+          type: { type: String, enum: ['LINK', 'FILE'], default: 'LINK' },
           name: String,
           url: String,
+          documentId: { type: Schema.Types.ObjectId, ref: 'Document', default: null },
+          size: { type: Number, default: null },
+          mimeType: { type: String, default: null },
           addedBy: { type: Schema.Types.ObjectId, ref: 'User' },
           at: { type: Date, default: () => new Date() },
         }),

@@ -15,6 +15,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   if (err instanceof HttpError) {
     ({ status, code, message, details } = err);
+  } else if (err instanceof Error && err.name === 'CalendarLimitError') {
+    // FR-CAL-05: the bounded date calculation found no working day within its limit.
+    status = 422;
+    code = 'CALENDAR_LIMIT';
+    message = err.message;
   } else if (isBodyParserError(err)) {
     status = 400;
     code = 'INVALID_JSON';

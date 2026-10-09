@@ -1,4 +1,10 @@
-import { TEMPLATE_TYPE_LABELS, plural } from '@xc8/shared';
+import {
+  TEMPLATE_TYPE_LABELS,
+  hasPermission,
+  plural,
+  type AccessAction,
+  type RecordType,
+} from '@xc8/shared';
 import { useState } from 'react';
 import { Alert, Button } from 'react-bootstrap';
 import {
@@ -13,6 +19,7 @@ import {
 } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { useProject, useProjectAction, useProjectTasks } from '../../api/projectHooks';
+import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { ProgressBar, ProjectBadge, ScheduleVariance } from '../../components/ProjectBadges';
@@ -27,6 +34,9 @@ import {
   ContactsTab,
   TeamTab,
 } from './ProjectTabs';
+import { ConversationTab } from './ConversationTab';
+import { DocumentsTab } from './DocumentsTab';
+import { ProjectTimeTab } from './ProjectTimeTab';
 import { TaskFormModal } from './TaskFormModal';
 import { TaskPanel } from './TaskPanel';
 
@@ -43,6 +53,8 @@ export function ProjectDetailPage() {
   const [adding, setAdding] = useState(false);
   const warnings = (location.state as { warnings?: string[] } | null)?.warnings ?? [];
   const openTask = params.get('task');
+  const { permissions } = useAuth();
+  const can = (r: RecordType, a: AccessAction) => hasPermission(permissions, r, a);
 
   if (project.error instanceof ApiError && project.error.status === 404) return <NotFoundPage />;
   const p = project.data;
@@ -68,9 +80,10 @@ export function ProjectDetailPage() {
     { to: 'board', label: 'Board' },
     { to: 'team', label: 'Team' },
     { to: 'contacts', label: 'Active contacts' },
+    ...(can('conversations', 'view') ? [{ to: 'conversation', label: 'Conversation' }] : []),
     { to: 'timeline', label: 'Timeline' },
-    { to: 'documents', label: 'Documents' },
-    { to: 'time', label: 'Time' },
+    ...(can('documents', 'view') ? [{ to: 'documents', label: 'Documents' }] : []),
+    ...(can('time', 'view') ? [{ to: 'time', label: 'Time' }] : []),
     // Admins and PMs on any project they can view, or View on audit (doc 11 §12).
     ...(p.can.activity ? [{ to: 'activity', label: 'Activity log' }] : []),
   ];
@@ -214,8 +227,12 @@ export function ProjectDetailPage() {
           <Route path="team" element={<TeamTab project={p} tasks={list} />} />
           <Route path="contacts" element={<ContactsTab project={p} />} />
           <Route path="timeline" element={<ComingSoonTab title="The timeline" />} />
-          <Route path="documents" element={<ComingSoonTab title="Documents" />} />
-          <Route path="time" element={<ComingSoonTab title="Time logging" />} />
+          <Route
+            path="conversation"
+            element={<ConversationTab project={p} tasks={list} onOpenTask={setTask} />}
+          />
+          <Route path="documents" element={<DocumentsTab project={p} tasks={list} />} />
+          <Route path="time" element={<ProjectTimeTab project={p} />} />
           {p.can.activity && <Route path="activity" element={<ActivityTab project={p} />} />}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

@@ -5,7 +5,7 @@ import {
   listQuerySchema,
   updateClientSchema,
   updateContactSchema,
-  todayUtc,
+  todayPH,
   type ContactDto,
 } from '@xc8/shared';
 import type { Request } from 'express';
@@ -86,7 +86,7 @@ async function withProjects(req: Request, contacts: ContactDto[]): Promise<Conta
   })
     .select('clientContactId dueDate')
     .lean();
-  const today = todayUtc();
+  const today = todayPH();
   return contacts.map((c) => {
     const mine = tasks.filter((t) => t.clientContactId?.toString() === c.id);
     return {

@@ -28,12 +28,20 @@ import { tasksRouter } from './routes/tasks.js';
 import { teamsRouter } from './routes/teams.js';
 import { templatesRouter } from './routes/templates.js';
 import { usersRouter } from './routes/users.js';
+import { conversationsRouter } from './routes/conversations.js';
+import { documentsRouter } from './routes/documents.js';
+import { notificationsRouter } from './routes/notifications.js';
+import { settingsRouter } from './routes/settings.js';
+import { timeRouter } from './routes/time.js';
+import { createBlobStore, type BlobStore } from './storage/blobStore.js';
 
 export function createApp(
   config: AppConfig,
   logger: Logger = createLogger(config.LOG_LEVEL),
   /** Test hook: mount extra routes (used to prove undeclared routes are denied). */
   extraRoutes?: (registry: RouteRegistry) => Router,
+  /** File storage; defaults to Azure Blob from config (or in-memory outside production). */
+  blobStore: BlobStore | null = createBlobStore(config),
 ) {
   const app = express();
   app.disable('x-powered-by');
@@ -110,6 +118,11 @@ export function createApp(
     ...projectsRouter(registry),
     accessRulesRouter(registry),
     auditRouter(registry),
+    settingsRouter(registry),
+    ...timeRouter(registry),
+    ...documentsRouter(config, registry, blobStore),
+    notificationsRouter(registry),
+    conversationsRouter(registry),
     ...(extraRoutes ? [extraRoutes(registry)] : []),
   ];
 
@@ -124,5 +137,6 @@ export function createApp(
   app.use(notFoundHandler);
   app.use(errorHandler);
   app.locals.routes = registry.entries;
+  app.locals.blobStore = blobStore;
   return app;
 }
