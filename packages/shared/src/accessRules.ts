@@ -6,14 +6,26 @@ import { SYSTEM_ROLES, type SystemRole } from './roles.js';
  * action. The API enforces them on every request; the web app only uses them to hide controls.
  * Record type keys are shared by the API and the web app so they stay in step (doc 11 §8).
  */
-export const ACCESS_ACTIONS = ['view', 'create', 'edit', 'delete'] as const;
+/**
+ * `export` only applies to Reports (CSV export). It isn't a grid column (doc 11 v0.4.8,
+ * FR-ACL-14): it's a small checkbox under View on the Reports row, and needs View.
+ */
+export const ACCESS_ACTIONS = ['view', 'create', 'edit', 'delete', 'export'] as const;
 export type AccessAction = (typeof ACCESS_ACTIONS)[number];
+/** The grid's columns: View/Create/Edit/Delete. Export sits under View where it applies. */
+export const GRID_ACTIONS = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+] as const satisfies readonly AccessAction[];
 
 export const ACCESS_ACTION_LABELS: Record<AccessAction, string> = {
   view: 'View',
   create: 'Create',
   edit: 'Edit',
   delete: 'Delete',
+  export: 'Export',
 };
 
 export interface RecordTypeInfo {
@@ -24,11 +36,12 @@ export interface RecordTypeInfo {
   notes?: string;
 }
 
-const ALL = ACCESS_ACTIONS;
+const ALL = ['view', 'create', 'edit', 'delete'] as const;
 const VIEW_EDIT = ['view', 'edit'] as const;
 const VIEW_ONLY = ['view'] as const;
 const EDIT_ONLY = ['edit'] as const;
 const VIEW_CREATE = ['view', 'create'] as const;
+const VIEW_EXPORT = ['view', 'export'] as const;
 
 /** The record types of doc 11 §3 plus M3's conversations and notifications (doc 12 §3.4), in grid order. */
 export const RECORD_TYPES = [
@@ -96,7 +109,19 @@ export const RECORD_TYPES = [
     actions: VIEW_ONLY,
     notes: 'Own notifications only; not configurable',
   },
-  { key: 'reports', label: 'Reports & dashboard', actions: VIEW_ONLY },
+  {
+    key: 'reports',
+    label: 'Reports',
+    actions: VIEW_EXPORT,
+    notes:
+      'Dashboard and the shared reports; Export covers their CSV exports (FR-ACL-14). Never another person’s saved DARs (FR-ACL-17)',
+  },
+  {
+    key: 'workload',
+    label: 'Team & workload',
+    actions: VIEW_ONLY,
+    notes: 'Weekly assigned and recorded hours per person',
+  },
   {
     key: 'audit',
     label: 'Audit log',
@@ -133,6 +158,7 @@ function grants(spec: string): ActionGrants {
     create: spec.includes('C'),
     edit: spec.includes('E'),
     delete: spec.includes('D'),
+    export: spec.includes('X'),
   };
 }
 
@@ -160,7 +186,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     issues: 'VCED',
     conversations: 'VC',
     notifications: 'V',
-    reports: 'V',
+    reports: 'VX',
+    workload: 'V',
     audit: 'V',
   },
   PROJECT_MANAGER: {
@@ -181,7 +208,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     issues: 'VCE',
     conversations: 'VC',
     notifications: 'V',
-    reports: 'V',
+    reports: 'VX',
+    workload: 'V',
     audit: '',
   },
   MEMBER: {
@@ -203,7 +231,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     issues: 'VCE',
     conversations: 'VC',
     notifications: 'V',
-    reports: 'V',
+    reports: 'VX',
+    workload: 'V',
     audit: '',
   },
   VIEWER: {
@@ -224,7 +253,8 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     issues: 'V',
     conversations: 'V',
     notifications: 'V',
-    reports: 'V',
+    reports: 'VX',
+    workload: 'V',
     audit: '',
   },
 };
@@ -276,17 +306,68 @@ export const DEFAULT_ACCESS_RULES: AccessRulesByRole = Object.fromEntries(
  */
 export const LOCKED_ADMIN_RECORDS: readonly RecordType[] = ['users', 'accessRules'];
 
+/** Admins always have every action on Reports and Team & workload (fixed, can't be changed). */
+export const ADMIN_FULL_RECORDS: readonly RecordType[] = ['reports', 'workload'];
+export const ADMIN_FULL_REASON = 'Admins always have full access to Reports and Team & workload';
+
+/**
+ * Record types split out of an existing one after go-live. When the startup migration adds the
+ * row to a saved grid, it starts from the defaults but stays off if the role had View turned off
+ * on the parent, so nobody gains or loses access on the day it ships.
+ */
+export const SPLIT_FROM: Partial<Record<RecordType, RecordType>> = {
+  workload: 'reports',
+};
+
+/**
+ * A cell added to an existing row after go-live (Reports Export, v0.4.8). The migration writes
+ * the default, but Export only starts on where the role already had View, so access stays as it
+ * was (FR-ACL-15). Admins are locked full.
+ */
+export function initialCell(
+  role: SystemRole,
+  record: RecordType,
+  action: AccessAction,
+  storedRow: Partial<ActionGrants> | null | undefined,
+): boolean {
+  if (isLockedOn(role, record, action)) return true;
+  const v = defaultPermissions(role)[record][action];
+  return action === 'export' ? v && storedRow?.view !== false : v;
+}
+
+/** The row the migration writes for `record` into a role's saved grid that doesn't have it. */
+export function initialRow(
+  role: SystemRole,
+  record: RecordType,
+  stored: Partial<Record<string, Partial<ActionGrants> | undefined>> | null | undefined,
+): ActionGrants {
+  const row = { ...defaultPermissions(role)[record] };
+  const parent = SPLIT_FROM[record];
+  if (parent && stored?.[parent]?.view === false) {
+    for (const a of ACCESS_ACTIONS) row[a] = false;
+  }
+  if (role === 'ADMIN' && ADMIN_FULL_RECORDS.includes(record)) {
+    for (const a of ACCESS_ACTIONS) row[a] = actionApplies(record, a);
+  }
+  return row;
+}
+
 /** Record types whose access is fixed on for every role (doc 12 §3.4: own notifications only). */
 export const ALWAYS_ON_RECORDS: readonly RecordType[] = ['notifications'];
 
 export function isLockedOn(role: SystemRole, record: RecordType, action: AccessAction): boolean {
   if (ALWAYS_ON_RECORDS.includes(record)) return actionApplies(record, action);
-  return role === 'ADMIN' && LOCKED_ADMIN_RECORDS.includes(record) && actionApplies(record, action);
+  return (
+    role === 'ADMIN' &&
+    (LOCKED_ADMIN_RECORDS.includes(record) || ADMIN_FULL_RECORDS.includes(record)) &&
+    actionApplies(record, action)
+  );
 }
 
 /** Why a cell can't be changed, for the grid's tooltip (null when it can be). */
 export function lockedOnReason(record: RecordType): string {
-  return ALWAYS_ON_RECORDS.includes(record) ? NOTIFICATIONS_LOCKED_REASON : LOCKED_ON_REASON;
+  if (ALWAYS_ON_RECORDS.includes(record)) return NOTIFICATIONS_LOCKED_REASON;
+  return ADMIN_FULL_RECORDS.includes(record) ? ADMIN_FULL_REASON : LOCKED_ON_REASON;
 }
 
 /**
@@ -331,6 +412,8 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     conversations: 'Projects they belong to',
     activities: 'Own; view (not edit) their direct reports',
     leave: 'Own; view their direct reports’ leave',
+    reports: 'Projects they belong to; own time entries only',
+    workload: 'Own row only',
   },
   VIEWER: {
     activities: 'Own; view (not edit) their direct reports',
@@ -359,6 +442,8 @@ export function effectivePermissions(
       row[action] = Boolean(v);
     }
     if (actionApplies(record, 'view') && (row.create || row.edit || row.delete)) row.view = true;
+    // Export needs View (FR-ACL-15): with View off, Export is off too.
+    if (!row.view) row.export = false;
     out[record] = row;
   }
   return out;
@@ -408,7 +493,9 @@ export function validatePermissionGrid(role: SystemRole, grid: PermissionGrid): 
           path,
           message: ALWAYS_ON_RECORDS.includes(record)
             ? `${NOTIFICATIONS_LOCKED_REASON}.`
-            : `Admin access to ${recordTypeInfo(record).label} is locked so nobody can lock every Admin out.`,
+            : ADMIN_FULL_RECORDS.includes(record)
+              ? `${ADMIN_FULL_REASON}.`
+              : `Admin access to ${recordTypeInfo(record).label} is locked so nobody can lock every Admin out.`,
         });
       } else if (isLockedOff(role, record, action) && v) {
         issues.push({ code: 'LOCKED_PERMISSION', path, message: lockedOffReason(record) + '.' });
@@ -434,6 +521,8 @@ export function setGrant(
 ): PermissionGrid {
   const row = { ...grid[record], [action]: value };
   if (value && action !== 'view' && actionApplies(record, 'view')) row.view = true;
+  // Turning View off also unticks Export (FR-ACL-15).
+  if (!value && action === 'view') row.export = false;
   return { ...grid, [record]: row };
 }
 

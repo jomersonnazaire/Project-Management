@@ -33,6 +33,7 @@ import {
 import { LAUNCH_TEMPLATE_KEY, ensureLaunchTemplate } from '../src/services/launchTemplate.js';
 import { buildPlanTasks, recomputeProject } from '../src/services/projectService.js';
 import {
+  addMissingCells,
   addMissingRecordTypes,
   applyAccessDefaultChanges,
 } from '../src/services/accessDefaults.js';
@@ -195,6 +196,7 @@ async function main() {
   const seededRules = await ensureDefaultAccessRules();
   console.log(`Access rules: ${seededRules ? `seeded ${seededRules} role(s)` : 'already present'}`);
   await addMissingRecordTypes();
+  await addMissingCells();
   // Later default changes (doc 11 §12), e.g. Member Delete on time; only cells still at the old default.
   for (const m of await applyAccessDefaultChanges()) {
     const switched = m.cells.filter((c) => c.outcome === 'switched').length;

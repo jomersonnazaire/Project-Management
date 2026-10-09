@@ -180,7 +180,7 @@ export function App() {
             <Route
               path="/workload"
               element={
-                <RequirePermission any={[['reports', 'view']]}>
+                <RequirePermission any={[['workload', 'view']]}>
                   <WorkloadPage />
                 </RequirePermission>
               }

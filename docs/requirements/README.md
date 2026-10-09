@@ -69,3 +69,6 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.9.4 | 2026-10-09 | Doc 14 approved for build; FR-LV-11 same-day AM+PM leave rule. |
 | v0.9.5 | 2026-10-09 | M4–M7 build notes: remarks fallback (FR-DAR-19), quick-activity delete (FR-ACT-19), accepted deviations, deferred leave items. |
 | v0.9.6 | 2026-10-09 | FR-TSK-22 tab order adds Day timesheet after Today. |
+- v0.9.7 (2026-10-09): doc 14 FR-ACT-20 to 23: Module optional free text (100 chars, trimmed), Modules settings screen removed (data kept), Day timesheet row Time out button.
+- v0.9.8 (2026-10-10): doc 14 FR-ACT-24 (locked days refuse non-Admin changes on every route), FR-ACT-25 (out-of-scope user IDs return 404).
+- v0.4.8 / doc 11 (2026-10-10): FR-ACL-14 to 17: Reports (View + Export) and Team & workload (View) access rows; starting values mirror today; saved DARs stay private.

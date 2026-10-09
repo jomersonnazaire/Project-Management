@@ -1,5 +1,6 @@
 import {
   ACCESS_ACTIONS,
+  GRID_ACTIONS,
   ACCESS_ACTION_LABELS,
   FIXED_SCOPES,
   lockedOffReason,
@@ -356,7 +357,7 @@ function RulesTable({
         <thead>
           <tr>
             <th scope="col">Record type</th>
-            {ACCESS_ACTIONS.map((a) => (
+            {GRID_ACTIONS.map((a) => (
               <th scope="col" key={a} className="text-center">
                 {ACCESS_ACTION_LABELS[a]}
               </th>
@@ -380,7 +381,7 @@ function RulesTable({
                     <code>{rt.key}</code>
                   </div>
                 </th>
-                {ACCESS_ACTIONS.map((a) => (
+                {GRID_ACTIONS.map((a) => (
                   <td key={a} className="text-center">
                     <Cell
                       role={role}
@@ -391,6 +392,21 @@ function RulesTable({
                       readOnly={readOnly}
                       onToggle={onToggle}
                     />
+                    {a === 'view' && actionApplies(rt.key, 'export') && (
+                      // FR-ACL-14: Export is a small checkbox under View, not a column.
+                      <label className="d-flex justify-content-center align-items-center gap-1 small text-body-secondary mt-1 mb-0 acl-sub">
+                        <Cell
+                          role={role}
+                          record={rt.key}
+                          label={rt.label}
+                          action="export"
+                          checked={grid[rt.key].export}
+                          readOnly={readOnly || !grid[rt.key].view}
+                          onToggle={onToggle}
+                        />
+                        <span aria-hidden="true">Export</span>
+                      </label>
+                    )}
                   </td>
                 ))}
                 <td className="small text-body-secondary">{scopes[rt.key] ?? '–'}</td>

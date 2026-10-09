@@ -33,8 +33,8 @@ describe('Access rules screen (doc 11, mockup v0.5.2)', () => {
     expect(tabs.map((t) => t.textContent)).toEqual(['Admin', 'PM', 'Member', 'Viewer']);
     expect(screen.getByRole('tab', { name: 'PM' })).toHaveAttribute('aria-selected', 'true');
     await screen.findByText('accessRules', { selector: 'code' });
-    // 18 record types (M3 adds conversations and notifications, M3.5 issues, M5 activities, M7 leave).
-    expect(document.querySelectorAll('tbody tr[data-record]')).toHaveLength(19);
+    // 20 record types (M3 conversations and notifications, M3.5 issues, M5 activities, M7 leave, v0.4.8 workload).
+    expect(document.querySelectorAll('tbody tr[data-record]')).toHaveLength(20);
     // PM defaults: clients VCED, users none.
     for (const a of [/^View Clients$/, /^Create Clients$/, /^Edit Clients$/, /^Delete Clients$/])
       expect(box(row('clients'), a)).toBeChecked();
@@ -126,7 +126,9 @@ describe('Access rules screen (doc 11, mockup v0.5.2)', () => {
     expect(String(put[0])).toMatch(/\/access-rules\/PROJECT_MANAGER$/);
     expect(JSON.parse(String(put[1]?.body))).toEqual({
       version: 1,
-      permissions: { clients: { view: true, create: true, edit: true, delete: false } },
+      permissions: {
+        clients: { view: true, create: true, edit: true, delete: false, export: false },
+      },
     });
     expect((put[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('xc8-web');
     await waitFor(() =>

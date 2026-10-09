@@ -1,5 +1,6 @@
 import {
   ACCESS_ACTIONS,
+  actionApplies,
   SYSTEM_ROLES,
   defaultPermissions,
   isRecordType,
@@ -83,6 +84,13 @@ function mergePatch(current: PermissionGrid, patch: Record<string, Record<string
       } else {
         next[record][action as AccessAction] = value;
       }
+    }
+    // FR-ACL-15: Export needs View. Turning View off also unticks Export; ticking Export
+    // (with View not turned off in the same change) ticks View, as the grid does.
+    const r = next[record];
+    if (actionApplies(record, 'export') && r.export && !r.view) {
+      if ((row as Record<string, unknown>).view === false) r.export = false;
+      else r.view = true;
     }
   }
   return { next, issues };

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GRID_ACTIONS,
+  initialCell,
+  ADMIN_FULL_REASON,
+  initialRow,
+  lockedOnReason,
+  defaultPermissions,
   DEFAULT_ACCESS_RULES,
   RECORD_TYPE_KEYS,
   SYSTEM_ROLES,
@@ -50,6 +56,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       'conversations',
       'notifications',
       'reports',
+      'workload',
       'audit',
     ]);
   });
@@ -95,7 +102,13 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
     });
     expect(eff.settings).toMatchObject({ create: false, delete: false });
     expect(eff.approvals.view).toBe(false);
-    expect(eff.audit).toEqual({ view: true, create: false, edit: false, delete: false });
+    expect(eff.audit).toEqual({
+      view: true,
+      create: false,
+      edit: false,
+      delete: false,
+      export: false,
+    });
     expect(actionApplies('reports', 'edit')).toBe(false);
   });
 
@@ -104,11 +117,17 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       users: { view: false, create: false, edit: false, delete: false },
       accessRules: { view: false, edit: false },
     });
-    expect(eff.users).toEqual({ view: true, create: true, edit: true, delete: true });
+    expect(eff.users).toEqual({
+      view: true,
+      create: true,
+      edit: true,
+      delete: true,
+      export: false,
+    });
     expect(eff.accessRules).toMatchObject({ view: true, edit: true });
     const bad = validatePermissionGrid('ADMIN', {
       ...g('ADMIN'),
-      users: { view: true, create: true, edit: true, delete: false },
+      users: { view: true, create: true, edit: true, delete: false, export: false },
     });
     expect(bad).toEqual([
       expect.objectContaining({ code: 'LOCKED_PERMISSION', path: 'users.delete' }),
@@ -127,7 +146,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
     expect(grid.teams).toMatchObject({ view: true, edit: true });
     const issues = validatePermissionGrid('VIEWER', {
       ...g('VIEWER'),
-      teams: { view: false, create: false, edit: true, delete: false },
+      teams: { view: false, create: false, edit: true, delete: false, export: false },
     });
     expect(issues.map((i) => i.code)).toEqual(['VIEW_REQUIRED']);
     // Approvals has no View, so Edit alone is valid there.
@@ -241,5 +260,64 @@ describe('My tasks › Today (FR-TSK-23/24, TC-N26, TC-N29, TC-N30)', () => {
     expect(t('TODO', '2026-10-08', '2026-10-08')).toBe('PLANNED');
     expect(t('TODO', '2026-10-09', '2026-10-13')).toBeNull();
     expect(todaySection({ status: 'TODO', plannedStart: null, dueDate: today }, today)).toBeNull();
+  });
+});
+
+describe('Reports and Team & workload rows (doc 11 v0.4.8, FR-ACL-14..17)', () => {
+  it('seeds today’s access: Reports View+Export and Team & workload View for every role', () => {
+    for (const role of ['ADMIN', 'PROJECT_MANAGER', 'MEMBER', 'VIEWER'] as const) {
+      const g = defaultPermissions(role);
+      expect(g.reports).toEqual({
+        view: true,
+        create: false,
+        edit: false,
+        delete: false,
+        export: true,
+      });
+      expect(g.workload).toEqual({
+        view: true,
+        create: false,
+        edit: false,
+        delete: false,
+        export: false,
+      });
+    }
+    for (const a of ['create', 'edit', 'delete'] as const) {
+      expect(actionApplies('reports', a)).toBe(false);
+      expect(actionApplies('workload', a)).toBe(false);
+    }
+    expect(actionApplies('reports', 'export')).toBe(true);
+    expect(actionApplies('workload', 'export')).toBe(false);
+    expect(actionApplies('users', 'export')).toBe(false);
+    expect(GRID_ACTIONS).toEqual(['view', 'create', 'edit', 'delete']);
+  });
+
+  it('Admin is locked full; View off also unticks Export; Export never survives without View', () => {
+    expect(isLockedOn('ADMIN', 'reports', 'view')).toBe(true);
+    expect(isLockedOn('ADMIN', 'reports', 'export')).toBe(true);
+    expect(isLockedOn('ADMIN', 'workload', 'view')).toBe(true);
+    expect(isLockedOn('PROJECT_MANAGER', 'reports', 'export')).toBe(false);
+    expect(lockedOnReason('workload')).toBe(ADMIN_FULL_REASON);
+    expect(
+      effectivePermissions('ADMIN', { reports: { view: false, export: false } }).reports,
+    ).toMatchObject({ view: true, export: true });
+    const off = setGrant(defaultPermissions('MEMBER'), 'reports', 'view', false);
+    expect(off.reports).toMatchObject({ view: false, export: false });
+    const on = setGrant(off, 'reports', 'export', true);
+    expect(on.reports).toMatchObject({ view: true, export: true });
+    expect(
+      effectivePermissions('VIEWER', { reports: { view: false, export: true } }).reports,
+    ).toMatchObject({ view: false, export: false });
+  });
+
+  it('the migration follows the role’s current Reports View', () => {
+    expect(initialCell('MEMBER', 'reports', 'export', { view: true })).toBe(true);
+    expect(initialCell('MEMBER', 'reports', 'export', { view: false })).toBe(false);
+    expect(initialCell('ADMIN', 'reports', 'export', { view: false })).toBe(true);
+    expect(initialRow('PROJECT_MANAGER', 'workload', { reports: { view: false } }).view).toBe(
+      false,
+    );
+    expect(initialRow('ADMIN', 'workload', { reports: { view: false } }).view).toBe(true);
+    expect(initialRow('VIEWER', 'workload', null).view).toBe(true);
   });
 });

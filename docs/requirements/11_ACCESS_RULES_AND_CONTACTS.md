@@ -1,6 +1,6 @@
 # 11 — Access Rules Module and Client Contacts Changes (Milestone 1.5)
 
-**Status:** v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.4.8 (Reports and Team & workload rows) · v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson (room, 2026-10-09 2:29 PM); Lean (Milestone 1.5 scope); Queen (safety rules); UIE (mockup v0.5 plan).
 **Decision:** permissions are set **per Access role** (Admin, PM, Member, Viewer), not per Job role (Jomerson, 2026-10-09).
 
@@ -34,6 +34,7 @@ Out of scope: per-Job-role or per-user permissions, field-level permissions, cus
 | `time` | Time entries | |
 | `documents` | Documents & folders | Signed versions stay locked regardless (FR-DOC) |
 | `reports` | Reports & dashboard | Only View applies |
+| `workload` | Team & workload | Only View applies (added v0.4.8) |
 | `audit` | Audit log | Only View applies; never editable or deletable by anyone |
 
 Actions that don't apply to a record type are shown disabled in the grid and rejected by the API.
@@ -144,3 +145,21 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 - **Decided (Lean, 2026-10-09):** a PM may set another PM as manager (handover); the change is audited and the confirmation reads "Hand over this project to <name>?" / "After this, only <name> and Admins can edit or archive it. You'll still be able to view it." (UIE).
 
 - **Default changes after go-live (Queen, 2026-10-09):** a change to the §6 defaults ships as a one-time data migration that updates only cells still at their old default value. Cells an Admin has changed are left alone, and the migration is audited. First case: Member Delete on `time`.
+
+## Reports and Team & workload modules (v0.4.8, Jomerson; Deven, UIE, Queen, Lean, 2026-10-10)
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-ACL-14 | The Access rules grid gets two configurable rows: **Reports** (`reports`) with **View** plus an **Export** checkbox shown under View, and **Team & workload** (`workload`) with **View** only. Create, Edit and Delete show "n/a" on both rows. Turning off Reports View also turns off Export, and Export can't be on without View. (UIE) | Must |
+| FR-ACL-15 | **Starting permissions match each role's access today exactly**, so nobody gains or loses anything until an Admin changes them. They ship as a migration, replacing the fixed role checks in the code. Deven confirms the exact per-role values from the current checks, and this table records them. | Must |
+| FR-ACL-16 | The API enforces both rows (403 on `/reports/*`, `?format=csv` exports and `/workload` without the permission), and the menu hides what's not allowed. Changes are audited like every other rule (FR-ACL audit). | Must |
+| FR-ACL-17 | **Saved reports stay private:** the Reports permission covers the shared M4 reports only. It never gives access to another person's saved Daily Accomplishment Reports, Admins included; those stay owner-only (doc 14 FR-DAR-14, 404 to anyone else). (Jomerson, Lean) | Must |
+
+| Role | Reports View | Reports Export | Team & workload View |
+|---|---|---|---|
+| Admin | as today | as today | as today |
+| PM | as today | as today | as today |
+| Member | as today | as today | as today |
+| Viewer | as today | as today | as today |
+
+*(Deven to replace "as today" with the values from the current role checks.)*

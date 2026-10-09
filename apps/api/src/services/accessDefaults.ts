@@ -2,8 +2,12 @@ import {
   ACCESS_ACTIONS,
   ACCESS_DEFAULT_CHANGES,
   RECORD_TYPE_KEYS,
-  defaultPermissions,
+  SPLIT_FROM,
+  actionApplies,
+  initialCell,
+  initialRow,
   type AccessDefaultChange,
+  type RecordType,
   type SystemRole,
 } from '@xc8/shared';
 import { Types } from 'mongoose';
@@ -171,12 +175,17 @@ export async function addMissingRecordTypes(
     const stored = (doc.permissions ?? {}) as Record<string, unknown>;
     const missing = RECORD_TYPE_KEYS.filter((k) => stored[k] === undefined);
     if (!missing.length) continue;
-    const defaults = defaultPermissions(role);
     for (const record of missing) {
       const path = `permissions.${record}`;
+      // Reports and Team & workload (split out of `reports`) start from today's access.
+      const row = initialRow(
+        role,
+        record as RecordType,
+        stored as Parameters<typeof initialRow>[2],
+      );
       const saved = await AccessRuleModel.findOneAndUpdate(
         { _id: doc._id, [path]: { $exists: false } },
-        { $set: { [path]: defaults[record] }, $inc: { version: 1 } },
+        { $set: { [path]: row }, $inc: { version: 1 } },
         { new: true },
       );
       if (!saved) continue; // added concurrently
@@ -185,13 +194,59 @@ export async function addMissingRecordTypes(
         entityType: 'accessRule',
         entityId: saved._id,
         action: 'access_rule_row_added',
-        changes: [{ field: record, old: null, new: spec(defaults[record]) }],
-        reason: 'New record type: seeded default row',
+        changes: [{ field: record, old: null, new: spec(row) }],
+        reason: SPLIT_FROM[record as RecordType]
+          ? `New record type split out of ${SPLIT_FROM[record as RecordType]}: seeded today's access`
+          : 'New record type: seeded default row',
         meta: { role, recordType: record },
       });
       added.push({ role, record });
     }
   }
   if (added.length) logger?.info({ added }, 'Added default rows for new record types');
+  return added;
+}
+
+/**
+ * An action added to an existing row after go-live (Reports Export, doc 11 v0.4.8) has no stored
+ * cell yet. Writes it once where it's missing (never over an Admin's value): Export starts on only
+ * where the role already has Reports View, so access stays exactly as it was (FR-ACL-15). Bumps
+ * the version and audits each cell. Idempotent; runs on API start.
+ */
+export async function addMissingCells(
+  logger?: Logger,
+): Promise<{ role: SystemRole; cell: string; value: boolean }[]> {
+  const added: { role: SystemRole; cell: string; value: boolean }[] = [];
+  const docs = await AccessRuleModel.find().select('role permissions').lean();
+  for (const doc of docs) {
+    const role = doc.role as SystemRole;
+    const stored = (doc.permissions ?? {}) as Record<string, Record<string, boolean> | undefined>;
+    for (const record of RECORD_TYPE_KEYS) {
+      const row = stored[record];
+      if (!row) continue; // a whole missing row is addMissingRecordTypes' job
+      for (const action of ACCESS_ACTIONS) {
+        if (!actionApplies(record, action) || row[action] !== undefined) continue;
+        const value = initialCell(role, record, action, row);
+        const path = `permissions.${record}.${action}`;
+        const saved = await AccessRuleModel.findOneAndUpdate(
+          { _id: doc._id, [path]: { $exists: false } },
+          { $set: { [path]: value }, $inc: { version: 1 } },
+          { new: true },
+        );
+        if (!saved) continue;
+        await audit({
+          actorId: null,
+          entityType: 'accessRule',
+          entityId: saved._id,
+          action: 'access_rule_cell_added',
+          changes: [{ field: `${record}.${action}`, old: null, new: value }],
+          reason: "New permission: seeded from the role's current access",
+          meta: { role, recordType: record, permission: action },
+        });
+        added.push({ role, cell: `${record}.${action}`, value });
+      }
+    }
+  }
+  if (added.length) logger?.info({ added }, 'Added cells for new permissions');
   return added;
 }

@@ -62,6 +62,9 @@ Accepted: HH:MM replaces DR-08's "4h" style everywhere (doc 14 §17).
   - Time in is green (btn-success) and Time out is red (btn-danger).
   - The hours note reads "Sum of the day's entries (exact minutes; a running timer counts up to now)".
   - The team-balance "−3.5 Negative" style couldn't be checked: no user has a negative balance in the live data any more (Maria's Vacation is now 5.5), and I didn't change entitlements.
+- DR-38 negative balance, checked Oct 10, 12:05 AM SGT (Oscar Outsider, Vacation 2026 = −3.5; view only).
+  - Fixed in Team on leave › My team's balances: it shows "−3.5" with a real minus sign (U+2212) in danger #b8240a on white (6.37:1) and a "Negative" badge (#b8240a on #ffe0db, 5.14:1). See `m47b/negative-balance.png`.
+  - Still open in Admin › Leave › Entitlements (Vacation): the balance shows "-3.5" with an ASCII hyphen in body grey #646e78. Only the "Negative" badge is in danger colour (5.14:1), so the AA contrast is fine. See `m47b/negative-balance-admin.png`. **Fix:** use the same balance formatter as Team on leave, with "−" and `text-danger` on the number.
 - FR-DAR-19 Verified. Rows with blank remarks show just the task name ("Submit master data template to client", "Data gathering") or the quick activity title ("QA timer 2"), with no prefix. A row that has remarks shows only the remarks.
 
 New findings:

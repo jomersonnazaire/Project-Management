@@ -61,6 +61,11 @@ export function useReport<K extends ReportKey>(key: K, filters: Filters, enabled
   });
 }
 
+/** FR-ACL-16: the rows to export come from the audited export route (needs Reports Export). */
+export function fetchReportExport<K extends ReportKey>(key: K, filters: Filters) {
+  return api<ReportBodies[K]>(`/reports/${key}/export${qs(filters)}`);
+}
+
 export function useTimeLock(enabled = true) {
   return useQuery({
     queryKey: ['settings', 'time-lock'],
