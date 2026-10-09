@@ -81,6 +81,12 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   const reorder = useReorderTasks(project.id);
   const { isOpen, toggle } = useCollapsedPhases(user?.id, project.id);
   const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskDto | null>(null);
+  // FR-PRJ-20: a visible pencil per row for users who can edit that task. Planners get the task
+  // form; Members who may only update their own tasks get the task panel. The column shows when
+  // anyone's row has it, so rows line up across phases.
+  const showEdit = !project.archived && tasks.some((t) => t.can.edit);
+  const editTask = (t: TaskDto) => (t.can.plan ? setEditingTask(t) : onOpen(t.id));
   const [announce, setAnnounce] = useState('');
   // Planners reorder within a phase with the ⋮⋮ handle (drag, or Alt+↑/↓). Display order only:
   // dependencies, dates, owners and status never change (FR-PRJ-16).
@@ -173,6 +179,11 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                       <th scope="col">Due</th>
                       <th scope="col">Est. / actual</th>
                       <th scope="col">Status</th>
+                      {showEdit && (
+                        <th scope="col" style={{ width: '2.5rem' }}>
+                          <span className="visually-hidden">Edit</span>
+                        </th>
+                      )}
                       {canPlan && (
                         <th scope="col">
                           <span className="visually-hidden">Actions</span>
@@ -221,6 +232,22 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                         <td data-label="Status">
                           <TaskStatusBadge status={t.status} />
                         </td>
+                        {showEdit && (
+                          <td className="text-end cell-edit" style={{ width: '2.5rem' }}>
+                            {t.can.edit && (
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 text-body"
+                                aria-label="Edit task"
+                                title="Edit task"
+                                onClick={() => editTask(t)}
+                              >
+                                <i className="bx bx-pencil fs-5" aria-hidden="true" />
+                              </Button>
+                            )}
+                          </td>
+                        )}
                         {canPlan && (
                           <td className="text-end cell-actions">
                             {/* Touch and non-drag alternative to ⋮⋮ (FR-PRJ-18). Same reorder call;
@@ -277,6 +304,14 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
           </div>
         );
       })}
+      {editingTask && (
+        <TaskFormModal
+          project={project}
+          task={editingTask}
+          tasks={tasks}
+          onClose={() => setEditingTask(null)}
+        />
+      )}
       {addingTo !== null && (
         <TaskFormModal
           project={project}

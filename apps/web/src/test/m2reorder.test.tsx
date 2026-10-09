@@ -388,6 +388,79 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     );
   });
 
+  it('FR-PRJ-20 planners get an always-visible pencil "Edit task" on every row, opening the task form', async () => {
+    checklistApi();
+    renderAt(`/projects/${PID}`, <App />);
+    await screen.findByText('Kickoff');
+    const pencils = screen.getAllByRole('button', { name: 'Edit task' });
+    expect(pencils).toHaveLength(tasks.length);
+    expect(pencils[0]).toHaveAttribute('title', 'Edit task');
+    // Its own cell, just before the ⋮ menu cell.
+    const cell = within(rowOf('Kickoff')).getByRole('button', { name: 'Edit task' }).closest('td')!;
+    expect(cell.nextElementSibling).toContainElement(
+      screen.getByRole('button', { name: 'Actions for Kickoff' }),
+    );
+    await userEvent.click(within(rowOf('Workshops')).getByRole('button', { name: 'Edit task' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Edit task' })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Task name')).toHaveValue('Workshops');
+  });
+
+  it('FR-PRJ-20 a Member sees Edit only on their own tasks (opens the task panel); a Viewer none', async () => {
+    const readOnly = {
+      can: {
+        edit: false,
+        archive: false,
+        delete: false,
+        planTasks: false,
+        addMembers: false,
+        activity: true,
+      },
+    } as const;
+    const mine = (t: TaskDto) =>
+      t.id === 'k2'
+        ? { ...t, can: { edit: true, plan: false, status: true, approve: false } }
+        : { ...t, can: { edit: false, plan: false, status: false, approve: false } };
+    const memberApi = (role: 'MEMBER' | 'VIEWER', items: TaskDto[]) =>
+      api(role, (url) => {
+        if (url.includes(`/tasks/k2`)) return { status: 200, body: { task: items[1] } };
+        if (url.includes(`/projects/${PID}/tasks`)) return { status: 200, body: { items } };
+        if (url.endsWith(`/projects/${PID}`))
+          return { status: 200, body: { project: project(readOnly) } };
+        return undefined;
+      });
+    memberApi('MEMBER', tasks.map(mine));
+    const { unmount, router } = renderAt(`/projects/${PID}`, <App />);
+    await screen.findByText('Kickoff');
+    expect(screen.getAllByRole('button', { name: 'Edit task' })).toHaveLength(1);
+    expect(within(rowOf('Workshops')).getByRole('button', { name: 'Edit task' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument();
+    // No plan rights: the pencil opens the task panel (status, evidence, notes), not the plan form.
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+    }));
+    await userEvent.click(within(rowOf('Workshops')).getByRole('button', { name: 'Edit task' }));
+    await waitFor(() => expect(router.state.location.search).toBe('?task=k2'));
+    expect(screen.queryByLabelText('Task name')).not.toBeInTheDocument();
+    unmount();
+    vi.unstubAllGlobals();
+
+    memberApi(
+      'VIEWER',
+      tasks.map((t) => ({
+        ...t,
+        can: { edit: false, plan: false, status: false, approve: false },
+      })),
+    );
+    renderAt(`/projects/${PID}`, <App />);
+    await screen.findByText('Kickoff');
+    expect(screen.queryByRole('button', { name: 'Edit task' })).not.toBeInTheDocument();
+  });
+
   it('"+ Add activity to Phase N" adds a task in that phase with no phase picker', async () => {
     const fetchMock = checklistApi();
     renderAt(`/projects/${PID}`, <App />);
