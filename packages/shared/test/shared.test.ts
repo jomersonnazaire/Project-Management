@@ -36,8 +36,11 @@ describe('permissions (07 §4, NFR-22)', () => {
 });
 
 describe('password policy (FR-AUTH-02, mockup v0.4)', () => {
-  it('requires 12+ chars, a number and a symbol', () => {
-    expect(isPasswordValid('short1!')).toBe(false);
+  it('requires 8+ chars, a number and a symbol', () => {
+    expect(isPasswordValid('short1!')).toBe(false); // 7 chars
+    expect(isPasswordValid('Short1!x')).toBe(true); // exactly 8
+    expect(isPasswordValid('abcdefg1')).toBe(false); // no symbol
+    expect(isPasswordValid('abcdefg!')).toBe(false); // no number
     expect(isPasswordValid('longpassword!!')).toBe(false);
     expect(isPasswordValid('longpassword12')).toBe(false);
     expect(isPasswordValid('Long-password-12')).toBe(true);

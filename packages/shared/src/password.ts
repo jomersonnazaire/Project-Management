@@ -1,9 +1,9 @@
 /**
- * Password policy. FR-AUTH-02 requires at least 10 characters; mockup v0.4 shows
- * "12+ characters, a number, a symbol". We apply the stricter mockup rule, which
- * also satisfies FR-AUTH-02.
+ * Password policy: at least 8 characters, including a number and a symbol.
+ * Minimum length of 8 per Jomerson Nazaire's decision (2026-10-09); the number and
+ * symbol rules follow mockup v0.4.
  */
-export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 
 export interface PasswordCheck {

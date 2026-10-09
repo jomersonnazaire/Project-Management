@@ -4,7 +4,7 @@ export function SettingsPanel() {
     ['Session idle timeout', '30 minutes (FR-AUTH-03)'],
     ['Account lockout', '15 minutes after 5 consecutive failed sign-ins (FR-AUTH-07)'],
     ['Sign-in rate limit', '20 attempts per IP per 15 minutes (NFR-05)'],
-    ['Password policy', '12+ characters, a number and a symbol'],
+    ['Password policy', '8+ characters, a number and a symbol'],
     ['Delayed threshold', 'Forecast more than 5 days past baseline (FR-PRJ-10)'],
     ['Default working hours per week', '40'],
   ];

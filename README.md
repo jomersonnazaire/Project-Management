@@ -30,7 +30,7 @@ npm run dev:db
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 #    Set SEED_ADMIN_PASSWORD and SEED_USER_PASSWORD in apps/api/.env
-#    (12+ chars, at least one number and one symbol)
+#    (8+ chars, at least one number and one symbol)
 
 # 3. Load the QA milestone data (idempotent, so it's safe to re-run)
 npm run seed

@@ -119,7 +119,13 @@ describe('First-time password setup', () => {
     });
     renderAt('/setup-password', <App />);
     expect(await screen.findByText(/You were invited by Jomerson Nazaire/)).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('New password'), 'Longpassword12');
+    const newPassword = screen.getByLabelText('New password');
+    await userEvent.type(newPassword, 'Ab1!xyz'); // 7 characters
+    expect(screen.getByText('8+ characters').closest('li')).toHaveClass('missing');
+    await userEvent.type(newPassword, 'w'); // 8 characters
+    expect(screen.getByText('8+ characters').closest('li')).not.toHaveClass('missing');
+    await userEvent.clear(newPassword);
+    await userEvent.type(newPassword, 'Longpassword12');
     expect(screen.getByText(/A symbol/).closest('li')).toHaveClass('missing');
     await userEvent.type(screen.getByLabelText('Confirm password'), 'different');
     await userEvent.click(screen.getByRole('button', { name: 'Set password & continue' }));

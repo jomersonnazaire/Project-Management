@@ -243,6 +243,14 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     expect(weak.status).toBe(400);
     expect(weak.body.error.code).toBe('VALIDATION_ERROR');
 
+    // 7 characters is one short of the 8-character minimum.
+    const sevenChars = await request(app)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token, password: 'Abc12!x' });
+    expect(sevenChars.status).toBe(400);
+    expect(sevenChars.body.error.code).toBe('VALIDATION_ERROR');
+
     const agent = request.agent(app);
     const done = await agent
       .post('/api/v1/auth/setup-password')
