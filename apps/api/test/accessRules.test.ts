@@ -147,6 +147,14 @@ describe('Real routes follow the default grid per role', () => {
 
   const uid = () => randomUUID().slice(0, 8);
   type Probe = (agent: Agent) => Promise<request.Response>;
+  // Probes that address a client record the test Member cannot see (NFR-25 answers 404).
+  const OUT_OF_SCOPE_FOR_MEMBER = new Set([
+    'clients.edit',
+    'clients.delete',
+    'contacts.create',
+    'contacts.edit',
+    'contacts.delete',
+  ]);
   const probes: [RecordType, AccessAction, Probe][] = [
     ['users', 'view', (a) => a.get('/api/v1/users')],
     [
@@ -242,6 +250,9 @@ describe('Real routes follow the default grid per role', () => {
       const label = `${role} ${record}.${action} -> ${res.status}`;
       if (allowed) {
         expect(res.status, label).toBeLessThan(400 + (res.status === 404 ? 5 : 0));
+      } else if (role === 'MEMBER' && OUT_OF_SCOPE_FOR_MEMBER.has(`${record}.${action}`)) {
+        // NFR-25: the Member is on no project of this client, so its records answer 404, not 403.
+        expect([label, res.status, res.body.error?.code]).toEqual([label, 404, 'NOT_FOUND']);
       } else {
         expect([label, res.status, res.body.error?.code]).toEqual([label, 403, 'FORBIDDEN']);
       }

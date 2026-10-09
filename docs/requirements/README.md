@@ -51,3 +51,5 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.6.7 | 2026-10-09 | Doc 12 aligned with M3 build calls: Holidays tab, 90-day notifications label, PMs read-only on others' conversations; Defender pending. |
 | v0.6.8 | 2026-10-09 | M3 done: phase folders unrestrictable, official holidays loading + later proclamations, Members delete own time (doc 11 §6). |
 | v0.6.9 | 2026-10-09 | My tasks: Today (planned/aging) and Due tabs, FR-TSK-22 to 25, AC-TODAY-2 to 5. |
+| v0.7.0 | 2026-10-09 | PR #7 calls confirmed: My tasks tabs after Due, PMs view-only on other projects' issues, phase deletion rule, M3.5 items deferred to M4. |
+| v0.7.1 | 2026-10-09 | NFR-25: out-of-scope records return 404 on every method (after DEF-005 and DEF-006). |

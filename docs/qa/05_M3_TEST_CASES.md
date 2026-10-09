@@ -28,7 +28,7 @@ Time logging and documents also run the existing sections G and J of `02_TEST_CA
 ## Today (planned work) and Due tabs (doc 12 v0.6.9, FR-TSK-22 to 25)
 | ID | Case | Expected | Traces |
 |---|---|---|---|
-| TC-N22 | My tasks tab order | Today, Due, This week, All open, Completed. Due behaves like the old Today tab (TC-N14 to N16 rerun on Due) | FR-TSK-22 |
+| TC-N22 | My tasks tab order | Today, Due, Assigned to me, I'm accountable, To review, Completed (v0.7.0). Due behaves like the old Today tab (TC-N14 to N16 rerun on Due) | FR-TSK-22 |
 | TC-N23 | Task planned Monday, Not started, checked Thursday | Aging, "3 working days". Set it to In progress, not yet due: it moves to Planned for today. A task never sits in both sections | AC-TODAY-2, FR-TSK-23 |
 | TC-N24 | Planned last week and past due | Aging on Today and overdue on Due | AC-TODAY-3 |
 | TC-N25 | Wednesday is a Regular holiday | The TC-N23 task shows "2 working days". A Special working Saturday adds a day; unticking a working day removes it | AC-TODAY-4, FR-TSK-24 |
