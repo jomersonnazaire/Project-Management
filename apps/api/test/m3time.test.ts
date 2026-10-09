@@ -131,6 +131,9 @@ describe('FR-TIME-04/06: weekly lock and own entries', () => {
     await log(w.member.agent, t1, '2026-10-13', 1);
     const del = await w.pm.agent.delete(`/api/v1/tasks/${t1}`).set(CSRF);
     expect(del.status).toBe(409);
-    expect(del.body.error.code).toBe('TASK_HAS_TIME');
+    expect(del.body.error).toMatchObject({
+      code: 'TASK_HAS_RECORDS',
+      message: 'This task has 1 time entry; remove it first.',
+    });
   });
 });

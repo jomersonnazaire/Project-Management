@@ -118,6 +118,8 @@ describe('Route policy table', () => {
       'POST /templates/:id/restore templates.edit',
       'DELETE /templates/:id templates.delete',
       'GET /projects/:id/tasks tasks.view',
+      'GET /projects/:id/phases tasks.view',
+      'DELETE /projects/:id/phases tasks.delete',
       'POST /projects/:id/tasks tasks.create',
       'POST /projects/:id/tasks/reorder tasks.edit',
       'GET /tasks/mine tasks.view',

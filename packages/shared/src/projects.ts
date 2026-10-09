@@ -904,6 +904,69 @@ export interface TaskDto {
   version: number;
   /** What the caller may do on this task. */
   can: { edit: boolean; plan: boolean; status: boolean; approve: boolean };
+  /** Planners (Admin, the project's PM) may delete a task only while nothing is recorded under it. */
+  deletable: boolean;
+  /** Why a planner can't delete it (e.g. "This task has 3 time entries; remove them first."). */
+  deleteBlockedReason: string | null;
+}
+
+/** What has been recorded under a task; any of these blocks deleting it (doc 12 §8, M3.5). */
+export interface TaskRecordCounts {
+  timeEntries: number;
+  evidence: number;
+  documents: number;
+  followUps: number;
+  comments: number;
+  subtasks: number;
+  issues: number;
+}
+
+const TASK_RECORD_LABELS: Record<keyof TaskRecordCounts, [string, string]> = {
+  timeEntries: ['time entry', 'time entries'],
+  evidence: ['evidence file', 'evidence files'],
+  documents: ['document', 'documents'],
+  followUps: ['follow-up', 'follow-ups'],
+  comments: ['comment', 'comments'],
+  subtasks: ['subtask', 'subtasks'],
+  issues: ['linked issue', 'linked issues'],
+};
+
+/** Joins ["a", "b", "c"] as "a, b and c". */
+export function joinAnd(parts: string[]): string {
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/** Null when nothing blocks the delete; otherwise the message shown to the user and in the 409. */
+export function taskDeleteBlockedReason(c: Partial<TaskRecordCounts>): string | null {
+  const parts = (Object.keys(TASK_RECORD_LABELS) as (keyof TaskRecordCounts)[])
+    .filter((k) => (c[k] ?? 0) > 0)
+    .map((k) => {
+      const n = c[k] ?? 0;
+      return `${n} ${TASK_RECORD_LABELS[k][n === 1 ? 0 : 1]}`;
+    });
+  if (!parts.length) return null;
+  const total = Object.values(c).reduce((a, n) => a + (n ?? 0), 0);
+  return `This task has ${joinAnd(parts)}; remove ${total === 1 ? 'it' : 'them'} first.`;
+}
+
+/** A project phase: the tasks grouped under it, plus its evidence folder (FR-DOC-17). */
+export interface PhaseDto {
+  name: string;
+  taskCount: number;
+  documentCount: number;
+  deletable: boolean;
+  deleteBlockedReason: string | null;
+}
+
+export function phaseDeleteBlockedReason(taskCount: number, documentCount: number): string | null {
+  if (taskCount > 0) {
+    return `This phase has ${taskCount} task${taskCount === 1 ? '' : 's'}; delete or move ${taskCount === 1 ? 'it' : 'them'} first.`;
+  }
+  if (documentCount > 0) {
+    return `The phase folder has ${documentCount} document${documentCount === 1 ? '' : 's'}; move or remove ${documentCount === 1 ? 'it' : 'them'} first.`;
+  }
+  return null;
 }
 
 export interface TaskHistoryDto {
