@@ -3,7 +3,7 @@
 Web app for managing Xceler8 implementation projects: templates, tasks, time, client follow-up and documents.
 Requirements, the QA plan and the design (mockup v0.4, theme tokens) are in [`docs/`](docs/).
 
-**Status:** Phase 1, Milestone 1. Covers tooling, authentication, access and job roles, users, teams, clients and client contacts.
+**Status:** Phase 1, Milestone 1.5. Covers tooling, authentication, access and job roles, users, teams, clients and client contacts (Milestone 1), plus editable access rules and client Details/Contacts/Projects tabs (Milestone 1.5, `docs/requirements/11_ACCESS_RULES_AND_CONTACTS.md`).
 
 ## Repository layout
 
@@ -12,7 +12,7 @@ apps/
   api/       Node 22 + Express 5 + TypeScript REST API (/api/v1), MongoDB 7 via Mongoose
   web/       React 18 + TypeScript + Vite SPA, UI built on the Sneat (MIT) Bootstrap 5 theme
 packages/
-  shared/    Roles, permissions, password policy and zod request schemas shared by api and web
+  shared/    Roles, access-rule defaults and fixed rules, password policy and zod request schemas shared by api and web
 docs/        Requirements, QA plan, design (source of truth; not modified by code changes)
 ```
 
@@ -66,7 +66,7 @@ The seed also creates 6 teams and two clients (Acme Trading, Northwind Foods), e
 | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `npm run dev:db`                      | Local MongoDB 7 replica set (mongodb-memory-server, persistent)              |
 | `npm run dev:api` / `npm run dev:web` | API with reload (tsx watch) / Vite dev server (proxies `/api` to the API)    |
-| `npm run seed`                        | Idempotent seed of teams, users, clients and contacts                        |
+| `npm run seed`                        | Idempotent seed of default access rules, teams, users, clients and contacts  |
 | `npm run lint`                        | ESLint (flat config, typescript-eslint, react-hooks)                         |
 | `npm run format` / `format:check`     | Prettier                                                                     |
 | `npm run typecheck`                   | `tsc --noEmit` for every workspace                                           |
@@ -162,7 +162,11 @@ Rotate the secret by setting a new value on Vercel (Preview and Production) and 
 - Every request reloads the user, so deactivation or a role change takes effect immediately. Deactivating a user also revokes their sessions.
 - State-changing requests need the `X-Requested-With: xc8-web` header and an allowed `Origin` (CSRF defence in depth on top of SameSite).
 - Client contacts are a separate collection with no credentials. They can never sign in.
-- Authorization is enforced in API middleware (`requireAuth` and `requirePermission`). The UI only hides what the API already forbids.
+- Authorization goes through one gate (`apps/api/src/access/registry.ts` + `middleware/authorize.ts`). Every route is declared with a policy (public, signed-in, or record + action). A route with no declaration answers 404 and its handler never runs. `test/routes.test.ts` snapshots the full policy table.
+- Permissions come from the `accessRules` collection (one document per access role), read on every request, so a saved change applies on the user's next request. Default rules are seeded idempotently on API startup and by `npm run seed`; existing rules are never overwritten.
+- Fixed rules live in code (`packages/shared/src/accessRules.ts`): n/a actions, Admin access to Users and Access rules can't be removed, only Admins can delete projects, Create/Edit/Delete imply View, and record scopes (e.g. Members only see clients of their own projects) can't be widened.
+- Each changed checkbox is written to the audit log (`GET /api/v1/audit?entityType=accessRule`). Saves use a version number; a stale save gets 409.
+- The UI only hides what the API already forbids.
 
 ## Licenses
 
