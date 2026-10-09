@@ -108,11 +108,23 @@ export class AzureBlobStore implements BlobStore {
   }
 
   async read(key: string, maxBytes: number) {
-    const blob = this.container.getBlockBlobClient(key);
-    // A range past the end of the blob is refused (416), so never ask for more than it holds.
-    const size = (await blob.getProperties()).contentLength ?? 0;
-    const count = Math.min(size, maxBytes);
-    return count > 0 ? blob.downloadToBuffer(0, count) : Buffer.alloc(0);
+    // One plain GET of the whole blob (no Range header), stopping after maxBytes. Ranged reads
+    // came back 416 from the live account even for in-bounds ranges, so they're avoided here.
+    const res = await this.container.getBlockBlobClient(key).download();
+    const stream = res.readableStreamBody;
+    if (!stream) return Buffer.alloc(0);
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of stream as AsyncIterable<Buffer | string>) {
+      const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+      chunks.push(buf);
+      total += buf.length;
+      if (total >= maxBytes) {
+        (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
+        break;
+      }
+    }
+    return Buffer.concat(chunks).subarray(0, maxBytes);
   }
 
   async remove(key: string) {

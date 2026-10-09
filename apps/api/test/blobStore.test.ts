@@ -1,35 +1,29 @@
+import { Readable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { AzureBlobStore } from '../src/storage/blobStore.js';
 
-/** Azure answers 416 when a read asks for more bytes than the blob holds (found on the live smoke test). */
+/** Reads use one GET without a Range header (ranged reads came back 416 on the live account). */
 describe('AzureBlobStore.read', () => {
   const fake = (data: Buffer) => {
-    const calls: number[] = [];
+    const calls: unknown[][] = [];
     const blob = {
-      getProperties: async () => ({ contentLength: data.length }),
-      downloadToBuffer: async (offset: number, count: number) => {
-        calls.push(count);
-        if (offset + count > data.length)
-          throw Object.assign(new Error('InvalidRange'), { statusCode: 416 });
-        return data.subarray(offset, offset + count);
+      download: async (...args: unknown[]) => {
+        calls.push(args);
+        return { readableStreamBody: Readable.from([data.subarray(0, 5), data.subarray(5)]) };
       },
     };
     const container = { containerName: 'c', getBlockBlobClient: () => blob };
-    const store = new AzureBlobStore({} as never, container as never, null);
-    return { store, calls };
+    return { store: new AzureBlobStore({} as never, container as never, null), calls };
   };
 
-  it('reads a small blob whole even when the cap is 25 MiB', async () => {
+  it('reads a small blob whole with no range, even when the cap is 25 MiB', async () => {
     const { store, calls } = fake(Buffer.from('%PDF-1.7 hello'));
     expect((await store.read('k', 26_214_400)).toString()).toBe('%PDF-1.7 hello');
-    expect(calls).toEqual([14]);
+    expect(calls).toEqual([[]]);
   });
 
-  it('never reads past the cap, and an empty blob is an empty buffer', async () => {
-    const big = fake(Buffer.alloc(100, 1));
-    expect((await big.store.read('k', 10)).length).toBe(10);
-    const empty = fake(Buffer.alloc(0));
-    expect((await empty.store.read('k', 10)).length).toBe(0);
-    expect(empty.calls).toEqual([]);
+  it('never returns more than the cap; an empty blob is an empty buffer', async () => {
+    expect((await fake(Buffer.alloc(100, 1)).store.read('k', 10)).length).toBe(10);
+    expect((await fake(Buffer.alloc(0)).store.read('k', 10)).length).toBe(0);
   });
 });
