@@ -139,7 +139,7 @@ function ReportTable<T extends { id: string }>({
         <LoadingRows />
       ) : rows.length === 0 ? (
         <EmptyState icon="bx-bar-chart-alt-2" title="Nothing to report">
-          {empty}
+          {empty} Try clearing a filter or widening the date range.
         </EmptyState>
       ) : (
         <div className="table-responsive">

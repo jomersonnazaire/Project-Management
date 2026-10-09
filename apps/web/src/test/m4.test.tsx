@@ -311,7 +311,11 @@ describe('Reports (FR-RPT-01..06, FR-ISS-16)', () => {
     renderAt('/reports?tab=issues', <App />);
     expect(await screen.findByText('3.5')).toBeInTheDocument();
     expect(screen.getByText('2 open, 1 overdue')).toBeInTheDocument();
-    expect(screen.getByText('No issues match these filters.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /No issues match these filters\. Try clearing a filter or widening the date range\./,
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Timesheets' })).toBeNull();
   });
 
