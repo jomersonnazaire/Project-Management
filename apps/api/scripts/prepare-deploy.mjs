@@ -38,7 +38,12 @@ writeFileSync(
       type: 'module',
       engines: pkg.engines,
       main: 'dist/server.js',
-      scripts: { start: 'node dist/server.js', seed: 'node dist/seed.js' },
+      scripts: {
+        start: 'node dist/server.js',
+        seed: 'node dist/seed.js',
+        'bootstrap:staging': 'node dist/bootstrap-staging.js',
+        'seed:qa-completed': 'node dist/seed-qa-completed.js',
+      },
       dependencies: pinned,
     },
     null,
