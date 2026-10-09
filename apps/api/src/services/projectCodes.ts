@@ -1,6 +1,6 @@
 import { PROJECT_CODE_LOCKED, PROJECT_CODE_TAKEN, issueKey, issuePrefix } from '@xc8/shared';
 import type { Types } from 'mongoose';
-import { conflictWith } from '../lib/http422.js';
+import { conflictWith, unprocessable } from '../lib/http422.js';
 import type { Logger } from 'pino';
 import { ClientModel, IssueModel, MigrationModel, ProjectModel } from '../models/index.js';
 
@@ -13,7 +13,7 @@ export const codeTaken = () =>
     { path: 'code', message: PROJECT_CODE_TAKEN },
   ]);
 export const codeLocked = () =>
-  conflictWith(PROJECT_CODE_LOCKED, 'PROJECT_CODE_LOCKED', [
+  unprocessable(PROJECT_CODE_LOCKED, 'PROJECT_CODE_LOCKED', [
     { path: 'code', message: PROJECT_CODE_LOCKED },
   ]);
 

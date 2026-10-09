@@ -76,7 +76,7 @@ describe('DR-23 project codes', () => {
 
     await raise(w);
     const locked = await patch({ code: 'NEW-CODE' });
-    expect(locked.status).toBe(409);
+    expect(locked.status).toBe(422);
     expect(locked.body.error).toMatchObject({
       code: 'PROJECT_CODE_LOCKED',
       message: PROJECT_CODE_LOCKED,
