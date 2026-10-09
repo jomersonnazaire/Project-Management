@@ -20,6 +20,6 @@
 
 @each $state in map-keys($theme-colors) {
   .progress-bar.bg-#{$state} {
-    --#{$prefix}progress-bar-shadow-color: rgba(var(--#{$prefix}#{$state}-rgb), .4);
+    --#{$prefix}progress-bar-shadow-color: rgba(var(--#{$prefix}#{$state}-rgb), 0.4);
   }
 }

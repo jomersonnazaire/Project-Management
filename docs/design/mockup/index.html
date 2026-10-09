@@ -86,6 +86,13 @@ td{padding:12px 10px;border-color:#e4e6e8}
 .av{background:var(--pri2);color:var(--pri)}
 .login{background:#f5f5f9}
 .ov{position:fixed;inset:0;background:rgba(34,48,62,.45);display:flex;align-items:center;justify-content:center;z-index:20}.acl td{padding:8px 10px}.acl input{width:17px;height:17px;accent-color:var(--pri)}
+.phase{padding:0;margin-bottom:14px}.ph{display:flex;gap:10px;align-items:center;padding:14px 18px;cursor:pointer;border-bottom:1px solid #e4e6e8}.ph:hover{background:#fafafc}.phase.closed .pb{display:none}.phase.closed .chev{transform:rotate(-90deg)}.chev{transition:.15s;color:var(--pri)}.pb{padding:4px 12px 14px}
+.drag{cursor:grab;color:#a1acb8;width:18px}.dragging{background:#e7e7ff;box-shadow:0 4px 12px rgba(83,85,224,.25)}.dropline td{padding:0;height:3px;background:var(--pri)}.addact{margin-top:10px;font-size:13px}
+.file{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #e4e6e8;border-radius:6px;margin-bottom:8px;font-size:13px}.fi{width:36px;height:36px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}.fi.pdf{background:#b8240a}.fi.xls{background:#2e7d17}.fi.doc{background:#00718a}.fi.grey{background:#ebeef0;color:#5d6878}.legacy{background:#fafafc}
+.bell{position:relative;font-size:18px;cursor:pointer;padding:4px 6px}.bell i{position:absolute;top:-2px;right:-4px;background:var(--bad);color:#fff;font-style:normal;font-size:10px;font-weight:700;border-radius:9px;padding:1px 5px}
+.msg{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #eef0f2}.msg.hidden{opacity:.8;font-style:italic}.tags span{display:inline-block;font-size:12px;background:#f2f3f5;border-radius:4px;padding:2px 8px;margin:6px 6px 0 0}.day{text-align:center;font-size:12px;color:#7a838b;margin:14px 0 4px}.composer{margin-top:14px;padding-top:14px;border-top:1px solid #e4e6e8}.composer textarea{width:100%;border:1px solid #d1d5db;border-radius:6px;padding:9px;font:inherit;box-sizing:border-box}.sel{border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px}
+.nt{display:flex;gap:10px;padding:10px;border-radius:6px;text-decoration:none;color:var(--mut);font-size:13px}.nt:hover{background:#f5f5f9}.nt.un{background:#f3f3ff}.dotu{width:8px;height:8px;border-radius:50%;margin-top:6px}.nt.un .dotu{background:var(--pri)}
+.sevc{background:#b8240a;color:#fff}td code{white-space:nowrap}tr.crit td:first-child{box-shadow:inset 3px 0 0 #b8240a}
 </style></head><body>
 <div class="login" id="login"><div class="lbox">
 <div class="modal"><div class="logo" style="color:var(--ink);padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
@@ -106,6 +113,12 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#projects" data-p="projects">▤ Projects</a>
 <a href="#board" data-p="board">☰ Task board</a>
 <a href="#project" data-p="project">◧ Project detail</a>
+<a href="#checklist" data-p="checklist">☑ Checklist & evidence <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#convo" data-p="convo">💬 Conversation <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#issues" data-p="issues">⚑ Project issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#allissues" data-p="allissues">⚑ All issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#issue" data-p="issue">⚑ Issue detail <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#notif" data-p="notif">🔔 Notifications <span class="pill info" style="margin-left:auto">M3</span></a>
 <a href="#pcontacts" data-p="pcontacts">☏ Project contacts <span class="pill info" style="margin-left:auto">M2</span></a>
 <a href="#docs" data-p="docs">🗀 Documents</a>
 <a href="#time" data-p="time">◷ Time logging</a>
@@ -123,7 +136,7 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#login" data-p="login">⎋ Login (sign out)</a>
 </aside>
 <main>
-<div class="banner">Mockup v0.5.2 (Sneat style) for review. All names and numbers are example data, not live data.</div>
+<div class="banner">Mockup v0.7 (Sneat style) for review. All names and numbers are example data, not live data.</div>
 
 <!-- DASHBOARD -->
 <section class="page" id="dash">
@@ -370,7 +383,7 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <div class="card"><h3>Viewer / Member (View only)</h3><p class="note">The "+ Add contact" button and ⋮ menu are hidden. The list is read-only.</p></div></div>
 <div id="addc" class="ov" style="display:none"><div class="modal" style="width:440px"><div class="row"><h3 style="margin:0">Add contact to Acme Trading Corp.</h3><span class="sp"></span><span style="cursor:pointer" onclick="this.closest('.ov').style.display='none'">✕</span></div><br>
 <div class="field"><label>Full name *</label><input></div><div class="field"><label>Position</label><input></div>
-<div class="field err"><label>Email *</label><input value="rsantos@"><small>Enter a valid email address.</small></div><div class="field"><label>Phone</label><input></div>
+<div class="field err"><label>Email</label><input value="rsantos@"><small>Enter a valid email address, or leave it blank.</small></div><div class="field"><label>Phone</label><input></div>
 <p class="note">The client is set automatically. Contacts never get a login.</p>
 <div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Save contact</button></div></div></div>
 </section>
@@ -387,6 +400,132 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <p class="note">Read-only list; open a project to change it. Members only see projects they're on, and the count in the tab follows the same rule. Archived projects are hidden unless you pick Archived.</p></div>
 <div class="grid g2" style="margin-top:16px"><div class="card"><h3>Empty state (Milestone 1.5)</h3><div class="empty">▤<br><b>No projects yet</b><p class="note">Projects linked to this client will show here.</p></div></div>
 <div class="card"><h3>Member view</h3><p class="note">A Member on only SAP B1 Rollout sees one row and "Projects 1". "+ New project" is hidden.</p></div></div>
+</section>
+<!-- CHECKLIST + EVIDENCE (M3) -->
+<section class="page" id="checklist">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header><div class="tabs"><span class="on" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="" onclick="location.hash='convo'">Conversation</span><span class="" onclick="location.hash='issues'">Issues <span class="pill bad">5</span></span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
+<div class="grid" style="grid-template-columns:1fr 380px"><div>
+<div class="card phase"><div class="ph" onclick="this.parentElement.classList.toggle('closed')"><span class="chev">▾</span><b>Phase 1 – Data gathering</b><span class="note">4 activities · 2 done</span><span class="sp"></span><div class="bar" style="width:120px"><i style="width:50%"></i></div></div>
+<div class="pb"><table><tr><th></th><th>#</th><th>Activity</th><th>Owner</th><th>Due</th><th>Est / Act</th><th>Status</th></tr>
+<tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>1</td><td><a href="#checklist"><b>Data gathering</b></a></td><td>Maria P.</td><td>Sep 10</td><td>16h / 15h</td><td><span class="pill ok">Completed</span></td></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>2</td><td><a href="#checklist"><b>Submit master data template</b></a></td><td>Maria P.</td><td>Sep 15</td><td>4h / 4h</td><td><span class="pill pur">For review</span></td></tr>
+<tr class="dragging"><td class="drag">⋮⋮</td><td>3</td><td><b>Client master data – Items</b> <span class="pill warn">Client</span></td><td>R. Santos</td><td>Oct 3</td><td>– / –<div class="note">No estimate</div></td><td><span class="pill bad">Blocked</span></td></tr>
+<tr class="dropline"><td colspan="7"></td></tr>
+<tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>4</td><td><a href="#checklist"><b>Client master data – BPs</b></a></td><td>R. Santos</td><td>Oct 10</td><td>– / –<div class="note">No estimate</div></td><td><span class="pill info">In progress</span></td></tr></table>
+<button class="btn ghost addact">+ Add activity to Phase 1</button></div></div>
+<div class="card phase closed"><div class="ph" onclick="this.parentElement.classList.toggle('closed')"><span class="chev">▾</span><b>Phase 2 – Configuration</b><span class="note">2 activities · 0 done</span><span class="sp"></span><div class="bar" style="width:120px"><i style="width:0%"></i></div></div>
+<div class="pb"><table><tr><th></th><th>#</th><th>Activity</th><th>Owner</th><th>Due</th><th>Est / Act</th><th>Status</th></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>5</td><td><a href="#checklist"><b>Validate imported master data</b></a></td><td>Ken L.</td><td>Oct 14</td><td>8h / 12h</td><td><span class="pill info">In progress</span></td></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>6</td><td><a href="#checklist"><b>Configure system &amp; validate</b></a></td><td>Ken L.</td><td>Oct 20</td><td>24h / –</td><td><span class="pill grey">To do</span></td></tr></table><button class="btn ghost addact">+ Add activity to Phase 2</button></div></div>
+<p class="note">Click anywhere on a phase header to open or close it. Drag ⋮⋮ to reorder (keyboard: focus the handle, Alt+↑/↓). Reordering changes display order only, never dependencies or dates. The highlighted row shows a drag in progress.</p>
+</div>
+<div class="card"><h3>Submit master data template</h3><p class="note">Deliverable: completed master data template</p>
+<h4 style="margin:14px 0 8px">Evidence</h4>
+<div class="drop">⇪ Drop a file here or <a href="#checklist">browse</a><div class="note">PDF, Word or Excel · up to 25 MB each</div></div>
+<div class="file"><span class="fi pdf">PDF</span><div><b>Master_Data_Template_v2.pdf</b><div class="note">1.8 MB · Maria P. · Sep 15</div></div><span class="sp"></span><a href="#checklist">Download</a></div>
+<div class="file"><span class="fi xls">XLS</span><div><b>Items_Upload.xlsx</b><div class="note">640 KB · Maria P. · Sep 15</div></div><span class="sp"></span><a href="#checklist">Download</a></div>
+<div class="file up"><span class="fi doc">DOC</span><div style="flex:1"><b>Signoff_Memo.docx</b><div class="bar" style="margin-top:6px"><i style="width:62%"></i></div><div class="note">Uploading… 62%</div></div><a href="#checklist">Cancel</a></div>
+<div class="file legacy"><span class="fi grey">🔗</span><div><b>sharepoint.example/…/template</b><div class="note">Link (legacy) · added before file uploads</div></div></div>
+<div class="field err" style="margin-top:12px"><small>⚠ screenshot.png can't be added. Evidence must be a PDF, Word or Excel file.</small></div>
+<div class="field err"><small>⚠ report.pdf isn't a real PDF, so it wasn't uploaded.</small></div>
+<div class="field err"><small>⚠ Big_Export.xlsx is 31 MB. The limit is 25 MB.</small></div>
+<div class="field err"><small>⚠ Macros.xlsm can't be added. Save it as .xlsx without macros.</small></div>
+<h4 style="margin:14px 0 8px">Follow-up</h4>
+<div class="field"><textarea rows="2" placeholder="Add a follow-up note…"></textarea></div>
+<div class="row"><span class="note">Notifies Maria P., Ken L. (reviewer) and Jomerson N. (PM)</span><span class="sp"></span><button class="btn">Post follow-up</button></div>
+</div></div>
+<div class="card" style="margin-top:16px"><h3>Template editor: + Add activity per phase</h3><p class="note">Each phase card in the template editor ends with its own "+ Add activity to Phase N" button. The new row opens inline in that phase, with no phase picker, and rows drag the same way as above.</p></div>
+</section>
+<!-- CONVERSATION (M3) -->
+<section class="page" id="convo">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header><div class="tabs"><span class="" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="on" onclick="location.hash='convo'">Conversation</span><span class="" onclick="location.hash='issues'">Issues <span class="pill bad">5</span></span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:10px"><div class="search">Search conversation…</div><span class="sp"></span><select class="sel"><option>All types</option><option>Notes</option><option>Calls</option><option>Meetings</option><option>Decisions</option></select><select class="sel"><option>All tasks</option></select></div>
+<div class="day">Thu, Oct 8</div>
+<div class="msg"><div class="av">KL</div><div style="flex:1"><div class="row"><b>Ken L.</b><span class="pill grey">Note</span><span class="note">10:12 AM</span></div><div>Import of item master failed on 14 rows with missing UoM. Sent the list back to the client.</div><div class="tags"><span>☑ Validate imported master data</span></div></div></div>
+<div class="msg"><div class="av">JN</div><div style="flex:1"><div class="row"><b>Jomerson N.</b><span class="pill info">Call</span><span class="note">2:40 PM</span></div><div>Called R. Santos. They will send the corrected items template by Friday.</div><div class="tags"><span>☑ Client master data – Items</span><span>☏ R. Santos · Acme</span></div></div></div>
+<div class="day">Fri, Oct 9</div>
+<div class="msg"><div class="av">MP</div><div style="flex:1"><div class="row"><b>Maria P.</b><span class="pill ok">Decision</span><span class="note">9:05 AM</span></div><div>Agreed with the client to go live with BPs first and add items in week 2.</div><div class="tags"><span>☑ Client master data – BPs</span></div></div></div>
+<div class="msg"><div class="av">MP</div><div style="flex:1"><div class="row"><b>Maria P.</b><span class="pill grey">Note</span><span class="note">9:30 AM</span></div><div>&lt;script&gt;alert(1)&lt;/script&gt; ← shown as plain text, never run</div></div></div>
+<div class="msg hidden"><div class="av">?</div><div class="note">Message hidden by Ada Admin on Oct 9 for breaking the conduct policy. (Q-31, if approved)</div></div>
+<div class="composer"><div class="row" style="margin-bottom:8px"><select class="sel"><option>Note</option><option>Call</option><option>Meeting</option><option>Decision</option></select><select class="sel"><option>Tag a task (optional)</option></select><select class="sel"><option>Tag a client contact (optional)</option></select></div>
+<textarea rows="3" placeholder="Write a message for the project team…"></textarea>
+<div class="row" style="margin-top:8px"><span class="note">Messages are permanent and can't be edited or deleted.</span><span class="sp"></span><button class="btn">Post</button></div></div>
+</div>
+<div><div class="card"><h3>Who sees this</h3><p class="note">Everyone who can see the project. Viewers can read but don't get the message box; they see "You can read this conversation but not post."</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">💬<br><b>No messages yet</b><p class="note">Record calls, meetings and decisions here so the whole team knows what was agreed.</p></div></div></div></div>
+</section>
+<!-- PROJECT ISSUES (M3.5) -->
+<section class="page" id="issues">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn" onclick="document.getElementById('newiss').style.display='flex'">+ Raise issue</button><div class="av">JN</div></header>
+<div class="tabs"><span class="" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="" onclick="location.hash='convo'">Conversation</span><span class="on" onclick="location.hash='issues'">Issues <span class="pill bad">5</span></span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
+<div class="grid g4" style="margin-bottom:16px"><div class="card kpi"><div class="l">Open</div><div class="n">5</div></div><div class="card kpi"><div class="l">Critical / High open</div><div class="n" style="color:var(--bad)">1 / 1</div></div><div class="card kpi"><div class="l">Overdue</div><div class="n" style="color:var(--bad)">2</div></div><div class="card kpi"><div class="l">Waiting on client</div><div class="n" style="color:var(--warn)">1</div></div></div>
+<div class="card"><div class="row" style="margin-bottom:10px;flex-wrap:wrap"><div class="search">Search issues…</div><span class="sp"></span><select class="sel"><option>Open statuses</option><option>All</option><option>Closed</option></select><select class="sel"><option>All severities</option></select><select class="sel"><option>Any owner</option></select><select class="sel"><option>Before &amp; after go-live</option><option>Before go-live</option><option>After go-live</option></select></div>
+<table><tr><th>ID</th><th>Title</th><th>Stage</th><th>Severity</th><th>Status</th><th>Owner</th><th>Client contact</th><th>Due</th></tr>
+<tr class="crit"><td><a href="#issue"><code>ACME-SAP-ISS-014</code></a></td><td><a href="#issue"><b>Item import fails on missing UoM</b></a></td><td class="note">Before go-live</td><td><span class="pill sevc">Critical</span></td><td><span class="pill pur">In progress</span></td><td>Ken L.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 9 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-013</code></a></td><td><a href="#issue"><b>Tax codes on BP master don't match BIR setup</b></a></td><td class="note">Before go-live</td><td><span class="pill bad">High</span></td><td><span class="pill warn">Waiting on client</span></td><td>Maria P.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 8 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-012</code></a></td><td><a href="#issue"><b>Approval email lands in spam</b></a></td><td class="note">Before go-live</td><td><span class="pill warn">Medium</span></td><td><span class="pill info">Open</span></td><td>–</td><td>L. Cruz</td><td style="">Oct 16</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-011</code></a></td><td><a href="#issue"><b>Training deck needs Tagalog version</b></a></td><td class="note">Before go-live</td><td><span class="pill grey">Low</span></td><td><span class="pill info">Open</span></td><td>Maria P.</td><td>–</td><td style="">Oct 29</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-009</code></a></td><td><a href="#issue"><b>Duplicate BP codes from legacy data</b></a></td><td class="note">Before go-live</td><td><span class="pill warn">Medium</span></td><td><span class="pill ok">Resolved</span></td><td>Ken L.</td><td>R. Santos</td><td style="">Oct 6</td></tr>
+</table>
+<p class="note">Critical rows carry a red edge. Overdue dates turn red. Resolved issues close automatically after 7 days unless reopened (Q-33). The ID is never reused.</p></div>
+<div class="grid g2" style="margin-top:16px">
+<div class="card"><h3>Completed project</h3><div class="lock" style="background:var(--blueb);color:#00586b">ℹ This project is completed. The plan is read-only, but you can still raise and update issues for post-go-live support.</div><p class="note">New issues default to the "After go-live" stage.</p></div>
+<div class="card"><h3>Archived project</h3><div class="lock">🔒 This project is archived, so its issues are read-only. "+ Raise issue" is hidden.</div>
+<h3 style="margin-top:14px">Archiving with open issues</h3><div class="modal" style="box-shadow:none;border:1px solid #e4e6e8"><b>Archive SAP B1 Rollout?</b><p class="note">5 issues are still open: ACME-SAP-ISS-014, -013, -012, -011, -009. After archiving, nobody can update them.</p><div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn" style="background:var(--bad)">Archive anyway</button></div></div></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">⚑<br><b>No issues raised</b><p class="note">Raise an issue when something blocks the implementation or comes up after go-live.</p><button class="btn">+ Raise issue</button></div></div>
+<div id="newiss" class="ov" style="display:none"><div class="modal" style="width:560px;max-height:90vh;overflow:auto"><div class="row"><h3 style="margin:0">Raise issue · SAP B1 Rollout</h3><span class="sp"></span><span style="cursor:pointer" onclick="this.closest('.ov').style.display='none'">✕</span></div><br>
+<div class="field err"><label>Title *</label><input value=""><small>Enter a title.</small></div>
+<div class="field"><label>Description *</label><textarea rows="3"></textarea></div>
+<div class="grid g2" style="gap:12px"><div class="field"><label>Severity *</label><select><option>Critical</option><option selected>High</option><option>Medium</option><option>Low</option></select></div><div class="field"><label>Category *</label><select><option>Bug</option><option>Configuration</option><option>Data</option><option>Training</option><option>Change request</option><option>Other</option></select></div>
+<div class="field"><label>Stage</label><select><option>Before go-live</option><option>After go-live</option></select></div><div class="field"><label>Due date</label><input value="Oct 14 (High · 3 working days)"></div>
+<div class="field"><label>Owner</label><select><option>Unassigned</option><option>Ken L.</option></select></div><div class="field"><label>Reported by client contact</label><select><option>None</option><option>R. Santos</option></select></div></div>
+<div class="field"><label>Related task</label><select><option>None</option><option>Client master data – Items</option></select></div>
+<div class="drop">⇪ Attach PDF, Word or Excel · up to 25 MB</div>
+<div class="row"><span class="note">Changing the default due date asks for a reason.</span><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Raise issue</button></div></div></div>
+</section>
+<!-- ALL ISSUES (M3.5) -->
+<section class="page" id="allissues">
+<header><h1>All issues</h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">JN</div></header>
+<div class="card"><div class="row" style="margin-bottom:10px;flex-wrap:wrap"><div class="search">Search issues…</div><span class="sp"></span><select class="sel"><option>Open statuses</option><option>All</option><option>Closed</option></select><select class="sel"><option>All severities</option></select><select class="sel"><option>Any owner</option></select><select class="sel"><option>Before &amp; after go-live</option><option>Before go-live</option><option>After go-live</option></select><select class="sel"><option>All projects</option></select><select class="sel"><option>All clients</option></select><button class="btn ghost">Export CSV</button></div>
+<table><tr><th>ID</th><th>Project</th><th>Title</th><th>Stage</th><th>Severity</th><th>Status</th><th>Owner</th><th>Client contact</th><th>Due</th></tr>
+<tr class="crit"><td><a href="#issue"><code>ACME-SAP-ISS-014</code></a></td><td>SAP B1 Rollout</td><td><a href="#issue"><b>Item import fails on missing UoM</b></a></td><td class="note">Before go-live</td><td><span class="pill sevc">Critical</span></td><td><span class="pill pur">In progress</span></td><td>Ken L.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 9 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>NWF-UPG-ISS-031</code></a></td><td>Northwind Upgrade</td><td><a href="#issue"><b>Year-end closing report times out</b></a></td><td class="note">After go-live</td><td><span class="pill bad">High</span></td><td><span class="pill info">Open</span></td><td>A. Reyes</td><td>J. Tan</td><td style="">Oct 12</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-013</code></a></td><td>SAP B1 Rollout</td><td><a href="#issue"><b>Tax codes on BP master don't match BIR setup</b></a></td><td class="note">Before go-live</td><td><span class="pill bad">High</span></td><td><span class="pill warn">Waiting on client</span></td><td>Maria P.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 8 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>NWF-UPG-ISS-029</code></a></td><td>Northwind Upgrade</td><td><a href="#issue"><b>Users want a shortcut to stock report</b></a></td><td class="note">After go-live</td><td><span class="pill grey">Low</span></td><td><span class="pill pur">In progress</span></td><td>Grace T.</td><td>–</td><td style="">Oct 30</td></tr>
+</table><p class="note">Sorted by severity, then due date. Members see only issues on projects they're on. Viewers can read but not raise.</p></div>
+</section>
+<!-- ISSUE DETAIL (M3.5) -->
+<section class="page" id="issue">
+<header><h1><code style="font-size:15px">ACME-SAP-ISS-013</code> Tax codes on BP master don't match BIR setup</h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit</button><button class="btn" onclick="document.getElementById('resolve').style.display='flex'">Mark resolved</button><div class="av">JN</div></header>
+<div class="note" style="margin:-12px 0 12px"><a href="#issues">SAP B1 Rollout › Issues</a></div>
+<div class="steps" style="margin-bottom:16px"><span class="d">Open</span><span class="d">In progress</span><span class="c">Waiting on client</span><span class="">Resolved</span><span class="">Closed</span></div>
+<div class="grid" style="grid-template-columns:1fr 320px"><div>
+<div class="card"><h3>Description</h3><p>Vendor BPs imported with VAT codes from the legacy system. Three codes don't exist in the BIR-aligned tax setup, so A/P invoices fail to post.</p>
+<h4 style="margin:14px 0 8px">Attachments</h4>
+<div class="file"><span class="fi xls">XLS</span><div><b>BP_TaxCode_Mismatch.xlsx</b><div class="note">220 KB · Maria P. · Oct 7</div></div><span class="sp"></span><a href="#issue">Download</a></div>
+<div class="drop" style="padding:10px">⇪ Attach PDF, Word or Excel · up to 25 MB</div>
+<h4 style="margin:14px 0 8px">Links</h4><div class="tags"><span>☑ Client master data – BPs</span><span>💬 Call with R. Santos · Oct 8, 2:40 PM</span><a href="#issue" class="note">+ Link task or message</a></div></div>
+<div class="card" style="margin-top:16px"><h3>Comments &amp; history</h3>
+<div class="msg"><div class="av">MP</div><div><b>Maria P.</b> <span class="note">Oct 7, 3:10 PM</span><div>Raised with severity High. Due Oct 10.</div></div></div>
+<div class="msg"><div class="av">MP</div><div><b>Maria P.</b> <span class="note">Oct 8, 9:00 AM</span><div class="note">Status: In progress → <b>Waiting on client</b></div><div>Asked R. Santos which of the three codes they actually use.</div></div></div>
+<div class="msg"><div class="av">JN</div><div><b>Jomerson N.</b> <span class="note">Oct 8, 4:30 PM</span><div class="note">Due date: Oct 10 → <b>Oct 8</b> · Reason: client go-live moved up</div></div></div>
+<div class="composer"><textarea rows="2" placeholder="Add a comment… (notifies owner, reporter and PM)"></textarea><div class="row" style="margin-top:8px"><span class="sp"></span><button class="btn">Comment</button></div></div></div></div>
+<div><div class="card"><div class="field"><label>Status</label><select><option>Waiting on client</option><option>In progress</option></select></div>
+<div class="field"><label>Severity</label><select><option>High</option></select></div><div class="field"><label>Category</label><select><option>Data</option></select></div>
+<div class="field"><label>Stage</label><select><option>Before go-live</option></select></div><div class="field"><label>Owner</label><select><option>Maria P.</option></select></div>
+<div class="field"><label>Reported by</label><input value="Maria P. · for R. Santos (Acme)"></div><div class="field"><label>Due date</label><input value="Oct 8 · 1 day overdue" style="color:var(--bad)"></div></div>
+<div class="card" style="margin-top:16px"><h3>Closed state</h3><div class="lock" style="background:var(--okb);color:#225e11">✓ Closed Oct 15 by Jomerson N. Resolution: "Mapped the 3 legacy codes to VAT12/VATEX."</div><p class="note">PMs and Admins see "Reopen", which asks for a reason. Only Admins see Delete.</p></div></div></div>
+<div id="resolve" class="ov" style="display:none"><div class="modal" style="width:440px"><h3>Resolve issue</h3><div class="field err"><label>Resolution *</label><textarea rows="3"></textarea><small>Describe how it was fixed before resolving.</small></div><p class="note">It closes automatically in 7 days unless the PM or reporter reopens it.</p><div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Resolve</button></div></div></div>
+</section>
+<!-- NOTIFICATIONS (M3) -->
+<section class="page" id="notif">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header>
+<div class="grid g2"><div class="modal" style="max-width:420px"><div class="row"><h3 style="margin:0">Notifications</h3><span class="sp"></span><a href="#notif" class="note">Mark all as read</a></div><br>
+<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Maria P.</b> added a follow-up on <b>Client master data – Items</b> · SAP B1 Rollout<div class="note">5 min ago</div></div></a>
+<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Ken L.</b> uploaded evidence on <b>Validate imported master data</b><div class="note">1 hour ago</div></div></a>
+<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Jomerson N.</b> added a follow-up on <b>Configure system &amp; validate</b><div class="note">Yesterday, 4:10 PM</div></div></a>
+<a class="nt" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Maria P.</b> added a follow-up on <b>Submit master data template</b><div class="note">Oct 7</div></div></a>
+<p class="note" style="text-align:center;margin:10px 0 0">Showing the last 30 days</p></div>
+<div><div class="card"><h3>Bell in the top bar</h3><p class="note">The red count shows unread notifications (9+ above nine). Clicking one opens that task and marks it read. The person who wrote the follow-up isn't notified. Anyone removed from the project stops seeing its notifications.</p><div class="row"><div class="bell">🔔<i>3</i></div><span class="note">unread</span><div class="bell">🔔</div><span class="note">all read</span></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">🔔<br><b>You're all caught up</b><p class="note">Follow-ups on your tasks will show here.</p></div></div></div></div>
 </section>
 <!-- PROJECT ACTIVE CONTACTS (M2) -->
 <section class="page" id="pcontacts">

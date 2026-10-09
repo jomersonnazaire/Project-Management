@@ -16,10 +16,10 @@
   .spinner-grow {
     --#{$prefix}spinner-height: 1em;
     --#{$prefix}spinner-width: 1em;
-    inset-block-start: -.0625rem;
+    inset-block-start: -0.0625rem;
   }
 
   .spinner-border {
-    --#{$prefix}spinner-border-width: .15em;
+    --#{$prefix}spinner-border-width: 0.15em;
   }
 }

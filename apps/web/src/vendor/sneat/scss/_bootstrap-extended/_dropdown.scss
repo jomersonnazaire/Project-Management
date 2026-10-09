@@ -15,7 +15,7 @@
 }
 
 .btn-xs.dropdown-toggle::after {
-  @include caret-down(.45em);
+  @include caret-down(0.45em);
 }
 
 /* Split dropdowns */

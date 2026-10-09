@@ -32,10 +32,10 @@
     &::after {
       position: absolute;
       @include border-radius(100%);
-      block-size: calc(var(--#{$prefix}avatar-size) * .2);
+      block-size: calc(var(--#{$prefix}avatar-size) * 0.2);
       box-shadow: 0 0 0 2px var(--#{$prefix}white);
-      content: "";
-      inline-size: calc(var(--#{$prefix}avatar-size) * .2);
+      content: '';
+      inline-size: calc(var(--#{$prefix}avatar-size) * 0.2);
       inset-block-end: 0;
       inset-inline-end: var(--#{$prefix}avatar-initial-inline);
     }
@@ -60,16 +60,16 @@
   &.avatar-busy::after {
     background-color: var(--#{$prefix}danger);
   }
-  [class*="avatar-shadow-"] {
+  [class*='avatar-shadow-'] {
     background-color: var(--#{$prefix}avatar-icon-bg);
-    box-shadow: 0 0 0 .25rem rgba(var(--#{$prefix}avatar-icon-shadow-color), .06);
+    box-shadow: 0 0 0 0.25rem rgba(var(--#{$prefix}avatar-icon-shadow-color), 0.06);
     color: var(--#{$prefix}avatar-icon-color);
   }
 }
 
 /* Pull up avatar style */
 .pull-up {
-  transition: all .25s ease;
+  transition: all 0.25s ease;
 
   &:hover {
     z-index: 30;
@@ -78,7 +78,6 @@
     transform: translateY(-4px) scale(1.02);
   }
 }
-
 
 @each $size, $values in $avatar-sizes {
   .avatar-#{$size} {
@@ -91,8 +90,8 @@
 /* Avatar Group SCSS */
 .avatar-group {
   .avatar {
-    margin-inline-start: -.8rem;
-    transition: all .25s ease;
+    margin-inline-start: -0.8rem;
+    transition: all 0.25s ease;
 
     &:first-child {
       margin-inline-start: 0;
@@ -106,21 +105,21 @@
 
     &:hover {
       z-index: 30;
-      transition: all .25s ease;
+      transition: all 0.25s ease;
     }
   }
 
   // Avatar Group Sizings
   .avatar-xs {
-    margin-inline-start: -.65rem;
+    margin-inline-start: -0.65rem;
   }
 
   .avatar-sm {
-    margin-inline-start: -.75rem;
+    margin-inline-start: -0.75rem;
   }
 
   .avatar-md {
-    margin-inline-start: -.9rem;
+    margin-inline-start: -0.9rem;
   }
 
   .avatar-lg {

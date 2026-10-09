@@ -16,7 +16,7 @@
 
   color: var(--#{$prefix}footer-color);
 
-  .footer-brand{
+  .footer-brand {
     color: var(--#{$prefix}footer-brand-color);
     &:hover,
     &:focus {
@@ -47,7 +47,11 @@
     --#{$prefix}footer-brand-color: var(--#{$prefix}body-color);
   }
   &.bg-light {
-    --#{$prefix}footer-brand-hover-color: color-mix(in sRGB, var(--#{$prefix}paper-bg) 40%, var(--#{$prefix}light-contrast));
+    --#{$prefix}footer-brand-hover-color: color-mix(
+      in sRGB,
+      var(--#{$prefix}paper-bg) 40%,
+      var(--#{$prefix}light-contrast)
+    );
     --#{$prefix}footer-link-hover-color: var(--#{$prefix}light-contrast);
     --#{$prefix}footer-color: var(--#{$prefix}body-color);
     --#{$prefix}footer-link-color: var(--#{$prefix}body-color);

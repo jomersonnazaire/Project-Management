@@ -64,6 +64,8 @@ Roles used: Admin, PM (owner of project P), PM2 (other project), Member (on P), 
 | TC-D06 | AC-08.2, EC-48 | Both | P1 | Project from v3; publish v4 with changed tasks, estimates, phase names | Project unchanged; shows "template snapshot v3"; folder names unchanged |
 | TC-D07 | AC-08.3, EC-14 | UI | P2 | Draft / Archived templates in New project picker | Not listed; archived template's projects unaffected |
 | TC-D08 | EC-11 | UI | P2 | PM previews v3; another user publishes v4; PM clicks Generate | Warned and asked to re-preview |
+| TC-D11 | Q-11 (resolved) | API | P1 | Publish a template as PM (default grid), as PM with Edit on templates removed, and as Member and Viewer | PM default: published; PM without Edit: 403; Member and Viewer: 403 |
+| TC-D12 | Q-12 (resolved), FR-ACL-07 | API | P1 | PM edits and archives another PM's project; views it | Edit and archive: 403; view: allowed |
 | TC-D09 | EC-12 | UI | P3 | Delete an activity another depends on in draft | Dependency removed with warning |
 | TC-D10 | AC-24.3 | Both | P2 | Edit default folders in template | New template version; existing projects' folders unchanged |
 
@@ -144,6 +146,7 @@ Roles used: Admin, PM (owner of project P), PM2 (other project), Member (on P), 
 | TC-H11 | EC-32 | UI | P2 | Values with commas, quotes, line breaks, ñ, é | Escaped; UTF-8 with BOM opens correctly in Excel |
 | TC-H12 | EC-33 | UI | P1 | Task named `=HYPERLINK(...)`, `+1`, `-2`, `@SUM` | Exported prefixed with `'` |
 | TC-H13 | EC-34, NFR-12 | UI | P3 | Export 50,000 rows | Paginated on screen; export < 10 s |
+| TC-H14 | EC-58 | Both | P1 | Project from the seeded SAP B1 template (no estimates); log time on 3 tasks; leave most tasks unestimated | Tasks show "–" with "No estimate", never 0; no over-budget flags; effort variance ignores them, so the project is not At risk because of effort; reports show the count of tasks with no estimate |
 
 ## I. Audit log (US-23)
 | TC | Ref | Type | Pri | Steps | Expected |

@@ -6,21 +6,19 @@
   flex-shrink: 0;
   align-items: center;
 
-
   .app-brand-text {
     opacity: 1;
     transition: opacity $menu-animation-duration ease-in-out;
   }
 
-
   .layout-menu-toggle {
     display: block;
   }
 
-  .app-brand-img{
+  .app-brand-img {
     display: block;
   }
-  .app-brand-img-collapsed{
+  .app-brand-img-collapsed {
     display: none;
   }
 }
@@ -40,13 +38,13 @@
   // .layout-menu-collapsed:not(.layout-menu-hover, .layout-menu-offcanvas, .layout-menu-fixed-offcanvas) .layout-menu {
   .layout-menu-collapsed:not(.layout-menu-hover) .layout-menu,
   .menu-collapsed:not(:hover) .app-brand {
-    .app-brand-logo ~ .app-brand-text{
+    .app-brand-logo ~ .app-brand-text {
       opacity: 0;
     }
-    .app-brand-img{
+    .app-brand-img {
       display: none;
     }
-    .app-brand-img-collapsed{
+    .app-brand-img-collapsed {
       display: block;
     }
   }
@@ -54,7 +52,10 @@
 
 /* Within menu */
 :not(.layout-menu) > .menu-vertical.menu-collapsed:not(.layout-menu):not(:hover),
-.layout-menu-collapsed:not(.layout-menu-hover):not(.layout-menu-offcanvas):not(.layout-menu-fixed-offcanvas) .layout-menu {
+.layout-menu-collapsed:not(.layout-menu-hover):not(.layout-menu-offcanvas):not(
+    .layout-menu-fixed-offcanvas
+  )
+  .layout-menu {
   .app-brand {
     inline-size: $menu-collapsed-width;
   }

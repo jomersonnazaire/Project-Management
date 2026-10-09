@@ -7,8 +7,8 @@
   border-block-end: 0;
   border-inline-start: 0;
   inline-size: $caret-width;
-  margin-block-start: .97 * divide($caret-width, 2);
-  margin-inline: .8em 0;
+  margin-block-start: 0.97 * divide($caret-width, 2);
+  margin-inline: 0.8em 0;
   transform: rotate(-45deg);
 }
 
@@ -19,7 +19,7 @@
   border-inline-start: 0;
   inline-size: $caret-width;
   margin-block-start: -1.07 * divide($caret-width, 2);
-  margin-inline: .8em 0;
+  margin-inline: 0.8em 0;
   transform: rotate(45deg);
 }
 

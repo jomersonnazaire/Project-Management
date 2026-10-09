@@ -8,7 +8,7 @@
 
 .modal {
   .btn-close {
-    padding: .563rem;
+    padding: 0.563rem;
     background-color: var(--#{$prefix}paper-bg);
     background-image: none;
     box-shadow: var(--#{$prefix}box-shadow-xs);
@@ -16,7 +16,7 @@
     opacity: 1;
     transform: translate(23px, -25px);
     @include border-radius($border-radius-sm);
-    @include transition(all .23s ease .1s);
+    @include transition(all 0.23s ease 0.1s);
 
     /* For hover effect of close btn */
     &:hover,
@@ -26,13 +26,17 @@
       outline: 0;
       transform: translate(20px, -20px);
     }
-    &::before{
+    &::before {
       display: block;
       background-color: var(--#{$prefix}secondary-color);
-      block-size: .6875rem;
-      content: "";
-      inline-size: .6875rem;
-      mask-image: str-replace(str-replace($btn-close-bg, "#{$btn-close-color}", currentColor), "#", "%23");
+      block-size: 0.6875rem;
+      content: '';
+      inline-size: 0.6875rem;
+      mask-image: str-replace(
+        str-replace($btn-close-bg, '#{$btn-close-color}', currentColor),
+        '#',
+        '%23'
+      );
       mask-repeat: no-repeat;
       mask-size: 100% 100%;
     }
@@ -41,8 +45,8 @@
     position: relative;
     .btn-close {
       position: absolute;
-      inset-block-start: $modal-dialog-margin - .5625rem;
-      inset-inline-end: $modal-dialog-margin - .6875rem;
+      inset-block-start: $modal-dialog-margin - 0.5625rem;
+      inset-inline-end: $modal-dialog-margin - 0.6875rem;
     }
   }
 
@@ -109,7 +113,7 @@
   .modal {
     .modal-dialog:not(.modal-fullscreen) {
       padding-block: 0;
-      padding-inline: .75rem;
+      padding-inline: 0.75rem;
     }
   }
 }

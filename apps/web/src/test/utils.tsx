@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { MemoryRouter } from 'react-router-dom';
+import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 
 type Handler = (url: string, init?: RequestInit) => { status: number; body?: unknown };
@@ -22,9 +22,14 @@ export function mockApi(handler: Handler) {
 
 export function renderAt(path: string, ui: ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[path]}>{ui}</MemoryRouter>
-    </QueryClientProvider>,
-  );
+  // A data router like main.tsx, so useBlocker works in tests.
+  const router = createMemoryRouter([{ path: '*', element: ui }], { initialEntries: [path] });
+  return {
+    router,
+    ...render(
+      <QueryClientProvider client={qc}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+  };
 }

@@ -8,7 +8,7 @@
   .nav-item {
     white-space: nowrap;
   }
-  &:not(.nav-pills){
+  &:not(.nav-pills) {
     .nav-link {
       &:hover,
       &:focus {
@@ -64,11 +64,11 @@
   .tab-pane {
     opacity: 0;
     transform: translateX(-30px);
-    @include transition(all linear .1s);
+    @include transition(all linear 0.1s);
     &.show {
       opacity: 1;
       transform: unset !important;
-      @include transition(all ease-out .2s .1s);
+      @include transition(all ease-out 0.2s 0.1s);
     }
   }
 }
@@ -82,7 +82,7 @@
   inline-size: 100%;
 }
 
-.nav-tabs{
+.nav-tabs {
   position: relative;
   .tab-slider {
     position: absolute;
@@ -203,13 +203,13 @@
     @include border-top-radius($border-radius);
     & .nav-link:not(.active):hover {
       border-block-end: 2px solid $nav-pills-link-hover-bg !important;
-      padding-block-end: calc($nav-link-padding-y - .125rem);
+      padding-block-end: calc($nav-link-padding-y - 0.125rem);
     }
     &.nav-lg .nav-link:not(.active):hover {
-      padding-block-end: calc($nav-link-padding-y-lg - .125rem);
+      padding-block-end: calc($nav-link-padding-y-lg - 0.125rem);
     }
     &.nav-sm .nav-link:not(.active):hover {
-      padding-block-end: calc($nav-link-padding-y-sm - .1125rem);
+      padding-block-end: calc($nav-link-padding-y-sm - 0.1125rem);
     }
   }
   .nav-pills ~ .tab-content {
@@ -254,13 +254,13 @@
     }
     & .nav-link:not(.active):hover {
       border-inline-start: 2px solid $nav-pills-link-hover-bg !important;
-      padding-inline-start: calc($nav-link-padding-x - .125rem);
+      padding-inline-start: calc($nav-link-padding-x - 0.125rem);
     }
     &.nav-lg .nav-link:not(.active):hover {
-      padding-inline-start: calc($nav-link-padding-x-lg - .125rem);
+      padding-inline-start: calc($nav-link-padding-x-lg - 0.125rem);
     }
     &.nav-sm .nav-link:not(.active):hover {
-      padding-inline-start: calc($nav-link-padding-x-sm - .125rem);
+      padding-inline-start: calc($nav-link-padding-x-sm - 0.125rem);
     }
   }
 
@@ -302,13 +302,13 @@
     }
     & .nav-link:not(.active):hover {
       border-block-start: 2px solid $nav-pills-link-hover-bg !important;
-      padding-block-start: calc($nav-link-padding-y - .125rem);
+      padding-block-start: calc($nav-link-padding-y - 0.125rem);
     }
     &.nav-lg .nav-link:not(.active):hover {
-      padding-block-start: calc($nav-link-padding-y-lg - .125rem);
+      padding-block-start: calc($nav-link-padding-y-lg - 0.125rem);
     }
     &.nav-sm .nav-link:not(.active):hover {
-      padding-block-start: calc($nav-link-padding-y-sm - .1125rem);
+      padding-block-start: calc($nav-link-padding-y-sm - 0.1125rem);
     }
   }
   .nav-pills ~ .tab-content {
@@ -331,13 +331,13 @@
     border-inline-end: $border-width solid var(--#{$prefix}nav-tabs-border-color);
     & .nav-link:not(.active):hover {
       border-inline-end: 2px solid $nav-pills-link-hover-bg !important;
-      padding-inline-end: calc($nav-link-padding-x - .125rem);
+      padding-inline-end: calc($nav-link-padding-x - 0.125rem);
     }
     &.nav-lg .nav-link:not(.active):hover {
-      padding-inline-end: calc($nav-link-padding-x-lg - .125rem);
+      padding-inline-end: calc($nav-link-padding-x-lg - 0.125rem);
     }
     &.nav-sm .nav-link:not(.active):hover {
-      padding-inline-end: calc($nav-link-padding-x-sm - .125rem);
+      padding-inline-end: calc($nav-link-padding-x-sm - 0.125rem);
     }
   }
   > .nav .nav-item,

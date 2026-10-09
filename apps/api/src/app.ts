@@ -23,7 +23,10 @@ import { accessRulesRouter } from './routes/accessRules.js';
 import { auditRouter } from './routes/audit.js';
 import { authRouter } from './routes/auth.js';
 import { clientsRouter, contactsRouter } from './routes/clients.js';
+import { projectsRouter } from './routes/projects.js';
+import { tasksRouter } from './routes/tasks.js';
 import { teamsRouter } from './routes/teams.js';
+import { templatesRouter } from './routes/templates.js';
 import { usersRouter } from './routes/users.js';
 
 export function createApp(
@@ -102,6 +105,9 @@ export function createApp(
     teamsRouter(registry),
     clientsRouter(registry),
     contactsRouter(registry),
+    templatesRouter(registry),
+    ...tasksRouter(registry),
+    ...projectsRouter(registry),
     accessRulesRouter(registry),
     auditRouter(registry),
     ...(extraRoutes ? [extraRoutes(registry)] : []),

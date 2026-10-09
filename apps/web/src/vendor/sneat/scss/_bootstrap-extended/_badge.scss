@@ -6,7 +6,8 @@
   --#{$prefix}badge-border-width: #{$badge-border-width};
   --#{$prefix}badge-border-color: var(--#{$prefix}primary);
   --#{$prefix}badge-bg-color: #{$badge-bg-color};
-  border: var(--#{$prefix}badge-border-width) var(--#{$prefix}border-style) var(--#{$prefix}badge-border-color);
+  border: var(--#{$prefix}badge-border-width) var(--#{$prefix}border-style)
+    var(--#{$prefix}badge-border-color);
   background-color: var(--#{$prefix}badge-bg-color);
 }
 
@@ -21,6 +22,6 @@
   inline-size: #{$badge-width};
   --#{$prefix}badge-font-size: #{$badge-center-font-size};
   .icon-base {
-    @include icon-base(.875rem);
+    @include icon-base(0.875rem);
   }
 }

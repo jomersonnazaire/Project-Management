@@ -10,6 +10,12 @@ import { SetupPasswordPage } from './pages/SetupPasswordPage';
 import { AdminPage } from './pages/admin/AdminPage';
 import { ClientDetailPage } from './pages/clients/ClientDetailPage';
 import { ClientsPage } from './pages/clients/ClientsPage';
+import { BoardPickerPage } from './pages/projects/BoardPickerPage';
+import { NewProjectPage } from './pages/projects/NewProjectPage';
+import { ProjectDetailPage } from './pages/projects/ProjectDetailPage';
+import { ProjectsPage } from './pages/projects/ProjectsPage';
+import { TemplateEditorPage } from './pages/templates/TemplateEditorPage';
+import { TemplatesPage } from './pages/templates/TemplatesPage';
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
@@ -49,6 +55,54 @@ export function App() {
               element={
                 <RequirePermission any={[['clients', 'view']]}>
                   <ClientDetailPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/projects"
+              element={
+                <RequirePermission any={[['projects', 'view']]}>
+                  <ProjectsPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/projects/new"
+              element={
+                <RequirePermission any={[['projects', 'create']]}>
+                  <NewProjectPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/projects/:id/*"
+              element={
+                <RequirePermission any={[['projects', 'view']]}>
+                  <ProjectDetailPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/board"
+              element={
+                <RequirePermission any={[['tasks', 'view']]}>
+                  <BoardPickerPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/templates"
+              element={
+                <RequirePermission any={[['templates', 'view']]}>
+                  <TemplatesPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/templates/:id"
+              element={
+                <RequirePermission any={[['templates', 'view']]}>
+                  <TemplateEditorPage />
                 </RequirePermission>
               }
             />

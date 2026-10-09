@@ -1,6 +1,6 @@
 import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_STATUSES,
+  PROJECT_FILTER_LABELS,
+  PROJECT_FILTERS,
   type ClientDto,
   type ContactDto,
 } from '@xc8/shared';
@@ -19,19 +19,11 @@ import { useCan } from '../../auth/useCan';
 import { ActiveBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
+import { ProgressBar, ProjectBadge } from '../../components/ProjectBadges';
+import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 import { ClientModal } from './ClientModal';
 import { ContactModal } from './ContactModal';
-
-const shortDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '–';
-
-const STATUS_VARIANT: Record<string, string> = {
-  ACTIVE: 'info',
-  DELAYED: 'danger',
-  ON_HOLD: 'warning',
-  COMPLETED: 'success',
-};
 
 /** Client detail with Details, Contacts and Projects tabs (FR-CLI-09, FR-CLI-11). */
 export function ClientDetailPage() {
@@ -253,6 +245,7 @@ function ContactsTab({
                     <th scope="col">Email</th>
                     <th scope="col">Phone</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Projects</th>
                     {hasMenu && (
                       <th scope="col">
                         <span className="visually-hidden">Actions</span>
@@ -278,6 +271,18 @@ function ContactsTab({
                       </td>
                       <td data-label="Status">
                         <ActiveBadge active={ct.active} />
+                      </td>
+                      <td data-label="Projects">
+                        {ct.projects?.length ? (
+                          ct.projects.map((p, i) => (
+                            <span key={p.id}>
+                              {i > 0 && ', '}
+                              <Link to={`/projects/${p.id}`}>{p.name}</Link>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-body-secondary">–</span>
+                        )}
                       </td>
                       {hasMenu && (
                         <td className="text-end cell-actions">
@@ -330,6 +335,7 @@ function ProjectsTab({ client }: { client: ClientDto }) {
   const [status, setStatus] = useState('');
   const projects = useClientProjects(client.id, { q: q || undefined, status: status || undefined });
   const filtered = Boolean(q) || Boolean(status);
+  const canCreate = useCan('projects', 'create');
 
   return (
     <div className="card">
@@ -351,13 +357,17 @@ function ProjectsTab({ client }: { client: ClientDto }) {
             className="ms-auto"
           >
             <option value="">All statuses</option>
-            {PROJECT_STATUSES.map((s) => (
+            {PROJECT_FILTERS.map((s) => (
               <option key={s} value={s}>
-                {PROJECT_STATUS_LABELS[s]}
+                {PROJECT_FILTER_LABELS[s]}
               </option>
             ))}
-            <option value="ARCHIVED">Archived</option>
           </Form.Select>
+          {canCreate && client.active && (
+            <Link className="btn btn-primary" to={`/projects/new?clientId=${client.id}`}>
+              + New project
+            </Link>
+          )}
         </div>
         <ErrorAlert error={projects.error} />
         {projects.isPending ? (
@@ -388,30 +398,17 @@ function ProjectsTab({ client }: { client: ClientDto }) {
               <tbody>
                 {projects.data?.items.map((p) => (
                   <tr key={p.id}>
-                    <td className="text-heading fw-medium">{p.name}</td>
+                    <td className="text-heading fw-medium">
+                      <Link to={`/projects/${p.id}`}>{p.name}</Link>
+                    </td>
                     <td>{p.managerName ?? '–'}</td>
-                    <td>{shortDate(p.startDate)}</td>
-                    <td>{shortDate(p.plannedEndDate)}</td>
-                    <td style={{ minWidth: 120 }}>
-                      <div
-                        className="progress"
-                        style={{ height: 8 }}
-                        role="progressbar"
-                        aria-label={`${p.name} progress`}
-                        aria-valuenow={p.progress}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                      >
-                        <div className="progress-bar" style={{ width: `${p.progress}%` }} />
-                      </div>
-                      <span className="small text-body-secondary">{p.progress}%</span>
+                    <td className="text-nowrap">{shortDate(p.startDate)}</td>
+                    <td className="text-nowrap">{shortDate(p.plannedEndDate)}</td>
+                    <td>
+                      <ProgressBar value={p.progress} label={`${p.name} progress`} />
                     </td>
                     <td>
-                      <span
-                        className={`badge bg-label-${p.archived ? 'secondary' : STATUS_VARIANT[p.status]} text-uppercase`}
-                      >
-                        {p.archived ? 'Archived' : PROJECT_STATUS_LABELS[p.status]}
-                      </span>
+                      <ProjectBadge status={p.status} health={p.health} archived={p.archived} />
                     </td>
                   </tr>
                 ))}
@@ -420,7 +417,7 @@ function ProjectsTab({ client }: { client: ClientDto }) {
           </div>
         )}
         <p className="small text-body-secondary mb-0 mt-3">
-          Read-only list. Archived projects are hidden unless you pick Archived.
+          Archived projects are hidden unless you pick Archived.
         </p>
       </div>
     </div>

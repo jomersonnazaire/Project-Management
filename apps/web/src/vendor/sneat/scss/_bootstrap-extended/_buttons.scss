@@ -5,7 +5,7 @@
   --#{$prefix}btn-box-shadow-rgb: transparent;
   --#{$prefix}btn-focus-shadow-rgb: transparent;
   --#{$prefix}btn-active-shadow-rgb: transparent;
-  --#{$prefix}btn-box-shadow: 0 .125rem .25rem 0 rgba(var(--#{$prefix}btn-box-shadow-rgb), .4);
+  --#{$prefix}btn-box-shadow: 0 0.125rem 0.25rem 0 rgba(var(--#{$prefix}btn-box-shadow-rgb), 0.4);
   --#{$prefix}btn-focus-box-shadow: none;
   --#{$prefix}btn-active-border-color: transparent;
   --#{$prefix}btn-active-shadow: none;
@@ -41,10 +41,10 @@
   }
 
   /* Table Action Dropdown fix */
-  &:not([class*="btn-"]):active,
-  &:not([class*="btn-"]).active,
-  &:not([class*="btn-"]).show,
-  &:not([class*="btn-"]) {
+  &:not([class*='btn-']):active,
+  &:not([class*='btn-']).active,
+  &:not([class*='btn-']).show,
+  &:not([class*='btn-']) {
     --#{$prefix}btn-border-width: 0;
   }
 
@@ -58,7 +58,7 @@
   /* Buttons Variant */
 
   /* Outline */
-  &[class*="btn-outline-"] {
+  &[class*='btn-outline-'] {
     --#{$prefix}btn-bg: transparent;
     --#{$prefix}btn-focus-box-shadow: none;
     --#{$prefix}btn-active-shadow: none;
@@ -79,7 +79,7 @@
     &:active .badge,
     &.active .badge,
     .show > &.dropdown-toggle .badge {
-      &:not([class*="badge-outline"]) {
+      &:not([class*='badge-outline']) {
         --#{$prefix}badge-bg-color: var(--#{$prefix}btn-hover-color);
         --#{$prefix}badge-color: var(--#{$prefix}btn-hover-bg);
       }
@@ -120,11 +120,21 @@ label.btn {
 /* Button Sizes */
 
 .btn-xl {
-  @include button-size($btn-padding-y-xl, $btn-padding-x-xl, $btn-font-size-xl, $btn-border-radius-xl);
+  @include button-size(
+    $btn-padding-y-xl,
+    $btn-padding-x-xl,
+    $btn-font-size-xl,
+    $btn-border-radius-xl
+  );
 }
 
 .btn-xs {
-  @include button-size($btn-padding-y-xs, $btn-padding-x-xs, $btn-font-size-xs, $btn-border-radius-xs);
+  @include button-size(
+    $btn-padding-y-xs,
+    $btn-padding-x-xs,
+    $btn-font-size-xs,
+    $btn-border-radius-xs
+  );
 }
 
 /* Icon button */
@@ -151,7 +161,7 @@ label.btn {
   font-size: $btn-icon-font-size;
   inline-size: calc(#{$btn-icon-size} + #{$borders-width});
 
-  .icon-base{
+  .icon-base {
     @include icon-base($btn-icon-font-size);
   }
 
@@ -198,8 +208,8 @@ label.btn {
 
 .btn-pinned {
   position: absolute;
-  inset-block-start: .75rem;
-  inset-inline-end: .75rem;
+  inset-block-start: 0.75rem;
+  inset-inline-end: 0.75rem;
 }
 
 /* Button focus */
@@ -216,28 +226,48 @@ button:focus-visible {
     --#{$prefix}btn-color: var(--#{$prefix}#{$state}-contrast);
     --#{$prefix}btn-border-color: var(--#{$prefix}#{$state});
     --#{$prefix}btn-hover-color: var(--#{$prefix}#{$state}-contrast);
-    --#{$prefix}btn-hover-bg: color-mix(in sRGB, #{$color-contrast-dark} #{$btn-hover-bg-shade-amount}, var(--#{$prefix}#{$state}));
+    --#{$prefix}btn-hover-bg: color-mix(
+      in sRGB,
+      #{$color-contrast-dark} #{$btn-hover-bg-shade-amount},
+      var(--#{$prefix}#{$state})
+    );
     --#{$prefix}btn-hover-border-color: var(--#{$prefix}btn-hover-bg);
     --#{$prefix}btn-active-color: var(--#{$prefix}#{$state}-contrast);
-    --#{$prefix}btn-active-bg: color-mix(in sRGB, #{$color-contrast-dark} #{$btn-active-bg-shade-amount}, var(--#{$prefix}#{$state}));
+    --#{$prefix}btn-active-bg: color-mix(
+      in sRGB,
+      #{$color-contrast-dark} #{$btn-active-bg-shade-amount},
+      var(--#{$prefix}#{$state})
+    );
     --#{$prefix}btn-active-border-color: var(--#{$prefix}btn-active-bg);
     --#{$prefix}btn-box-shadow-rgb: var(--#{$prefix}#{$state}-rgb);
     --#{$prefix}btn-disabled-color: var(--#{$prefix}#{$state}-contrast);
     --#{$prefix}btn-disabled-bg: var(--#{$prefix}#{$state});
     --#{$prefix}btn-disabled-border-color: var(--#{$prefix}#{$state});
-    --#{$prefix}btn-group-border-color: color-mix(in sRGB, #{$color-contrast-dark} #{$btn-active-bg-shade-amount}, var(--#{$prefix}#{$state}));
+    --#{$prefix}btn-group-border-color: color-mix(
+      in sRGB,
+      #{$color-contrast-dark} #{$btn-active-bg-shade-amount},
+      var(--#{$prefix}#{$state})
+    );
   }
 
   /* Outline */
-  .btn-outline-#{$state}{
+  .btn-outline-#{$state} {
     --#{$prefix}btn-color: var(--#{$prefix}#{$state});
     --#{$prefix}btn-border-color: var(--#{$prefix}#{$state});
     --#{$prefix}btn-hover-color: var(--#{$prefix}#{$state}-contrast);
-    --#{$prefix}btn-hover-bg: color-mix(in sRGB, #{$color-contrast-dark} #{$btn-outline-active-bg-shade-amount}, var(--#{$prefix}#{$state}));
+    --#{$prefix}btn-hover-bg: color-mix(
+      in sRGB,
+      #{$color-contrast-dark} #{$btn-outline-active-bg-shade-amount},
+      var(--#{$prefix}#{$state})
+    );
     --#{$prefix}btn-hover-border-color: var(--#{$prefix}btn-hover-bg);
     --#{$prefix}btn-box-shadow-rgb: var(--#{$prefix}#{$state}-rgb);
     --#{$prefix}btn-active-color: var(--#{$prefix}#{$state}-contrast);
-    --#{$prefix}btn-active-bg: color-mix(in sRGB, #{$color-contrast-dark} #{$btn-outline-active-bg-shade-amount}, var(--#{$prefix}#{$state}));
+    --#{$prefix}btn-active-bg: color-mix(
+      in sRGB,
+      #{$color-contrast-dark} #{$btn-outline-active-bg-shade-amount},
+      var(--#{$prefix}#{$state})
+    );
     --#{$prefix}btn-active-border-color: var(--#{$prefix}btn-active-bg);
     --#{$prefix}btn-disabled-color: var(--#{$prefix}#{$state});
     --#{$prefix}btn-disabled-border-color: var(--#{$prefix}#{$state});

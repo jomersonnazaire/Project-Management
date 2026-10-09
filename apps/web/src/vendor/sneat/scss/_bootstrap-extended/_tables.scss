@@ -6,7 +6,6 @@
   position: relative;
 }
 
-
 /* Firefox fix for table head border bottom */
 .table {
   > :not(caption) > * > * {
@@ -21,7 +20,7 @@
   }
 
   .btn-icon,
-  .btn:not([class*="btn-"]) {
+  .btn:not([class*='btn-']) {
     color: var(--#{$prefix}table-color);
   }
 
@@ -29,7 +28,7 @@
   th {
     color: var(--#{$prefix}heading-color);
     font-size: $font-size-sm;
-    letter-spacing: .2px;
+    letter-spacing: 0.2px;
     text-transform: uppercase;
   }
   &:not(.table-borderless):not(.table-without-card, .dataTable) thead th {
@@ -77,10 +76,10 @@
   }
   &.table-borderless:not(.table-sm) {
     > :not(thead) > * > * {
-      padding-block: $table-cell-padding-y + .0313rem;
+      padding-block: $table-cell-padding-y + 0.0313rem;
     }
     > thead > * > * {
-      padding-block: $table-head-padding-y + .0313rem;
+      padding-block: $table-head-padding-y + 0.0313rem;
     }
   }
 }
@@ -108,16 +107,36 @@
 
 @each $state in map-keys($theme-colors) {
   .table-#{$state} {
-    --#{$prefix}table-bg: rgba(var(--#{$prefix}#{$state}-rgb), .2);
-    --#{$prefix}table-hover-bg: color-mix(in sRGB, var(--#{$prefix}body-bg) #{$table-hover-bg-factor-amount}, var(--#{$prefix}table-bg));
-    --#{$prefix}table-border-color: color-mix(in sRGB, var(--#{$prefix}table-bg)  #{$table-border-factor-amount}, var(--#{$prefix}table-color));
-    --#{$prefix}table-active-bg: color-mix(in sRGB, var(--#{$prefix}body-bg) #{$table-active-bg-factor-amount}, var(--#{$prefix}table-bg));
-    @if $state == "dark" or $state == "light" {
+    --#{$prefix}table-bg: rgba(var(--#{$prefix}#{$state}-rgb), 0.2);
+    --#{$prefix}table-hover-bg: color-mix(
+      in sRGB,
+      var(--#{$prefix}body-bg) #{$table-hover-bg-factor-amount},
+      var(--#{$prefix}table-bg)
+    );
+    --#{$prefix}table-border-color: color-mix(
+      in sRGB,
+      var(--#{$prefix}table-bg) #{$table-border-factor-amount},
+      var(--#{$prefix}table-color)
+    );
+    --#{$prefix}table-active-bg: color-mix(
+      in sRGB,
+      var(--#{$prefix}body-bg) #{$table-active-bg-factor-amount},
+      var(--#{$prefix}table-bg)
+    );
+    @if $state == 'dark' or $state == 'light' {
       --#{$prefix}table-bg: var(--#{$prefix}#{$state});
-      --#{$prefix}table-hover-bg: color-mix(in sRGB, var(--#{$prefix}table-color) 3.5%, var(--#{$prefix}table-bg));
-      --#{$prefix}table-active-bg: color-mix(in sRGB, var(--#{$prefix}table-color) 4%, var(--#{$prefix}table-bg));
+      --#{$prefix}table-hover-bg: color-mix(
+        in sRGB,
+        var(--#{$prefix}table-color) 3.5%,
+        var(--#{$prefix}table-bg)
+      );
+      --#{$prefix}table-active-bg: color-mix(
+        in sRGB,
+        var(--#{$prefix}table-color) 4%,
+        var(--#{$prefix}table-bg)
+      );
     }
-    @if $state == "default" or $state == "active" {
+    @if $state == 'default' or $state == 'active' {
       --#{$prefix}table-border-color: #{$gray-200};
     }
   }

@@ -1,4 +1,4 @@
-import type { ClientDto } from '@xc8/shared';
+import { plural, type ClientDto } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, Form } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
@@ -99,7 +99,7 @@ export function ClientsPage() {
                       <td>
                         <Link
                           to={`/clients/${c.id}/contacts`}
-                          aria-label={`${c.contactCount} contacts at ${c.name}`}
+                          aria-label={`${plural(c.contactCount, 'contact')} at ${c.name}`}
                         >
                           {c.contactCount}
                         </Link>

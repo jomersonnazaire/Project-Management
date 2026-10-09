@@ -42,7 +42,7 @@ export const RECORD_TYPES = [
   { key: 'accessRules', label: 'Access rules', actions: VIEW_EDIT, notes: 'This screen' },
   { key: 'clients', label: 'Clients', actions: ALL },
   { key: 'contacts', label: 'Client contacts', actions: ALL },
-  { key: 'templates', label: 'Templates', actions: ALL, notes: 'Publish counts as Edit' },
+  { key: 'templates', label: 'Templates', actions: ALL, notes: 'Publish counts as Edit (Q-11)' },
   {
     key: 'projects',
     label: 'Projects',
@@ -209,7 +209,8 @@ export const NOT_APPLICABLE_REASON = "Doesn't apply to this record type";
 /** Read-only "Scope (fixed)" column: limits fixed in code that a grant can never widen (FR-ACL-07). */
 export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType, string>>>> = {
   PROJECT_MANAGER: {
-    projects: 'Edit and archive only projects they manage',
+    projects: 'View all; edit and archive only projects they manage (Q-12)',
+    tasks: 'Plan changes only in projects they manage',
     approvals: 'Own projects only',
   },
   MEMBER: {

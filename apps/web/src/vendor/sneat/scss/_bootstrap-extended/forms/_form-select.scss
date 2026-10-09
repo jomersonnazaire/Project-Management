@@ -13,7 +13,7 @@
     background-color: var(--#{$prefix}paper-bg);
   }
   &[multiple],
-  &[size]:not([size="1"]) {
+  &[size]:not([size='1']) {
     padding-inline-end: $form-select-padding-x;
   }
   &:hover {
@@ -53,6 +53,6 @@
     }
   }
   &[multiple]:focus {
-    padding-inline-end: .875rem !important;
+    padding-inline-end: 0.875rem !important;
   }
 }
