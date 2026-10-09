@@ -1,6 +1,6 @@
 # Phase 1 Requirements: AI-Powered Implementation Project Tracker
 
-**Status:** v0.4.2 (Milestone 1.5 model approved); Phase 1 v0.3.6, approved by Jomerson for the Phase 1 build (2026-10-09) · **Author:** Rich (Research & Requirements) · **Date:** 2026-10-09
+**Status:** v0.4.5 (Milestone 1.5 done); Phase 1 v0.3.6, approved by Jomerson for the Phase 1 build (2026-10-09) · **Author:** Rich (Research & Requirements) · **Date:** 2026-10-09
 **Sources:** Product blueprint PDF ("AI-Powered Implementation Project Tracker"), UI mockup v0.4 by UIE, Sneat style (incl. Documents, Login, My tasks, Admin, Template editor, dialogs, empty/error states), competitor research.
 
 | # | Document | Primary reader |
@@ -35,3 +35,6 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.4.0 draft | 2026-10-09 | Doc 11: access rules module per Access role (Milestone 1.5), Clients › Contacts tab, project Active contacts (M2). |
 | v0.4.1 | 2026-10-09 | Jomerson: four fixed Access roles (no custom roles); Q-26 only Admins delete projects, PMs archive; Q-27 PMs can't see access rules. |
 | v0.4.2 | 2026-10-09 | Client Projects tab (FR-CLI-11) with Member scope rule (FR-CLI-12), AC-35.2, AC-35.3. |
+| v0.4.3 | 2026-10-09 | Doc 11 §11 records Lean-accepted PR #2 deviations. |
+| v0.4.4 | 2026-10-09 | Q-11 resolved (PMs publish templates via Edit), Q-12 resolved (PMs edit/archive own projects only). |
+| v0.4.5 | 2026-10-09 | EC-58: tasks without estimates show "–" and are excluded from variance; seed template ships with proposed order, no estimates (Lean). |

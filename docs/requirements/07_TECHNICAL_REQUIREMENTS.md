@@ -51,7 +51,7 @@ List endpoints support pagination (`page`, `pageSize` ≤ 100), sorting, and fil
 |--------|:----:|:--:|:------:|:------:|
 | Manage users, roles, teams, settings | ✓ | – | – | – |
 | Manage clients & contacts | ✓ | ✓ | view (own projects) | view |
-| Create/edit/publish templates | ✓ | ✓ (Q-11) | view | view |
+| Create/edit/publish templates | ✓ | ✓ (Q-11 resolved: PMs publish) | view | view |
 | Create project | ✓ | ✓ | – | – |
 | Edit project, plan, dates, estimates, owners, dependencies | ✓ | ✓ (own projects) | – | – |
 | Approve/reject tasks | ✓ | ✓ (own projects) | designated reviewer only | – |

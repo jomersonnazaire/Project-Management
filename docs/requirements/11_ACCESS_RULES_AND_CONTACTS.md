@@ -1,6 +1,6 @@
 # 11 — Access Rules Module and Client Contacts Changes (Milestone 1.5)
 
-**Status:** v0.4.2 — model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson (room, 2026-10-09 2:29 PM); Lean (Milestone 1.5 scope); Queen (safety rules); UIE (mockup v0.5 plan).
 **Decision:** permissions are set **per Access role** (Admin, PM, Member, Viewer), not per Job role (Jomerson, 2026-10-09).
 
@@ -81,7 +81,7 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 | accessRules 🔒 | VE | – | – | – |
 | clients | VCED | VCED | V | V |
 | contacts | VCED | VCED | V | V |
-| templates | VCED | VCED (Q-11) | V | V |
+| templates | VCED | VCED (publish = Edit, Q-11) | V | V |
 | projects | VCED | VCE + archive (own for E/archive) | V | V |
 | tasks | VCED | VCED | VE (own tasks) | V |
 | approvals | E | E (own projects) | E (designated reviewer only) | – |
@@ -124,4 +124,14 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 - **A-13** Job roles stay as labels for reporting and workload and don't affect permissions.
 - **Q-26 (resolved, Jomerson 2026-10-09):** only Admins can delete projects; PMs archive their own projects instead. Archive counts as Edit on `projects`.
 - **Q-27 (resolved, Jomerson 2026-10-09):** PMs don't see the access rules screen; only Admin has View on `accessRules` by default.
-- **Q-12 and Q-11** (existing) still decide PM edit rights on other PMs' projects and template publishing.
+- **Q-11 resolved:** PMs can publish templates; publishing follows Edit on `templates`. **Q-12 resolved:** PMs view all projects but edit and archive only their own.
+
+## 11. Accepted build deviations (Lean, 2026-10-09, PR #2)
+- Undeclared routes return 404, not 403 (refines FR-ACL-08/09).
+- Delete on `projects` is locked for every non-Admin role, not only PM (extends Q-26).
+- Non-Admins with `users` rights can't create, change, reset, rename, deactivate or promote Admins (extends FR-ACL-05).
+- Contact email stays optional (FR-CLI-02); mockup updated to match.
+- FR-ACL-13 permission summary is API-only for now.
+- FR-ACL-11 unsaved-changes warning fires only on tab close/reload; in-app navigation warning moves to Milestone 2 (Low).
+- Per-contact Projects column and project-name links on the client Projects tab arrive with Milestone 2.
+- Viewer default has no View on `teams` (per §6), so Teams is hidden from Viewer menus.

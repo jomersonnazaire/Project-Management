@@ -42,3 +42,5 @@
 | EC-38 | Search | Search returns tasks from projects the user can't access | Must never happen (server-side filter) |
 
 Document management edge cases EC-39 to EC-51 are in [10 §8](10_DOCUMENT_MANAGEMENT.md).
+
+| EC-58 | Task has no estimate (e.g. seed template shipped without hours, Q-06) | Shown as "–" with a "No estimate" hint, never 0. Excluded from effort variance and over-budget flags; reports show the count of unestimated tasks. Time can still be logged. |

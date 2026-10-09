@@ -17,8 +17,8 @@ Questions marked ★ blocked development or design decisions. **All ★ question
 | Q-08 | Progress %: count of completed tasks, or weighted by estimated hours? | Dashboard accuracy | Task count in Phase 1 |
 | Q-09 | Timesheet lock: should past weeks lock? When? Does anyone approve timesheets? | Data integrity vs flexibility | Lock previous week on Monday 12:00; no approval step |
 | Q-10 | Success targets and availability expectations (01 §6, NFR-21): are those reasonable? | Defines "done" for the business | As proposed |
-| Q-11 | Can PMs create and publish templates, or Admin only? | Governance of the standard method | PMs can create; Admin publishes |
-| Q-12 | Can a PM edit projects managed by another PM? | Permissions | View all, edit own only |
+| Q-11 | Can PMs create and publish templates, or Admin only? | Governance of the standard method | **Resolved (Jomerson, 2026-10-09):** PMs can create and publish; publishing follows Edit on Templates |
+| Q-12 | Can a PM edit projects managed by another PM? | Permissions | **Resolved (Jomerson, 2026-10-09):** view all, edit and archive own only |
 | Q-13 | Any data privacy requirements (PH Data Privacy Act, client NDAs) for storing client contact details and evidence files? | Hosting region, retention, access logs | Store minimal contact data; host in Singapore/APAC region |
 | Q-14 | May a PM approve a task they own (self-approval)? | Audit/compliance | Allowed and flagged in audit |
 | Q-15 | How should On Hold projects behave in health counts and time logging? | Dashboard accuracy | **✅ RESOLVED 2026-10-09 (Lean):** excluded from health counts; time logging blocked. |
