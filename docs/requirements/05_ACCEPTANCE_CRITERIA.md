@@ -5,14 +5,15 @@ Given/When/Then. Each `AC-xx.y` maps to `US-xx`. "API" criteria must be verified
 ## US-01 Sign in
 - **AC-01.1** Given an active user, when they enter correct credentials, then they land on **My tasks** (until the Dashboard ships in Milestone 4, then the Dashboard).
 - **AC-01.2** Given wrong credentials, then a generic "Email or password is incorrect" message shows (no hint which one).
-- **AC-01.3** Given 5 consecutive failures on one account (from any IP), then that account is locked for 15 minutes and a message says so. **(API)** Excess attempts from one IP across many accounts are rate-limited (HTTP 429).
+- **AC-01.3** Given 5 consecutive failures on one account (from any IP), then that account is locked for 15 minutes **silently**: further attempts, even with the correct password, return the same HTTP 401 "Email or password is incorrect" (never 423 or any "locked" wording), and a correct sign-in succeeds once the 15 minutes pass. **(API)** Excess attempts from one IP across many accounts are rate-limited (HTTP 429).
 - **AC-01.4** Given a deactivated user, when they sign in with correct credentials, then access is denied.
+- **AC-01.5b** Given an active session older than 12 hours, the next request returns 401 and the user must sign in again.
 - **AC-01.5** Given a session idle for more than 30 minutes, when the user acts, then they're redirected to sign-in and no data is returned by the API (401).
 - **AC-01.6 (API)** Given any client contact's email, when used on any auth endpoint, then the response is the same failure as an unknown user.
 
 ## US-02 Manage users
 - **AC-02.1** Admin can create a user; duplicate email is rejected with "Email already in use".
-- **AC-02.2** An invited user sets a password (at least 8 characters) through the invite link. A 7-character password is rejected by both the UI and the API.
+- **AC-02.2** An invited user sets a password (at least 8 characters, with a number and a symbol) through the invite link. A 7-character password, or one missing a number or a symbol, is rejected by both the UI and the API.
 - **AC-02.6** Invite and reset links work only once. Used links, links older than their expiry (72 hours for invites, 24 hours for resets), and links replaced by a newer one are refused with "This link has expired. Ask an Admin for a new one."
 - **AC-02.3 (API)** A non-Admin calling user-create or role-change endpoints receives 403.
 - **AC-02.4 (API)** A user changing their own system role receives 403.

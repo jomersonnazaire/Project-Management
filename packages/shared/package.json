@@ -1,0 +1,20 @@
+{
+  "name": "@xc8/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Roles, permissions, password policy and Zod schemas shared by the web app and the API",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {}
+}

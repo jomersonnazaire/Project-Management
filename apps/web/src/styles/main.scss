@@ -1,0 +1,207 @@
+// Sneat core (Bootstrap 5.3 + Sneat extensions + layout/menu components), with the
+// THEME_TOKENS.md overrides applied in vendor/sneat/scss/_custom-variables.
+@import '../vendor/sneat/scss/core';
+@import '../vendor/sneat/scss/pages/page-auth';
+@import '../vendor/sneat/scss/pages/page-misc';
+
+// Label badges: exact token text/tint pairs (THEME_TOKENS.md) rather than computed mixes.
+$label-pairs: (
+  'primary': (
+    #5355e0,
+    #e7e7ff,
+  ),
+  'secondary': (
+    #5d6878,
+    #ebeef0,
+  ),
+  'success': (
+    #2e7d17,
+    #e8fadf,
+  ),
+  'danger': (
+    #b8240a,
+    #ffe0db,
+  ),
+  'warning': (
+    #9a5b00,
+    #fff2d6,
+  ),
+  'info': (
+    #00718a,
+    #d7f5fc,
+  ),
+);
+@each $name, $pair in $label-pairs {
+  .bg-label-#{$name} {
+    color: nth($pair, 1) !important;
+    background-color: nth($pair, 2) !important;
+  }
+}
+
+// Body text stays Sneat's #646e78 (5.19:1) per tokens; muted text must not go lighter.
+.text-muted,
+.text-body-secondary,
+.form-text {
+  color: #5d6878 !important;
+}
+
+// --- App shell tweaks (React replaces Sneat's menu.js) ---
+.layout-menu .menu-link.disabled {
+  opacity: 0.7;
+  pointer-events: none;
+}
+.layout-menu .menu-link:focus-visible,
+.btn:focus-visible,
+a:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid $primary;
+  outline-offset: 2px;
+}
+.app-brand-logo-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 0.375rem;
+  background: $primary;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  .empty-icon {
+    font-size: 2.25rem;
+    color: $secondary;
+  }
+  .big {
+    font-size: 3.5rem;
+    font-weight: 700;
+    color: $primary;
+    line-height: 1;
+  }
+}
+.skeleton-row {
+  block-size: 0.875rem;
+  border-radius: 0.25rem;
+  background: #ebeef0;
+  margin-block: 0.75rem;
+}
+.lock-notice {
+  border-radius: 0.375rem;
+  padding: 0.625rem 0.875rem;
+  background: #fff2d6;
+  color: #9a5b00;
+  font-size: 0.875rem;
+}
+.table th {
+  color: #384551;
+}
+.password-checks li.ok {
+  color: #2e7d17;
+}
+.password-checks li.missing {
+  color: #5d6878;
+}
+
+// Compact tables (mockup v0.4 density)
+.table > :not(caption) > * > * {
+  padding: 0.625rem 0.75rem;
+}
+.table > thead th {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+// Underlined tabs like the mockup
+.nav-tabs {
+  border-bottom: 1px solid #e4e6e8;
+  gap: 0.25rem;
+  .nav-link {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: #646e78;
+    &:hover {
+      color: $primary;
+    }
+    &.active {
+      color: $primary;
+      background: transparent;
+      border-bottom-color: $primary;
+    }
+  }
+}
+
+.menu-soon {
+  font-size: 0.625rem;
+  padding: 0.2rem 0.35rem;
+}
+
+// --- Top bar with page title and primary action (DR-02, mockup v0.4.2) ---
+.min-w-0 {
+  min-width: 0;
+}
+.layout-navbar .page-title {
+  color: $headings-color;
+  font-weight: 600;
+}
+
+// Users table: keep long emails from widening the table while the sidebar is visible (DR-01).
+@include media-breakpoint-between(md, xxl) {
+  .users-table .cell-primary {
+    max-width: 16rem;
+  }
+}
+
+// --- Tables that become stacked cards on phones (DR-03) ---
+@include media-breakpoint-down(md) {
+  .table-stack-md {
+    thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    tbody,
+    tr,
+    td {
+      display: block;
+      width: 100%;
+    }
+    tr {
+      border: 1px solid $border-color;
+      border-radius: $border-radius;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+    > :not(caption) > * > * {
+      border-bottom-width: 0;
+      padding: 0.25rem 0;
+    }
+    td[data-label] {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      text-align: end;
+      &::before {
+        content: attr(data-label);
+        font-weight: 500;
+        color: $headings-color;
+        text-align: start;
+      }
+    }
+    td.cell-primary {
+      padding-bottom: 0.5rem;
+    }
+    td.cell-actions {
+      text-align: start !important;
+      white-space: normal !important;
+      padding-top: 0.5rem;
+    }
+  }
+}

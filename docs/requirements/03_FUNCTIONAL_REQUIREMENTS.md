@@ -6,12 +6,12 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | ID | Requirement | BR | Pri |
 |----|-------------|----|-----|
 | FR-AUTH-01 | Internal users sign in with email + password. | BR-12 | Must |
-| FR-AUTH-02 | Passwords are hashed (bcrypt/argon2); minimum **8 characters** (Jomerson, 2026-10-09). | BR-12 | Must |
-| FR-AUTH-03 | Sessions expire after **30 minutes** of inactivity (Admin-configurable). Sign-out invalidates the session. | BR-12 | Must |
-| FR-AUTH-04 | Admin invites users. The system creates a **single-use invite link** that the Admin copies and shares by hand, because email is deferred. The invite expires after 72 hours. The user sets their own password through the link. | BR-12 | Must |
-| FR-AUTH-05 | Password reset: an Admin uses **"Copy reset link"** on the Users list to generate a single-use link that expires after 24 hours, and shares it by hand. Creating a new link cancels any earlier unused one. The sign-in page shows "Forgot your password? Ask an Admin for a reset link." Emailed reset links are **deferred**. | BR-12 | Must |
+| FR-AUTH-02 | Passwords are hashed (bcrypt/argon2); minimum **8 characters, including at least one number and one symbol** (Jomerson, 2026-10-09). | BR-12 | Must |
+| FR-AUTH-03 | Sessions expire after **30 minutes** of inactivity (Admin-configurable), and after **12 hours** no matter what (absolute cap), even if the user stays active. Sign-out invalidates the session. | BR-12 | Must |
+| FR-AUTH-04 | Admin invites users. The system creates a **single-use invite link** that the Admin copies and shares by hand, because email is deferred. The invite expires after 72 hours. The user sets their own password through the link. The token is never sent in a GET path; the page submits it in a **POST body** (Lean, 2026-10-09). | BR-12 | Must |
+| FR-AUTH-05 | Password reset: an Admin uses **"Copy reset link"** on the Users list to generate a single-use link that expires after 24 hours, and shares it by hand. Creating a new link cancels any earlier unused one. The sign-in page shows "Forgot your password? Ask an Admin for a reset link." Emailed reset links are **deferred**. As with invites, the token is submitted in a **POST body**, never in a GET path. | BR-12 | Must |
 | FR-AUTH-06 | Deactivated users cannot sign in; their history (tasks, time) is preserved. | BR-11 | Must |
-| FR-AUTH-07 | Lock the **account** for 15 min after 5 consecutive failed sign-ins on that account (counter resets on success). Separately, rate-limit sign-in attempts **per IP address** (see NFR-05). | BR-12 | Must |
+| FR-AUTH-07 | Lock the **account** for 15 min after 5 consecutive failed sign-ins on that account (counter resets on success). The lock is **silent**: the response is the same generic 401 as a wrong password, so it never reveals that an account exists (Lean, 2026-10-09). Separately, rate-limit sign-in attempts **per IP address** (see NFR-05). | BR-12 | Must |
 | FR-AUTH-08 | No authentication endpoint accepts a client contact identity (server). | BR-05 | Must |
 
 ## USR · Users, roles, teams

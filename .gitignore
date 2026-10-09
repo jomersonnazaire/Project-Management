@@ -25,3 +25,9 @@ npm-debug.log*
 
 # Vercel / Azure
 .vercel
+
+# Local MongoDB data for `npm run dev:db`
+.data/
+
+# API deploy bundle
+apps/api/deploy/
