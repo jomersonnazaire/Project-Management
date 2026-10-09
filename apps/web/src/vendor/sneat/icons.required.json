@@ -1,0 +1,29 @@
+{
+  "$comment": "Icons kept in icons.css even if not (yet) used in src. Everything used in src is added automatically by scripts/build-icon-subset.mjs.",
+  "icons": [
+    "bx-pencil",
+    "bx-edit",
+    "bx-grid-vertical",
+    "bx-dots-vertical-rounded",
+    "bx-chevron-down",
+    "bx-chevron-right",
+    "bx-up-arrow-alt",
+    "bx-down-arrow-alt",
+    "bx-upload",
+    "bx-download",
+    "bxs-file-pdf",
+    "bxs-file-doc",
+    "bx-spreadsheet",
+    "bx-link",
+    "bx-x",
+    "bx-bell",
+    "bx-chat",
+    "bx-phone",
+    "bx-calendar-event",
+    "bx-check-circle",
+    "bx-lock-alt",
+    "bx-flag",
+    "bx-paperclip",
+    "bx-error-circle"
+  ]
+}
