@@ -22,7 +22,7 @@ import {
   type WorkCalendar,
 } from '@xc8/shared';
 import type { Logger } from 'pino';
-import type { Types } from 'mongoose';
+import { Types } from 'mongoose';
 import {
   ActivityLogModel,
   ClientContactModel,
@@ -264,10 +264,35 @@ export async function issueActivity(issueId: Id): Promise<IssueActivityDto[]> {
     IssueCommentModel.find({ issueId }).sort({ createdAt: 1 }).lean(),
     ActivityLogModel.find({ entityType: 'issue', entityId: issueId }).sort({ at: 1 }).lean(),
   ]);
-  const users = await userRefs([...comments.map((c) => c.authorId), ...logs.map((l) => l.actorId)]);
+  // DR-18: owner and reporter changes show people's names, not raw ids (resolved at read time, so
+  // older history entries read correctly too).
+  const changeIds = (field: string) =>
+    logs.flatMap((l) =>
+      (l.changes ?? [])
+        .filter((c) => c.field === field)
+        .flatMap((c) => [c.old, c.new])
+        .filter((v): v is string => typeof v === 'string' && Types.ObjectId.isValid(v)),
+    );
+  const [users, contacts] = await Promise.all([
+    userRefs([
+      ...comments.map((c) => c.authorId),
+      ...logs.map((l) => l.actorId),
+      ...changeIds('ownerId').map((v) => new Types.ObjectId(v)),
+    ]),
+    ClientContactModel.find({ _id: { $in: changeIds('reportedByContactId') } })
+      .select('name')
+      .lean(),
+  ]);
+  const contactNames = new Map(contacts.map((c) => [c._id.toString(), c.name]));
   const ref = (id?: Id | null) => {
     const u = id ? users.get(id.toString()) : null;
     return u ? { id: u.id, name: u.name } : null;
+  };
+  const shown = (field: string, v: unknown): unknown => {
+    if (typeof v !== 'string') return v;
+    if (field === 'ownerId') return users.get(v)?.name ?? 'Former user';
+    if (field === 'reportedByContactId') return contactNames.get(v) ?? 'Former contact';
+    return v;
   };
   return [
     ...comments.map((c) => ({
@@ -287,7 +312,11 @@ export async function issueActivity(issueId: Id): Promise<IssueActivityDto[]> {
       at: l.at.toISOString(),
       text: null,
       action: l.action,
-      changes: (l.changes ?? []).map((c) => ({ field: c.field ?? '', old: c.old, new: c.new })),
+      changes: (l.changes ?? []).map((c) => ({
+        field: c.field ?? '',
+        old: shown(c.field ?? '', c.old),
+        new: shown(c.field ?? '', c.new),
+      })),
       reason: l.reason ?? null,
     })),
   ].sort((a, b) => a.at.localeCompare(b.at));

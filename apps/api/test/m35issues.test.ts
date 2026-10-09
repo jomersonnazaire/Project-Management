@@ -372,6 +372,22 @@ describe('AC-45.x: notifications, access and attachments', () => {
     ).toEqual(['issue_created', 'issue_updated', 'COMMENT']);
   });
 
+  it('DR-18: history shows the owner by name, never a raw id', async () => {
+    const w = await world(app);
+    const i = await raised(w.pm.agent, w);
+    const res = await patch(w.pm.agent, i.id, {
+      version: i.version,
+      ownerId: w.member.user._id.toString(),
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const activity = await w.pm.agent.get(`/api/v1/issues/${i.id}/activity`);
+    const changes = activity.body.items.flatMap(
+      (a: { changes: { field: string; old: unknown; new: unknown }[] }) => a.changes,
+    );
+    expect(changes).toContainEqual({ field: 'ownerId', old: null, new: w.member.user.name });
+    expect(JSON.stringify(activity.body)).not.toContain(w.member.user._id.toString() + '"');
+  });
+
   it('AC-45.2: a Viewer reads issues but every write is 403; Members edit only issues they own or reported', async () => {
     const w = await world(app);
     const i = await raised(w.pm.agent, w);

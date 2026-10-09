@@ -27,7 +27,16 @@ export function AllIssuesPage() {
 
   return (
     <>
-      <PageHeader title="All issues" />
+      {/* DR-22: Export CSV lives in the page header so the filters fit on fewer rows. */}
+      <PageHeader title="All issues">
+        <Button
+          variant="outline-secondary"
+          disabled={!items.length}
+          onClick={() => downloadCsv('issues.csv', issuesCsv(items))}
+        >
+          Export CSV
+        </Button>
+      </PageHeader>
       <div className="card">
         <div className="card-body">
           <IssueFilterBar
@@ -37,15 +46,6 @@ export function AllIssuesPage() {
             projects={pickers.projects}
             clients={pickers.clients}
           />
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            className="mb-4"
-            disabled={!items.length}
-            onClick={() => downloadCsv('issues.csv', issuesCsv(items))}
-          >
-            Export CSV
-          </Button>
           <IssuesTable
             items={items}
             loading={list.isPending}

@@ -17,7 +17,8 @@
     "build": "tsup",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:qa-completed": "tsx --env-file-if-exists=.env scripts/seed-qa-completed.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.3",

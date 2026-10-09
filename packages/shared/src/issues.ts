@@ -101,7 +101,7 @@ export function issueTransition(from: IssueStatus, to: IssueStatus): TransitionR
 export function transitionLabel(from: IssueStatus, to: IssueStatus): string {
   if (to === 'IN_PROGRESS')
     return from === 'OPEN' ? 'Start' : from === 'WAITING_ON_CLIENT' ? 'Client responded' : 'Reopen';
-  if (to === 'WAITING_ON_CLIENT') return 'Waiting on client';
+  if (to === 'WAITING_ON_CLIENT') return 'Move to Waiting on client'; // DR-19: an action, not a step
   if (to === 'RESOLVED') return 'Mark resolved';
   return from === 'OPEN' ? 'Close as duplicate / not an issue' : 'Close';
 }

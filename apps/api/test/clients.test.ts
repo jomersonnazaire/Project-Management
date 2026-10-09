@@ -109,6 +109,8 @@ describe('Clients and contacts (US-04, FR-CLI-01..03, 07 §4)', () => {
       .send({ name: 'Perm Contact' });
     for (const role of ['MEMBER', 'VIEWER'] as const) {
       const { agent } = await signedInAs(app, role);
+      // NFR-25: the Member is on no project of this client, so its records answer 404, not 403.
+      const recordDenied = role === 'MEMBER' ? 404 : 403;
       expect(
         (
           await agent
@@ -120,7 +122,7 @@ describe('Clients and contacts (US-04, FR-CLI-01..03, 07 §4)', () => {
       expect(
         (await agent.patch(`/api/v1/clients/${c.body.client.id}`).set(CSRF).send({ notes: 'x' }))
           .status,
-      ).toBe(403);
+      ).toBe(recordDenied);
       expect(
         (
           await agent
@@ -128,7 +130,7 @@ describe('Clients and contacts (US-04, FR-CLI-01..03, 07 §4)', () => {
             .set(CSRF)
             .send({ name: 'X' })
         ).status,
-      ).toBe(403);
+      ).toBe(recordDenied);
       expect(
         (
           await agent
@@ -136,7 +138,7 @@ describe('Clients and contacts (US-04, FR-CLI-01..03, 07 §4)', () => {
             .set(CSRF)
             .send({ name: 'Y' })
         ).status,
-      ).toBe(403);
+      ).toBe(recordDenied);
       expect(
         (
           await agent
@@ -144,7 +146,7 @@ describe('Clients and contacts (US-04, FR-CLI-01..03, 07 §4)', () => {
             .set(CSRF)
             .send({})
         ).status,
-      ).toBe(403);
+      ).toBe(recordDenied);
     }
   });
 

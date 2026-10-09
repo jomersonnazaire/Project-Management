@@ -14,8 +14,8 @@ Questions marked ★ blocked development or design decisions. **All ★ question
 | Q-05 ★ | Keep the workload view and effort variance report in Phase 1 (mockup) or move them to Phase 2 (blueprint)? | Scope and timeline | Keep basic versions in Phase 1 **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
 | Q-06 | For the SAP B1 template, please confirm the dependencies (06 §4) and supply default estimates and durations per activity. | Plan generation needs them | Use proposed dependencies; estimates blank until supplied |
 | Q-07 | Working days and holidays: Mon–Fri? Philippine public holidays? Default timezone Asia/Manila? | Date offsets, overdue, utilization | Mon–Fri, PH holidays configurable, Asia/Manila |
-| Q-08 | Progress %: count of completed tasks, or weighted by estimated hours? | Dashboard accuracy | Task count in Phase 1 |
-| Q-09 | Timesheet lock: should past weeks lock? When? Does anyone approve timesheets? | Data integrity vs flexibility | Lock previous week on Monday 12:00; no approval step |
+| Q-08 | Progress %: count of completed tasks, or weighted by estimated hours? | Dashboard accuracy | **Resolved (Lean, 2026-10-09):** share of tasks completed |
+| Q-09 | Timesheet lock: should past weeks lock? When? Does anyone approve timesheets? | Data integrity vs flexibility | Built as an Admin setting defaulting to Monday 12:00 PM PHT, no approval step; policy pending Jomerson |
 | Q-10 | Success targets and availability expectations (01 §6, NFR-21): are those reasonable? | Defines "done" for the business | As proposed |
 | Q-11 | Can PMs create and publish templates, or Admin only? | Governance of the standard method | **Resolved (Jomerson, 2026-10-09):** PMs can create and publish; publishing follows Edit on Templates |
 | Q-12 | Can a PM edit projects managed by another PM? | Permissions | **Resolved (Jomerson, 2026-10-09):** view all, edit and archive own only |

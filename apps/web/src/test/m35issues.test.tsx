@@ -199,6 +199,49 @@ describe('Issue detail (mockup v7-issue)', () => {
     });
   });
 
+  it('DR-19/DR-20: "Move to Waiting on client" sits apart from the steps; history reads plainly', async () => {
+    api('PROJECT_MANAGER', (url) => {
+      if (url.endsWith('/issues/i1/activity'))
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                id: 'a1',
+                kind: 'EVENT',
+                actor: { id: 'u2', name: 'Ken Lee' },
+                at: '2026-10-08T01:00:00Z',
+                text: null,
+                action: 'issue_attachment_added',
+                changes: [{ field: 'attachments', old: null, new: 'ok.pdf' }],
+                reason: null,
+              },
+              {
+                id: 'a2',
+                kind: 'EVENT',
+                actor: { id: 'u2', name: 'Ken Lee' },
+                at: '2026-10-08T02:00:00Z',
+                text: null,
+                action: 'issue_updated',
+                changes: [{ field: 'ownerId', old: null, new: 'Ken Lee' }],
+                reason: null,
+              },
+            ],
+          },
+        };
+      if (url.endsWith('/issues/i1')) return { status: 200, body: { issue: detail() } };
+      return undefined;
+    });
+    renderAt('/issues/i1', <App />);
+    const other = await screen.findByRole('group', { name: 'Other status changes' });
+    expect(
+      within(other).getByRole('button', { name: 'Move to Waiting on client' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('Attachment added: ok.pdf')).toBeInTheDocument();
+    expect(screen.getByText(/Owner: –/)).toHaveTextContent('Owner: – → Ken Lee');
+    expect(screen.queryByText(/attachments:/)).not.toBeInTheDocument();
+  });
+
   it('archived project: read-only note, no actions; completed: the support banner', async () => {
     api('VIEWER', (url) =>
       url.endsWith('/issues/i1')

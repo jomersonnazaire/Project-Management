@@ -118,3 +118,8 @@ Scope limits from FR-ACL-07 apply. Delete on `issues` is Admin-only by default a
 - **Q-35** Can issues be raised on On Hold projects? Proposed: yes (FR-ISS-14).
 - **A-15** Client contacts never see or raise issues themselves; an internal user records issues on their behalf (client portal stays out of scope).
 - **A-16** Issue tracking reuses M3's upload, notification and permanent-comment building blocks, so M3 must ship first.
+
+## 12. Build decisions (PR #7, confirmed by Rich 2026-10-09)
+- PMs outside a project can view its issues but can't raise or edit them (consistent with Q-12).
+- A task or phase can be deleted only when nothing is recorded under it (server-checked). Phases aren't separate records, so a phase can be deleted once it has no tasks and no documents.
+- Deferred to Milestone 4: issue dashboards and reports (FR-ISS-16), EC-66, EC-68, and linking conversation messages to an issue from the screen (FR-ISS-09, partly).
