@@ -23,7 +23,7 @@ import {
   type TaskStatus,
 } from '@xc8/shared';
 import type { Request, Response } from 'express';
-import { Types, type FilterQuery } from 'mongoose';
+import mongoose, { Types, type FilterQuery } from 'mongoose';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith, unprocessable } from '../lib/http422.js';
@@ -42,6 +42,7 @@ import {
 import { audit } from '../services/audit.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
 import {
+  canAddProjectMembers,
   canEditProjectScope,
   isPlanner,
   projectScopeFilter,
@@ -299,10 +300,105 @@ async function validatePlan(
   }
 }
 
+/**
+ * FR-PRJ-19 (DEF-003): people a planner adds to the project in the same save that assigns them.
+ * Returns the ids that aren't members yet, after checking the caller may add members (Admin, or a
+ * PM who may edit the project, with Edit on projects) and that each one is an active internal user
+ * who is actually given a role on this task (so this is never a bare member add).
+ */
+async function prepareMemberAdds(
+  req: Request,
+  project: ProjectDoc,
+  input: {
+    addMemberIds?: string[];
+    ownerId?: string | null;
+    assigneeIds?: string[];
+    reviewerId?: string | null;
+  },
+): Promise<string[]> {
+  const requested = [...new Set(input.addMemberIds ?? [])];
+  if (!requested.length) return [];
+  const current = new Set(
+    [...(project.memberIds ?? []).map(String), project.managerId?.toString()].filter(Boolean),
+  );
+  const toAdd = requested.filter((id) => !current.has(id));
+  if (!toAdd.length) return [];
+  if (!canAddProjectMembers(currentUser(req), currentPermissions(req), project)) {
+    throw forbidden(
+      'Only Admins and the project manager can add people to this project.',
+      'CANNOT_ADD_MEMBERS',
+    );
+  }
+  const assigned = new Set(
+    [input.ownerId, input.reviewerId, ...(input.assigneeIds ?? [])].filter(Boolean),
+  );
+  if (toAdd.some((id) => !assigned.has(id))) {
+    throw badRequest(
+      'People added to the project here must be assigned to this task.',
+      undefined,
+      'ADD_MEMBER_NOT_ASSIGNED',
+    );
+  }
+  const active = await UserModel.countDocuments({ _id: { $in: toAdd }, active: true });
+  if (active !== toAdd.length) {
+    throw unprocessable('Project members must be active internal users.', 'INVALID_USER');
+  }
+  return toAdd;
+}
+
+/** With the members about to be added, so validatePlan accepts them as owners or assignees. */
+const withMembers = (project: ProjectDoc, add: string[]): ProjectDoc =>
+  add.length
+    ? {
+        ...project,
+        memberIds: [...(project.memberIds ?? []), ...add.map((id) => new Types.ObjectId(id))],
+      }
+    : project;
+
+/** One audit entry per person, as a project member add (same action as the project form). */
+async function auditMemberAdds(req: Request, project: ProjectDoc, add: string[], taskId: Id) {
+  for (const id of add) {
+    await audit({
+      actorId: currentUser(req)._id,
+      entityType: 'project',
+      entityId: project._id,
+      projectId: project._id,
+      action: 'project_member_added',
+      changes: [{ field: 'memberIds', old: null, new: id }],
+      meta: { via: 'task_assign', taskId: taskId.toString() },
+    });
+  }
+}
+
+/**
+ * Runs the task write and the member add in one transaction, so a failed save (e.g. a version
+ * conflict) never leaves someone added to the project.
+ */
+async function writeWithMembers(
+  project: ProjectDoc,
+  add: string[],
+  write: (session: mongoose.ClientSession | undefined) => Promise<void>,
+) {
+  if (!add.length) return write(undefined);
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await ProjectModel.updateOne(
+        { _id: project._id },
+        { $addToSet: { memberIds: { $each: add.map((id) => new Types.ObjectId(id)) } } },
+        { session },
+      );
+      await write(session);
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
 function toPlanUpdate(input: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
-    if (v === undefined || k === 'version' || k === 'reviewerId') continue;
+    if (v === undefined || k === 'version' || k === 'reviewerId' || k === 'addMemberIds') continue;
     if (k === 'plannedStart' || k === 'dueDate') out[k] = v ? parseDateOnly(v as string) : null;
     else if (k === 'deliverable' || k === 'phase' || k === 'taskType') out[k] = v || null;
     else out[k] = v;
@@ -344,19 +440,28 @@ export function tasksRouter(registry: RouteRegistry) {
       throw forbidden('Only the project manager can add tasks.');
     }
     const _id = new Types.ObjectId();
-    await validatePlan(project, input, { _id, party: input.party });
+    const add = await prepareMemberAdds(req, project, input);
+    await validatePlan(withMembers(project, add), input, { _id, party: input.party });
     const last = await TaskModel.findOne({ projectId: project._id })
       .sort({ order: -1 })
       .select('order')
       .lean();
-    await TaskModel.create({
-      _id,
-      projectId: project._id,
-      order: (last?.order ?? 0) + 1,
-      ...toPlanUpdate(input),
-      approval: { reviewerId: input.reviewerId ?? null },
+    await writeWithMembers(project, add, async (session) => {
+      await TaskModel.create(
+        [
+          {
+            _id,
+            projectId: project._id,
+            order: (last?.order ?? 0) + 1,
+            ...toPlanUpdate(input),
+            approval: { reviewerId: input.reviewerId ?? null },
+          },
+        ],
+        { session },
+      );
     });
     await recomputeProject(project._id);
+    await auditMemberAdds(req, project, add, _id);
     await audit({
       actorId: currentUser(req)._id,
       entityType: 'task',
@@ -550,7 +655,8 @@ export function tasksRouter(registry: RouteRegistry) {
     const { task, project } = await loadTask(req);
     assertCan(req, project, task.toObject() as TaskDoc, 'plan');
     assertVersion(task, input.version);
-    await validatePlan(project, input as PlanInput, task.toObject() as TaskDoc);
+    const add = await prepareMemberAdds(req, project, input);
+    await validatePlan(withMembers(project, add), input as PlanInput, task.toObject() as TaskDoc);
     const update = toPlanUpdate(input as Record<string, unknown>);
     const before = task.toObject() as unknown as Record<string, unknown>;
     const changes = Object.entries(update)
@@ -571,12 +677,16 @@ export function tasksRouter(registry: RouteRegistry) {
         'VALIDATION_ERROR',
       );
     }
-    const updated = await TaskModel.updateOne(
-      { _id: task._id, version: input.version },
-      { $set: update, $inc: { version: 1 } },
-    );
-    if (!updated.modifiedCount) assertVersion({ version: -1 }, input.version);
+    await writeWithMembers(project, add, async (session) => {
+      const updated = await TaskModel.updateOne(
+        { _id: task._id, version: input.version },
+        { $set: update, $inc: { version: 1 } },
+        { session },
+      );
+      if (!updated.modifiedCount) assertVersion({ version: -1 }, input.version);
+    });
     await recomputeProject(project._id);
+    await auditMemberAdds(req, project, add, task._id);
     if (changes.length) {
       await audit({
         actorId: currentUser(req)._id,

@@ -217,7 +217,14 @@ describe('Project detail (FR-PRJ-13, FR-TSK-10)', () => {
     // Viewers can't create contacts: no link.
     projectApi(
       project({
-        can: { edit: false, archive: false, delete: false, planTasks: false, activity: false },
+        can: {
+          edit: false,
+          archive: false,
+          delete: false,
+          planTasks: false,
+          addMembers: false,
+          activity: false,
+        },
       }),
       'VIEWER',
     );
@@ -229,7 +236,14 @@ describe('Project detail (FR-PRJ-13, FR-TSK-10)', () => {
   it('actions follow the project’s can flags: no Edit, Add task or Delete for a Member', async () => {
     projectApi(
       project({
-        can: { edit: false, archive: false, delete: false, planTasks: false, activity: false },
+        can: {
+          edit: false,
+          archive: false,
+          delete: false,
+          planTasks: false,
+          addMembers: false,
+          activity: false,
+        },
       }),
       'MEMBER',
     );

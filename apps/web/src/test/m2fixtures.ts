@@ -32,7 +32,14 @@ export const project = (over: Partial<ProjectDto> = {}): ProjectDto => ({
   activeContacts: [],
   templateId: 't1',
   baselineHistory: [],
-  can: { edit: true, archive: true, delete: false, planTasks: true, activity: true },
+  can: {
+    edit: true,
+    archive: true,
+    delete: false,
+    planTasks: true,
+    addMembers: true,
+    activity: true,
+  },
   ...over,
 });
 

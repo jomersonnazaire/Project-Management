@@ -409,7 +409,14 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
   it('no handles or add buttons without plan rights or on an archived project', async () => {
     checklistApi(
       project({
-        can: { edit: false, archive: false, delete: false, planTasks: false, activity: true },
+        can: {
+          edit: false,
+          archive: false,
+          delete: false,
+          planTasks: false,
+          addMembers: false,
+          activity: true,
+        },
       }),
     );
     const { unmount } = renderAt(`/projects/${PID}`, <App />);

@@ -1,5 +1,8 @@
 import {
   DUE_NOT_BEFORE_START,
+  JOB_ROLE_LABELS,
+  type JobRole,
+  type PersonDto,
   NO_ESTIMATE_LABEL,
   PARTIES,
   PARTY_LABELS,
@@ -13,7 +16,13 @@ import {
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
 import { ApiError, saveErrorMessage } from '../../api/client';
-import { taskCreate, taskPatch, useContactOptions, useTaskMutation } from '../../api/projectHooks';
+import {
+  taskCreate,
+  taskPatch,
+  useContactOptions,
+  usePeople,
+  useTaskMutation,
+} from '../../api/projectHooks';
 
 /** Add or edit a task's plan (FR-TSK-01, FR-TSK-14). Only the project's planners see this. */
 export function TaskFormModal({
@@ -32,9 +41,19 @@ export function TaskFormModal({
 }) {
   const mutation = useTaskMutation();
   const contacts = useContactOptions(project.id, true);
-  const team = [project.manager, ...project.members].filter(
+  // FR-PRJ-19 (DEF-003): Owner and Assignees list only the project team. Admins and PMs who can
+  // edit the project may pick someone else; they join the project in the same save that assigns
+  // them (atomic on the API, audited as a project member add).
+  const canAddMembers = Boolean(project.can.addMembers);
+  const [added, setAdded] = useState<PersonDto[]>([]);
+  const [picking, setPicking] = useState<'owner' | 'assignee' | null>(null);
+  const [confirmation, setConfirmation] = useState<string | null>(null);
+  const team = [project.manager, ...project.members, ...added].filter(
     (u, i, all): u is NonNullable<typeof u> =>
       Boolean(u) && all.findIndex((x) => x?.id === u!.id) === i,
+  );
+  const memberIds = new Set(
+    [project.manager, ...project.members].filter(Boolean).map((u) => u!.id),
   );
 
   const [name, setName] = useState(task?.name ?? '');
@@ -90,11 +109,53 @@ export function TaskFormModal({
       reviewerId: requiresApproval ? reviewerId || null : null,
       isMilestone,
     };
+    const roles = new Set([body.ownerId, body.reviewerId, ...assigneeIds].filter(Boolean));
+    const joining = added.filter((p) => roles.has(p.id) && !memberIds.has(p.id));
+    const withAdds = joining.length ? { ...body, addMemberIds: joining.map((p) => p.id) } : body;
     mutation.mutate(
-      task ? taskPatch(task.id, { ...body, version: task.version }) : taskCreate(project.id, body),
-      { onSuccess: onClose },
+      task
+        ? taskPatch(task.id, { ...withAdds, version: task.version })
+        : taskCreate(project.id, withAdds),
+      {
+        onSuccess: () => {
+          if (!joining.length) return onClose();
+          setConfirmation(
+            `${joining.map((p) => p.name).join(', ')} added to ${project.name} and assigned.`,
+          );
+        },
+      },
     );
   };
+
+  const pick = (person: PersonDto) => {
+    setAdded((prev) => (prev.some((p) => p.id === person.id) ? prev : [...prev, person]));
+    if (picking === 'owner') setOwnerId(person.id);
+    else if (!assigneeIds.includes(person.id)) setAssigneeIds([...assigneeIds, person.id]);
+    setPicking(null);
+  };
+  const pending = added.filter(
+    (p) => (p.id === ownerId || assigneeIds.includes(p.id)) && !memberIds.has(p.id),
+  );
+  const memberHint = !canAddMembers ? (
+    <Form.Text className="d-block">Only project members can be assigned</Form.Text>
+  ) : null;
+
+  if (confirmation) {
+    return (
+      <Modal show onHide={onClose} centered>
+        <Modal.Body>
+          <Alert variant="success" className="mb-0" role="status">
+            {confirmation}
+          </Alert>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button onClick={onClose} autoFocus>
+            Done
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    );
+  }
 
   return (
     <Modal show onHide={onClose} centered size="lg">
@@ -168,7 +229,9 @@ export function TaskFormModal({
               <Form.Label>Owner (accountable)</Form.Label>
               <Form.Select
                 value={ownerId}
-                onChange={(e) => setOwnerId(e.target.value)}
+                onChange={(e) =>
+                  e.target.value === ADD_SOMEONE ? setPicking('owner') : setOwnerId(e.target.value)
+                }
                 isInvalid={Boolean(err('ownerId'))}
               >
                 <option value="">Unassigned</option>
@@ -177,8 +240,10 @@ export function TaskFormModal({
                     {u.name}
                   </option>
                 ))}
+                {canAddMembers && <option value={ADD_SOMEONE}>{ADD_SOMEONE_LABEL}</option>}
               </Form.Select>
               <Form.Control.Feedback type="invalid">{err('ownerId')}</Form.Control.Feedback>
+              {memberHint}
             </Form.Group>
             {party === 'CLIENT' && (
               <Form.Group className="col-md-6" controlId="task-contact">
@@ -220,8 +285,35 @@ export function TaskFormModal({
                     }
                   />
                 ))}
+                {canAddMembers && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="p-0 mt-1"
+                    onClick={() => setPicking('assignee')}
+                  >
+                    {ADD_SOMEONE_LABEL}
+                  </Button>
+                )}
               </div>
+              {memberHint}
             </fieldset>
+            {picking && (
+              <PeoplePicker
+                projectName={project.name}
+                exclude={new Set(team.map((u) => u.id))}
+                onPick={pick}
+                onCancel={() => setPicking(null)}
+              />
+            )}
+            {pending.length > 0 && (
+              <div className="col-12">
+                <Alert variant="info" className="py-2 mb-0" data-testid="pending-members">
+                  {pending.map((p) => p.name).join(', ')} will be added to {project.name} when you
+                  save.
+                </Alert>
+              </div>
+            )}
             <Form.Group className="col-md-4" controlId="task-start">
               <Form.Label>Planned start</Form.Label>
               <Form.Control
@@ -324,5 +416,67 @@ export function TaskFormModal({
         </Modal.Footer>
       </Form>
     </Modal>
+  );
+}
+
+const ADD_SOMEONE = '__add_someone__';
+const ADD_SOMEONE_LABEL = '+ Add someone to this project…';
+
+/** People picker for FR-PRJ-19: active internal users not yet on the project (GET /people). */
+function PeoplePicker({
+  projectName,
+  exclude,
+  onPick,
+  onCancel,
+}: {
+  projectName: string;
+  exclude: Set<string>;
+  onPick: (p: PersonDto) => void;
+  onCancel: () => void;
+}) {
+  const people = usePeople();
+  const [q, setQ] = useState('');
+  const shown = (people.data ?? [])
+    .filter((p) => !exclude.has(p.id))
+    .filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div className="col-12">
+      <div className="border rounded p-3" role="group" aria-labelledby="people-picker-title">
+        <div className="d-flex align-items-center mb-2">
+          <h3 className="h6 mb-0" id="people-picker-title">
+            Add someone to {projectName}
+          </h3>
+          <Button variant="link" size="sm" className="ms-auto p-0" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+        <Form.Control
+          aria-label="Search people"
+          placeholder="Search people…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoFocus
+        />
+        <div className="list-group mt-2" style={{ maxHeight: 200, overflowY: 'auto' }}>
+          {people.isLoading && <div className="small text-body-secondary p-2">Loading…</div>}
+          {!people.isLoading && shown.length === 0 && (
+            <div className="small text-body-secondary p-2">No one else to add.</div>
+          )}
+          {shown.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="list-group-item list-group-item-action"
+              onClick={() => onPick(p)}
+            >
+              {p.name}
+              <span className="small text-body-secondary ms-2">
+                {JOB_ROLE_LABELS[p.jobRole as JobRole] ?? p.jobRole}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

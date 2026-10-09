@@ -25,7 +25,7 @@ import {
   type Project,
   type Template,
 } from '../models/index.js';
-import { canEditProjectScope, isPlanner, type ScopeUser } from './scope.js';
+import { canAddProjectMembers, canEditProjectScope, isPlanner, type ScopeUser } from './scope.js';
 
 type Id = Types.ObjectId;
 export type ProjectDoc = Project & { _id: Id; createdAt?: Date; updatedAt?: Date };
@@ -165,6 +165,7 @@ export async function toProjectDto(
       archive: perms.projects.edit && editScope,
       delete: perms.projects.delete && user.systemRole === 'ADMIN',
       planTasks: perms.tasks.edit && isPlanner(user, project),
+      addMembers: canAddProjectMembers(user, perms, project),
       activity: canViewProjectActivity(user.systemRole as SystemRole, perms),
     },
   };

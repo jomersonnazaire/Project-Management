@@ -57,7 +57,14 @@ describe('Project Activity log for PMs (doc 11 §12)', () => {
     projectApi(
       project({
         managerId: 'pm2',
-        can: { edit: false, archive: false, delete: false, planTasks: false, activity: true },
+        can: {
+          edit: false,
+          archive: false,
+          delete: false,
+          planTasks: false,
+          addMembers: false,
+          activity: true,
+        },
       }),
       'PROJECT_MANAGER',
     );
@@ -69,7 +76,14 @@ describe('Project Activity log for PMs (doc 11 §12)', () => {
   it('Members do not get the tab (the API answers can.activity = false)', async () => {
     projectApi(
       project({
-        can: { edit: false, archive: false, delete: false, planTasks: false, activity: false },
+        can: {
+          edit: false,
+          archive: false,
+          delete: false,
+          planTasks: false,
+          addMembers: false,
+          activity: false,
+        },
       }),
       'MEMBER',
     );
