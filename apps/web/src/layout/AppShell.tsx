@@ -42,6 +42,7 @@ const MAIN: NavItem[] = [
     icon: 'bx-archive',
     any: [['activities', 'view']],
   },
+  { to: '/leave', label: 'Leave', icon: 'bx-sun', any: [['leave', 'view']] },
 ];
 
 const SETUP: NavItem[] = [

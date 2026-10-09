@@ -13,7 +13,7 @@ import {
   type WorkCalendar,
 } from '@xc8/shared';
 import type { Logger } from 'pino';
-import { Types } from 'mongoose';
+import type { Types } from 'mongoose';
 import {
   LeaveEntitlementModel,
   LeaveModel,

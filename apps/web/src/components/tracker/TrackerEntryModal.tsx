@@ -8,6 +8,7 @@ import { ErrorAlert } from '../Feedback';
 import { DayLocationField, EntryFields } from './EntryFields';
 import { emptyFields, fieldErrors, fieldsBody, type EntryFieldValues } from './entryFieldValues';
 
+type SaveReq = { path: string; method?: 'POST' | 'PATCH'; body: unknown };
 export type TrackerModalMode =
   | {
       kind: 'start';
@@ -103,7 +104,7 @@ export function TrackerEntryModal({
     if (Object.values(next).some(Boolean)) return;
     const body: Record<string, unknown> = { ...fieldsBody(fields, kind) };
     if (needsDayLocation && dayLocationId) body.dayLocationId = dayLocationId;
-    let req: { path: string; method?: 'POST' | 'PATCH'; body: unknown };
+    let req: SaveReq;
     if (editing) {
       delete body.dayLocationId;
       if (kind === 'QUICK') body.title = title.trim();
@@ -119,10 +120,24 @@ export function TrackerEntryModal({
           ? { path: '/start', body }
           : { path: '/entries', body: { ...body, date, timeIn, timeOut } };
     }
+    send(req);
+  };
+
+  // Half-day leave (FR-LV-06, TC-S09): a warning the user can confirm; a full day is refused.
+  const [leaveWarning, setLeaveWarning] = useState<{ message: string; req: SaveReq } | null>(null);
+  const send = (req: SaveReq) => {
+    setLeaveWarning(null);
     save.mutate(req, {
       onSuccess: onClose,
       onError: (err) => {
         if (err instanceof ApiError) {
+          if (err.code === 'HALF_DAY_LEAVE') {
+            setLeaveWarning({
+              message: err.message,
+              req: { ...req, body: { ...(req.body as object), confirmLeave: true } },
+            });
+            return;
+          }
           const f = err.fieldErrors();
           if (err.code === 'TIME_OVERLAP' || err.code === 'DAILY_LIMIT') return;
           setErrors(f);
@@ -150,7 +165,19 @@ export function TrackerEntryModal({
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <ErrorAlert error={save.error} action />
+          {leaveWarning ? (
+            <div
+              className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
+              role="alert"
+            >
+              <span className="me-auto">{leaveWarning.message}</span>
+              <Button size="sm" variant="warning" onClick={() => send(leaveWarning.req)}>
+                Log time anyway
+              </Button>
+            </div>
+          ) : (
+            <ErrorAlert error={save.error} action />
+          )}
           {mode.kind === 'start' && (
             <p className="mb-3">
               <strong>{mode.task.name}</strong>
