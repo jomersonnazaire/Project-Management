@@ -20,6 +20,8 @@ const loginReq = (a: typeof app, email: string, password: string, ip?: string) =
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const LINK_EXPIRED = 'This link has expired. Ask an Admin for a new one.';
+/** Response body without the per-request id, to compare error responses. */
+const shape = (body: Record<string, unknown>) => ({ ...body, requestId: undefined });
 const tokenOf = (inviteUrl: string) => new URL(inviteUrl).hash.replace('#token=', '');
 
 describe('Sign in (US-01)', () => {
@@ -54,30 +56,67 @@ describe('Sign in (US-01)', () => {
     expect(wrong.body.error.message).toBe('Email or password is incorrect.');
   });
 
-  it('AC-01.3 locks the account for 15 minutes after 5 consecutive failures, from any IP', async () => {
+  it('AC-01.3 silently locks the account for 15 minutes after 5 consecutive failures, from any IP', async () => {
     const proxied = makeApp({ TRUST_PROXY_HOPS: '1' });
     const user = await createUser();
-    for (let i = 1; i <= 4; i++) {
-      const r = await loginReq(proxied, user.email, 'Wrong-password-1!', `10.0.0.${i}`);
-      expect(r.status).toBe(401);
-    }
-    const fifth = await loginReq(proxied, user.email, 'Wrong-password-1!', '10.0.0.5');
-    expect(fifth.status).toBe(423);
-    expect(fifth.body.error.code).toBe('ACCOUNT_LOCKED');
-    expect(fifth.body.error.message).toMatch(/locked for 15 minutes/);
+    const unknown = await loginReq(
+      proxied,
+      'nobody@xceler8.example',
+      'Wrong-password-1!',
+      '10.0.0.9',
+    );
+    expect(unknown.status).toBe(401);
 
-    // Correct password is refused while locked.
-    const locked = await loginReq(proxied, user.email, PASSWORD, '10.0.0.6');
-    expect(locked.status).toBe(423);
+    for (let i = 1; i <= 5; i++) {
+      const r = await loginReq(proxied, user.email, 'Wrong-password-1!', `10.0.0.${i}`);
+      // The fifth failure locks the account but answers exactly like any wrong password.
+      expect(r.status).toBe(401);
+      expect(Object.keys(r.body).sort()).toEqual(Object.keys(unknown.body).sort());
+      expect(shape(r.body)).toEqual(shape(unknown.body));
+    }
 
     const stored = await UserModel.findById(user._id);
-    const minutes = (stored!.lockedUntil!.getTime() - Date.now()) / 60_000;
+    const lockedUntil = stored!.lockedUntil!.getTime();
+    const minutes = (lockedUntil - Date.now()) / 60_000;
     expect(minutes).toBeGreaterThan(14);
     expect(minutes).toBeLessThanOrEqual(15);
 
-    // After the lock expires the correct password works again.
-    await UserModel.updateOne({ _id: user._id }, { lockedUntil: new Date(Date.now() - 1000) });
-    expect((await loginReq(proxied, user.email, PASSWORD)).status).toBe(200);
+    // While locked, even the correct password gets the same generic 401 (never 423).
+    const locked = await loginReq(proxied, user.email, PASSWORD, '10.0.0.6');
+    expect(locked.status).toBe(401);
+    expect(shape(locked.body)).toEqual(shape(unknown.body));
+    expect(JSON.stringify(locked.body)).not.toMatch(/lock/i);
+    expect(locked.headers['set-cookie']).toBeUndefined();
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // Still locked one minute before the window ends.
+      vi.setSystemTime(lockedUntil - MINUTE);
+      const almost = await loginReq(proxied, user.email, PASSWORD, '10.0.0.7');
+      expect(almost.status).toBe(401);
+      expect(shape(almost.body)).toEqual(shape(unknown.body));
+
+      // After the 15-minute window the correct password works again.
+      vi.setSystemTime(lockedUntil + 1000);
+      const after = await loginReq(proxied, user.email, PASSWORD, '10.0.0.8');
+      expect(after.status).toBe(200);
+      expect(after.body.user.email).toBe(user.email);
+    } finally {
+      vi.useRealTimers();
+    }
+    const unlocked = await UserModel.findById(user._id);
+    expect(unlocked!.lockedUntil).toBeNull();
+    expect(unlocked!.failedLogins).toBe(0);
+  });
+
+  it('AC-01.3 records the lockout in the activity log without revealing it to the caller', async () => {
+    const user = await createUser();
+    for (let i = 0; i < 5; i++) await loginReq(app, user.email, 'Wrong-password-1!');
+    const log = await ActivityLogModel.find({
+      entityId: user._id,
+      action: 'account_locked',
+    }).lean();
+    expect(log).toHaveLength(1);
   });
 
   it('AC-01.3 / G-5 resets the failure counter after a successful sign-in', async () => {

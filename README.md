@@ -91,7 +91,7 @@ Configuration comes from environment variables only. See `apps/api/.env.example`
 | `COOKIE_SECURE`                                                     | `true` in production    | Must be `true` whenever `COOKIE_SAMESITE=none`                                            |
 | `COOKIE_SAMESITE`                                                   | `lax`                   | `lax` behind the Vercel rewrite (default). `none` if the web app calls the API cross-site |
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS`                   | `30` / `12`             | Idle timeout (FR-AUTH-06) and hard cap                                                    |
-| `LOCKOUT_THRESHOLD` / `LOCKOUT_MINUTES`                             | `5` / `15`              | Per-account lockout (FR-AUTH-07)                                                          |
+| `LOCKOUT_THRESHOLD` / `LOCKOUT_MINUTES`                             | `5` / `15`              | Per-account lockout (FR-AUTH-07). Silent: a locked account gets the same generic 401      |
 | `AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_MINUTES`            | `20` / `15`             | Per-IP limit on sign-in and password setup                                                |
 | `INVITE_TTL_HOURS` / `RESET_TTL_HOURS`                              | `72` / `24`             | Lifetime of single-use invite links and Admin-issued reset links                          |
 | `TRUST_PROXY_HOPS`                                                  | `0`                     | `1` when browsers call Azure directly. `2` behind the Vercel rewrite                      |

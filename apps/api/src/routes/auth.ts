@@ -37,8 +37,11 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
 
     const now = new Date();
     if (user.lockedUntil && user.lockedUntil > now) {
+      // Silent lockout (AC-01.3): a locked account answers exactly like a wrong password,
+      // even when the correct password is entered, so the lock can't be used to confirm
+      // that an email belongs to a real account.
       await burnPasswordCheck(password);
-      throw lockedError(user.lockedUntil);
+      throw unauthorized(INVALID_CREDENTIALS, 'INVALID_CREDENTIALS');
     }
 
     const ok = await verifyPassword(user.passwordHash, password);
@@ -61,7 +64,6 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
           changes: [{ field: 'lockedUntil', old: null, new: lockedUntil }],
         });
         req.log?.warn({ userId: user._id.toString() }, 'Account locked after failed sign-ins');
-        throw lockedError(lockedUntil);
       }
       throw unauthorized(INVALID_CREDENTIALS, 'INVALID_CREDENTIALS');
     }
@@ -165,16 +167,6 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
   });
 
   return router;
-}
-
-function lockedError(until: Date) {
-  const minutes = Math.max(1, Math.ceil((until.getTime() - Date.now()) / 60_000));
-  return new HttpError(
-    423,
-    'ACCOUNT_LOCKED',
-    `Too many failed sign-in attempts. This account is locked for ${minutes} minute${minutes === 1 ? '' : 's'}.`,
-    { lockedUntil: until.toISOString() },
-  );
 }
 
 const LINK_EXPIRED_MESSAGE = 'This link has expired. Ask an Admin for a new one.';
