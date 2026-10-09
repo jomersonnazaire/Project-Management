@@ -8,9 +8,12 @@ import { useAuth } from '../auth/AuthContext';
 import { LoadingRows } from '../components/Feedback';
 import { AuthCard } from '../components/AuthCard';
 
+/**
+ * Links carry the token in the URL fragment (`/setup-password#token=…`), which browsers never
+ * send to a server. The API only ever receives it in a POST body (FR-AUTH-04/05).
+ */
 function readToken(): string {
-  const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token');
-  return fromHash ?? new URLSearchParams(window.location.search).get('token') ?? '';
+  return new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token') ?? '';
 }
 
 /** First-time password setup (and admin-issued reset) via one-time link (FR-AUTH-04). */
@@ -26,7 +29,7 @@ export function SetupPasswordPage() {
 
   const info = useQuery({
     queryKey: ['invite', token],
-    queryFn: () => api<InviteInfoDto>(`/auth/invite/${encodeURIComponent(token)}`),
+    queryFn: () => api<InviteInfoDto>('/auth/invite/verify', { method: 'POST', body: { token } }),
     enabled: token.length > 0,
     retry: false,
   });

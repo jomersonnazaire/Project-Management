@@ -104,8 +104,8 @@ describe('Role-gated UI', () => {
 describe('First-time password setup', () => {
   it('checks the password rules and confirmation before submitting', async () => {
     window.location.hash = '#token=abcdefghijklmnopqrstuvwxyz0123456789';
-    const fetchMock = mockApi((url) => {
-      if (url.includes('/auth/invite/'))
+    const fetchMock = mockApi((url, init) => {
+      if (url.endsWith('/auth/invite/verify') && init?.method === 'POST')
         return {
           status: 200,
           body: {
@@ -134,6 +134,68 @@ describe('First-time password setup', () => {
       false,
     );
     window.location.hash = '';
+  });
+
+  it('FR-AUTH-04/05 sends the link token only in POST bodies, never in a URL', async () => {
+    const token = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    window.location.hash = `#token=${token}`;
+    const fetchMock = mockApi((url, init) => {
+      if (url.endsWith('/auth/invite/verify') && init?.method === 'POST')
+        return {
+          status: 200,
+          body: {
+            name: 'A. Reyes',
+            email: 'areyes@xceler8.example',
+            invitedByName: null,
+            purpose: 'RESET',
+          },
+        };
+      if (url.endsWith('/auth/setup-password') && init?.method === 'POST')
+        return { status: 200, body: { user: user({ email: 'areyes@xceler8.example' }) } };
+      if (url.endsWith('/auth/me'))
+        return { status: 401, body: { error: { code: 'UNAUTHENTICATED', message: 'x' } } };
+      return { status: 200, body: { items: [] } };
+    });
+    renderAt('/setup-password', <App />);
+    expect(
+      await screen.findByRole('heading', { name: 'Choose a new password' }),
+    ).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('New password'), 'Reset-password-1!');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'Reset-password-1!');
+    await userEvent.click(screen.getByRole('button', { name: 'Set password & continue' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/auth/setup-password'))).toBe(
+        true,
+      ),
+    );
+
+    for (const [u] of fetchMock.mock.calls) expect(String(u)).not.toContain(token);
+    const bodyOf = (path: string) => {
+      const call = fetchMock.mock.calls.find(([u]) => String(u).endsWith(path));
+      expect(call?.[1]?.method).toBe('POST');
+      expect((call?.[1]?.headers as Record<string, string>)['X-Requested-With']).toBe('xc8-web');
+      return JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
+    };
+    expect(bodyOf('/auth/invite/verify')).toEqual({ token });
+    expect(bodyOf('/auth/setup-password')).toEqual({ token, password: 'Reset-password-1!' });
+    // The token is removed from the address bar once it has been used.
+    await waitFor(() => expect(window.location.hash).toBe(''));
+  });
+
+  it('ignores a token in the query string; links carry it in the fragment', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/setup-password?token=abcdefghijklmnopqrstuvwxyz0123456789',
+    );
+    const fetchMock = mockApi(() => ({
+      status: 401,
+      body: { error: { code: 'UNAUTHENTICATED', message: 'x' } },
+    }));
+    renderAt('/setup-password?token=abcdefghijklmnopqrstuvwxyz0123456789', <App />);
+    expect(await screen.findByRole('heading', { name: 'Link not valid' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/auth/invite'))).toBe(false);
+    window.history.replaceState(null, '', '/');
   });
 });
 
@@ -230,8 +292,8 @@ describe('Admin-issued links (FR-AUTH-04/05, TC-A14)', () => {
 
   it('an expired, used or replaced link shows the "ask an Admin" message', async () => {
     window.location.hash = '#token=abcdefghijklmnopqrstuvwxyz0123456789';
-    mockApi((url) =>
-      url.includes('/auth/invite/')
+    mockApi((url, init) =>
+      url.endsWith('/auth/invite/verify') && init?.method === 'POST'
         ? {
             status: 400,
             body: {

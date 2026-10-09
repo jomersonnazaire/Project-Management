@@ -1,5 +1,10 @@
 import { Router, type RequestHandler } from 'express';
-import { changePasswordSchema, loginSchema, setupPasswordSchema } from '@xc8/shared';
+import {
+  changePasswordSchema,
+  inviteTokenSchema,
+  loginSchema,
+  setupPasswordSchema,
+} from '@xc8/shared';
 import type { AppConfig } from '../config.js';
 import { HttpError, badRequest, unauthorized } from '../lib/errors.js';
 import { parseBody } from '../lib/validate.js';
@@ -100,9 +105,16 @@ export function authRouter(config: AppConfig, authLimiter: RequestHandler) {
     res.json({ user: toUserDto(currentUser(req)) });
   });
 
-  /** Looks up a first-time setup (invite) or reset link so the UI can greet the user. */
-  router.get('/invite/:token', authLimiter, async (req, res) => {
-    const user = await findByInviteToken(req.params.token);
+  /**
+   * Checks a first-time setup (invite) or reset link so the UI can greet the user.
+   * POST with the token in the JSON body so it never appears in a URL path, where platform
+   * HTTP logs and proxies would record it (FR-AUTH-04/05, QA review R-2). Read-only.
+   */
+  router.post('/invite/verify', authLimiter, async (req, res) => {
+    const parsed = inviteTokenSchema.safeParse(req.body);
+    // Malformed tokens get the same answer as unknown, used or expired ones (AC-02.6).
+    if (!parsed.success) throw invalidLink();
+    const user = await findByInviteToken(parsed.data.token);
     const invitedBy = user.invite?.invitedBy
       ? await UserModel.findById(user.invite.invitedBy).select('name').lean()
       : null;

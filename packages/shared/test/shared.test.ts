@@ -5,6 +5,7 @@ import {
   can,
   checkPassword,
   contactSchema,
+  inviteTokenSchema,
   inviteUserSchema,
   isPasswordValid,
   loginSchema,
@@ -72,5 +73,14 @@ describe('schemas (NFR-04)', () => {
     expect(contactSchema.safeParse({ name: 'R. Santos', systemRole: 'ADMIN' }).success).toBe(false);
     expect(contactSchema.safeParse({ name: 'R. Santos', email: 'bad' }).success).toBe(false);
     expect(contactSchema.safeParse({ name: 'R. Santos', email: '' }).success).toBe(true);
+  });
+
+  it('accepts only a token string in the invite verify body (FR-AUTH-04/05)', () => {
+    const token = 'a'.repeat(43);
+    expect(inviteTokenSchema.safeParse({ token }).success).toBe(true);
+    expect(inviteTokenSchema.safeParse({}).success).toBe(false);
+    expect(inviteTokenSchema.safeParse({ token: 'short' }).success).toBe(false);
+    expect(inviteTokenSchema.safeParse({ token: { $ne: null } }).success).toBe(false);
+    expect(inviteTokenSchema.safeParse({ token, password: 'x' }).success).toBe(false);
   });
 });

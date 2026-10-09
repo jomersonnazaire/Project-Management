@@ -37,8 +37,14 @@ export const loginSchema = z.strictObject({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+/** One-time invite/reset token. Always sent in a POST body, never in a URL path (FR-AUTH-04/05). */
+const linkTokenSchema = z.string().min(20).max(200);
+
+export const inviteTokenSchema = z.strictObject({ token: linkTokenSchema });
+export type InviteTokenInput = z.infer<typeof inviteTokenSchema>;
+
 export const setupPasswordSchema = z.strictObject({
-  token: z.string().min(20).max(200),
+  token: linkTokenSchema,
   password: newPasswordSchema,
 });
 export type SetupPasswordInput = z.infer<typeof setupPasswordSchema>;

@@ -23,6 +23,8 @@ const LINK_EXPIRED = 'This link has expired. Ask an Admin for a new one.';
 /** Response body without the per-request id, to compare error responses. */
 const shape = (body: Record<string, unknown>) => ({ ...body, requestId: undefined });
 const tokenOf = (inviteUrl: string) => new URL(inviteUrl).hash.replace('#token=', '');
+const verifyReq = (a: typeof app, token: string) =>
+  request(a).post('/api/v1/auth/invite/verify').set(CSRF).send({ token });
 
 describe('Sign in (US-01)', () => {
   it('AC-01.1 signs in an active user with an httpOnly session cookie and no token in the body', async () => {
@@ -276,7 +278,7 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     // Can't sign in before setting a password.
     expect((await loginReq(app, 'areyes@xceler8.example', 'Whatever-123!')).status).toBe(401);
 
-    const info = await request(app).get(`/api/v1/auth/invite/${token}`);
+    const info = await verifyReq(app, token);
     expect(info.status).toBe(200);
     expect(info.body).toEqual({
       name: 'A. Reyes',
@@ -318,6 +320,55 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     expect((await loginReq(app, 'areyes@xceler8.example', 'New-password-123!')).status).toBe(200);
   });
 
+  it('FR-AUTH-04/05 accepts link tokens only in a POST body, never in a URL path (QA R-2)', async () => {
+    const admin = await createUser({ systemRole: 'ADMIN' });
+    const adminAgent = await login(app, admin.email);
+    const invited = await adminAgent.post('/api/v1/users').set(CSRF).send({
+      name: 'Body Token',
+      email: 'bodytoken@xceler8.example',
+      systemRole: 'MEMBER',
+      jobRole: 'DEVELOPER',
+    });
+    const token = tokenOf(invited.body.inviteUrl);
+
+    // The old GET lookup with the token in the path is gone.
+    expect((await request(app).get(`/api/v1/auth/invite/${token}`)).status).toBe(404);
+    expect((await request(app).get('/api/v1/auth/invite/verify').query({ token })).status).toBe(
+      404,
+    );
+
+    // The POST lookup is a state-changing route as far as CSRF goes: it needs the header.
+    const noCsrf = await request(app).post('/api/v1/auth/invite/verify').send({ token });
+    expect(noCsrf.status).toBe(403);
+    expect(noCsrf.body.error.code).toBe('CSRF_REJECTED');
+    const badOrigin = await request(app)
+      .post('/api/v1/auth/invite/verify')
+      .set(CSRF)
+      .set('Origin', 'https://evil.example')
+      .send({ token });
+    expect(badOrigin.status).toBe(403);
+
+    // Missing, malformed or extra fields get the same "expired" answer as an unknown token.
+    for (const body of [{}, { token: 42 }, { token: 'short' }, { token, extra: 1 }]) {
+      const r = await request(app).post('/api/v1/auth/invite/verify').set(CSRF).send(body);
+      expect(r.status).toBe(400);
+      expect(r.body.error).toMatchObject({ code: 'INVALID_TOKEN', message: LINK_EXPIRED });
+    }
+    const unknown = await verifyReq(app, 'x'.repeat(40));
+    expect(unknown.status).toBe(400);
+    expect(unknown.body.error).toMatchObject({ code: 'INVALID_TOKEN', message: LINK_EXPIRED });
+
+    // Verifying doesn't consume the link.
+    expect((await verifyReq(app, token)).status).toBe(200);
+    expect((await verifyReq(app, token)).status).toBe(200);
+    await request(app)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token, password: 'Body-token-pass-1!' })
+      .expect(200);
+    expect((await verifyReq(app, token)).status).toBe(400);
+  });
+
   it('invite links expire after 72 hours (INVITE_TTL_HOURS, TC-A14)', async () => {
     const admin = await createUser({ systemRole: 'ADMIN' });
     const adminAgent = await login(app, admin.email);
@@ -336,9 +387,9 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       vi.setSystemTime(expiresAt - MINUTE);
-      expect((await request(app).get(`/api/v1/auth/invite/${token}`)).status).toBe(200);
+      expect((await verifyReq(app, token)).status).toBe(200);
       vi.setSystemTime(expiresAt + MINUTE);
-      const late = await request(app).get(`/api/v1/auth/invite/${token}`);
+      const late = await verifyReq(app, token);
       expect(late.status).toBe(400);
       expect(late.body.error).toMatchObject({ code: 'INVALID_TOKEN', message: LINK_EXPIRED });
       const setup = await request(app)
@@ -366,7 +417,7 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       vi.setSystemTime(expiresAt - MINUTE);
-      expect((await request(app).get(`/api/v1/auth/invite/${token}`)).status).toBe(200);
+      expect((await verifyReq(app, token)).status).toBe(200);
       vi.setSystemTime(expiresAt + MINUTE);
       const setup = await request(app)
         .post('/api/v1/auth/setup-password')
@@ -425,7 +476,7 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
       .send({ token: oldToken, password: 'Old-link-pass-1!' });
     expect(old.status).toBe(400);
     expect(old.body.error.message).toBe(LINK_EXPIRED);
-    expect((await request(app).get(`/api/v1/auth/invite/${oldToken}`)).status).toBe(400);
+    expect((await verifyReq(app, oldToken)).status).toBe(400);
 
     await request(app)
       .post('/api/v1/auth/setup-password')
@@ -467,12 +518,8 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     expect(
       Math.abs(new Date(again.body.inviteExpiresAt).getTime() - Date.now() - 72 * HOUR),
     ).toBeLessThan(10_000);
-    expect(
-      (await request(app).get(`/api/v1/auth/invite/${tokenOf(invited.body.inviteUrl)}`)).status,
-    ).toBe(400);
-    expect(
-      (await request(app).get(`/api/v1/auth/invite/${tokenOf(again.body.inviteUrl)}`)).status,
-    ).toBe(200);
+    expect((await verifyReq(app, tokenOf(invited.body.inviteUrl))).status).toBe(400);
+    expect((await verifyReq(app, tokenOf(again.body.inviteUrl))).status).toBe(200);
   });
 
   it('deactivated users cannot get or use links', async () => {
@@ -481,9 +528,7 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     const adminAgent = await login(app, admin.email);
     const res = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
     await adminAgent.post(`/api/v1/users/${user._id}/deactivate`).set(CSRF).send({}).expect(200);
-    expect(
-      (await request(app).get(`/api/v1/auth/invite/${tokenOf(res.body.inviteUrl)}`)).status,
-    ).toBe(400);
+    expect((await verifyReq(app, tokenOf(res.body.inviteUrl))).status).toBe(400);
     const blocked = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
     expect(blocked.status).toBe(409);
   });
@@ -495,7 +540,7 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     const res = await adminAgent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
     expect(res.status).toBe(200);
     const token = new URL(res.body.inviteUrl).hash.replace('#token=', '');
-    expect((await request(app).get(`/api/v1/auth/invite/${token}`)).body.purpose).toBe('RESET');
+    expect((await verifyReq(app, token)).body.purpose).toBe('RESET');
     const userAgent = await login(app, user.email);
     await request(app)
       .post('/api/v1/auth/setup-password')

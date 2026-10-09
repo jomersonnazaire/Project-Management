@@ -101,12 +101,23 @@ describe('Security (section K)', () => {
       .send({ email: user.email, password: PASSWORD });
     const sid = String(res.headers['set-cookie']).split(';')[0]!.split('=')[1]!;
     await request(logged).get('/api/v1/auth/me').set('Cookie', `xc8_sid=${sid}`);
+    // A stray old-style link with the token in the path (now 404) is redacted too.
     await request(logged).get('/api/v1/auth/invite/secret-invite-token-1234567890');
+    await request(logged)
+      .post('/api/v1/auth/invite/verify')
+      .set(CSRF)
+      .send({ token: 'secret-invite-token-1234567890' });
+    await request(logged)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token: 'secret-invite-token-1234567890', password: 'Never-logged-pass-1!' });
     const all = lines.join('\n');
     expect(all.length).toBeGreaterThan(0);
     expect(all).not.toContain(PASSWORD);
     expect(all).not.toContain(sid);
     expect(all).not.toContain('secret-invite-token-1234567890');
+    expect(all).not.toContain('Never-logged-pass-1!');
+    expect(all).toContain('/api/v1/auth/invite/verify');
   });
 
   it('TC-K07 stores and returns HTML as plain JSON text (rendered as text by React)', async () => {

@@ -45,12 +45,16 @@ export function httpLogger(logger: Logger) {
       res(res: { statusCode: number }) {
         return { statusCode: res.statusCode };
       },
-      // Log the path only: invite tokens and other secrets must never land in logs.
+      // Log the path only: invite tokens and other secrets must never land in logs. Tokens
+      // now travel in POST bodies; the path redaction stays as defence in depth against
+      // stray requests that put one in a path (e.g. old GET /auth/invite/:token links).
       req(req: { id: string; method: string; url: string }) {
         return {
           id: req.id,
           method: req.method,
-          path: req.url.split('?')[0]?.replace(/\/auth\/invite\/[^/]+/, '/auth/invite/[redacted]'),
+          path: req.url
+            .split('?')[0]
+            ?.replace(/\/auth\/invite\/(?!verify$)[^/]+/, '/auth/invite/[redacted]'),
         };
       },
     },

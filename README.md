@@ -129,6 +129,11 @@ Only `VITE_*` variables reach the browser. Never put secrets in them.
 ## Security notes
 
 - Invite and reset links are single use. Email is deferred, so an Admin copies the link and shares it by hand: "Create invite link" in Admin › Users, "New invite link" for invited users, and "Copy reset link" for active users. Invite links expire after 72 hours and reset links after 24 hours. Each user holds at most one link, so creating a new link cancels any earlier unused one. Used, expired and replaced links all get the same message: "This link has expired. Ask an Admin for a new one." The sign-in page has no self-service reset; it tells people to ask an Admin.
+- Link tokens never travel in a URL path or query string. The link the Admin shares carries the token in the URL fragment (`/setup-password#token=…`), which browsers don't send to any server, and the web app submits it to the API only in a JSON POST body. Both calls need the CSRF header below:
+  - `POST /api/v1/auth/invite/verify` with `{ "token": "…" }` checks the link and returns `{ name, email, invitedByName, purpose }` (it doesn't use the link up). This replaces the old `GET /api/v1/auth/invite/:token`.
+  - `POST /api/v1/auth/setup-password` with `{ "token": "…", "password": "…" }` sets the password, uses up the link and signs the user in.
+  - Unknown, malformed, used, expired and replaced tokens all get the same 400 `INVALID_TOKEN` response.
+- Sign-in lockout is silent. After 5 consecutive failures the account is locked for 15 minutes, but a locked account gets the same 401 "Email or password is incorrect." as a wrong password or an unknown email, even when the correct password is entered. A correct sign-in works again once the 15 minutes are up.
 - Passwords are hashed with argon2id. Sessions are server-side: the httpOnly cookie holds a random token, and the database stores only its SHA-256.
 - Every request reloads the user, so deactivation or a role change takes effect immediately. Deactivating a user also revokes their sessions.
 - State-changing requests need the `X-Requested-With: xc8-web` header and an allowed `Origin` (CSRF defence in depth on top of SameSite).
