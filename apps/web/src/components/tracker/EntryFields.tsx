@@ -26,6 +26,7 @@ export function EntryFields({
   keep,
   idPrefix,
   hideLocation = false,
+  activityHint,
 }: {
   kind: 'TASK' | 'QUICK';
   values: EntryFieldValues;
@@ -40,6 +41,8 @@ export function EntryFields({
   idPrefix: string;
   /** DR-30: the entry that sets the day's location doesn't ask for a per-entry one too. */
   hideLocation?: boolean;
+  /** FR-PTY-04: "From project type: X. You can change it." under Activity type. */
+  activityHint?: string;
 }) {
   const lists = useLookups();
   const withKept = (
@@ -67,6 +70,11 @@ export function EntryFields({
             ))}
           </Form.Select>
           <Form.Control.Feedback type="invalid">{errors.activityTypeId}</Form.Control.Feedback>
+          {activityHint && !errors.activityTypeId && (
+            <Form.Text className="d-block" data-testid="activity-hint">
+              {activityHint}
+            </Form.Text>
+          )}
         </Form.Group>
         {kind === 'TASK' && (
           <Form.Group className="col-sm-6" controlId={`${idPrefix}-type`}>

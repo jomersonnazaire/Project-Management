@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { TaskModel, TemplateModel } from '../src/models/index.js';
 import {
   LAUNCH_TEMPLATE_KEY,
@@ -10,6 +10,7 @@ import {
   SMALL_TEMPLATE,
   clientWithContacts,
   grant,
+  ptypeId,
   publishedTemplate,
   resetRules,
 } from './m2helpers.js';
@@ -18,8 +19,13 @@ useDatabase();
 const app = makeApp();
 afterEach(resetRules);
 
+let PT = '';
+beforeAll(async () => {
+  PT = await ptypeId();
+});
 const projectBody = (clientId: string, managerId: string, templateId: string, extra = {}) => ({
   name: 'Versioned project',
+  projectTypeId: PT,
   clientId,
   managerId,
   startDate: '2026-10-12',

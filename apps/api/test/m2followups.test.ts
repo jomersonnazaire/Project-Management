@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { SMALL_TEMPLATE, grant, resetRules, world } from './m2helpers.js';
+import { SMALL_TEMPLATE, grant, resetRules, world, ptypeId } from './m2helpers.js';
 
 /** Milestone 2 follow-ups decided in doc 11 §12. */
 useDatabase();
@@ -144,14 +144,18 @@ describe('PM handover (doc 11 §12)', () => {
 
   it('creating a project with another PM as manager is audited as a handover', async () => {
     const { pm, pm2, template, acme } = await world(app);
-    const res = await pm.agent.post('/api/v1/projects').set(CSRF).send({
-      name: 'Handed over at creation',
-      clientId: acme.client.id,
-      managerId: pm2.user._id.toString(),
-      startDate: '2026-10-12',
-      plannedEndDate: '2026-12-18',
-      templateId: template.id,
-    });
+    const res = await pm.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        projectTypeId: await ptypeId(),
+        name: 'Handed over at creation',
+        clientId: acme.client.id,
+        managerId: pm2.user._id.toString(),
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        templateId: template.id,
+      });
     expect(res.status).toBe(201);
     expect(res.body.project.can.edit).toBe(false);
     const log = (await pm.agent.get(`/api/v1/projects/${res.body.project.id}/activity`)).body
@@ -251,14 +255,18 @@ describe('Reordering tasks and template activities', () => {
     expect(saved.body.template.activities[0].dependsOn).toEqual(['a1']);
     await admin.agent.post(`/api/v1/templates/${created.id}/publish`).set(CSRF).send({});
     const p = (
-      await admin.agent.post('/api/v1/projects').set(CSRF).send({
-        name: 'Follows order',
-        clientId: acme.client.id,
-        managerId: admin.user._id.toString(),
-        startDate: '2026-10-12',
-        plannedEndDate: '2026-12-18',
-        templateId: created.id,
-      })
+      await admin.agent
+        .post('/api/v1/projects')
+        .set(CSRF)
+        .send({
+          projectTypeId: await ptypeId(),
+          name: 'Follows order',
+          clientId: acme.client.id,
+          managerId: admin.user._id.toString(),
+          startDate: '2026-10-12',
+          plannedEndDate: '2026-12-18',
+          templateId: created.id,
+        })
     ).body.project;
     const tasks = await tasksOf(admin.agent, p.id);
     expect(tasks.map((t) => t.name)).toEqual(['Design', 'Kickoff', 'Client sign-off']);

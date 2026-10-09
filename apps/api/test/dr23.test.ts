@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { IssueModel, MigrationModel, ProjectModel } from '../src/models/index.js';
 import { migrateProjectCodes } from '../src/services/projectCodes.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { world } from './m2helpers.js';
+import { world, ptypeId } from './m2helpers.js';
 
 /** DR-23: issue IDs use the project code; codes are unique ignoring case and lock once issues exist. */
 useDatabase();
@@ -20,11 +20,12 @@ const raise = (w: W, projectId = w.project.id) =>
     severity: 'HIGH',
     stage: 'BEFORE_GO_LIVE',
   });
-const create = (w: W, body: Record<string, unknown>) =>
+const create = async (w: W, body: Record<string, unknown>) =>
   w.pm.agent
     .post('/api/v1/projects')
     .set(CSRF)
     .send({
+      projectTypeId: await ptypeId(),
       name: 'Second rollout',
       clientId: w.acme.client.id,
       managerId: w.pm.user._id.toString(),

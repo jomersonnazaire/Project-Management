@@ -22,7 +22,7 @@ import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { ensureDefaultLeaveTypes } from '../src/services/leave.js';
 import { sweepAutoStop } from '../src/services/tracker.js';
 import { CSRF, createUser, login, makeApp, useDatabase } from './helpers.js';
-import { world } from './m2helpers.js';
+import { world, ptypeId } from './m2helpers.js';
 import { lookups } from './trackerHelpers.js';
 
 /**
@@ -484,15 +484,19 @@ describe('DR-43: report filter options from the report scope', () => {
   it("a Member gets their projects and those projects' clients, without needing /clients", async () => {
     const { w } = await setup();
     // A second project the Member isn't on, under another client.
-    const other = await w.pm.agent.post('/api/v1/projects').set(CSRF).send({
-      name: 'Hidden Q',
-      clientId: w.other.client.id,
-      managerId: w.pm.user._id.toString(),
-      memberIds: [],
-      startDate: '2026-10-12',
-      plannedEndDate: '2026-12-18',
-      templateId: w.template.id,
-    });
+    const other = await w.pm.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        projectTypeId: await ptypeId(),
+        name: 'Hidden Q',
+        clientId: w.other.client.id,
+        managerId: w.pm.user._id.toString(),
+        memberIds: [],
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        templateId: w.template.id,
+      });
     expect(other.status).toBe(201);
     const mine = await w.member.agent.get('/api/v1/reports/filters');
     expect(mine.status).toBe(200);

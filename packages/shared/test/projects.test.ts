@@ -197,6 +197,7 @@ describe('request schemas and decisions', () => {
       clientId: 'a'.repeat(24),
       managerId: 'b'.repeat(24),
       templateId: 'c'.repeat(24),
+      projectTypeId: 'd'.repeat(24),
       startDate: '2026-10-12',
       plannedEndDate: '2026-10-12',
     });

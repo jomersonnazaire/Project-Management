@@ -1,8 +1,9 @@
-import { PROJECT_FILTER_LABELS, PROJECT_FILTERS } from '@xc8/shared';
+import { PROJECT_FILTER_LABELS, PROJECT_FILTERS, PROJECT_TYPE_NOT_SET } from '@xc8/shared';
 import { useState } from 'react';
 import { Form, Nav } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useProjects } from '../../api/projectHooks';
+import { useProjectTypes } from '../../api/projectTypeHooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
@@ -16,8 +17,14 @@ import { shortDate } from '../../lib/format';
 export function ProjectsPage() {
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
+  const [typeId, setTypeId] = useState('');
   const canCreate = useCan('projects', 'create');
-  const projects = useProjects({ status: status || undefined, q: q || undefined });
+  const types = useProjectTypes(true, true);
+  const projects = useProjects({
+    status: status || undefined,
+    q: q || undefined,
+    projectTypeId: typeId || undefined,
+  });
   const counts = projects.data?.counts ?? {};
   const items = projects.data?.items ?? [];
 
@@ -51,6 +58,23 @@ export function ProjectsPage() {
                 </Nav.Item>
               ))}
             </Nav>
+            {/* Doc 14 FR-PTY-07: filter by project type. */}
+            <Form.Select
+              aria-label="Project type filter"
+              value={typeId}
+              onChange={(e) => setTypeId(e.target.value)}
+              style={{ maxWidth: 200 }}
+              className="ms-auto"
+            >
+              <option value="">All project types</option>
+              {(types.data ?? []).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.active ? '' : ' (inactive)'}
+                </option>
+              ))}
+              <option value="none">{PROJECT_TYPE_NOT_SET}</option>
+            </Form.Select>
             <Form.Control
               type="search"
               placeholder="Search projects…"
@@ -58,14 +82,13 @@ export function ProjectsPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={{ maxWidth: 240 }}
-              className="ms-auto"
             />
           </div>
           <ErrorAlert error={projects.error} />
           {projects.isPending ? (
             <LoadingRows />
           ) : items.length === 0 ? (
-            q || status ? (
+            q || status || typeId ? (
               <EmptyState icon="bx-briefcase" title="No projects match">
                 Try clearing the search or choosing All.
               </EmptyState>
@@ -93,6 +116,7 @@ export function ProjectsPage() {
                   <tr>
                     <th scope="col">Project</th>
                     <th scope="col">Client</th>
+                    <th scope="col">Project type</th>
                     <th scope="col">Project manager</th>
                     <th scope="col">Start</th>
                     <th scope="col">Planned end</th>
@@ -114,6 +138,18 @@ export function ProjectsPage() {
                       </td>
                       <td data-label="Client">
                         <Link to={`/clients/${p.clientId}/projects`}>{p.clientName}</Link>
+                      </td>
+                      <td data-label="Project type">
+                        {p.projectType ? (
+                          <>
+                            {p.projectType.name}
+                            {!p.projectType.active && (
+                              <span className="badge badge-inactive ms-1">Inactive</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-body-secondary">{PROJECT_TYPE_NOT_SET}</span>
+                        )}
                       </td>
                       <td data-label="Project manager">{p.managerName ?? '–'}</td>
                       <td data-label="Start" className="text-nowrap">

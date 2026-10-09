@@ -1,6 +1,9 @@
 import {
   formatHHMM,
   formatTime24,
+  PROJECT_TYPE_NOT_SET,
+  projectTypeDeadDefaultHint,
+  projectTypeHint,
   switchTimerQuestion,
   type TimerRunningDetails,
   type TrackerEntryDto,
@@ -10,6 +13,7 @@ import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
 import { useTimeOptions } from '../../api/m3Hooks';
+import { useProjectTypePreselect } from '../../api/projectTypeHooks';
 import { useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
 import { useConfirm } from '../ConfirmModal';
 import { ErrorAlert } from '../Feedback';
@@ -122,9 +126,28 @@ export function TrackerEntryModal({
     editing
       ? fromEntry(editing)
       : mode.kind === 'start' && mode.last
-        ? { ...fromEntry(mode.last), notes: '' }
+        ? // FR-PTY-04: the activity type comes from the project type, not the last entry.
+          { ...fromEntry(mode.last), activityTypeId: '', notes: '' }
         : emptyFields(mode.kind === 'quick' ? 'QUICK' : 'TASK'),
   );
+  // FR-PTY-04: Time in and + Add entry on a project task preselect the project type's default
+  // activity type ("From project type: X. You can change it."). Blank for quick activities, a
+  // project with no type, a type with no default, or an inactive default.
+  const presetTaskId = !editing && target && target !== QUICK ? target : null;
+  const preselect = useProjectTypePreselect(presetTaskId);
+  const pre = preselect.data && presetTaskId ? preselect.data : null;
+  const [appliedFor, setAppliedFor] = useState<string | null>(null);
+  const [activityTouched, setActivityTouched] = useState(false);
+  if (pre && presetTaskId !== appliedFor) {
+    setAppliedFor(presetTaskId);
+    if (!activityTouched) setFields((f) => ({ ...f, activityTypeId: pre.activityType?.id ?? '' }));
+  }
+  const activityHint =
+    pre?.projectType && pre.activityType && fields.activityTypeId === pre.activityType.id
+      ? projectTypeHint(pre.projectType.name)
+      : pre?.projectType && pre.inactiveDefault && !fields.activityTypeId
+        ? projectTypeDeadDefaultHint(pre.inactiveDefault, pre.projectType.name)
+        : undefined;
   const [title, setTitle] = useState(editing?.title ?? '');
   const [when, setWhen] = useState<'now' | 'times'>(
     mode.kind === 'add' || mode.kind === 'edit' ? 'times' : 'now',
@@ -139,14 +162,19 @@ export function TrackerEntryModal({
   const projects = options.data ?? [];
 
   const change = (patch: Partial<EntryFieldValues>) => {
+    if ('activityTypeId' in patch) setActivityTouched(true);
     setFields((f) => ({ ...f, ...patch }));
     setErrors((e) => ({ ...e, ...Object.fromEntries(Object.keys(patch).map((k) => [k, ''])) }));
   };
 
   const pickTarget = (v: string) => {
     setTarget(v);
+    // A new task gets its own preselect (or none); a quick activity is never preselected.
+    setActivityTouched(false);
+    setAppliedFor(null);
     setFields((f) => ({
       ...f,
+      activityTypeId: '',
       billable: v !== QUICK,
       ...(v === QUICK ? { type: 'EXECUTION' } : {}),
     }));
@@ -296,7 +324,15 @@ export function TrackerEntryModal({
           {mode.kind === 'start' && (
             <p className="mb-3">
               <strong>{mode.task.name}</strong>
-              <span className="d-block small text-body-secondary">{mode.task.projectName}</span>
+              <span className="d-block small text-body-secondary">
+                {mode.task.projectName}
+                {pre && (
+                  <>
+                    {' '}
+                    · Project type: <b>{pre.projectType?.name ?? PROJECT_TYPE_NOT_SET}</b>
+                  </>
+                )}
+              </span>
             </p>
           )}
           {mode.kind === 'quick' && (
@@ -368,6 +404,7 @@ export function TrackerEntryModal({
             dayLocation={day.data?.location?.name ?? null}
             hideLocation={needsDayLocation}
             keep={editing ? { activityType: editing.activityType } : undefined}
+            activityHint={activityHint}
             idPrefix="tracker"
           />
           {mode.kind === 'quick' && (

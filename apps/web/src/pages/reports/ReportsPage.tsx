@@ -10,6 +10,7 @@ import {
   ISSUE_STATUS_LABELS,
   PARTIES,
   PARTY_LABELS,
+  PROJECT_TYPE_NOT_SET,
   TASK_STATUS_LABELS,
   TIME_TYPES,
   TIME_TYPE_LABELS,
@@ -521,6 +522,8 @@ function ProjectStatusTab({ filters }: { filters: Filters }) {
   const columns: Column<ProjectStatusRowDto>[] = [
     { label: 'Project', value: (r) => r.name, render: (r) => projectLink(r) },
     { label: 'Client', value: (r) => r.client.name },
+    // Doc 14 FR-PTY-07: the project's current type ("Not set" for older projects).
+    { label: 'Project type', value: (r) => r.projectType ?? PROJECT_TYPE_NOT_SET },
     {
       label: 'Health',
       value: (r) => HEALTH_LABELS[r.health],

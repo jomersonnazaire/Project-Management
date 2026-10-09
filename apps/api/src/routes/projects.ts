@@ -13,6 +13,8 @@ import {
   updateProjectSchema,
   type ProjectFilter,
   type ProjectStatus,
+  PROJECT_TYPE_INACTIVE_PICK,
+  PROJECT_TYPE_REQUIRED,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
@@ -28,6 +30,7 @@ import {
   ClientModel,
   IssueModel,
   ProjectModel,
+  ProjectTypeModel,
   TaskModel,
   TemplateModel,
   UserModel,
@@ -131,6 +134,26 @@ export function applyProjectFilter(filter: FilterQuery<Project>, status?: string
   }
 }
 
+/**
+ * FR-PTY-02: the chosen project type must exist and be active, unless it is the project's
+ * current type (a type deactivated later stays valid on save).
+ */
+async function assertProjectType(id: string, current: Types.ObjectId | null) {
+  if (current && current.toString() === id) return current;
+  const doc = await ProjectTypeModel.findById(id).select('active').lean();
+  if (!doc) {
+    throw unprocessable(PROJECT_TYPE_REQUIRED, 'INVALID_PROJECT_TYPE', [
+      { path: 'projectTypeId', message: PROJECT_TYPE_REQUIRED },
+    ]);
+  }
+  if (doc.active === false) {
+    throw unprocessable(PROJECT_TYPE_INACTIVE_PICK, 'INVALID_PROJECT_TYPE', [
+      { path: 'projectTypeId', message: PROJECT_TYPE_INACTIVE_PICK },
+    ]);
+  }
+  return doc._id;
+}
+
 async function assertInternalUsers(ids: string[], label: string, roles?: string[]) {
   if (!ids.length) return;
   const q: FilterQuery<unknown> = { _id: { $in: ids }, active: true };
@@ -189,6 +212,10 @@ export function projectsRouter(registry: RouteRegistry) {
     const filter: FilterQuery<Project> = { ...scope };
     applyProjectFilter(filter, q.status);
     if (q.clientId) filter.clientId = q.clientId;
+    // FR-PTY-07: filter by project type ("none" = Not set).
+    if (q.projectTypeId) {
+      filter.projectTypeId = q.projectTypeId === 'none' ? null : q.projectTypeId;
+    }
     if (q.mine === 'true') filter.managerId = user._id;
     if (q.q) filter.name = new RegExp(escapeRegex(q.q), 'i');
     const { skip, limit } = paginate(q.page, q.pageSize);
@@ -250,6 +277,8 @@ export function projectsRouter(registry: RouteRegistry) {
       'PROJECT_MANAGER',
     ]);
     await assertInternalUsers(input.memberIds, 'Project members');
+    // FR-PTY-02: a new project picks an active project type.
+    const projectType = await assertProjectType(input.projectTypeId, null);
 
     const template = await TemplateModel.findById(input.templateId).lean();
     if (!template || template.status !== 'PUBLISHED') {
@@ -302,6 +331,7 @@ export function projectsRouter(registry: RouteRegistry) {
               managerId,
               memberIds,
               type: input.type ?? template.type,
+              projectTypeId: projectType,
               description: input.description || null,
               status: 'PLANNING',
               startDate: start,
@@ -337,6 +367,7 @@ export function projectsRouter(registry: RouteRegistry) {
         templateId: template._id.toString(),
         templateVersion: template.version,
         tasks: tasks.length,
+        projectTypeId: projectType.toString(),
       },
     });
     // Creating a project for another manager hands it over at once (doc 11 §12): audit it.
@@ -407,6 +438,19 @@ export function projectsRouter(registry: RouteRegistry) {
     if (input.type !== undefined) {
       track('type', project.type, input.type);
       project.type = input.type;
+    }
+    // FR-PTY-02/03: required on every save once projects have types; a project created before
+    // them ("Not set") picks one on its next edit. Keeping an inactive type stays valid.
+    // FR-PTY-05: changing the type never touches existing time entries.
+    if (input.projectTypeId === undefined && !project.projectTypeId) {
+      throw unprocessable(PROJECT_TYPE_REQUIRED, 'PROJECT_TYPE_REQUIRED', [
+        { path: 'projectTypeId', message: PROJECT_TYPE_REQUIRED },
+      ]);
+    }
+    if (input.projectTypeId !== undefined) {
+      const next = await assertProjectType(input.projectTypeId, project.projectTypeId ?? null);
+      track('projectTypeId', project.projectTypeId?.toString() ?? null, next.toString());
+      project.projectTypeId = next;
     }
     const previousManager = project.managerId?.toString() ?? null;
     if (input.managerId !== undefined && input.managerId !== project.managerId?.toString()) {

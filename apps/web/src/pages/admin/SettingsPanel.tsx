@@ -5,6 +5,7 @@ import { useSaveTimeLock, useTimeLock } from '../../api/m4Hooks';
 import { useCan } from '../../auth/useCan';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { LookupsPanel } from './LookupsPanel';
+import { ProjectTypesPanel } from './ProjectTypesPanel';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -156,6 +157,8 @@ function GeneralSettings() {
 const SETTINGS_TABS = [
   { key: 'general', label: 'General' },
   { key: 'ACTIVITY_TYPE', label: 'Activity types' },
+  // Doc 14 FR-PTY-01 (mockup v0.9.2): Project types sits between Activity types and Locations.
+  { key: 'PROJECT_TYPE', label: 'Project types' },
   { key: 'LOCATION', label: 'Locations' },
   // FR-ACT-22: no Modules screen; Module is free text on each entry (FR-ACT-20).
 ] as const;
@@ -179,7 +182,13 @@ export function SettingsPanel() {
           </li>
         ))}
       </ul>
-      {tab === 'general' ? <GeneralSettings /> : <LookupsPanel kind={tab} />}
+      {tab === 'general' ? (
+        <GeneralSettings />
+      ) : tab === 'PROJECT_TYPE' ? (
+        <ProjectTypesPanel />
+      ) : (
+        <LookupsPanel kind={tab} />
+      )}
     </>
   );
 }

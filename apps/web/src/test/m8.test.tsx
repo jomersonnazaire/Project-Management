@@ -225,7 +225,7 @@ describe('FR-ACT-20: Module is optional free text', () => {
 });
 
 describe('FR-ACT-22: no Admin › Settings › Modules', () => {
-  it('Settings lists Activity types and Locations only', async () => {
+  it('Settings lists Activity types, Project types and Locations only', async () => {
     screenWidth(1440);
     api('ADMIN', (url) =>
       url.includes('/lookups') ? { status: 200, body: { items: [] } } : undefined,
@@ -236,7 +236,7 @@ describe('FR-ACT-22: no Admin › Settings › Modules', () => {
       within(nav)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['General', 'Activity types', 'Locations']);
+    ).toEqual(['General', 'Activity types', 'Project types', 'Locations']);
   });
 });
 

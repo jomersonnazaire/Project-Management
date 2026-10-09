@@ -25,6 +25,7 @@ import { auditRouter } from './routes/audit.js';
 import { authRouter } from './routes/auth.js';
 import { clientsRouter, contactsRouter } from './routes/clients.js';
 import { projectsRouter } from './routes/projects.js';
+import { projectTypesRouter } from './routes/projectTypes.js';
 import { tasksRouter } from './routes/tasks.js';
 import { teamsRouter } from './routes/teams.js';
 import { templatesRouter } from './routes/templates.js';
@@ -126,6 +127,7 @@ export function createApp(
     templatesRouter(registry),
     ...tasksRouter(registry),
     ...projectsRouter(registry),
+    projectTypesRouter(registry),
     accessRulesRouter(registry),
     auditRouter(registry),
     settingsRouter(registry),
