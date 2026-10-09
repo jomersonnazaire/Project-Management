@@ -1,11 +1,14 @@
 import {
   DAY_LOCKED,
   DAY_LOCKED_ADMIN,
-  LOOKUP_KINDS,
+  EDITABLE_LOOKUP_KINDS,
   LOOKUP_LABELS,
   STOP_TIMER_FIRST,
+  TIMER_RUNNING_MESSAGE,
+  type TimerRunningDetails,
   WHERE_WORKING,
   dayLocationSchema,
+  stopTimerSchema,
   dayQuerySchema,
   lookupInUseMessage,
   lookupSchema,
@@ -24,16 +27,24 @@ import {
   type LookupKind,
   type RunningDto,
   type TrackerDayDto,
+  floorToMinute,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import { Types } from 'mongoose';
 import { AUTHENTICATED, perm, type RouteRegistry } from '../access/registry.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { HttpError, badRequest, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith, unprocessable } from '../lib/http422.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
-import { LookupModel, TimeEntryModel, TimesheetDayModel, UserModel } from '../models/index.js';
+import {
+  LookupModel,
+  TaskModel,
+  TimeEntryModel,
+  TimesheetDayModel,
+  UserModel,
+} from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { leaveRowsFor } from '../services/leave.js';
 import { assertLeaveAllowsTime, leaveLabelFor } from '../services/leaveHook.js';
 import { notifyPersonal } from '../services/notify.js';
 import { userRefs } from '../services/projectService.js';
@@ -77,7 +88,10 @@ function noFuture(date: Date) {
   }
 }
 
-const KIND_BY_PATH = new Map(LOOKUP_KINDS.map((k) => [LOOKUP_LABELS[k].path, k]));
+// FR-ACT-22: Modules are no longer an Admin list. The stored values stay in the database untouched,
+// so only Activity types and Locations are reachable here.
+const KIND_BY_PATH = new Map(EDITABLE_LOOKUP_KINDS.map((k) => [LOOKUP_LABELS[k].path, k]));
+const isEditableKind = (k: string) => (EDITABLE_LOOKUP_KINDS as readonly string[]).includes(k);
 function kindParam(req: Request): LookupKind {
   const k = KIND_BY_PATH.get(String(req.params.kind));
   if (!k) throw notFound();
@@ -86,7 +100,8 @@ function kindParam(req: Request): LookupKind {
 
 interface FieldInput {
   activityTypeId?: string;
-  moduleId?: string | null;
+  /** Free text, already trimmed by the schema; null = blank (FR-ACT-20). */
+  module?: string | null;
   locationId?: string | null;
   billable?: boolean;
   type?: 'EXECUTION' | 'WAITING' | 'REWORK';
@@ -110,16 +125,11 @@ async function resolveFields(input: FieldInput, kind: 'TASK' | 'QUICK', current?
       'VALIDATION_ERROR',
     );
   }
-  if (input.moduleId) {
-    out.moduleId = await assertLookup(input.moduleId, 'MODULE', 'moduleId', current?.moduleId);
-  } else if (input.moduleId === null || (!current && input.moduleId === undefined)) {
-    if (kind === 'TASK') {
-      throw badRequest(
-        'Choose a module.',
-        [{ path: 'moduleId', message: 'Choose a module.' }],
-        'VALIDATION_ERROR',
-      );
-    }
+  // FR-ACT-20: optional free text on every entry; blank or spaces-only saves as blank.
+  // DEF-010: any Module save (blank included) also drops the legacy Modules-list link, so the
+  // free-text migration can never bring a cleared module back.
+  if (input.module !== undefined || !current) {
+    out.module = input.module || null;
     out.moduleId = null;
   }
   if (input.locationId) {
@@ -232,7 +242,16 @@ async function buildDay(
       reopen: canReopenRole && lockedNow && (!state.weekLocked || isAdmin),
     },
     leave: await leaveLabelFor(userId, date),
+    leaveRows: await leaveRowsFor(userId, date),
   };
+}
+
+async function timerRunning(e: Pick<EntryDoc, '_id' | 'kind' | 'title' | 'taskId'>) {
+  const task = e.taskId ? await TaskModel.findById(e.taskId).select('name').lean() : null;
+  const details: TimerRunningDetails = {
+    running: { id: e._id.toString(), name: task?.name ?? e.title ?? 'Quick activity' },
+  };
+  return new HttpError(409, 'TIMER_RUNNING', TIMER_RUNNING_MESSAGE, details);
 }
 
 export function trackerRouter(registry: RouteRegistry) {
@@ -271,7 +290,8 @@ export function trackerRouter(registry: RouteRegistry) {
   r.post('/start', perm('activities', 'create'), async (req, res) => {
     const input = parseBody(startTimerSchema, req);
     const user = currentUser(req);
-    const now = new Date();
+    // DR-45: the timer starts on the whole minute.
+    const now = floorToMinute(new Date());
     await sweepAutoStop(now, user._id);
     const target = await resolveTarget(req, input);
     const fields = await resolveFields(input, target.kind);
@@ -285,10 +305,16 @@ export function trackerRouter(registry: RouteRegistry) {
       input.locationId,
     );
     if (inherit) fields.locationId = null;
-    const current = await TimeEntryModel.findOne({ userId: user._id, running: true })
-      .select('_id')
-      .lean();
-    if (current) await stopEntry(current._id, now);
+    // FR-ACT-26: one timer per person. A running timer is only stopped when the user chose
+    // Switch for that very timer; otherwise 409. The create below is guarded by the unique
+    // partial index (one running entry per user), so two simultaneous starts can't both win.
+    const current = (await TimeEntryModel.findOne({ userId: user._id, running: true })
+      .select('_id kind title taskId')
+      .lean()) as Pick<EntryDoc, '_id' | 'kind' | 'title' | 'taskId'> | null;
+    if (current) {
+      if (input.switchFrom !== current._id.toString()) throw await timerRunning(current);
+      await stopEntry(current._id, now);
+    }
     await assertNoOverlap(user._id, now, new Date(now.getTime() + 60_000));
     // TC-Q05: no new timer on a day that already has 24 hours.
     await assertDailyCap(user._id, date, 1);
@@ -304,7 +330,7 @@ export function trackerRouter(registry: RouteRegistry) {
       ...fields,
     }).catch((e: unknown) => {
       if ((e as { code?: number }).code === 11000) {
-        throw conflictWith('A timer is already running. Stop it first.', 'TIMER_RUNNING');
+        throw conflictWith(TIMER_RUNNING_MESSAGE, 'TIMER_RUNNING');
       }
       throw e;
     });
@@ -323,15 +349,29 @@ export function trackerRouter(registry: RouteRegistry) {
 
   // Time out.
   r.post('/stop', perm('activities', 'edit'), async (req, res) => {
-    parseBody(dayLocationSchema.partial().strict(), req);
+    const input = parseBody(stopTimerSchema, req);
     const user = currentUser(req);
     const now = new Date();
     await sweepAutoStop(now, user._id);
-    const current = await TimeEntryModel.findOne({ userId: user._id, running: true })
-      .select('_id')
-      .lean();
-    if (!current) throw unprocessable('No timer is running.', 'NO_TIMER');
-    const done = (await stopEntry(current._id, now))!;
+    // FR-ACT-23: stopping a named entry is idempotent. If it has already stopped (the other
+    // Time out button, a double click, or the 23:59 auto-stop), return it unchanged.
+    const current = input.entryId
+      ? ((await TimeEntryModel.findOne({
+          _id: input.entryId,
+          userId: user._id,
+        }).lean()) as EntryDoc | null)
+      : await TimeEntryModel.findOne({ userId: user._id, running: true }).select('_id').lean();
+    if (!current) {
+      if (input.entryId) throw notFound();
+      throw unprocessable('No timer is running.', 'NO_TIMER');
+    }
+    const done = await stopEntry(current._id, now);
+    if (!done) {
+      const already = (await TimeEntryModel.findById(current._id).lean()) as EntryDoc | null;
+      const [same] = await toTrackerDtos([already!]);
+      res.json({ entry: same });
+      return;
+    }
     await audit({
       actorId: user._id,
       entityType: 'time',
@@ -577,6 +617,9 @@ export function trackerRouter(registry: RouteRegistry) {
     const isAdmin = actor.systemRole === 'ADMIN';
     const isSupervisor = Boolean(target.supervisorId?.equals(actor._id));
     if (!isAdmin && !isSupervisor) {
+      // FR-ACT-25 (NFR-25): a user outside the caller's scope is "not found" whether or not they
+      // exist; 403 only when the caller can see them (e.g. a Member reopening their own day).
+      if (!(await canViewPerson(actor, userId))) throw notFound();
       throw forbidden('Only their supervisor or an Admin can reopen this day.', 'NOT_SUPERVISOR');
     }
     const state = await dayState(userId, date);
@@ -619,13 +662,12 @@ export function trackerRouter(registry: RouteRegistry) {
     res.json({
       activityTypes: pick('ACTIVITY_TYPE'),
       locations: pick('LOCATION'),
-      modules: pick('MODULE'),
     });
   });
 
   async function usage(ids: Id[]) {
     const counts = new Map<string, number>();
-    for (const field of ['activityTypeId', 'moduleId', 'locationId'] as const) {
+    for (const field of ['activityTypeId', 'locationId'] as const) {
       const rows = await TimeEntryModel.aggregate<{ _id: Id; n: number }>([
         { $match: { [field]: { $in: ids } } },
         { $group: { _id: `$${field}`, n: { $sum: 1 } } },
@@ -714,7 +756,8 @@ export function trackerRouter(registry: RouteRegistry) {
   l.patch('/:id', perm('settings', 'edit'), async (req, res) => {
     const input = parseBody(updateLookupSchema, req);
     const doc = await LookupModel.findById(idParam(req));
-    if (!doc) throw notFound();
+    // FR-ACT-22: the old Modules list stays in the database untouched.
+    if (!doc || !isEditableKind(doc.kind)) throw notFound();
     const user = currentUser(req);
     const changes: { field: string; old: unknown; new: unknown }[] = [];
     if (input.name && input.name !== doc.name) {
@@ -751,7 +794,8 @@ export function trackerRouter(registry: RouteRegistry) {
   // In-use values can only be deactivated (§10).
   l.delete('/:id', perm('settings', 'edit'), async (req, res) => {
     const doc = await LookupModel.findById(idParam(req));
-    if (!doc) throw notFound();
+    // FR-ACT-22: the old Modules list stays in the database untouched.
+    if (!doc || !isEditableKind(doc.kind)) throw notFound();
     const n = (await usage([doc._id])).get(doc._id.toString()) ?? 0;
     if (n > 0) throw conflictWith(lookupInUseMessage(doc.name, n), 'LOOKUP_IN_USE', { usedBy: n });
     await doc.deleteOne();

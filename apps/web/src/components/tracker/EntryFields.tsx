@@ -1,6 +1,16 @@
-import { TIME_TYPES, TIME_TYPE_LABELS, type TimeType } from '@xc8/shared';
+import {
+  MODULE_COUNTER_FROM,
+  MODULE_MAX,
+  moduleLength,
+  TIME_TYPES,
+  TIME_TYPE_LABELS,
+  toDateOnly,
+  todayPH,
+  type TimeType,
+} from '@xc8/shared';
 import { Form } from 'react-bootstrap';
 import { useLookups } from '../../api/trackerHooks';
+import { whereWorkingQuestion } from '../../lib/format';
 import type { EntryFieldValues } from './entryFieldValues';
 
 /**
@@ -26,7 +36,6 @@ export function EntryFields({
   /** Values the entry already has (shown even when inactive). */
   keep?: {
     activityType?: { id: string; name: string } | null;
-    module?: { id: string; name: string } | null;
   };
   idPrefix: string;
   /** DR-30: the entry that sets the day's location doesn't ask for a per-entry one too. */
@@ -38,7 +47,8 @@ export function EntryFields({
     kept?: { id: string; name: string } | null,
   ) => (kept && !items.some((i) => i.id === kept.id) ? [...items, kept] : items);
   const activityTypes = withKept(lists.data?.activityTypes ?? [], keep?.activityType);
-  const modules = withKept(lists.data?.modules ?? [], keep?.module);
+  // DEF-010: user-visible characters (an emoji counts as 1), the same rule the API uses.
+  const moduleChars = moduleLength(values.module);
   return (
     <>
       <div className="row g-3 mb-3">
@@ -81,6 +91,7 @@ export function EntryFields({
             <Form.Label>Location</Form.Label>
             <Form.Select
               value={values.locationId}
+              isInvalid={Boolean(errors.locationId)}
               onChange={(e) => onChange({ locationId: e.target.value })}
             >
               <option value="">
@@ -92,6 +103,7 @@ export function EntryFields({
                 </option>
               ))}
             </Form.Select>
+            <Form.Control.Feedback type="invalid">{errors.locationId}</Form.Control.Feedback>
             <Form.Text>Change for this entry only</Form.Text>
           </Form.Group>
         )}
@@ -117,26 +129,35 @@ export function EntryFields({
               onChange={() => onChange({ billable: false })}
             />
           </div>
+          {errors.billable && <div className="invalid-feedback d-block">{errors.billable}</div>}
           <Form.Text>
             {kind === 'TASK' ? 'Yes for client projects' : 'No for quick activities'}
           </Form.Text>
         </Form.Group>
       </div>
+      {/* FR-ACT-20: optional free text, max 100 after trimming; React shows it as plain text. */}
       <Form.Group className="mb-3" controlId={`${idPrefix}-module`}>
-        <Form.Label>{kind === 'TASK' ? 'Module *' : 'Module (optional)'}</Form.Label>
-        <Form.Select
-          value={values.moduleId}
-          isInvalid={Boolean(errors.moduleId)}
-          onChange={(e) => onChange({ moduleId: e.target.value })}
-        >
-          <option value="">{kind === 'TASK' ? 'Choose…' : 'None'}</option>
-          {modules.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </Form.Select>
-        <Form.Control.Feedback type="invalid">{errors.moduleId}</Form.Control.Feedback>
+        <Form.Label>Module (optional)</Form.Label>
+        <Form.Control
+          value={values.module}
+          placeholder="e.g. ADFS Remote"
+          autoComplete="off"
+          isInvalid={Boolean(errors.module)}
+          aria-describedby={
+            moduleChars >= MODULE_COUNTER_FROM ? `${idPrefix}-module-count` : undefined
+          }
+          onChange={(e) => onChange({ module: e.target.value })}
+        />
+        <Form.Control.Feedback type="invalid">{errors.module}</Form.Control.Feedback>
+        {moduleChars >= MODULE_COUNTER_FROM && (
+          <Form.Text
+            id={`${idPrefix}-module-count`}
+            className={moduleChars > MODULE_MAX ? 'text-danger' : undefined}
+            aria-live="polite"
+          >
+            {moduleChars}/{MODULE_MAX}
+          </Form.Text>
+        )}
       </Form.Group>
       <Form.Group className="mb-3" controlId={`${idPrefix}-notes`}>
         <Form.Label>Remarks</Form.Label>
@@ -145,29 +166,38 @@ export function EntryFields({
           rows={2}
           maxLength={1000}
           value={values.notes}
+          isInvalid={Boolean(errors.notes)}
           onChange={(e) => onChange({ notes: e.target.value })}
         />
+        <Form.Control.Feedback type="invalid">{errors.notes}</Form.Control.Feedback>
       </Form.Group>
     </>
   );
 }
 
-/** "Where are you working today?" (FR-ACT-17), asked on the first entry of a day. */
+/**
+ * "Where are you working today?" (FR-ACT-17), asked on the first entry of a day. For an
+ * earlier day it reads "Where were you working on Wed, Oct 7?" (DR-41).
+ */
 export function DayLocationField({
+  date,
   value,
   onChange,
   error,
   idPrefix,
 }: {
+  /** The entry's day, YYYY-MM-DD (Philippine time). */
+  date: string;
   value: string;
   onChange: (v: string) => void;
   error?: string;
   idPrefix: string;
 }) {
   const lists = useLookups();
+  const today = toDateOnly(todayPH());
   return (
     <Form.Group className="mb-3" controlId={`${idPrefix}-day-location`}>
-      <Form.Label>Where are you working today? *</Form.Label>
+      <Form.Label>{whereWorkingQuestion(date, today)} *</Form.Label>
       <Form.Select
         value={value}
         isInvalid={Boolean(error)}
@@ -181,7 +211,9 @@ export function DayLocationField({
         ))}
       </Form.Select>
       <Form.Control.Feedback type="invalid">{error}</Form.Control.Feedback>
-      <Form.Text>Every entry today uses it; you can change one entry later.</Form.Text>
+      <Form.Text>
+        Every entry {date === today ? 'today' : 'that day'} uses it; you can change one entry later.
+      </Form.Text>
     </Form.Group>
   );
 }

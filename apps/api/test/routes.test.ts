@@ -242,12 +242,18 @@ describe('Route policy table', () => {
       'DELETE /issues/:id issues.delete',
       'GET /dashboard reports.view',
       'GET /dashboard/my-projects reports.view',
-      'GET /workload reports.view',
+      'GET /workload workload.view',
+      'GET /reports/filters reports.view',
       'GET /reports/effort-variance reports.view',
+      'GET /reports/effort-variance/export reports.export',
       'GET /reports/overdue reports.view',
+      'GET /reports/overdue/export reports.export',
       'GET /reports/timesheets reports.view',
+      'GET /reports/timesheets/export reports.export',
       'GET /reports/project-status reports.view',
+      'GET /reports/project-status/export reports.export',
       'GET /reports/issues reports.view',
+      'GET /reports/issues/export reports.export',
     ]);
   });
 });

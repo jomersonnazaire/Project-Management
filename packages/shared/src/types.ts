@@ -111,4 +111,10 @@ export interface AuditEntryDto {
   action: string;
   changes: { field: string; old: unknown; new: unknown }[];
   meta: Record<string, unknown> | null;
+  /** NFR-29: client IP and user agent of the request; only sent to Admins, null for system jobs. */
+  ip?: string | null;
+  userAgent?: string | null;
 }
+
+/** NFR-28: the actor shown for system-made changes (e.g. the 11:59 PM auto-stop). */
+export const SYSTEM_ACTOR = { id: 'system', name: 'System' } as const;

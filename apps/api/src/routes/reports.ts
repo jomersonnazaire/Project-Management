@@ -17,6 +17,7 @@ import {
   type MyProjectsDto,
   type OverdueRowDto,
   type ProjectStatusRowDto,
+  type ReportFilterOptionsDto,
   type ReportList,
   type TimeType,
   type TimesheetReportDto,
@@ -24,10 +25,12 @@ import {
   type WorkloadRowDto,
 } from '@xc8/shared';
 import { Types, type FilterQuery } from 'mongoose';
+import type { Request } from 'express';
 import { z } from 'zod';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import { forbidden } from '../lib/errors.js';
 import { parseQuery } from '../lib/validate.js';
+import { audit } from '../services/audit.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
 import { TaskModel, TeamModel, TimeEntryModel, UserModel } from '../models/index.js';
 import {
@@ -50,8 +53,8 @@ import {
 } from '../services/reports.js';
 
 /**
- * Milestone 4 (FR-DASH, FR-PMV, FR-WL, FR-RPT, FR-ISS-16). Every route needs View on `reports`
- * and only ever reads projects inside the caller's scope (FR-DASH-06). Reports return the rows for
+ * Milestone 4 (FR-DASH, FR-PMV, FR-WL, FR-RPT, FR-ISS-16). The dashboard and the reports need
+ * Reports View, report exports Reports Export, and workload Team & workload View (doc 11 v0.4.8). Every route only ever reads projects inside the caller's scope (FR-DASH-06). Reports return the rows for
  * the current filters; the web app exports exactly those rows to CSV (FR-RPT-05, AC-22.2).
  */
 const id = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
@@ -82,8 +85,10 @@ export function reportsRouter(registry: RouteRegistry) {
   });
 
   const w = registry.router('/workload');
-  // FR-WL-01..03: one row per person for the selected week. Members only see their own row.
-  w.get('/', perm('reports', 'view'), async (req, res) => {
+  // FR-WL-01..03: one row per person for the selected week. Gated by Team & workload View (doc 11
+  // v0.4.8); the scope stays fixed in code: Members only see their own row, tasks only count in
+  // projects the caller can see, and recorded hours need View on time.
+  w.get('/', perm('workload', 'view'), async (req, res) => {
     const q = parseQuery(z.object({ week: day.optional(), teamId: id.optional() }), req);
     const user = currentUser(req);
     const { start, end } = weekOf(q.week ? parseDateOnly(q.week) : todayPH());
@@ -167,8 +172,47 @@ export function reportsRouter(registry: RouteRegistry) {
 
   const r = registry.router('/reports');
 
+  /**
+   * Each report answers on two routes with the same rows and the same scope: `/reports/<name>`
+   * needs Reports View, `/reports/<name>/export` needs Reports Export and is audited (FR-ACL-16).
+   * The web app builds the CSV from the export route's rows.
+   */
+  function report(name: string, build: (req: Request) => Promise<{ items: unknown[] }>) {
+    r.get(`/${name}`, perm('reports', 'view'), async (req, res) => {
+      res.json(await build(req));
+    });
+    r.get(`/${name}/export`, perm('reports', 'export'), async (req, res) => {
+      const body = await build(req);
+      await audit({
+        actorId: currentUser(req)._id,
+        entityType: 'report',
+        entityId: new Types.ObjectId(),
+        action: 'report_exported',
+        meta: { report: name, filters: req.query, rows: body.items.length },
+      });
+      res.json(body);
+    });
+  }
+
+  // DR-43: filter options from the same scope as the report rows (no /clients or /projects
+  // access needed, and nothing outside the caller's scope).
+  r.get('/filters', perm('reports', 'view'), async (req, res) => {
+    const projects = await scopedProjects(currentUser(req));
+    const refs = await refMaps({ clients: projects.map((p) => p.clientId) });
+    const clients = new Map<string, { id: string; name: string }>();
+    for (const p of projects) {
+      const c = refs.client(p.clientId);
+      if (c.name) clients.set(c.id, c);
+    }
+    const body: ReportFilterOptionsDto = {
+      projects: projects.map((p) => ({ id: p._id.toString(), name: p.name })),
+      clients: [...clients.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    };
+    res.json(body);
+  });
+
   // FR-RPT-01: effort variance per task (EC-58: tasks without an estimate have no variance).
-  r.get('/effort-variance', perm('reports', 'view'), async (req, res) => {
+  report('effort-variance', async (req) => {
     const q = parseQuery(projectFilters.extend({ ownerId: id.optional() }), req);
     const projects = narrow(await scopedProjects(currentUser(req)), q);
     const tasks = (
@@ -205,11 +249,11 @@ export function reportsRouter(registry: RouteRegistry) {
         };
       }),
     };
-    res.json(body);
+    return body;
   });
 
   // FR-RPT-02: overdue tasks, filtered by project, client, owner, party and due-date range.
-  r.get('/overdue', perm('reports', 'view'), async (req, res) => {
+  report('overdue', async (req) => {
     const q = parseQuery(
       projectFilters.extend({
         ownerId: id.optional(),
@@ -264,12 +308,12 @@ export function reportsRouter(registry: RouteRegistry) {
         };
       }),
     };
-    res.json(body);
+    return body;
   });
 
   // FR-RPT-03: time entries by user/project/date range with totals by entry type. Needs View on
   // time; Members only ever see their own entries (07 §4).
-  r.get('/timesheets', perm('reports', 'view'), async (req, res) => {
+  report('timesheets', async (req) => {
     if (!currentPermissions(req).time.view) throw forbidden();
     const q = parseQuery(
       projectFilters.extend({ userId: id.optional(), from: day.optional(), to: day.optional() }),
@@ -323,11 +367,11 @@ export function reportsRouter(registry: RouteRegistry) {
     for (const k of Object.keys(totals) as (keyof typeof totals)[])
       totals[k] = Math.round(totals[k] * 100) / 100;
     const body: TimesheetReportDto = { items, totals };
-    res.json(body);
+    return body;
   });
 
   // FR-RPT-04: project status: progress, health, baseline vs forecast, overdue, blocked, client items.
-  r.get('/project-status', perm('reports', 'view'), async (req, res) => {
+  report('project-status', async (req) => {
     const q = parseQuery(projectFilters.extend({ health: z.enum(HEALTH_VALUES).optional() }), req);
     const today = todayPH();
     const projects = narrow(await scopedProjects(currentUser(req)), q);
@@ -355,11 +399,11 @@ export function reportsRouter(registry: RouteRegistry) {
       })
       .filter((row) => !q.health || row.health === q.health);
     const body: ReportList<ProjectStatusRowDto> = { items };
-    res.json(body);
+    return body;
   });
 
   // FR-ISS-16: open issues by severity and stage, overdue issues, average time to resolve, per client.
-  r.get('/issues', perm('reports', 'view'), async (req, res) => {
+  report('issues', async (req) => {
     if (!currentPermissions(req).issues.view) throw forbidden();
     const q = parseQuery(
       projectFilters.extend({
@@ -389,7 +433,7 @@ export function reportsRouter(registry: RouteRegistry) {
       items,
       summary: summarizeIssues(issues, (pid) => refs.client(pm.get(pid.toString())!.clientId)),
     };
-    res.json(body);
+    return body;
   });
 
   return [d.router, w.router, r.router];

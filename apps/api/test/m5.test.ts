@@ -59,7 +59,7 @@ async function setup() {
 const task = (l: L, taskId: string, extra = {}) => ({
   taskId,
   activityTypeId: l.configuration,
-  moduleId: l.financials,
+  module: l.financials,
   ...extra,
 });
 const start = (a: Agent, body: object) => a.post('/api/v1/tracker/start').set(CSRF).send(body);
@@ -96,11 +96,48 @@ describe('TC-Q01/Q02: Time in and Time out', () => {
     expect((await stop(w.member.agent)).body.error.code).toBe('NO_TIMER');
   });
 
+  it("Time in then Time out puts the entry on that day's timesheet and DAR, nothing typed", async () => {
+    const { w, l, t1 } = await setup();
+    // The body is what the Time in dialog sends with its prefilled values: no times at all.
+    expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(
+      201,
+    );
+    at('2026-10-14T03:25:00Z');
+    expect((await stop(w.member.agent)).status).toBe(200);
+    const d = (await day(w.member.agent, '2026-10-14')).body.day;
+    expect(d.entries).toHaveLength(1);
+    expect(d.entries[0]).toMatchObject({
+      kind: 'TASK',
+      task: { id: t1 },
+      date: '2026-10-14',
+      startAt: '2026-10-14T02:00:00.000Z',
+      endAt: '2026-10-14T03:25:00.000Z',
+      minutes: 85,
+      running: false,
+      timed: true,
+      location: { id: l.onsite },
+    });
+    expect(d.totalMinutes).toBe(85);
+    const dar = (await w.member.agent.get('/api/v1/dar?from=2026-10-14&to=2026-10-14')).body.report;
+    expect(dar.rows).toHaveLength(1);
+    expect(dar.rows[0]).toMatchObject({
+      timeIn: '10:00 AM',
+      timeOut: '11:25 AM',
+      rendered: '01:25',
+    });
+  });
+
   it('starting B stops A at the same moment; only one runs', async () => {
     const { w, l, t1, t2 } = await setup();
     const a = await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite });
     at('2026-10-14T02:30:00Z');
-    const b = await start(w.member.agent, task(l, t2));
+    // FR-ACT-26: a plain start while A runs is refused; Switch names A.
+    const refused = await start(w.member.agent, task(l, t2));
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe('TIMER_RUNNING');
+    expect(refused.body.error.details.running.id).toBe(a.body.entry.id);
+    const b = await start(w.member.agent, { ...task(l, t2), switchFrom: a.body.entry.id });
+    expect(b.status).toBe(201);
     expect(b.body.stopped).toBe(a.body.entry.id);
     const first = await TimeEntryModel.findById(a.body.entry.id).lean();
     expect(first!.endAt!.toISOString()).toBe(b.body.entry.startAt);
@@ -159,7 +196,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
       workDate: '2026-10-13',
       hours: 2,
       activityTypeId: l.configuration,
-      moduleId: l.financials,
+      module: l.financials,
     });
     expect(hoursOnly.status).toBe(201);
     // A manual entry can't end in the future.
@@ -180,7 +217,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
         workDate: '2026-10-13',
         hours: h,
         activityTypeId: l.configuration,
-        moduleId: l.financials,
+        module: l.financials,
       });
     }
     const res = await manual(w.member.agent, {
@@ -278,7 +315,7 @@ describe('TC-Q08: location per day', () => {
     const b = await start(w.member.agent, task(l, t1, { locationId: l.onsite }));
     expect(b.body.entry).toMatchObject({ location: { name: 'Onsite' }, locationOverridden: true });
     at('2026-10-14T06:00:00Z');
-    const c = await start(w.member.agent, task(l, t1));
+    const c = await start(w.member.agent, { ...task(l, t1), switchFrom: b.body.entry.id });
     expect(c.body.entry.location.name).toBe('WFH');
     // Changing the day's location moves entries that follow it.
     const put = await w.member.agent
@@ -291,14 +328,14 @@ describe('TC-Q08: location per day', () => {
   });
 });
 
-describe('TC-Q09: Activity types, Locations and Modules lists', () => {
+describe('TC-Q09: Activity types and Locations lists', () => {
   it('Admin-only edits; in-use values deactivate, not delete; past entries keep the label', async () => {
     const { w, l, t1 } = await setup();
     expect(
       (await w.member.agent.post('/api/v1/lookups/activity-types').set(CSRF).send({ name: 'X' }))
         .status,
     ).toBe(403);
-    expect((await w.pm.agent.get('/api/v1/lookups/modules/all')).status).toBe(403);
+    expect((await w.pm.agent.get('/api/v1/lookups/locations/all')).status).toBe(403);
     const all = await w.admin.agent.get('/api/v1/lookups/locations/all');
     expect(all.body.items.map((i: { name: string }) => i.name)).toEqual([
       'Onsite',
@@ -312,7 +349,7 @@ describe('TC-Q09: Activity types, Locations and Modules lists', () => {
     expect(dup.status).toBe(409);
     expect(dup.body.error.message).toBe('"WFH" already exists.');
     const created = await w.admin.agent
-      .post('/api/v1/lookups/modules')
+      .post('/api/v1/lookups/activity-types')
       .set(CSRF)
       .send({ name: 'Production' });
     expect(created.status).toBe(201);
@@ -385,7 +422,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
       workDate: '2026-10-14',
       hours: 1,
       activityTypeId: l.integration,
-      moduleId: l.financials,
+      module: l.financials,
     });
     expect(time.body.error.code).toBe('DAY_LOCKED');
     // Late submission of an earlier day this week is fine.
@@ -402,7 +439,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
     const body = { userId: w.member.user._id.toString(), reason: 'Missing afternoon entries' };
     const url = '/api/v1/tracker/days/2026-10-13/reopen';
     expect((await w.member.agent.post(url).set(CSRF).send(body)).status).toBe(403);
-    expect((await w.pm2.agent.post(url).set(CSRF).send(body)).status).toBe(403);
+    expect((await w.pm2.agent.post(url).set(CSRF).send(body)).status).toBe(404); // FR-ACT-25: outside pm2's scope
     expect(
       (
         await w.pm.agent
@@ -554,7 +591,7 @@ describe('TC-Q05 mixed: hours-only entries, timed entries and a running timer sh
         workDate: '2026-10-14',
         hours,
         activityTypeId: l.configuration,
-        moduleId: l.financials,
+        module: l.financials,
       });
     expect((await hoursOnly(18)).status).toBe(201);
     expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(

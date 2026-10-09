@@ -23,9 +23,13 @@ import {
   type Ref,
   type TimesheetRowDto,
 } from '@xc8/shared';
-import { useClients } from '../../api/hooks';
-import { useReport, type Filters, type ReportKey } from '../../api/m4Hooks';
-import { useProjects } from '../../api/projectHooks';
+import {
+  fetchReportExport,
+  useReport,
+  useReportFilters,
+  type Filters,
+  type ReportKey,
+} from '../../api/m4Hooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
@@ -110,6 +114,9 @@ function ReportTable<T extends { id: string }>({
   empty,
   pending,
   error,
+  report,
+  filters,
+  refine = (items) => items,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -117,23 +124,46 @@ function ReportTable<T extends { id: string }>({
   empty: string;
   pending: boolean;
   error: unknown;
+  report: ReportKey;
+  filters: Filters;
+  /** The same on-screen filters the table applies (e.g. owner), applied to the exported rows. */
+  refine?: (items: T[]) => T[];
 }) {
+  // FR-ACL-14..16: the button only shows with Reports Export; the API checks it again.
+  const canExport = useCan('reports', 'export');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<unknown>(null);
+  const onExport = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const body = (await fetchReportExport(report, filters)) as unknown as { items: T[] };
+      exportCsv(file, columns, refine(body.items));
+    } catch (e) {
+      setExportError(e);
+    } finally {
+      setExporting(false);
+    }
+  };
   return (
     <>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <span className="small text-body-secondary">
           {pending ? '' : `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`}
         </span>
-        <button
-          type="button"
-          className="btn btn-sm btn-outline-primary"
-          disabled={pending || rows.length === 0}
-          onClick={() => exportCsv(file, columns, rows)}
-        >
-          <i className="bx bx-download me-1" aria-hidden="true" />
-          Export CSV
-        </button>
+        {canExport && (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-primary"
+            disabled={pending || exporting || rows.length === 0}
+            onClick={() => void onExport()}
+          >
+            <i className="bx bx-download me-1" aria-hidden="true" />
+            Export CSV
+          </button>
+        )}
       </div>
+      <ErrorAlert error={exportError} />
       <ErrorAlert error={error} />
       {pending ? (
         <LoadingRows />
@@ -186,13 +216,16 @@ export function ReportsPage() {
   const tab = tabs.find((t) => t.key === requested) ?? tabs[0]!;
   const [f, setF] = useState<Record<string, string>>({});
   const set = (k: string) => (v: string) => setF((s) => ({ ...s, [k]: v }));
-  const projects = useProjects();
-  const clients = useClients();
-  const projectOptions: [string, string][] = (projects.data?.items ?? []).map((p) => [
+  // DR-43: options come from the report scope, so Members (no /clients access) get them too.
+  const options = useReportFilters();
+  const projectOptions: [string, string][] = (options.data?.projects ?? []).map((p) => [
     p.id,
     p.name,
   ]);
-  const clientOptions: [string, string][] = (clients.data?.items ?? []).map((c) => [c.id, c.name]);
+  const clientOptions: [string, string][] = (options.data?.clients ?? []).map((c) => [
+    c.id,
+    c.name,
+  ]);
 
   const pick = (...keys: string[]): Filters =>
     Object.fromEntries(keys.map((k) => [k, f[k] || undefined]));
@@ -374,6 +407,9 @@ function EffortTab({
         columns={columns}
         rows={rows}
         file={`effort-variance-${today()}.csv`}
+        report="effort-variance"
+        filters={filters}
+        refine={(items) => (owner ? items.filter((r) => r.owner?.id === owner) : items)}
         empty="No tasks with an estimate or logged time match these filters."
         pending={q.isPending}
         error={q.error}
@@ -419,6 +455,9 @@ function OverdueTab({
         columns={columns}
         rows={rows}
         file={`overdue-tasks-${today()}.csv`}
+        report="overdue"
+        filters={filters}
+        refine={(items) => (owner ? items.filter((r) => r.owner?.id === owner) : items)}
         empty="No overdue tasks match these filters."
         pending={q.isPending}
         error={q.error}
@@ -466,6 +505,9 @@ function TimesheetsTab({ filters }: { filters: Filters }) {
         columns={columns}
         rows={rows}
         file={`timesheets-${today()}.csv`}
+        report="timesheets"
+        filters={filters}
+        refine={(items) => (person ? items.filter((r) => r.user.id === person) : items)}
         empty="No time entries match these filters."
         pending={q.isPending}
         error={q.error}
@@ -509,6 +551,8 @@ function ProjectStatusTab({ filters }: { filters: Filters }) {
       columns={columns}
       rows={q.data?.items ?? []}
       file={`project-status-${today()}.csv`}
+      report="project-status"
+      filters={filters}
       empty="No projects match these filters."
       pending={q.isPending}
       error={q.error}
@@ -551,6 +595,8 @@ function IssuesTab({ filters }: { filters: Filters }) {
         columns={columns}
         rows={q.data?.items ?? []}
         file={`issues-${today()}.csv`}
+        report="issues"
+        filters={filters}
         empty="No issues match these filters."
         pending={q.isPending}
         error={q.error}

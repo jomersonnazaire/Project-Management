@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Ref } from './projects.js';
 import type { TimeType } from './m3.js';
-import { TIME_TYPES } from './m3.js';
+import { TIME_TYPES, moduleText } from './m3.js';
 
 /**
  * Milestone 5: Activity Tracker (doc 14 §2, §10, §12). One time-entry model: timed entries
@@ -18,6 +18,12 @@ export const PH_OFFSET_MINUTES = 8 * 60;
 // ---------- Admin lists (FR-ACT-15, §10) ----------
 export const LOOKUP_KINDS = ['ACTIVITY_TYPE', 'LOCATION', 'MODULE'] as const;
 export type LookupKind = (typeof LOOKUP_KINDS)[number];
+/**
+ * The lists Admins edit. Module became free text (FR-ACT-20..22): the old MODULE values stay in
+ * the database untouched and are no longer shown or edited.
+ */
+export const EDITABLE_LOOKUP_KINDS = ['ACTIVITY_TYPE', 'LOCATION'] as const;
+export type EditableLookupKind = (typeof EDITABLE_LOOKUP_KINDS)[number];
 export const LOOKUP_LABELS: Record<LookupKind, { one: string; many: string; path: string }> = {
   ACTIVITY_TYPE: { one: 'activity type', many: 'Activity types', path: 'activity-types' },
   LOCATION: { one: 'location', many: 'Locations', path: 'locations' },
@@ -39,17 +45,8 @@ export const DEFAULT_LOOKUPS: Record<LookupKind, string[]> = {
     'Other',
   ],
   LOCATION: ['Onsite', 'WFH', 'Office'],
-  MODULE: [
-    'Financials',
-    'Inventory',
-    'Master data',
-    'Sales',
-    'Purchasing',
-    'Banking',
-    'ADFS Remote',
-    'Reports',
-    'UAT',
-  ],
+  // Free text since mockup v0.8.9: nothing to seed.
+  MODULE: [],
 };
 export const lookupSchema = z.strictObject({
   name: z.string().trim().min(1, 'Add a name.').max(80),
@@ -78,8 +75,8 @@ export const lookupInUseMessage = (name: string, n: number) =>
 /** Fields every timed entry carries (FR-ACT-15, -16, -17, -18). */
 const entryFields = {
   activityTypeId: objectId,
-  /** Required for project tasks, optional for quick activities. */
-  moduleId: objectId.nullable().optional(),
+  /** Optional free text, max 100 (FR-ACT-20). */
+  module: moduleText,
   /** Null = the day's location (FR-ACT-17). */
   locationId: objectId.nullable().optional(),
   /** Defaults: Yes for project tasks, No for quick activities. */
@@ -110,6 +107,12 @@ export const startTimerSchema = z
     dayLocationId: objectId.optional(),
     /** Confirms the half-day leave warning (FR-LV-06). */
     confirmLeave: z.boolean().optional(),
+    /**
+     * FR-ACT-26 Switch: the running timer the user agreed to stop. Without it, Time in while a
+     * timer runs answers 409 TIMER_RUNNING; with a stale id (that timer already stopped and
+     * another started), it answers 409 too, so two starts can never both win.
+     */
+    switchFrom: objectId.optional(),
   })
   .refine(oneTarget, { message: TARGET_MESSAGE, path: ['taskId'] });
 export type StartTimerInput = z.input<typeof startTimerSchema>;
@@ -138,7 +141,7 @@ export const updateTimedEntrySchema = z
     timeIn: hhmm.optional(),
     timeOut: hhmm.optional(),
     activityTypeId: objectId.optional(),
-    moduleId: objectId.nullable().optional(),
+    module: moduleText,
     locationId: objectId.nullable().optional(),
     billable: z.boolean().optional(),
     type: z.enum(TIME_TYPES).optional(),
@@ -148,6 +151,17 @@ export const updateTimedEntrySchema = z
 export type UpdateTimedEntryInput = z.input<typeof updateTimedEntrySchema>;
 
 export const dayLocationSchema = z.strictObject({ locationId: objectId });
+
+/**
+ * Time out (FR-ACT-02, FR-ACT-23). `entryId` makes it idempotent: the top bar and the Day
+ * timesheet both send it, so a second click returns the already-stopped entry unchanged.
+ */
+export const stopTimerSchema = z.strictObject({
+  entryId: objectId.optional(),
+  /** Accepted for older clients; ignored. */
+  locationId: objectId.optional(),
+});
+export type StopTimerInput = z.input<typeof stopTimerSchema>;
 export const reopenDaySchema = z.strictObject({
   userId: objectId,
   reason: z.string().trim().min(1, 'Add a reason for reopening.').max(500),
@@ -181,7 +195,8 @@ export interface TrackerEntryDto {
   timed: boolean;
   autoStopped: boolean;
   activityType: Ref | null;
-  module: Ref | null;
+  /** Free text (mockup v0.8.9). */
+  module: string | null;
   /** The effective location (the entry's own, or the day's). */
   location: Ref | null;
   locationOverridden: boolean;
@@ -216,6 +231,8 @@ export interface TrackerDayDto {
   can: { edit: boolean; submit: boolean; reopen: boolean };
   /** Filled by M7 Leave: "On leave", "Half day leave (AM)" … */
   leave: string | null;
+  /** FR-LV-12: the recorded leave on this day, shown as grey read-only rows at the top. */
+  leaveRows: TrackerLeaveRowDto[];
 }
 
 export interface RunningDto {
@@ -262,6 +279,12 @@ export function phInstant(date: string, hhmm: string): Date {
 export function autoStopAt(date: string): Date {
   return phInstant(date, '23:59');
 }
+/**
+ * DR-45: timer times are saved floored to the whole minute (01:02:40 → 01:02:00), so an entry's
+ * minutes always equal end minus start as shown (01:02 → 01:05 is 00:03).
+ */
+export const floorToMinute = (d: Date) => new Date(Math.floor(d.getTime() / 60_000) * 60_000);
+
 export const minutesBetween = (a: Date, b: Date) =>
   Math.max(0, Math.round((b.getTime() - a.getTime()) / 60_000));
 
@@ -280,3 +303,22 @@ export const reopenedMessage = (name: string, date: string, reason: string) =>
   `${name} reopened your timesheet for ${date}: ${reason}. Make your changes and submit it again before the weekly lock.`;
 export const onHoldStoppedMessage = (project: string, task: string, time: string) =>
   `${project} was put on hold, so your timer on "${task}" stopped at ${time}.`;
+
+/** FR-ACT-26: the Switch prompt shown when Time in finds another timer running. */
+export const switchTimerQuestion = (name: string) => `Stop '${name}' and start this one?`;
+export const TIMER_RUNNING_MESSAGE = 'A timer is already running. Stop it first or switch.';
+/** 409 TIMER_RUNNING details: the timer that's running. */
+export interface TimerRunningDetails {
+  running: { id: string; name: string };
+}
+
+/** FR-LV-12: one recorded leave on a Day timesheet ("Vacation · Full day"). */
+export interface TrackerLeaveRowDto {
+  id: string;
+  type: string;
+  dayPart: 'FULL' | 'AM' | 'PM';
+  label: string;
+}
+export function leaveRowLabel(type: string, dayPart: 'FULL' | 'AM' | 'PM'): string {
+  return `${type} · ${dayPart === 'FULL' ? 'Full day' : `Half day ${dayPart}`}`;
+}

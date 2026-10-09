@@ -1,4 +1,11 @@
-import { SYSTEM_ROLE_LABELS, hasPermission, type AccessAction, type RecordType } from '@xc8/shared';
+import {
+  APP_FOOTER,
+  BRAND_ASSETS,
+  SYSTEM_ROLE_LABELS,
+  hasPermission,
+  type AccessAction,
+  type RecordType,
+} from '@xc8/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -53,7 +60,7 @@ const SETUP: NavItem[] = [
     any: [['templates', 'view']],
   },
   { to: '/clients', label: 'Clients', icon: 'bx-buildings', any: [['clients', 'view']] },
-  { to: '/workload', label: 'Team & workload', icon: 'bx-group', any: [['reports', 'view']] },
+  { to: '/workload', label: 'Team & workload', icon: 'bx-group', any: [['workload', 'view']] },
   { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', any: [['reports', 'view']] },
   {
     to: '/admin',
@@ -265,16 +272,21 @@ export function AppShell() {
               </TopbarContext.Provider>
             </main>
             <footer className="content-footer footer bg-footer-theme">
-              <div className="container-xxl py-3 small text-body-secondary">
-                Xceler8 Implementation Tracker · UI based on{' '}
-                <a
-                  href="https://themeselection.com/item/sneat-free-bootstrap-html-admin-template/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Sneat
-                </a>{' '}
-                by ThemeSelection (MIT)
+              <div className="container-xxl py-3 small text-body-secondary d-flex flex-wrap align-items-center gap-2">
+                {/* Mockup v0.9.1: "OpsTrack · by Jomerson & Grok" */}
+                <img src={BRAND_ASSETS.icon} alt="" aria-hidden="true" width={18} height={18} />
+                <span data-testid="app-footer">{APP_FOOTER}</span>
+                <span className="ms-auto">
+                  UI based on{' '}
+                  <a
+                    href="https://themeselection.com/item/sneat-free-bootstrap-html-admin-template/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Sneat
+                  </a>{' '}
+                  by ThemeSelection (MIT)
+                </span>
               </div>
             </footer>
           </div>

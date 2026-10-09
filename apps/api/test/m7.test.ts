@@ -402,7 +402,7 @@ describe('TC-S07: entitlement below what is taken (EC-79)', () => {
     expect(res.status).toBe(200);
     expect(res.body.item).toMatchObject({ taken: 6, balance: -2, negative: true });
     expect(res.body.warning).toBe(
-      `${w.member.user.name} has already taken 6 days of Vacation. Setting 4 makes the balance -2. The balance is flagged (EC-79).`,
+      `${w.member.user.name} has already taken 6 days of Vacation. Setting 4 makes the balance −2. The balance is flagged (EC-79).`,
     );
     expect((await balance(w.member.agent, vacation)).negative).toBe(true);
     expect(
@@ -499,7 +499,7 @@ describe('TC-S09: timer on a leave day (FR-LV-06)', () => {
         .send({
           taskId: tasks[0]!.id,
           activityTypeId: l.configuration,
-          moduleId: l.financials,
+          module: l.financials,
           dayLocationId: l.wfh,
           ...extra,
         });
@@ -537,7 +537,7 @@ describe('TC-S09: timer on a leave day (FR-LV-06)', () => {
     const manual = await w.member.agent.post('/api/v1/tracker/entries').set(CSRF).send({
       taskId: tasks[0]!.id,
       activityTypeId: l.configuration,
-      moduleId: l.financials,
+      module: l.financials,
       date: '2026-10-13',
       timeIn: '08:00',
       timeOut: '09:00',

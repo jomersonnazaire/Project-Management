@@ -27,12 +27,13 @@ import { hoursLabel, longDay, shortDate } from '../lib/format';
 
 const VIEWS = [
   { key: 'today', label: 'Today' },
+  // FR-TSK-22 (doc 14 update): Day timesheet sits right after Today.
+  { key: 'day', label: 'Day timesheet' },
   { key: 'due', label: 'Due' },
   { key: 'assigned', label: 'Assigned to me' },
   { key: 'accountable', label: "I'm accountable" },
   { key: 'review', label: 'To review' },
   { key: 'completed', label: 'Completed' },
-  { key: 'day', label: 'Day timesheet' },
 ] as const;
 
 const ROLE_LABELS = {
@@ -93,7 +94,8 @@ function TodayPlan({
   const minutesOn = (taskId: string) =>
     entries.filter((e) => e.task?.id === taskId).reduce((s, e) => s + entryMinutes(e), 0);
   const loading = hasTracker && !tracker;
-  const runningOn = (taskId: string) => entries.some((e) => e.running && e.task?.id === taskId);
+  const runningEntry = (taskId: string) => entries.find((e) => e.running && e.task?.id === taskId);
+  const runningOn = (taskId: string) => Boolean(runningEntry(taskId));
   const quick = entries.filter((e) => e.kind === 'QUICK');
   const canTime = Boolean(tracker?.can.edit);
   const planned = items.filter((t) => t.section === 'PLANNED');
@@ -130,7 +132,9 @@ function TodayPlan({
             size="sm"
             variant="danger"
             disabled={stop.isPending}
-            onClick={() => stop.mutate({ path: '/stop' })}
+            onClick={() =>
+              stop.mutate({ path: '/stop', body: { entryId: runningEntry(t.id)?.id } })
+            }
           >
             ■ Time out
           </Button>

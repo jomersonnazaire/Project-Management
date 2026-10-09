@@ -218,6 +218,15 @@ export interface IssueReportDto {
   items: IssueReportRowDto[];
   summary: IssueSummaryDto;
 }
+/**
+ * DR-43: the Project and Client filter options, built from the projects the caller's reports
+ * cover (a Member sees only their projects' names and clients, without access to /clients).
+ */
+export interface ReportFilterOptionsDto {
+  projects: Ref[];
+  clients: Ref[];
+}
+
 export interface ReportList<T> {
   items: T[];
 }

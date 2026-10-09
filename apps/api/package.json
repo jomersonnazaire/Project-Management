@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Xceler8 Implementation Tracker REST API (Express + TypeScript, Node 22)",
+  "description": "Xceler8 project management REST API (Express + TypeScript, Node 22)",
   "engines": {
     "node": ">=22 <23"
   },

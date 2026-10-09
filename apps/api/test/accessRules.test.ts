@@ -287,7 +287,7 @@ describe('Changing rules', () => {
 
     const saved = await putRules(admin.agent, 'PROJECT_MANAGER', { clients: { delete: false } });
     expect(saved.status).toBe(200);
-    expect(saved.body.rules.permissions.clients).toEqual({
+    expect(saved.body.rules.permissions.clients).toMatchObject({
       view: true,
       create: true,
       edit: true,

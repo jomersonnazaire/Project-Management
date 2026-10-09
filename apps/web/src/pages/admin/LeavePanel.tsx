@@ -1,5 +1,5 @@
 import { LEAVE_UNITS, todayPH, type EntitlementRowDto, type LeaveTypeDto } from '@xc8/shared';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Button, Form, Modal, Table } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../../api/leaveHooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { LeaveBalance } from '../../components/LeaveBalance';
 import { exportCsv } from '../../lib/reportCsv';
 
 /** Admin › Leave: leave types (FR-LV-01) and yearly entitlements (FR-LV-02, EC-79). */
@@ -282,7 +283,9 @@ function EntitlementsCard({ types, canEdit }: { types: LeaveTypeDto[]; canEdit: 
                   <th>Carry-over from {year - 1}</th>
                   <th className="text-end">Taken</th>
                   <th className="text-end">Balance</th>
-                  <th />
+                  <th>
+                    <span className="visually-hidden">Save status</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -298,11 +301,16 @@ function EntitlementsCard({ types, canEdit }: { types: LeaveTypeDto[]; canEdit: 
             </Table>
           </div>
         )}
-        <p className="small text-body-secondary mb-0">Every entitlement change is audited.</p>
+        <p className="small text-body-secondary mb-0">
+          Changes save on their own when you leave the field. Every change is audited.
+        </p>
       </div>
     </div>
   );
 }
+
+/** FR-LV-13: each cell saves on its own (blur or Enter); no Save button. */
+const SAVE_FAILED = "Couldn't save. Try again.";
 
 function EntitlementRow({
   row,
@@ -314,11 +322,56 @@ function EntitlementRow({
   canEdit: boolean;
 }) {
   const save = useSetEntitlement();
-  const [days, setDays] = useState(row.entitlement?.toString() ?? '');
-  const [carry, setCarry] = useState(String(row.carryOver));
+  // The last values the server accepted: what a failed save puts back.
+  const [saved, setSaved] = useState({
+    days: row.entitlement?.toString() ?? '',
+    carry: String(row.carryOver),
+  });
+  const [days, setDays] = useState(saved.days);
+  const [carry, setCarry] = useState(saved.carry);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const dirty = days !== (row.entitlement?.toString() ?? '') || carry !== String(row.carryOver);
+
+  const commit = (next: { days: string; carry: string }) => {
+    if (next.days === saved.days && next.carry === saved.carry) return;
+    if (next.days === '') {
+      // An empty entitlement isn't a value: put the saved one back.
+      setDays(saved.days);
+      return;
+    }
+    setStatus('saving');
+    setError(null);
+    save.mutate(
+      {
+        userId: row.user.id,
+        leaveTypeId: type.id,
+        year: row.year,
+        days: Number(next.days),
+        carryOver: Number(next.carry || 0),
+      },
+      {
+        onSuccess: (r) => {
+          setSaved(next);
+          setWarning(r.warning);
+          setStatus('saved');
+        },
+        onError: (e) => {
+          setDays(saved.days);
+          setCarry(saved.carry);
+          setStatus('error');
+          setError(
+            e instanceof ApiError && e.status < 500 && Object.values(e.fieldErrors())[0]
+              ? `${SAVE_FAILED} ${Object.values(e.fieldErrors())[0]}`
+              : SAVE_FAILED,
+          );
+        },
+      },
+    );
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+  };
   return (
     <>
       <tr>
@@ -333,6 +386,8 @@ function EntitlementRow({
             disabled={!canEdit}
             value={days}
             onChange={(e) => setDays(e.target.value)}
+            onBlur={() => commit({ days, carry })}
+            onKeyDown={onKey}
           />
         </td>
         <td style={{ width: 120 }}>
@@ -345,47 +400,21 @@ function EntitlementRow({
             disabled={!canEdit}
             value={carry}
             onChange={(e) => setCarry(e.target.value)}
+            onBlur={() => commit({ days, carry })}
+            onKeyDown={onKey}
           />
         </td>
         <td className="text-end">{row.taken}</td>
         <td className="text-end">
-          {row.balance ?? '–'}
-          {row.negative && <span className="badge bg-label-danger ms-1">Negative</span>}
+          <LeaveBalance value={row.balance ?? null} negative={row.negative} noLimit="–" />
         </td>
-        <td className="text-end">
-          {canEdit && (
-            <Button
-              size="sm"
-              variant="outline-primary"
-              disabled={!dirty || days === '' || save.isPending}
-              onClick={() => {
-                setError(null);
-                save.mutate(
-                  {
-                    userId: row.user.id,
-                    leaveTypeId: type.id,
-                    year: row.year,
-                    days: Number(days),
-                    carryOver: Number(carry || 0),
-                  },
-                  {
-                    onSuccess: (r) => setWarning(r.warning),
-                    onError: (e) =>
-                      setError(
-                        e instanceof ApiError
-                          ? (Object.values(e.fieldErrors())[0] ?? e.message)
-                          : 'Could not save.',
-                      ),
-                  },
-                );
-              }}
-            >
-              Save
-            </Button>
-          )}
+        <td className="text-end small text-nowrap" aria-live="polite">
+          {status === 'saving' && <span className="text-body-secondary">Saving…</span>}
+          {status === 'saved' && <span className="text-success">Saved ✓</span>}
+          {status === 'error' && <span className="text-negative">{SAVE_FAILED}</span>}
         </td>
       </tr>
-      {(warning || error) && (
+      {(warning || (error && error !== SAVE_FAILED)) && (
         <tr>
           <td colSpan={6}>
             <div

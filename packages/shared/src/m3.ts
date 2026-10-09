@@ -10,6 +10,46 @@ const objectId = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
 const requiredText = (label: string, max = 200) =>
   z.string().trim().min(1, `${label} is required.`).max(max);
 const optionalText = (max = 2000) => z.string().trim().max(max).nullable().optional();
+
+// ---------- Module (doc 14 v0.9.7 FR-ACT-20): optional free text, no Admin list ----------
+export const MODULE_MAX = 100;
+/** The counter shows from this many characters (FR-ACT-20). */
+export const MODULE_COUNTER_FROM = 80;
+export const MODULE_TOO_LONG = `Keep the module under ${MODULE_MAX} characters.`;
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+/**
+ * DEF-010: lengths users see. Counts grapheme clusters, so an emoji (even a multi-code-point
+ * one such as a flag or a family) counts as 1. The web counter and the API use this same rule.
+ */
+export const graphemeLength = (s: string) => {
+  let n = 0;
+  for (const _ of graphemes.segment(s)) n++;
+  return n;
+};
+/** The first `max` user-visible characters of `s` (never splits an emoji). */
+export const graphemeSlice = (s: string, max: number) => {
+  let out = '';
+  let n = 0;
+  for (const { segment } of graphemes.segment(s)) {
+    if (n++ >= max) break;
+    out += segment;
+  }
+  return out;
+};
+/** Module length in user-visible characters, after trimming (FR-ACT-20, DEF-010). */
+export const moduleLength = (s: string) => graphemeLength(s.trim());
+
+/** Trimmed free text, max 100 characters after trimming; blank or spaces-only saves as blank (null). */
+export const moduleText = z
+  .string()
+  .trim()
+  .refine((v) => graphemeLength(v) <= MODULE_MAX, MODULE_TOO_LONG)
+  .nullable()
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v || null));
+/** How a blank module shows on screen, in the report, PDF and Excel. */
+export const moduleLabel = (m: string | null | undefined) => m?.trim() || '–';
 const dateOnly = (label: string) =>
   z
     .string()
@@ -134,7 +174,7 @@ export const timeEntrySchema = z.strictObject({
   notes: optionalText(1000),
   /** Doc 14 FR-ACT-15, FR-DAR-09: required on every entry, Log time included. */
   activityTypeId: objectId,
-  moduleId: objectId,
+  module: moduleText,
   locationId: objectId.nullable().optional(),
   billable: z.boolean().default(true),
   /** Confirms the half-day leave warning (FR-LV-06). */
@@ -147,7 +187,7 @@ export const updateTimeEntrySchema = z.strictObject({
   type: z.enum(TIME_TYPES).optional(),
   notes: optionalText(1000),
   activityTypeId: objectId.optional(),
-  moduleId: objectId.optional(),
+  module: moduleText,
   locationId: objectId.nullable().optional(),
   billable: z.boolean().optional(),
 });
@@ -165,7 +205,8 @@ export interface TimeEntryDto {
   /** Logged with Time in / Time out (doc 14 FR-ACT-02); hours change on the Day timesheet. */
   timed: boolean;
   activityType: Ref | null;
-  module: Ref | null;
+  /** Free text (mockup v0.8.9). */
+  module: string | null;
   billable: boolean;
   type: TimeType;
   notes: string | null;

@@ -1,4 +1,6 @@
 import {
+  leaveRowLabel,
+  type TrackerLeaveRowDto,
   DEFAULT_LEAVE_TYPES,
   ON_LEAVE,
   addDays,
@@ -161,6 +163,30 @@ export async function leaveDay(userId: Id, date: Date): Promise<LeaveDay> {
   return { full: false, half: null, label: null };
 }
 setLeaveDayLookup(leaveDay);
+
+/** FR-LV-12: the recorded leave on one date, for the Day timesheet's read-only rows. */
+export async function leaveRowsFor(userId: Id, date: Date): Promise<TrackerLeaveRowDto[]> {
+  const leaves = await LeaveModel.find({
+    userId,
+    status: 'RECORDED',
+    from: { $lte: date },
+    to: { $gte: date },
+    dates: date,
+  })
+    .select('leaveTypeId dayPart')
+    .sort({ dayPart: 1, createdAt: 1 })
+    .lean();
+  if (!leaves.length) return [];
+  const types = await LeaveTypeModel.find({ _id: { $in: leaves.map((l) => l.leaveTypeId) } })
+    .select('name')
+    .lean();
+  const name = new Map(types.map((t) => [t._id.toString(), t.name]));
+  return leaves.map((l) => {
+    const type = name.get(l.leaveTypeId.toString()) ?? 'Leave';
+    const dayPart = l.dayPart as TrackerLeaveRowDto['dayPart'];
+    return { id: l._id.toString(), type, dayPart, label: leaveRowLabel(type, dayPart) };
+  });
+}
 
 /** Re-reads the calendar for every new leave (FR-CAL-02). */
 export const calendar = () => loadCalendar();
