@@ -4,6 +4,7 @@ import {
   JOB_ROLE_LABELS,
   SYSTEM_ROLES,
   SYSTEM_ROLE_LABELS,
+  emailSchema,
   inviteUserSchema,
   plural,
   updateUserSchema,
@@ -13,7 +14,7 @@ import {
 } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, Dropdown, Form, Modal } from 'react-bootstrap';
-import { Controller, useForm, type Control } from 'react-hook-form';
+import { Controller, useForm, useWatch, type Control } from 'react-hook-form';
 import type { z } from 'zod';
 import { ApiError } from '../../api/client';
 import {
@@ -282,6 +283,7 @@ function EditUserModal({
     register,
     control,
     handleSubmit,
+    setError: setFieldError,
     formState: { errors, isSubmitting },
   } = useForm<InviteIn>({
     defaultValues: {
@@ -294,11 +296,23 @@ function EditUserModal({
     },
   });
   const [error, setError] = useState<unknown>(null);
+  const emailChanged =
+    (useWatch({ control, name: 'email' }) ?? '').trim().toLowerCase() !== user.email;
 
   const onSubmit = handleSubmit(async (v) => {
     setError(null);
+    const email = v.email.trim().toLowerCase();
+    if (email !== user.email) {
+      // Same rules as the invite form: valid format, stored lowercase (unique among users).
+      const check = emailSchema.safeParse(email);
+      if (!check.success) {
+        setFieldError('email', { message: check.error.issues[0]?.message });
+        return;
+      }
+    }
     const body: EditOut = {
       name: v.name,
+      ...(email !== user.email ? { email } : {}),
       jobRole: v.jobRole,
       teamIds: v.teamIds ?? [],
       weeklyCapacityHours: Number(v.weeklyCapacityHours),
@@ -315,7 +329,9 @@ function EditUserModal({
       await update.mutateAsync({ id: user.id, body: parsed.data });
       onClose();
     } catch (e) {
-      setError(e);
+      const fields = e instanceof ApiError ? e.fieldErrors() : {};
+      if (fields.email) setFieldError('email', { message: fields.email });
+      else setError(e);
     }
   });
 
@@ -332,8 +348,21 @@ function EditUserModal({
             <Form.Control {...register('name', { required: true })} isInvalid={!!errors.name} />
           </Form.Group>
           <Form.Group className="mb-3" controlId="edit-email">
-            <Form.Label>Email</Form.Label>
-            <Form.Control value={user.email} readOnly plaintext />
+            <Form.Label>Email *</Form.Label>
+            <Form.Control
+              type="email"
+              {...register('email', { required: true })}
+              isInvalid={!!errors.email}
+              aria-describedby="edit-email-hint"
+            />
+            <Form.Control.Feedback type="invalid">{errors.email?.message}</Form.Control.Feedback>
+            {emailChanged && (
+              <Form.Text id="edit-email-hint">
+                {isSelf
+                  ? 'You’ll sign in with the new email next time. Your password stays the same.'
+                  : `${user.name} signs in with the new email and the same password. Their open sessions end.`}
+              </Form.Text>
+            )}
           </Form.Group>
           <RoleSelects control={control} errors={errors} disableAccess={isSelf} idPrefix="edit" />
           <fieldset className="mb-3">
