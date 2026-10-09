@@ -1,5 +1,7 @@
 import {
   PARTY_LABELS,
+  hasPermission,
+  isIssueOpen,
   PRIORITY_LABELS,
   TASK_TRANSITIONS,
   type ProjectDto,
@@ -7,6 +9,7 @@ import {
 } from '@xc8/shared';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Form, Offcanvas } from 'react-bootstrap';
+import { useAllIssues } from '../../api/issueHooks';
 import { useTask, useTaskHistory, useTaskMutation } from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
@@ -16,6 +19,8 @@ import { dateTime, shortDate } from '../../lib/format';
 import { followUpRecipients } from '../../lib/m3ui';
 import { EvidenceSection } from './EvidenceSection';
 import { TaskFormModal } from './TaskFormModal';
+import { IssueStatusBadge, RaiseIssueModal, SeverityBadge } from '../issues/IssueUi';
+import { Link } from 'react-router-dom';
 import { moveLabel, useStatusMove } from './useStatusMove';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -49,6 +54,8 @@ export function TaskPanel({
   const [note, setNote] = useState('');
   const t = task.data;
   const archived = project.archived;
+  const { permissions } = useAuth();
+  const canIssues = hasPermission(permissions, 'issues', 'view');
   const notifies = t ? followUpRecipients(t, project, user?.id) : '';
   const nameOf = (id: string) => {
     const d = tasks.find((x) => x.id === id);
@@ -139,12 +146,16 @@ export function TaskPanel({
                     Edit task
                   </Button>
                 )}
-                {t.can.plan && (
+                {t.deletable && (
                   <Button
                     size="sm"
                     variant="outline-danger"
                     onClick={() => {
-                      if (window.confirm(`Delete "${t.name}"? This cannot be undone.`)) {
+                      if (
+                        window.confirm(
+                          `Delete "${t.name}"? Nothing has been recorded on it yet. This cannot be undone.`,
+                        )
+                      ) {
                         mutation.mutate(
                           { path: `/tasks/${t.id}`, method: 'DELETE' },
                           { onSuccess: onClose },
@@ -156,6 +167,13 @@ export function TaskPanel({
                   </Button>
                 )}
               </div>
+            )}
+
+            {!archived && !t.deletable && t.deleteBlockedReason && (
+              <p className="small text-body-secondary mt-n2 mb-4" data-testid="delete-blocked">
+                <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+                Can’t delete: {t.deleteBlockedReason}
+              </p>
             )}
 
             {t.blockerReason && t.status === 'BLOCKED' && (
@@ -201,6 +219,8 @@ export function TaskPanel({
             </dl>
 
             <EvidenceSection task={t} archived={archived} />
+
+            {canIssues && <LinkedIssues task={t} project={project} />}
 
             <h3 className="h6">Follow-ups</h3>
             {t.followUps.length === 0 ? (
@@ -270,5 +290,50 @@ export function TaskPanel({
         />
       )}
     </Offcanvas>
+  );
+}
+
+/** Issues linked to this task (FR-ISS-09): open ones first; raise one for this task. */
+function LinkedIssues({ task, project }: { task: TaskDto; project: ProjectDto }) {
+  const list = useAllIssues({ taskId: task.id, status: 'ALL' });
+  const [raising, setRaising] = useState(false);
+  const items = [...(list.data?.items ?? [])].sort(
+    (a, b) => Number(isIssueOpen(b.status)) - Number(isIssueOpen(a.status)),
+  );
+  const canRaise = list.data?.can.create && !project.archived;
+  return (
+    <>
+      <div className="d-flex align-items-center mb-2">
+        <h3 className="h6 mb-0 me-auto">Linked issues</h3>
+        {canRaise && (
+          <Button variant="link" size="sm" className="p-0" onClick={() => setRaising(true)}>
+            + Raise issue
+          </Button>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <p className="small text-body-secondary">No issues linked to this task.</p>
+      ) : (
+        <ul className="list-unstyled small mb-4">
+          {items.map((i) => (
+            <li key={i.id} className="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <Link to={`/issues/${i.id}`} className="font-monospace">
+                {i.key}
+              </Link>
+              <span className="flex-grow-1">{i.title}</span>
+              <SeverityBadge severity={i.severity} />
+              <IssueStatusBadge status={i.status} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {raising && (
+        <RaiseIssueModal
+          projectId={project.id}
+          taskId={task.id}
+          onClose={() => setRaising(false)}
+        />
+      )}
+    </>
   );
 }

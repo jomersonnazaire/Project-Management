@@ -12,6 +12,10 @@ import {
   myTasksQuerySchema,
   parseDateOnly,
   rejectTaskSchema,
+  phaseDeleteBlockedReason,
+  taskDeleteBlockedReason,
+  todaySection,
+  workingDaysSince,
   taskStatusSchema,
   taskVersionSchema,
   todayPH,
@@ -21,7 +25,9 @@ import {
   type HolidayType,
   type NotificationType,
   type PermissionGrid,
+  type PhaseDto,
   type TaskDto,
+  type TaskRecordCounts,
   type TaskStatus,
 } from '@xc8/shared';
 import type { Request, Response } from 'express';
@@ -35,8 +41,8 @@ import {
   ActivityLogModel,
   ClientContactModel,
   DocumentModel,
+  FolderModel,
   HolidayModel,
-  TimeEntryModel,
   ProjectModel,
   TaskModel,
   TeamModel,
@@ -45,6 +51,8 @@ import {
   type Task,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { loadCalendar } from '../services/calendar.js';
+import { taskRecordCounts } from '../services/taskRecords.js';
 import { notify } from '../services/notify.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
 import {
@@ -54,7 +62,7 @@ import {
   projectScopeFilter,
   type ScopeUser,
 } from '../services/scope.js';
-import { assertNotArchived, loadProject } from './projects.js';
+import { assertNotArchived, assertPlanOpen, loadProject } from './projects.js';
 
 /**
  * Tasks: board, checklist, task details and My tasks (FR-TSK-01..14, workflow §2). The gate checks
@@ -76,7 +84,7 @@ export function taskCan(
   project: ProjectDoc,
   t: TaskDoc,
 ): TaskDto['can'] {
-  const open = !project.archived;
+  const open = !project.archived && project.status !== 'COMPLETED';
   const plan = open && perms.tasks.edit && isPlanner(user, project);
   const status = open && perms.tasks.edit && (plan || isMine(user, t));
   const reviewer = Boolean(t.approval?.reviewerId?.equals(user._id));
@@ -88,6 +96,56 @@ export function taskCan(
       (user.systemRole === 'PROJECT_MANAGER' && canEditProjectScope(user, project)) ||
       reviewer);
   return { edit: status, plan, status, approve };
+}
+
+/**
+ * A project's phases: task phases in plan order, then phases that only have an evidence folder
+ * left (their tasks were deleted). Counts tasks, and documents in the folder and its sub-folders.
+ */
+async function projectPhases(projectId: Types.ObjectId, session?: mongoose.ClientSession) {
+  const tasks = await TaskModel.find({ projectId })
+    .select('phase order')
+    .sort({ order: 1 })
+    .session(session ?? null)
+    .lean();
+  const folders = await FolderModel.find({ projectId })
+    .select('_id parentId kind phase')
+    .session(session ?? null)
+    .lean();
+  const names = [
+    ...new Set([
+      ...tasks.map((t) => t.phase).filter((x): x is string => Boolean(x)),
+      ...folders.filter((f) => f.kind === 'PHASE' && f.phase).map((f) => f.phase as string),
+    ]),
+  ];
+  const out = [];
+  for (const name of names) {
+    const root = folders.filter((f) => f.kind === 'PHASE' && f.phase === name).map((f) => f._id);
+    const ids = [...root];
+    for (let i = 0; i < ids.length; i++) {
+      for (const f of folders) if (f.parentId?.equals(ids[i])) ids.push(f._id);
+    }
+    const documentCount = ids.length
+      ? await DocumentModel.countDocuments({ folderId: { $in: ids } }).session(session ?? null)
+      : 0;
+    out.push({
+      name,
+      taskCount: tasks.filter((t) => t.phase === name).length,
+      documentCount,
+      folderIds: ids,
+    });
+  }
+  return out;
+}
+
+/** Admins and the project's PM, with Delete on Tasks, on a project that is still open. */
+export function canDeleteTasks(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  return (
+    !project.archived &&
+    project.status !== 'COMPLETED' &&
+    perms.tasks.delete &&
+    isPlanner(user, project)
+  );
 }
 
 async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): Promise<TaskDto[]> {
@@ -122,8 +180,12 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
     return u ? { id: u.id, name: u.name } : null;
   };
   const today = todayPH();
+  // M3.5: planners may delete a task only while nothing is recorded under it.
+  const mayDelete = canDeleteTasks(user, perms, project);
+  const records = mayDelete ? await taskRecordCounts(tasks.map((t) => t._id)) : null;
   return tasks.map((t) => {
     const status = t.status as TaskStatus;
+    const blocked = records ? taskDeleteBlockedReason(records.get(t._id.toString()) ?? {}) : null;
     const overdue = isOverdue({ status, dueDate: t.dueDate }, today);
     return {
       id: t._id.toString(),
@@ -183,6 +245,8 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
       daysLate: overdue && t.dueDate ? daysBetween(t.dueDate, today) : 0,
       version: t.version ?? 0,
       can: taskCan(user, perms, project, t),
+      deletable: mayDelete && !blocked,
+      deleteBlockedReason: blocked,
     };
   });
 }
@@ -208,6 +272,7 @@ export function assertCan(
   what: keyof TaskDto['can'],
 ) {
   assertNotArchived(project);
+  assertPlanOpen(project);
   if (!taskCan(currentUser(req), currentPermissions(req), project, task)[what]) {
     throw forbidden(
       what === 'plan'
@@ -465,10 +530,74 @@ export function tasksRouter(registry: RouteRegistry) {
     res.json({ items: await toTaskDtos(req, project, tasks) });
   });
 
+  // M3.5: phases (task groups plus their evidence folder). Planners delete an empty phase.
+  p.get('/:id/phases', perm('tasks', 'view'), async (req, res) => {
+    const project = await loadProject(req, 'view');
+    const mayDelete = canDeleteTasks(currentUser(req), currentPermissions(req), project);
+    const phases = await projectPhases(project._id);
+    res.json({
+      items: phases.map((ph): PhaseDto => {
+        const reason = phaseDeleteBlockedReason(ph.taskCount, ph.documentCount);
+        return {
+          name: ph.name,
+          taskCount: ph.taskCount,
+          documentCount: ph.documentCount,
+          deletable: mayDelete && !reason,
+          deleteBlockedReason: mayDelete ? reason : null,
+        };
+      }),
+    });
+  });
+
+  p.delete('/:id/phases', perm('tasks', 'delete'), async (req, res) => {
+    const project = await loadProject(req, 'view');
+    assertNotArchived(project);
+    assertPlanOpen(project);
+    if (!canDeleteTasks(currentUser(req), currentPermissions(req), project)) {
+      throw forbidden('Only an Admin or this project’s PM can delete its phases.');
+    }
+    const name = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+    if (!name) throw badRequest('Say which phase to delete.');
+    const session = await mongoose.startSession();
+    let folderIds: Types.ObjectId[] = [];
+    try {
+      await session.withTransaction(async () => {
+        const ph = (await projectPhases(project._id, session)).find((x) => x.name === name);
+        if (!ph) throw notFound('Phase not found');
+        if (ph.taskCount > 0) {
+          throw conflictWith(phaseDeleteBlockedReason(ph.taskCount, 0)!, 'PHASE_HAS_TASKS', {
+            taskCount: ph.taskCount,
+          });
+        }
+        if (ph.documentCount > 0) {
+          throw conflictWith(
+            phaseDeleteBlockedReason(0, ph.documentCount)!,
+            'PHASE_HAS_DOCUMENTS',
+            { documentCount: ph.documentCount },
+          );
+        }
+        folderIds = ph.folderIds;
+        await FolderModel.deleteMany({ _id: { $in: folderIds } }, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
+    await audit({
+      actorId: currentUser(req)._id,
+      entityType: 'project',
+      entityId: project._id,
+      projectId: project._id,
+      action: 'phase_deleted',
+      meta: { phase: name, folderIds: folderIds.map(String) },
+    });
+    res.status(204).end();
+  });
+
   p.post('/:id/tasks', perm('tasks', 'create'), async (req, res) => {
     const input = parseBody(createTaskSchema, req);
     const project = await loadProject(req, 'view');
     assertNotArchived(project);
+    assertPlanOpen(project);
     if (!isPlanner(currentUser(req), project)) {
       throw forbidden('Only the project manager can add tasks.');
     }
@@ -516,6 +645,7 @@ export function tasksRouter(registry: RouteRegistry) {
     const input = parseBody(reorderTasksSchema, req);
     const project = await loadProject(req, 'view');
     assertNotArchived(project);
+    assertPlanOpen(project);
     if (!isPlanner(currentUser(req), project)) {
       throw forbidden('Only the project manager can reorder tasks.');
     }
@@ -570,9 +700,14 @@ export function tasksRouter(registry: RouteRegistry) {
       ...projectScopeFilter(user),
       archived: { $ne: true },
     })
-      .select('name managerId memberIds')
+      .select('name managerId memberIds status')
       .lean();
     const projectIds = projects.map((p) => p._id);
+    // FR-TSK-25: tasks on On Hold projects are hidden from Today and Due.
+    const onHold = new Set(
+      projects.filter((p) => p.status === 'ON_HOLD').map((p) => p._id.toString()),
+    );
+    const active = (t: TaskDoc) => !onHold.has(t.projectId.toString());
     const managed = projects
       .filter((p) =>
         user.systemRole === 'ADMIN'
@@ -594,11 +729,21 @@ export function tasksRouter(registry: RouteRegistry) {
       t.status === 'FOR_REVIEW' &&
       (Boolean(t.approval?.reviewerId?.equals(user._id)) ||
         managed.some((id) => id.equals(t.projectId)));
-    // FR-TSK-20/21: Today = my open tasks overdue or due on today's PHILIPPINE date.
-    const isToday = (t: TaskDoc) =>
-      isMine(user, t) && isOpen(t) && Boolean(t.dueDate) && t.dueDate! <= today;
+    // FR-TSK-20/21/22: Due = my open tasks overdue or due on today's PHILIPPINE date.
+    const isDue = (t: TaskDoc) =>
+      isMine(user, t) && isOpen(t) && active(t) && Boolean(t.dueDate) && t.dueDate! <= today;
+    // FR-TSK-23: Today = Aging + Planned for today, from plannedStart and the due date.
+    const sectionOf = (t: TaskDoc) =>
+      isMine(user, t) && isOpen(t) && active(t)
+        ? todaySection(
+            { status: t.status as TaskStatus, plannedStart: t.plannedStart, dueDate: t.dueDate },
+            today,
+          )
+        : null;
+    const isToday = (t: TaskDoc) => sectionOf(t) !== null;
     const counts = {
       today: all.filter(isToday).length,
+      due: all.filter(isDue).length,
       overdue: all.filter(
         (t) =>
           isMine(user, t) &&
@@ -617,6 +762,9 @@ export function tasksRouter(registry: RouteRegistry) {
       case 'today':
         list = all.filter(isToday);
         break;
+      case 'due':
+        list = all.filter(isDue);
+        break;
       case 'accountable':
         list = all.filter((t) => Boolean(t.ownerId?.equals(user._id)) && isOpen(t));
         break;
@@ -634,9 +782,12 @@ export function tasksRouter(registry: RouteRegistry) {
       list = list.filter((t) => re.test(t.name));
     }
     const names = new Map(projects.map((p) => [p._id.toString(), p.name]));
+    // FR-TSK-24: age in working days (Working days setting + holidays).
+    const calendar = q.view === 'today' ? await loadCalendar() : null;
     const items: MyTaskDto[] = list.map((t) => {
       const status = t.status as TaskStatus;
       const overdue = isOverdue({ status, dueDate: t.dueDate }, today);
+      const section = q.view === 'today' ? sectionOf(t) : null;
       return {
         id: t._id.toString(),
         name: t.name,
@@ -654,15 +805,31 @@ export function tasksRouter(registry: RouteRegistry) {
         actualHours: t.actualHours ?? 0,
         status,
         party: t.party as MyTaskDto['party'],
+        plannedStart: dateOrNull(t.plannedStart),
+        section,
+        ageDays:
+          section && t.plannedStart && calendar
+            ? workingDaysSince(t.plannedStart, today, calendar)
+            : null,
       };
     });
-    // Overdue first (most days late first), then by due date (undated last).
-    items.sort((a, b) => {
-      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
-      if (a.overdue && b.overdue && a.daysLate !== b.daysLate) return b.daysLate - a.daysLate;
-      if (!a.dueDate || !b.dueDate) return a.dueDate ? -1 : b.dueDate ? 1 : 0;
-      return a.dueDate.localeCompare(b.dueDate);
-    });
+    if (q.view === 'today') {
+      // Planned for today by planned start; Aging oldest first (earliest planned start).
+      items.sort((a, b) => {
+        if (a.section !== b.section) return a.section === 'PLANNED' ? -1 : 1;
+        if (a.section === 'AGING' && (a.ageDays ?? 0) !== (b.ageDays ?? 0)) {
+          return (b.ageDays ?? 0) - (a.ageDays ?? 0);
+        }
+        return (a.plannedStart ?? '').localeCompare(b.plannedStart ?? '');
+      });
+    } else
+      // Overdue first (most days late first), then by due date (undated last).
+      items.sort((a, b) => {
+        if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+        if (a.overdue && b.overdue && a.daysLate !== b.daysLate) return b.daysLate - a.daysLate;
+        if (!a.dueDate || !b.dueDate) return a.dueDate ? -1 : b.dueDate ? 1 : 0;
+        return a.dueDate.localeCompare(b.dueDate);
+      });
     const h = await HolidayModel.findOne({ date: today }).select('name type').lean();
     res.json({
       items,
@@ -1062,21 +1229,33 @@ export function tasksRouter(registry: RouteRegistry) {
     await respondTask(req, res, project, task._id, 201);
   });
 
+  // M3.5: Admins and the project's PM delete a task only while nothing is recorded under it.
+  // Checked and deleted in one transaction, so a time entry logged meanwhile can't be orphaned.
   r.delete('/:id', perm('tasks', 'delete'), async (req, res) => {
     const { task, project } = await loadTask(req);
-    assertCan(req, project, task.toObject() as TaskDoc, 'plan');
-    // EC-09: a task with logged time can't be deleted (cancel it instead).
-    if (await TimeEntryModel.exists({ taskId: task._id })) {
-      throw conflict(
-        'Time has been logged on this task, so it can’t be deleted. Cancel it instead.',
-        'TASK_HAS_TIME',
-      );
+    assertNotArchived(project);
+    assertPlanOpen(project);
+    if (!canDeleteTasks(currentUser(req), currentPermissions(req), project)) {
+      throw forbidden('Only an Admin or this project’s PM can delete its tasks.');
     }
-    await TaskModel.updateMany(
-      { projectId: project._id, dependsOn: task._id },
-      { $pull: { dependsOn: task._id }, $inc: { version: 1 } },
-    );
-    await task.deleteOne();
+    const session = await mongoose.startSession();
+    let counts: TaskRecordCounts | undefined;
+    try {
+      await session.withTransaction(async () => {
+        counts = (await taskRecordCounts([task._id], session)).get(task._id.toString());
+        const reason = taskDeleteBlockedReason(counts ?? {});
+        if (reason) throw conflictWith(reason, 'TASK_HAS_RECORDS', { counts });
+        await TaskModel.updateMany(
+          { projectId: project._id, dependsOn: task._id },
+          { $pull: { dependsOn: task._id }, $inc: { version: 1 } },
+          { session },
+        );
+        const gone = await TaskModel.deleteOne({ _id: task._id }, { session });
+        if (!gone.deletedCount) throw notFound('Task not found');
+      });
+    } finally {
+      await session.endSession();
+    }
     await recomputeProject(project._id);
     await audit({
       actorId: currentUser(req)._id,
@@ -1084,7 +1263,7 @@ export function tasksRouter(registry: RouteRegistry) {
       entityId: task._id,
       projectId: project._id,
       action: 'task_deleted',
-      meta: { name: task.name },
+      meta: { name: task.name, phase: task.phase ?? null },
     });
     res.status(204).end();
   });

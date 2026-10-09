@@ -39,15 +39,23 @@
 ### 3.1b My tasks Today tab and working-day calendar (M3)
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-TSK-20 | My tasks gets a **Today** tab, first in order, with a count: open tasks assigned to me (owner or assignee) that are **overdue first** (red, with days late), then those **due today**. Each row has "Log time". Empty state: "Nothing due today". (Jomerson, Lean) | Must |
+| FR-TSK-20 | *(Superseded by FR-TSK-22 to 25: this tab is renamed **Due**.)* My tasks gets a **Today** tab, first in order, with a count: open tasks assigned to me (owner or assignee) that are **overdue first** (red, with days late), then those **due today**. Each row has "Log time". Empty state: "Nothing due today". (Jomerson, Lean) | Must |
+| FR-TSK-22 | My tasks tabs, in order: **Today** (planned work), **Due** (the former Today tab, by due date: overdue first in red, then due today), then This week, All open, Completed (Jomerson, Lean). | Must |
+| FR-TSK-23 | **Today tab** has two sections built from the existing `plannedStart` and due date, open tasks only (not Completed or Cancelled), owner or assignee is me. **Aging:** tasks whose planned start is before today and that are either still Not started or past their due date, oldest first, each with an age badge. **Planned for today:** every other open task where planned start ≤ today ≤ due date. Each task appears in only one section. | Must |
+| FR-TSK-24 | **Age** = working days since planned start (FR-CAL-02: Working days setting and holidays), shown as "N working days". Badge amber at 3 or more, red at 7 or more (Lean). | Must |
+| FR-TSK-25 | **Blocked** tasks show in both tabs with their Blocked badge; tasks on **On Hold** projects are hidden from both. All dates are Philippine time (FR-TSK-21). A task can appear in both Today and Due. | Must |
 | FR-TSK-21 | "Today" and "overdue" are always computed in **Philippine time (Asia/Manila, UTC+8)**, never server UTC; the tab is labelled "Philippine time" (Queen). | Must |
-| FR-CAL-01 | Admins manage a holiday list per year (Admin › Settings › Holidays): date, name, type **Regular holiday / Special non-working day / Special working day**; duplicate dates refused; "Copy from previous year". | Must |
+| FR-CAL-01 | Admins manage a holiday list per year on its own **Admin › Holidays** tab, with Working days on the same page (Deven, accepted by Lean): date, name, type **Regular holiday / Special non-working day / Special working day**; duplicate dates refused; "Copy from previous year". | Must |
 | FR-CAL-05 | Admin › Settings has a **Working days** setting: one checkbox per weekday, Mon–Fri ticked by default (Jomerson). **At least one day must stay ticked** (UI and API, 422 otherwise), and the date calculation has a hard iteration limit so it can never loop (Queen). Changes only affect dates computed afterwards, are audited, and need Edit on `settings`. | Must |
 | FR-CAL-02 | Working days = the days ticked in Working days (FR-CAL-05; default Mon–Fri), minus Regular holidays and Special non-working days, **plus Special working days, including ones on a Saturday or Sunday** (Lean). | Must |
 | FR-CAL-03 | **Adding or editing a holiday doesn't move existing due dates** (Lean); it only affects dates computed afterwards. Before saving, show "N tasks are due on this day" with a link to the list so PMs can adjust by hand. | Must |
 | FR-CAL-04 | Calendar changes are audited and limited to roles with Edit on `settings`. | Must |
 
 - **AC-TODAY-1** At 00:30 Philippine time (16:30 UTC the day before), a task due that Philippine date appears in Today; one due the previous date shows as overdue. **(API)**
+- **AC-TODAY-2** A task planned to start Monday, Not started, viewed Thursday shows in Aging with "3 working days"; the same task In progress and not yet due shows in Planned for today instead. **(API)**
+- **AC-TODAY-3** A task planned last week and past its due date shows in Aging on Today and as overdue on Due.
+- **AC-TODAY-4** With Wednesday a Regular holiday, the task above shows "2 working days" on Thursday.
+- **AC-TODAY-5** A Blocked task shows in both tabs; a task on an On Hold project shows in neither.
 - **AC-CAL-1** With a Special working day on Saturday, a 1-working-day offset from Friday lands on that Saturday. **(API)**
 - **AC-CAL-3** Unticking the last working day is refused in the UI ("Keep at least one working day.") and by the API (422). With Saturday ticked, a 1-working-day offset from Friday lands on Saturday. **(API)**
 - **AC-CAL-2** Adding a holiday on a date with 12 due tasks shows the count before saving and leaves those 12 due dates unchanged.
@@ -72,7 +80,7 @@
 | FR-NTF-03 | A notification reads e.g. "Maria P. added a follow-up on Client master data – Items" with the project name and time; clicking it opens the task and marks it read. "Mark all as read" is available. | Must |
 | FR-NTF-04 | Notifications respect access at read time: if a user loses access to the project, its notifications disappear from their list. | Must |
 | FR-NTF-05 | Also notify on: being assigned a task, a task sent For Review (to reviewer), approved or rejected (to owner). | Should |
-| FR-NTF-06 | Unread count refreshes at least every 60 seconds or on page focus; notifications older than 90 days are removed. | Should |
+| FR-NTF-06 | Unread count refreshes at least every 60 seconds or on page focus; notifications older than 90 days are removed, and the list footer reads "Showing the last 90 days" (Deven, accepted by Lean). | Should |
 
 ### 3.4 Project Conversation tab (M3)
 | ID | Requirement | Priority |
@@ -80,7 +88,7 @@
 | FR-CNV-01 | Each project has a **Conversation** tab: a timeline of messages, oldest at top and newest at bottom, with a message box. | Must |
 | FR-CNV-02 | A message has text (up to 5,000 characters), author, time, and optional tags: one task of the project and/or client contacts active on the project. A type can be chosen: Note, Call, Meeting, Decision (default Note). | Must |
 | FR-CNV-03 | **Messages are permanent:** no edit or delete (Lean's default). A mistaken message is corrected by posting a follow-up. | Must |
-| FR-CNV-04 | **Access follows the project (Queen):** anyone who can view the project can read; posting needs Edit on the project or membership of it (Members post on projects they're on). Viewers read only. Enforced in the API. | Must |
+| FR-CNV-04 | **Access follows the project (Queen):** anyone who can view the project can read; posting needs Edit on the project or membership of it (Members post on projects they're on). Viewers read only, and so do PMs on projects they don't manage (e.g. pm2: read, can't post; Deven, accepted by Lean). Enforced in the API. | Must |
 | FR-CNV-05 | A task's detail panel shows conversation messages tagged to it. | Should |
 | FR-CNV-06 | Search and filter by type, task, contact and date. | Should |
 | FR-CNV-07 | Text is stored and shown as plain text (links auto-detected); no HTML is rendered. | Must |
@@ -120,7 +128,13 @@ Access rules (doc 11): add record types `notifications` (own only, not configura
 
 ## 7. Open questions and assumptions
 - **Q-28 (resolved, Jomerson 2026-10-09):** in-app only. Email notifications move to the External integrations stage in `docs/FEATURES_AND_ROADMAP.md`. Email needs an email service (e.g. Azure Communication Services) and would also enable emailed invite and reset links.
-- **Q-29 (resolved: proposed default approved)** Turn on malware scanning for uploads (Microsoft Defender for Storage, per-GB cost)? Proposed: yes for production.
+- **Q-29 (resolved: proposed default approved; M3 ships with our own file checks, and turning on Defender for Storage is pending Jomerson's cost call)** Turn on malware scanning for uploads (Microsoft Defender for Storage, per-GB cost)? Proposed: yes for production.
 - **Q-30 (resolved: proposed default approved)** Should images (PNG, JPG) still be allowed in Documents, while evidence is limited to PDF, Word and Excel? Proposed: yes.
 - **Q-31 (resolved: proposed default approved)** Conversation messages permanent with no edit or delete, matching Lean's default? Proposed: yes; Admins can hide abusive content with an audited "hidden by Admin" marker.
 - **A-14** Old `.doc` and `.xls` formats are accepted as Word and Excel.
+
+## 8. Milestone 3 follow-up decisions (PR #6, Lean 2026-10-09)
+- **Phase folders can't be restricted** (FR-DOC-43), because assignees need to see the evidence inside them. Only Contracts and custom folders can be restricted, and only to project members.
+- **Official PH holidays:** Admins load the 2026 and 2027 lists with "Load official PH holidays"; loading is idempotent. Holidays proclaimed later (e.g. the 2027 Eid holidays, which depend on the Islamic calendar) are added by hand once proclaimed.
+- **Time deletion:** FR-TIME-06 wins over the old default. Members get Delete on `time` limited to their own entries (doc 11 §6); the server still blocks deleting anyone else's.
+- Request a document cannot take a past due date, so overdue requests only arise as time passes.

@@ -110,8 +110,6 @@ describe('FR-TIME-04/06: weekly lock and own entries', () => {
     const ok = await w.member.agent.patch(`/api/v1/time/${e.id}`).set(CSRF).send({ hours: 3 });
     expect(ok.status).toBe(200);
     expect((await TaskModel.findById(t1).lean())!.actualHours).toBe(3);
-    // Members have no Delete on time entries in the default grid (VCE); PMs delete their own.
-    expect((await w.member.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(403);
     // DEF-005: anyone else (an outsider, another PM) gets 404 for someone else's entry, not 403.
     expect((await w.outsider.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(404);
     expect((await w.pm2.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(404);
@@ -123,6 +121,9 @@ describe('FR-TIME-04/06: weekly lock and own entries', () => {
     expect((await TaskModel.findById(t1).lean())!.actualHours).toBe(4);
     expect((await w.pm.agent.delete(`/api/v1/time/${mine.id}`).set(CSRF)).status).toBe(204);
     expect((await TaskModel.findById(t1).lean())!.actualHours).toBe(3);
+    // Members delete their own entries (doc 11 §6 v0.6.8: Member time = VCED, own entries only).
+    expect((await w.member.agent.delete(`/api/v1/time/${e.id}`).set(CSRF)).status).toBe(204);
+    expect((await TaskModel.findById(t1).lean())!.actualHours).toBe(0);
   });
 
   it('a task with logged time can’t be deleted', async () => {
@@ -130,6 +131,9 @@ describe('FR-TIME-04/06: weekly lock and own entries', () => {
     await log(w.member.agent, t1, '2026-10-13', 1);
     const del = await w.pm.agent.delete(`/api/v1/tasks/${t1}`).set(CSRF);
     expect(del.status).toBe(409);
-    expect(del.body.error.code).toBe('TASK_HAS_TIME');
+    expect(del.body.error).toMatchObject({
+      code: 'TASK_HAS_RECORDS',
+      message: 'This task has 1 time entry; remove it first.',
+    });
   });
 });

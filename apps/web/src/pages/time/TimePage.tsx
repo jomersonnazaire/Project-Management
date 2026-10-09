@@ -2,6 +2,7 @@ import { TIME_TYPE_SHORT, toDateOnly } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, ButtonGroup } from 'react-bootstrap';
 import { useTimeMutation, useTimeWeek } from '../../api/m3Hooks';
+import { useCan } from '../../auth/useCan';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { TimeEntryForm } from '../../components/TimeEntryForm';
@@ -16,6 +17,8 @@ export function TimePage() {
   const [week, setWeek] = useState<string | undefined>(undefined);
   const data = useTimeWeek(week);
   const remove = useTimeMutation();
+  // Members delete their own entries (doc 11 §6 v0.6.8); the API returns 404 for anyone else's.
+  const canDelete = useCan('time', 'delete');
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
@@ -93,19 +96,21 @@ export function TimePage() {
                                 🔒 Locked
                               </span>
                             ) : (
-                              <Button
-                                size="sm"
-                                variant="link"
-                                className="p-0 text-danger"
-                                aria-label={`Delete ${hoursLabel(e.hours)}h on ${e.task.name}`}
-                                onClick={() => {
-                                  if (window.confirm('Delete this time entry?')) {
-                                    remove.mutate({ id: e.id, method: 'DELETE' });
-                                  }
-                                }}
-                              >
-                                Delete
-                              </Button>
+                              canDelete && (
+                                <Button
+                                  size="sm"
+                                  variant="link"
+                                  className="p-0 text-danger"
+                                  aria-label={`Delete ${hoursLabel(e.hours)}h on ${e.task.name}`}
+                                  onClick={() => {
+                                    if (window.confirm('Delete this time entry?')) {
+                                      remove.mutate({ id: e.id, method: 'DELETE' });
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              )
                             )}
                           </td>
                         </tr>

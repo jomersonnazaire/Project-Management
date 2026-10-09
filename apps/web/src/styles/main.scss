@@ -453,3 +453,8 @@ $board-gap: 0.75rem;
     color: var(--bs-secondary-color);
   }
 }
+
+// M3.5 issues: Critical rows carry a red edge (mockup v7-issues).
+.issues-table tr.issue-critical > td:first-child {
+  box-shadow: inset 3px 0 0 var(--bs-danger);
+}

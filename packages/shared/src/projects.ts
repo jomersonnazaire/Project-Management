@@ -251,6 +251,56 @@ export function addWorkingDays(start: Date, n: number, cal: WorkCalendar = DEFAU
   return d;
 }
 
+/**
+ * FR-TSK-24: working days after `from` up to and including `to` (so a Monday start checked on
+ * Thursday is 3). 0 when `to` is on or before `from`. Bounded by MAX_CALENDAR_SCAN_DAYS.
+ */
+export function workingDaysSince(
+  from: Date,
+  to: Date,
+  cal: WorkCalendar = DEFAULT_CALENDAR,
+): number {
+  let n = 0;
+  let d = new Date(from.getTime());
+  for (let steps = 0; d.getTime() < to.getTime(); steps++) {
+    if (steps > MAX_CALENDAR_SCAN_DAYS) throw new CalendarLimitError();
+    d = addDays(d, 1);
+    if (isWorkingDay(d, cal)) n += 1;
+  }
+  return n;
+}
+
+/** FR-TSK-24: age badge amber at 3+ working days, red at 7+ (Lean). */
+export const AGE_AMBER_DAYS = 3;
+export const AGE_RED_DAYS = 7;
+export function ageTone(days: number): 'none' | 'amber' | 'red' {
+  return days >= AGE_RED_DAYS ? 'red' : days >= AGE_AMBER_DAYS ? 'amber' : 'none';
+}
+export const ageLabel = (days: number) => `${days} working day${days === 1 ? '' : 's'}`;
+
+export type TodaySection = 'AGING' | 'PLANNED';
+/**
+ * FR-TSK-23 (open tasks only; the caller filters status, scope and On Hold projects). Aging: planned
+ * start before today and still Not started or past due. Planned for today: any other task with
+ * planned start ≤ today ≤ due. Otherwise null (not on the Today tab). All dates are PH dates.
+ */
+export function todaySection(
+  t: {
+    status: TaskStatus;
+    plannedStart: Date | null | undefined;
+    dueDate: Date | null | undefined;
+  },
+  today: Date,
+): TodaySection | null {
+  if (!t.plannedStart) return null;
+  const start = t.plannedStart.getTime();
+  const now = today.getTime();
+  const pastDue = Boolean(t.dueDate) && t.dueDate!.getTime() < now;
+  if (start < now && (t.status === 'TODO' || pastDue)) return 'AGING';
+  if (start <= now && (!t.dueDate || now <= t.dueDate.getTime())) return 'PLANNED';
+  return null;
+}
+
 /** FR-PRJ-03: planned start = baseline start + offset; due = start + (duration − 1), working days. */
 export function scheduleFromOffsets(
   baselineStart: Date,
@@ -707,7 +757,8 @@ export const followUpSchema = z.strictObject({
 });
 
 export const myTasksQuerySchema = z.strictObject({
-  view: z.enum(['today', 'assigned', 'accountable', 'review', 'completed']).optional(),
+  /** FR-TSK-22: today = planned work (Aging + Planned for today); due = overdue + due today. */
+  view: z.enum(['today', 'due', 'assigned', 'accountable', 'review', 'completed']).optional(),
   q: z.string().trim().max(100).optional(),
 });
 
@@ -904,6 +955,69 @@ export interface TaskDto {
   version: number;
   /** What the caller may do on this task. */
   can: { edit: boolean; plan: boolean; status: boolean; approve: boolean };
+  /** Planners (Admin, the project's PM) may delete a task only while nothing is recorded under it. */
+  deletable: boolean;
+  /** Why a planner can't delete it (e.g. "This task has 3 time entries; remove them first."). */
+  deleteBlockedReason: string | null;
+}
+
+/** What has been recorded under a task; any of these blocks deleting it (doc 12 §8, M3.5). */
+export interface TaskRecordCounts {
+  timeEntries: number;
+  evidence: number;
+  documents: number;
+  followUps: number;
+  comments: number;
+  subtasks: number;
+  issues: number;
+}
+
+const TASK_RECORD_LABELS: Record<keyof TaskRecordCounts, [string, string]> = {
+  timeEntries: ['time entry', 'time entries'],
+  evidence: ['evidence file', 'evidence files'],
+  documents: ['document', 'documents'],
+  followUps: ['follow-up', 'follow-ups'],
+  comments: ['comment', 'comments'],
+  subtasks: ['subtask', 'subtasks'],
+  issues: ['linked issue', 'linked issues'],
+};
+
+/** Joins ["a", "b", "c"] as "a, b and c". */
+export function joinAnd(parts: string[]): string {
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/** Null when nothing blocks the delete; otherwise the message shown to the user and in the 409. */
+export function taskDeleteBlockedReason(c: Partial<TaskRecordCounts>): string | null {
+  const parts = (Object.keys(TASK_RECORD_LABELS) as (keyof TaskRecordCounts)[])
+    .filter((k) => (c[k] ?? 0) > 0)
+    .map((k) => {
+      const n = c[k] ?? 0;
+      return `${n} ${TASK_RECORD_LABELS[k][n === 1 ? 0 : 1]}`;
+    });
+  if (!parts.length) return null;
+  const total = Object.values(c).reduce((a, n) => a + (n ?? 0), 0);
+  return `This task has ${joinAnd(parts)}; remove ${total === 1 ? 'it' : 'them'} first.`;
+}
+
+/** A project phase: the tasks grouped under it, plus its evidence folder (FR-DOC-17). */
+export interface PhaseDto {
+  name: string;
+  taskCount: number;
+  documentCount: number;
+  deletable: boolean;
+  deleteBlockedReason: string | null;
+}
+
+export function phaseDeleteBlockedReason(taskCount: number, documentCount: number): string | null {
+  if (taskCount > 0) {
+    return `This phase has ${taskCount} task${taskCount === 1 ? '' : 's'}; delete or move ${taskCount === 1 ? 'it' : 'them'} first.`;
+  }
+  if (documentCount > 0) {
+    return `The phase folder has ${documentCount} document${documentCount === 1 ? '' : 's'}; move or remove ${documentCount === 1 ? 'it' : 'them'} first.`;
+  }
+  return null;
 }
 
 export interface TaskHistoryDto {
@@ -928,6 +1042,10 @@ export interface MyTaskDto {
   actualHours: number;
   status: TaskStatus;
   party: Party;
+  plannedStart: string | null;
+  /** Today tab only (FR-TSK-23): which section the task is in, and its age in working days. */
+  section: TodaySection | null;
+  ageDays: number | null;
 }
 
 export interface MyTasksDto {
@@ -937,8 +1055,10 @@ export interface MyTasksDto {
   /** Set when today is a holiday in the calendar (Today tab banner). */
   holiday: { name: string; type: HolidayType } | null;
   counts: {
-    /** Today tab: my open tasks that are overdue or due today (FR-TSK-20). */
+    /** Today tab: Aging + Planned for today (FR-TSK-23). */
     today: number;
+    /** Due tab: my open tasks that are overdue or due today (FR-TSK-20/22). */
+    due: number;
     overdue: number;
     dueThisWeek: number;
     toReview: number;

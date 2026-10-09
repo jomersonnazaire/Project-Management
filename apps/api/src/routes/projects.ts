@@ -32,6 +32,7 @@ import {
   type Project,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { openIssueKeys } from './issues.js';
 import {
   buildPlanTasks,
   recomputeProject,
@@ -73,6 +74,19 @@ export function assertNotArchived(project: { archived?: boolean | null }) {
     throw conflict(
       'This project is archived. Restore it before making changes.',
       'PROJECT_ARCHIVED',
+    );
+  }
+}
+
+/**
+ * FR-ISS-12: a Completed project's plan is read-only (issues stay open for support). Reopen the
+ * project (Completed → Active) to change tasks.
+ */
+export function assertPlanOpen(project: { status?: string | null }) {
+  if (project.status === 'COMPLETED') {
+    throw unprocessable(
+      'This project is completed, so its plan is read-only. Reopen the project to change tasks.',
+      'PROJECT_COMPLETED',
     );
   }
 }
@@ -516,6 +530,17 @@ export function projectsRouter(registry: RouteRegistry) {
   ] as const) {
     r.post(`/:id/${path}`, perm('projects', 'edit'), async (req, res) => {
       const project = await loadProject(req, 'archive');
+      // FR-ISS-13: archiving with open issues warns and lists them; send confirmOpenIssues to go on.
+      if (archived && !project.archived && req.body?.confirmOpenIssues !== true) {
+        const open = await openIssueKeys(project._id);
+        if (open.length) {
+          throw conflictWith(
+            `${open.length} issue${open.length === 1 ? ' is' : 's are'} still open: ${open.join(', ')}. After archiving, nobody can update them.`,
+            'OPEN_ISSUES',
+            { issues: open },
+          );
+        }
+      }
       if (Boolean(project.archived) !== archived) {
         project.archived = archived;
         project.archivedAt = archived ? new Date() : null;

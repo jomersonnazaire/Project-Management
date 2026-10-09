@@ -60,7 +60,9 @@ export function NotificationBell() {
           <div className="text-center p-5">
             <i className="bx bx-bell fs-2 text-body-secondary" aria-hidden="true" />
             <div className="fw-semibold text-heading mt-2">You're all caught up</div>
-            <small className="text-body-secondary">Follow-ups on your tasks will show here.</small>
+            <small className="text-body-secondary">
+              Follow-ups on your tasks and issues will show here.
+            </small>
           </div>
         ) : (
           <ul className="list-unstyled mb-0" style={{ maxHeight: 420, overflowY: 'auto' }}>
@@ -73,9 +75,11 @@ export function NotificationBell() {
                     if (!n.read) mark.mutate(n.id);
                     setOpen(false);
                     navigate(
-                      n.task
-                        ? `/projects/${n.project.id}?task=${n.task.id}`
-                        : `/projects/${n.project.id}`,
+                      n.issue
+                        ? `/issues/${n.issue.id}`
+                        : n.task
+                          ? `/projects/${n.project.id}?task=${n.task.id}`
+                          : `/projects/${n.project.id}`,
                     );
                   }}
                 >
@@ -84,9 +88,24 @@ export function NotificationBell() {
                     aria-label={n.read ? undefined : 'Unread'}
                   />
                   <span className="flex-grow-1 small">
-                    <strong>{n.actor ? shortName(n.actor.name) : 'Someone'}</strong>{' '}
-                    {NOTIFICATION_VERBS[n.type]} <strong>{n.task?.name ?? 'a task'}</strong> ·{' '}
-                    {n.project.name}
+                    {n.issue && !n.actor ? (
+                      // System reminders (overdue, owner needed) have no actor.
+                      <>
+                        {NOTIFICATION_VERBS[n.type]}{' '}
+                        <strong>
+                          {n.issue.key} {n.issue.title}
+                        </strong>
+                      </>
+                    ) : (
+                      <>
+                        <strong>{n.actor ? shortName(n.actor.name) : 'Someone'}</strong>{' '}
+                        {NOTIFICATION_VERBS[n.type]}{' '}
+                        <strong>
+                          {n.issue ? `${n.issue.key} ${n.issue.title}` : (n.task?.name ?? 'a task')}
+                        </strong>
+                      </>
+                    )}{' '}
+                    · {n.project.name}
                     <span className="d-block text-body-secondary">{relativeTime(n.at)}</span>
                   </span>
                 </button>

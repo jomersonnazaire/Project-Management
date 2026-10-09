@@ -76,6 +76,8 @@ export const task = (over: Partial<TaskDto> = {}): TaskDto => ({
   daysLate: 0,
   version: 0,
   can: { edit: true, plan: true, status: true, approve: false },
+  deletable: false,
+  deleteBlockedReason: null,
   ...over,
 });
 

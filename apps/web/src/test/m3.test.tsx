@@ -36,17 +36,19 @@ const myTask = (over: Record<string, unknown>) => ({
 });
 
 const mine =
-  (items: unknown[], extra: Record<string, unknown> = {}): Route =>
+  (items: unknown[], extra: Record<string, unknown> = {}, todayItems: unknown[] = []): Route =>
   (url) =>
     url.includes('/tasks/mine')
       ? {
           status: 200,
           body: {
-            items,
+            // The Today tab (view=today, the default) is planned work; the rest get `items`.
+            items: /view=today/.test(url) || !/view=/.test(url) ? todayItems : items,
             today: '2026-10-09',
             holiday: null,
             counts: {
-              today: items.length,
+              today: todayItems.length,
+              due: items.length,
               overdue: 1,
               dueThisWeek: 2,
               toReview: 0,
@@ -58,8 +60,8 @@ const mine =
         }
       : undefined;
 
-describe('My tasks › Today (FR-TSK-20/21, AC-TODAY-1)', () => {
-  it('is the first tab, shows the count, overdue first in red with days overdue, then due today, each with Log time', async () => {
+describe('My tasks › Due (FR-TSK-20/21/22, AC-TODAY-1, TC-N22)', () => {
+  it('is the second tab, shows the count, overdue first in red with days overdue, then due today, each with Log time', async () => {
     api(
       'MEMBER',
       mine([
@@ -83,11 +85,19 @@ describe('My tasks › Today (FR-TSK-20/21, AC-TODAY-1)', () => {
     renderAt('/my-tasks', <App />);
     expect(await screen.findByText('Friday, Oct 9')).toBeInTheDocument();
     const tabs = await screen.findAllByRole('button', {
-      name: /Today|Assigned to me|accountable|review|Completed/,
+      name: /^(Today|Due|Assigned to me|I'm accountable|To review|Completed)/,
     });
-    expect(tabs[0]).toHaveTextContent('Today3');
-    expect(await screen.findByText('Friday, Oct 9')).toBeInTheDocument();
-    expect(screen.getByText('Philippine time')).toBeInTheDocument();
+    expect(tabs.map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual([
+      'Today',
+      'Due',
+      'Assigned to me',
+      "I'm accountable",
+      'To review',
+      'Completed',
+    ]);
+    expect(tabs[1]).toHaveTextContent('Due3');
+    await userEvent.click(tabs[1]!);
+    expect(await screen.findByText('Philippine time')).toBeInTheDocument();
     const overdue = screen.getByRole('heading', { name: 'Overdue · 2' });
     expect(overdue).toHaveClass('text-danger');
     expect(screen.getByRole('heading', { name: 'Due today · 1' })).toBeInTheDocument();
@@ -108,6 +118,9 @@ describe('My tasks › Today (FR-TSK-20/21, AC-TODAY-1)', () => {
   it('empty state and the holiday banner', async () => {
     api('MEMBER', mine([], { holiday: { name: 'Bonifacio Day', type: 'REGULAR' } }));
     renderAt('/my-tasks', <App />);
+    expect(await screen.findByText('Nothing planned for today')).toBeInTheDocument();
+    // "Check what's due" opens the Due tab.
+    await userEvent.click(screen.getByRole('button', { name: /Check what’s due/ }));
     expect(await screen.findByText('Nothing due today')).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -135,6 +148,7 @@ describe('My tasks › Today (FR-TSK-20/21, AC-TODAY-1)', () => {
       return mine([myTask({ id: 't1', name: 'Prepare UAT scripts' })])(url, init);
     });
     renderAt('/my-tasks', <App />);
+    await userEvent.click(await screen.findByRole('button', { name: /^Due/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Log time' }));
     const dialog = await screen.findByRole('dialog', { name: 'Log time' });
     await waitFor(() => expect(within(dialog).getByLabelText('Task *')).toHaveValue('t1'));
@@ -163,6 +177,7 @@ const note = (i: number, read = false): NotificationDto => ({
   actor: { id: 'u2', name: 'Maria Perez' },
   task: { id: 'k1', name: 'Kickoff' },
   project: { id: PID, name: 'SAP B1 Rollout' },
+  issue: null,
   read,
   at: new Date().toISOString(),
 });

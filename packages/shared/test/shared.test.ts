@@ -30,7 +30,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
     (row.edit ? 'E' : '') +
     (row.delete ? 'D' : '');
 
-  it('has the 14 record types of §3 plus M3 conversations and notifications, in order', () => {
+  it('has the 14 record types of §3 plus M3 conversations and notifications and M3.5 issues, in order', () => {
     expect(RECORD_TYPE_KEYS).toEqual([
       'users',
       'teams',
@@ -44,6 +44,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       'approvals',
       'time',
       'documents',
+      'issues',
       'conversations',
       'notifications',
       'reports',
@@ -63,8 +64,9 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       projects: ['VCED', 'VCE', 'V', 'V'],
       tasks: ['VCED', 'VCED', 'VE', 'V'],
       approvals: ['E', 'E', 'E', ''],
-      time: ['VCED', 'VCED', 'VCE', ''],
+      time: ['VCED', 'VCED', 'VCED', ''],
       documents: ['VCED', 'VCED', 'VC', 'V'],
+      issues: ['VCED', 'VCE', 'VCE', 'V'],
       conversations: ['VC', 'VC', 'VC', 'V'],
       notifications: ['V', 'V', 'V', 'V'],
       reports: ['V', 'V', 'V', 'V'],
@@ -180,5 +182,62 @@ describe('schemas (NFR-04)', () => {
     expect(inviteTokenSchema.safeParse({ token: 'short' }).success).toBe(false);
     expect(inviteTokenSchema.safeParse({ token: { $ne: null } }).success).toBe(false);
     expect(inviteTokenSchema.safeParse({ token, password: 'x' }).success).toBe(false);
+  });
+});
+
+describe('M3.5 task and phase delete messages', () => {
+  it('says what blocks it, in plain words', async () => {
+    const { taskDeleteBlockedReason, phaseDeleteBlockedReason } = await import('../src/index.js');
+    expect(taskDeleteBlockedReason({})).toBeNull();
+    expect(taskDeleteBlockedReason({ timeEntries: 3 })).toBe(
+      'This task has 3 time entries; remove them first.',
+    );
+    expect(taskDeleteBlockedReason({ followUps: 1 })).toBe(
+      'This task has 1 follow-up; remove it first.',
+    );
+    expect(taskDeleteBlockedReason({ timeEntries: 1, comments: 2, issues: 1 })).toBe(
+      'This task has 1 time entry, 2 comments and 1 linked issue; remove them first.',
+    );
+    expect(phaseDeleteBlockedReason(0, 0)).toBeNull();
+    expect(phaseDeleteBlockedReason(1, 4)).toBe('This phase has 1 task; delete or move it first.');
+  });
+});
+
+describe('My tasks › Today (FR-TSK-23/24, TC-N26, TC-N29, TC-N30)', () => {
+  it('age badge: 2 no colour, 3 amber, 6 amber, 7 red', async () => {
+    const { ageTone, ageLabel } = await import('../src/index.js');
+    expect([2, 3, 6, 7].map(ageTone)).toEqual(['none', 'amber', 'amber', 'red']);
+    expect(ageLabel(1)).toBe('1 working day');
+    expect(ageLabel(3)).toBe('3 working days');
+  });
+
+  it('working days since planned start skip weekends and holidays, never negative', async () => {
+    const { workingDaysSince, DEFAULT_CALENDAR } = await import('../src/index.js');
+    const d = (s: string) => new Date(`${s}T00:00:00Z`);
+    expect(workingDaysSince(d('2026-10-05'), d('2026-10-08'))).toBe(3);
+    expect(
+      workingDaysSince(d('2026-10-05'), d('2026-10-08'), {
+        ...DEFAULT_CALENDAR,
+        holidays: { '2026-10-07': 'REGULAR' },
+      }),
+    ).toBe(2);
+    expect(workingDaysSince(d('2026-10-03'), d('2026-10-05'))).toBe(1);
+    expect(workingDaysSince(d('2026-10-08'), d('2026-10-08'))).toBe(0);
+    expect(workingDaysSince(d('2026-10-09'), d('2026-10-08'))).toBe(0);
+  });
+
+  it('each task is in one section at most', async () => {
+    const { todaySection } = await import('../src/index.js');
+    const d = (s: string) => new Date(`${s}T00:00:00Z`);
+    const today = d('2026-10-08');
+    const t = (status: 'TODO' | 'IN_PROGRESS' | 'BLOCKED', start: string, due: string) =>
+      todaySection({ status, plannedStart: d(start), dueDate: d(due) }, today);
+    expect(t('TODO', '2026-10-05', '2026-10-13')).toBe('AGING');
+    expect(t('IN_PROGRESS', '2026-10-05', '2026-10-13')).toBe('PLANNED');
+    expect(t('IN_PROGRESS', '2026-10-01', '2026-10-07')).toBe('AGING');
+    expect(t('BLOCKED', '2026-10-05', '2026-10-13')).toBe('PLANNED');
+    expect(t('TODO', '2026-10-08', '2026-10-08')).toBe('PLANNED');
+    expect(t('TODO', '2026-10-09', '2026-10-13')).toBeNull();
+    expect(todaySection({ status: 'TODO', plannedStart: null, dueDate: today }, today)).toBeNull();
   });
 });

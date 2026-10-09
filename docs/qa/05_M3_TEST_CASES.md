@@ -24,3 +24,17 @@ Time logging and documents also run the existing sections G and J of `02_TEST_CA
 | TC-N19 | AC-CAL-2 | Both | P1 | Add a holiday on a date with tasks due | Count shown; due dates unchanged; new projects skip the date |
 | TC-N20 | FR-CAL | API | P2 | Duplicate holiday date; 10 holidays in a row after a weekend; only Sunday ticked | Duplicate refused; dates still compute with no timeout |
 | TC-N21 | Access grid | API | P1 | New record types (documents, conversations, notifications) appear in access rules and are enforced | Rows present; unticking takes effect on the next request |
+
+## Today (planned work) and Due tabs (doc 12 v0.6.9, FR-TSK-22 to 25)
+| ID | Case | Expected | Traces |
+|---|---|---|---|
+| TC-N22 | My tasks tab order | Today, Due, This week, All open, Completed. Due behaves like the old Today tab (TC-N14 to N16 rerun on Due) | FR-TSK-22 |
+| TC-N23 | Task planned Monday, Not started, checked Thursday | Aging, "3 working days". Set it to In progress, not yet due: it moves to Planned for today. A task never sits in both sections | AC-TODAY-2, FR-TSK-23 |
+| TC-N24 | Planned last week and past due | Aging on Today and overdue on Due | AC-TODAY-3 |
+| TC-N25 | Wednesday is a Regular holiday | The TC-N23 task shows "2 working days". A Special working Saturday adds a day; unticking a working day removes it | AC-TODAY-4, FR-TSK-24 |
+| TC-N26 | Badge thresholds | 2 days: no colour. 3: amber. 6: amber. 7: red | FR-TSK-24 |
+| TC-N27 | Blocked task / On Hold project | Blocked shows in both tabs with its badge; On Hold project tasks show in neither | AC-TODAY-5 |
+| TC-N28 | Scope | Only tasks where I'm owner or assignee; Completed and Cancelled hidden; another user's tasks never returned by the API | FR-TSK-23 |
+| TC-N29 | Edge: planned start is today, or start is in the future | Today: Planned for today, age 0. Future: in neither section | FR-TSK-23 |
+| TC-N30 | Edge: planned start on a weekend or holiday | Age counts working days only; no negative or off-by-one age | FR-TSK-24 |
+| TC-N31 | Midnight (00:30 PHT) | Section membership and age follow the Philippine date, not UTC | FR-TSK-21 |

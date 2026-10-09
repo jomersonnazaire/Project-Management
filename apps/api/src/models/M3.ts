@@ -66,7 +66,7 @@ const folderSchema = new Schema(
     /** Lower-cased name for the per-parent uniqueness check (FR-DOC-03). */
     nameKey: { type: String, required: true },
     parentId: { type: ObjectId, ref: 'Folder', default: null },
-    kind: { type: String, enum: ['CONTRACTS', 'PHASE', 'CUSTOM'], default: 'CUSTOM' },
+    kind: { type: String, enum: ['CONTRACTS', 'PHASE', 'CUSTOM', 'ISSUES'], default: 'CUSTOM' },
     /** For PHASE folders: the task phase they hold evidence for (FR-DOC-17). */
     phase: { type: String, default: null },
     order: { type: Number, default: 0 },
@@ -131,7 +131,7 @@ const documentSchema = new Schema(
     },
     signedVersion: { type: Number, default: null },
     taskId: { type: ObjectId, ref: 'Task', default: null, index: true },
-    source: { type: String, enum: ['DOCUMENT', 'EVIDENCE'], default: 'DOCUMENT' },
+    source: { type: String, enum: ['DOCUMENT', 'EVIDENCE', 'ISSUE'], default: 'DOCUMENT' },
     versions: { type: [versionSchema], default: [] },
     events: {
       type: [
@@ -171,6 +171,7 @@ const uploadSchema = new Schema(
     projectId: { type: ObjectId, ref: 'Project', required: true },
     purpose: { type: String, enum: UPLOAD_PURPOSES, required: true },
     taskId: { type: ObjectId, ref: 'Task', default: null },
+    issueId: { type: ObjectId, ref: 'Issue', default: null },
     folderId: { type: ObjectId, ref: 'Folder', default: null },
     fileName: { type: String, required: true },
     declaredSize: { type: Number, required: true },
@@ -198,6 +199,7 @@ const notificationSchema = new Schema(
     userId: { type: ObjectId, ref: 'User', required: true },
     projectId: { type: ObjectId, ref: 'Project', required: true },
     taskId: { type: ObjectId, ref: 'Task', default: null },
+    issueId: { type: ObjectId, ref: 'Issue', default: null },
     type: { type: String, enum: NOTIFICATION_TYPES, required: true },
     actorId: { type: ObjectId, ref: 'User', default: null },
     readAt: { type: Date, default: null },

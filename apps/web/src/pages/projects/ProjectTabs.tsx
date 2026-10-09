@@ -6,6 +6,7 @@ import {
   formatHours,
   moveWithinGroup,
   plural,
+  type PhaseDto,
   type ProjectDto,
   type TaskDto,
   type TaskStatus,
@@ -24,6 +25,8 @@ import { DragHandle } from '../../components/ReorderControls';
 import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
 import { useAuth } from '../../auth/AuthContext';
 import { TaskFormModal } from './TaskFormModal';
+import { useDeletePhase, useProjectPhases } from '../../api/issueHooks';
+import { ApiError } from '../../api/client';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
@@ -91,6 +94,12 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   // Planners reorder within a phase with the grip handle (drag, or Alt+↑/↓). Display order only:
   // dependencies, dates, owners and status never change (FR-PRJ-16).
   const canPlan = project.can.planTasks && !project.archived;
+  // M3.5: planners delete a phase once it has no tasks (and its folder holds no documents).
+  const phaseInfo = useProjectPhases(project.id, canPlan);
+  const infoOf = (ph: string) => phaseInfo.data?.find((x) => x.name === ph);
+  const emptyPhases = (phaseInfo.data ?? []).filter(
+    (x) => x.taskCount === 0 && !phases.includes(x.name),
+  );
   const move = (ph: string, from: number, to: number) => {
     const group = tasks.filter((t) => phaseOf(t) === ph);
     const ids = group.map((t) => t.id);
@@ -100,7 +109,42 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
     reorder.mutate({ phase: ph === OTHER ? null : ph, taskIds: next });
   };
 
+  const emptySection = emptyPhases.length > 0 && (
+    <>
+      {emptyPhases.map((ph) => (
+        <div key={ph.name} className="card mb-4" data-testid={`empty-phase-${ph.name}`}>
+          <div className="card-header py-3 d-flex align-items-center gap-2">
+            <h3 className="h6 mb-0">{ph.name}</h3>
+            <span className="small text-body-secondary">No activities</span>
+          </div>
+          <div className="card-footer py-3 d-flex flex-wrap align-items-center gap-2">
+            <Button variant="outline-secondary" size="sm" onClick={() => setAddingTo(ph.name)}>
+              + Add activity
+            </Button>
+            <PhaseDelete projectId={project.id} phase={ph} />
+          </div>
+        </div>
+      ))}
+    </>
+  );
+
   if (tasks.length === 0) {
+    if (emptySection) {
+      return (
+        <>
+          {emptySection}
+          {addingTo !== null && (
+            <TaskFormModal
+              project={project}
+              task={null}
+              tasks={tasks}
+              fixedPhase={addingTo}
+              onClose={() => setAddingTo(null)}
+            />
+          )}
+        </>
+      );
+    }
     return (
       <EmptyState icon="bx-list-check" title="No tasks yet">
         {project.can.planTasks
@@ -298,12 +342,16 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                   >
                     {addLabel}
                   </Button>
+                  {ph !== OTHER && infoOf(ph) && (
+                    <PhaseDelete projectId={project.id} phase={infoOf(ph)!} />
+                  )}
                 </div>
               )}
             </div>
           </div>
         );
       })}
+      {emptySection}
       {editingTask && (
         <TaskFormModal
           project={project}
@@ -322,6 +370,44 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         />
       )}
     </>
+  );
+}
+
+/** Delete phase: shown when allowed (with a confirm); otherwise disabled with the reason. */
+function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto }) {
+  const del = useDeletePhase(projectId);
+  if (!phase.deletable && !phase.deleteBlockedReason) return null;
+  return (
+    <span className="d-inline-flex flex-wrap align-items-center gap-2 ms-auto">
+      <Button
+        variant="outline-danger"
+        size="sm"
+        disabled={!phase.deletable || del.isPending}
+        aria-describedby={
+          phase.deletable ? undefined : `phase-blocked-${phase.name.replace(/\W+/g, '-')}`
+        }
+        onClick={() => {
+          if (window.confirm(`Delete the phase "${phase.name}"? This cannot be undone.`)) {
+            del.mutate(phase.name);
+          }
+        }}
+      >
+        Delete phase
+      </Button>
+      {!phase.deletable && (
+        <small
+          className="text-body-secondary"
+          id={`phase-blocked-${phase.name.replace(/\W+/g, '-')}`}
+        >
+          {phase.deleteBlockedReason}
+        </small>
+      )}
+      {del.error instanceof ApiError && (
+        <small className="text-danger" role="alert">
+          ⚠ {del.error.message}
+        </small>
+      )}
+    </span>
   );
 }
 
@@ -635,9 +721,5 @@ export function ActivityTab({ project }: { project: ProjectDto }) {
 }
 
 export function ComingSoonTab({ title }: { title: string }) {
-  return (
-    <EmptyState icon="bx-time" title={`${title} is coming in a later milestone`}>
-      This tab is planned for Milestone 3.
-    </EmptyState>
-  );
+  return <EmptyState icon="bx-time" title={`${title} is coming in a later milestone`} />;
 }

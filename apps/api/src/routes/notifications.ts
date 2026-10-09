@@ -5,7 +5,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { notFound } from '../lib/errors.js';
 import { idParam } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
-import { NotificationModel, ProjectModel, TaskModel } from '../models/index.js';
+import { IssueModel, NotificationModel, ProjectModel, TaskModel } from '../models/index.js';
 import { userRefs } from '../services/projectService.js';
 import { projectScopeFilter } from '../services/scope.js';
 
@@ -33,7 +33,7 @@ export function notificationsRouter(registry: RouteRegistry) {
       NotificationModel.find(filter).sort({ createdAt: -1 }).limit(50).lean(),
       NotificationModel.countDocuments({ ...filter, readAt: null }),
     ]);
-    const [users, tasks, projects] = await Promise.all([
+    const [users, tasks, projects, issues] = await Promise.all([
       userRefs(docs.map((d) => d.actorId)),
       TaskModel.find({ _id: { $in: docs.map((d) => d.taskId).filter(Boolean) } })
         .select('name')
@@ -41,7 +41,11 @@ export function notificationsRouter(registry: RouteRegistry) {
       ProjectModel.find({ _id: { $in: docs.map((d) => d.projectId) } })
         .select('name')
         .lean(),
+      IssueModel.find({ _id: { $in: docs.map((d) => d.issueId).filter(Boolean) } })
+        .select('key title')
+        .lean(),
     ]);
+    const iss = new Map(issues.map((i) => [i._id.toString(), i]));
     const tn = new Map(tasks.map((t) => [t._id.toString(), t.name]));
     const pn = new Map(projects.map((p) => [p._id.toString(), p.name]));
     const items: NotificationDto[] = docs.map((d) => {
@@ -54,6 +58,10 @@ export function notificationsRouter(registry: RouteRegistry) {
           d.taskId && tn.has(d.taskId.toString())
             ? { id: d.taskId.toString(), name: tn.get(d.taskId.toString())! }
             : null,
+        issue: (() => {
+          const i = d.issueId ? iss.get(d.issueId.toString()) : null;
+          return i ? { id: i._id.toString(), key: i.key, title: i.title } : null;
+        })(),
         project: { id: d.projectId.toString(), name: pn.get(d.projectId.toString()) ?? '' },
         read: Boolean(d.readAt),
         at: d.createdAt.toISOString(),

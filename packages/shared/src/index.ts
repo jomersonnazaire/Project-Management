@@ -6,3 +6,4 @@ export * from './types.js';
 export * from './projects.js';
 export * from './m3.js';
 export * from './phHolidays.js';
+export * from './issues.js';

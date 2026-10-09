@@ -1,4 +1,10 @@
-import { HOLIDAY_BANNER_NOTE, HOLIDAY_TYPE_LABELS, type MyTaskDto } from '@xc8/shared';
+import {
+  HOLIDAY_BANNER_NOTE,
+  HOLIDAY_TYPE_LABELS,
+  ageLabel,
+  ageTone,
+  type MyTaskDto,
+} from '@xc8/shared';
 import { useState } from 'react';
 import { Button, Form, Nav } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
@@ -15,6 +21,7 @@ import { hoursLabel, longDay, shortDate } from '../lib/format';
 
 const VIEWS = [
   { key: 'today', label: 'Today' },
+  { key: 'due', label: 'Due' },
   { key: 'assigned', label: 'Assigned to me' },
   { key: 'accountable', label: "I'm accountable" },
   { key: 'review', label: 'To review' },
@@ -27,10 +34,174 @@ const ROLE_LABELS = {
   REVIEWER: 'Reviewer',
 } as const;
 
+const AGE_BADGE = { none: 'bg-label-secondary', amber: 'bg-label-warning', red: 'bg-label-danger' };
+
+function TaskCell({ t }: { t: MyTaskDto }) {
+  return (
+    <td className="cell-primary">
+      <Link className="fw-medium" to={`/projects/${t.project.id}?task=${t.id}`}>
+        {t.name}
+      </Link>
+      <div className="small text-body-secondary">
+        {t.project.name}
+        {t.phase && ` · ${t.phase}`}
+      </div>
+    </td>
+  );
+}
+
+/**
+ * The Today tab (FR-TSK-23..25, mockup v0.7.6): Planned for today, then Aging (planned start has
+ * passed and the task is still Not started or past due), oldest first, with a working-day age.
+ */
+function TodayPlan({
+  items,
+  today,
+  onLog,
+  onShowDue,
+}: {
+  items: MyTaskDto[];
+  today: string;
+  onLog: (t: MyTaskDto) => void;
+  onShowDue: () => void;
+}) {
+  const planned = items.filter((t) => t.section === 'PLANNED');
+  const aging = items.filter((t) => t.section === 'AGING');
+  const dueCell = (t: MyTaskDto) => (
+    <td data-label="Due" className={`text-nowrap ${t.overdue ? 'text-danger fw-semibold' : ''}`}>
+      {t.dueDate === today ? 'Today' : shortDate(t.dueDate)}
+      {t.overdue && ' · overdue'}
+    </td>
+  );
+  const logCell = (t: MyTaskDto) => (
+    <td className="text-end">
+      <Button size="sm" variant="outline-primary" onClick={() => onLog(t)}>
+        Log time
+      </Button>
+    </td>
+  );
+  return (
+    <>
+      <div className="d-flex align-items-baseline gap-2">
+        <strong className="text-heading">{longDay(today)}</strong>
+        <small className="text-body-secondary">Philippine time · by planned date</small>
+      </div>
+      {items.length === 0 ? (
+        <EmptyState icon="bx-sun" title="Nothing planned for today">
+          No aging tasks either.{' '}
+          <Button variant="link" className="p-0 align-baseline" onClick={onShowDue}>
+            Check what’s due
+          </Button>
+        </EmptyState>
+      ) : (
+        <>
+          {planned.length > 0 && (
+            <section aria-labelledby="planned-today">
+              <h3 className="h6 mt-4 mb-2" id="planned-today">
+                Planned for today · {planned.length}
+              </h3>
+              <div className="table-responsive">
+                <table className="table table-stack-md">
+                  <thead>
+                    <tr>
+                      <th scope="col">Task</th>
+                      <th scope="col">Planned</th>
+                      <th scope="col">Due</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">
+                        <span className="visually-hidden">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planned.map((t) => (
+                      <tr key={t.id} data-testid={`planned-${t.id}`}>
+                        <TaskCell t={t} />
+                        <td data-label="Planned" className="text-nowrap">
+                          {t.plannedStart === today
+                            ? shortDate(t.plannedStart)
+                            : `${shortDate(t.plannedStart)} → ${shortDate(t.dueDate)}`}
+                        </td>
+                        {dueCell(t)}
+                        <td data-label="Status">
+                          <TaskStatusBadge status={t.status} />
+                        </td>
+                        {logCell(t)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          {aging.length > 0 && (
+            <section aria-labelledby="aging-today">
+              <h3 className="h6 mt-4 mb-2 text-warning" id="aging-today">
+                Aging · {aging.length}{' '}
+                <small className="text-body-secondary fw-normal">
+                  planned date has passed, not done yet
+                </small>
+              </h3>
+              <div className="table-responsive">
+                <table className="table table-stack-md">
+                  <thead>
+                    <tr>
+                      <th scope="col">Task</th>
+                      <th scope="col">Planned</th>
+                      <th scope="col">Due</th>
+                      <th scope="col">Age</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">
+                        <span className="visually-hidden">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aging.map((t) => {
+                      const age = t.ageDays ?? 0;
+                      const tone = ageTone(age);
+                      return (
+                        <tr key={t.id} data-testid={`aging-${t.id}`}>
+                          <TaskCell t={t} />
+                          <td data-label="Planned" className="text-nowrap">
+                            {shortDate(t.plannedStart)}
+                          </td>
+                          {dueCell(t)}
+                          <td data-label="Age">
+                            <span
+                              className={`badge text-uppercase ${AGE_BADGE[tone]}`}
+                              data-tone={tone}
+                            >
+                              {ageLabel(age)}
+                            </span>
+                          </td>
+                          <td data-label="Status">
+                            <TaskStatusBadge status={t.status} />
+                          </td>
+                          {logCell(t)}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+      <p className="small text-body-secondary mt-3 mb-0">
+        Open tasks assigned to you (owner or assignee), by planned date in Philippine time. Age
+        counts working days since the planned start; the badge turns amber at 3 and red at 7. Tasks
+        on On Hold projects are hidden. A task can appear here and on the Due tab.
+      </p>
+    </>
+  );
+}
+
 const daysOverdue = (n: number) => `${n} day${n === 1 ? '' : 's'} overdue`;
 
-/** The Today tab (FR-TSK-20/21): overdue first in red, then due today, by Philippine date. */
-function TodayList({
+/** The Due tab (FR-TSK-20/21/22, formerly Today): overdue first in red, then due today. */
+function DueList({
   items,
   today,
   onLog,
@@ -116,7 +287,7 @@ function TodayList({
   );
 }
 
-/** My tasks: the sign-in landing page (FR-TSK-13, FR-TSK-20, AC-17.1, AC-TODAY-1). */
+/** My tasks: the sign-in landing page (FR-TSK-13, FR-TSK-20..25, AC-17.1, AC-TODAY-1..5). */
 export function MyTasksPage() {
   const { user } = useAuth();
   const [view, setView] = useState<string>('today');
@@ -129,6 +300,18 @@ export function MyTasksPage() {
   const counts = mine.data?.counts;
   const items = mine.data?.items ?? [];
   const holiday = mine.data?.holiday;
+  // FR-DOC-26: documents requested from me (overdue ones in red), on the Today and Due tabs.
+  const requestsSection = (requests.data?.items.length ?? 0) > 0 && (
+    <section className="mt-5" aria-labelledby="requested-from-you">
+      <h3 className="h6 mb-3" id="requested-from-you">
+        Documents requested from you
+        {(requests.data?.overdue ?? 0) > 0 && (
+          <span className="badge bg-label-danger ms-2">{requests.data?.overdue} overdue</span>
+        )}
+      </h3>
+      <DocumentRequestList items={requests.data!.items} showContact={false} />
+    </section>
+  );
   const kpis = [
     { label: 'Overdue', value: String(counts?.overdue ?? 0) },
     { label: 'Due this week', value: String(counts?.dueThisWeek ?? 0) },
@@ -173,9 +356,16 @@ export function MyTasksPage() {
                     {v.label}
                     {v.key === 'today' && (counts?.today ?? 0) > 0 && (
                       <span
-                        className={`badge rounded-pill ms-2 ${view === 'today' ? 'bg-white text-danger' : 'bg-danger'}`}
+                        className={`badge rounded-pill ms-2 ${view === 'today' ? 'bg-white text-secondary' : 'bg-secondary'}`}
                       >
                         {counts?.today}
+                      </span>
+                    )}
+                    {v.key === 'due' && (counts?.due ?? 0) > 0 && (
+                      <span
+                        className={`badge rounded-pill ms-2 ${view === 'due' ? 'bg-white text-danger' : 'bg-danger'}`}
+                      >
+                        {counts?.due}
                       </span>
                     )}
                   </Nav.Link>
@@ -197,20 +387,18 @@ export function MyTasksPage() {
             <LoadingRows />
           ) : view === 'today' ? (
             <>
-              <TodayList items={items} today={mine.data?.today ?? ''} onLog={setLogging} />
-              {(requests.data?.items.length ?? 0) > 0 && (
-                <section className="mt-5" aria-labelledby="requested-from-you">
-                  <h3 className="h6 mb-3" id="requested-from-you">
-                    Documents requested from you
-                    {(requests.data?.overdue ?? 0) > 0 && (
-                      <span className="badge bg-label-danger ms-2">
-                        {requests.data?.overdue} overdue
-                      </span>
-                    )}
-                  </h3>
-                  <DocumentRequestList items={requests.data!.items} showContact={false} />
-                </section>
-              )}
+              <TodayPlan
+                items={items}
+                today={mine.data?.today ?? ''}
+                onLog={setLogging}
+                onShowDue={() => setView('due')}
+              />
+              {requestsSection}
+            </>
+          ) : view === 'due' ? (
+            <>
+              <DueList items={items} today={mine.data?.today ?? ''} onLog={setLogging} />
+              {requestsSection}
             </>
           ) : items.length === 0 ? (
             <EmptyState icon="bx-check" title="You're all caught up">
