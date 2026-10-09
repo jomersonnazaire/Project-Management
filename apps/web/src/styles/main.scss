@@ -149,6 +149,13 @@ a:focus-visible,
   font-weight: 600;
 }
 
+// Users table: keep long emails from widening the table while the sidebar is visible (DR-01).
+@include media-breakpoint-between(md, xxl) {
+  .users-table .cell-primary {
+    max-width: 16rem;
+  }
+}
+
 // --- Tables that become stacked cards on phones (DR-03) ---
 @include media-breakpoint-down(md) {
   .table-stack-md {

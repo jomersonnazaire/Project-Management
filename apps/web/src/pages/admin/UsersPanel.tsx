@@ -221,15 +221,45 @@ function InviteUserModal({ teams, onClose }: { teams: TeamDto[]; onClose: () => 
 /** Team names joined as "Management, Consulting"; each name keeps its comma when wrapping (DR-04). */
 export function TeamNames({ names }: { names: string[] }) {
   if (!names.length) return <>–</>;
+  // One wrapper element: in the stacked phone layout the cell is a flex row (DR-03).
   return (
-    <>
+    <span>
       {names.map((n, i) => (
         <span key={`${n}-${i}`} className="text-nowrap">
           {n}
           {i < names.length - 1 ? ', ' : ''}
         </span>
       ))}
-    </>
+    </span>
+  );
+}
+
+/**
+ * Row action for invite/reset links. Between 768px and 1400px (sidebar visible, narrower
+ * content) it shrinks to an icon so the actions column stays visible (DR-01).
+ */
+function LinkButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="outline-secondary"
+      className="me-2"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+    >
+      <i className="bx bx-link d-none d-md-inline d-xxl-none" aria-hidden="true" />
+      <span className="d-md-none d-xxl-inline">{label}</span>
+    </Button>
   );
 }
 
@@ -430,7 +460,7 @@ export function UsersPanel() {
                           {u.name}
                           {u.id === me?.id && <span className="text-body-secondary"> (you)</span>}
                         </div>
-                        <small className="text-body-secondary">{u.email}</small>
+                        <small className="text-body-secondary text-break">{u.email}</small>
                       </td>
                       <td data-label="Access">{SYSTEM_ROLE_LABELS[u.systemRole]}</td>
                       <td data-label="Job role">{JOB_ROLE_LABELS[u.jobRole]}</td>
@@ -446,15 +476,11 @@ export function UsersPanel() {
                       </td>
                       <td className="cell-actions text-end text-nowrap">
                         {u.active && (
-                          <Button
-                            size="sm"
-                            variant="outline-secondary"
-                            className="me-2"
+                          <LinkButton
+                            label={u.status === 'INVITED' ? 'New invite link' : 'Copy reset link'}
                             disabled={reissue.isPending}
                             onClick={() => void issueLink(u.id)}
-                          >
-                            {u.status === 'INVITED' ? 'New invite link' : 'Copy reset link'}
-                          </Button>
+                          />
                         )}
                         <Dropdown align="end" className="d-inline-block">
                           <Dropdown.Toggle
