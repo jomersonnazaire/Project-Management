@@ -135,3 +135,10 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 - FR-ACL-11 unsaved-changes warning fires only on tab close/reload; in-app navigation warning moves to Milestone 2 (Low).
 - Per-contact Projects column and project-name links on the client Projects tab arrive with Milestone 2.
 - Viewer default has no View on `teams` (per §6), so Teams is hidden from Viewer menus.
+
+## 12. Milestone 2 build notes (PR #3, 2026-10-09)
+- Accepted: Timeline, Documents and Time tabs are placeholders and evidence is links only until M3; launch template offsets/durations are placeholders (Q-06); template name "SAP B1 Implementation".
+- Accepted for M2: due dates count Mon–Fri. **Still required (Q-07):** configurable Philippine public holidays, Asia/Manila; scheduled for M3 (Lean).
+- **Decided (Lean, 2026-10-09):** PMs can read the project Activity log (FR-AUD-02) on projects they can view, without the global Audit log. Members and Viewers stay hidden.
+- **Decided (Lean, 2026-10-09):** Draft templates are visible only to roles with Edit on `templates`.
+- **Decided (Lean, 2026-10-09):** a PM may set another PM as manager (handover); the change is audited and the confirmation reads "Hand over this project to <name>?" / "After this, only <name> and Admins can edit or archive it. You'll still be able to view it." (UIE).

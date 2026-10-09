@@ -46,7 +46,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | FR-TPL-06 | Template list shows activity count, phase count, version, and number of projects using it. | BR-02 | Should |
 | FR-TPL-07 | Dependency cycles are rejected on save (server). | BR-02 | Must |
 | FR-TPL-08 | Duplicate an existing template as a new Draft. | BR-15 | Should |
-| FR-TPL-09 | Seed the "SAP Business One Implementation" template with the 10 blueprint activities (06 §4). | BR-15 | Must |
+| FR-TPL-09 | Seed the "SAP B1 Implementation" template (short name accepted, 2026-10-09) with the 10 blueprint activities (06 §4). | BR-15 | Must |
 | FR-TPL-10 | Archived templates can't be used for new projects but remain linked to existing projects. | BR-03 | Must |
 
 ## PRJ · Projects
