@@ -30,6 +30,18 @@ const MAIN: NavItem[] = [
   { to: '/board', label: 'Task board', icon: 'bx-columns', any: [['tasks', 'view']] },
   { to: '/issues', label: 'All issues', icon: 'bx-flag', any: [['issues', 'view']] },
   { to: '/time', label: 'Time logging', icon: 'bx-time-five', any: [['time', 'view']] },
+  {
+    to: '/dar',
+    label: 'Daily Accomplishment Report',
+    icon: 'bx-envelope',
+    any: [['activities', 'view']],
+  },
+  {
+    to: '/dar/saved',
+    label: 'My saved reports',
+    icon: 'bx-archive',
+    any: [['activities', 'view']],
+  },
 ];
 
 const SETUP: NavItem[] = [
@@ -130,7 +142,12 @@ export function AppShell() {
   const visible = (items: NavItem[]) =>
     items.filter((i) => !i.any || i.any.some(([r, a]) => hasPermission(permissions, r, a)));
   const isActive = (to: string) =>
-    location.pathname === to || location.pathname.startsWith(`${to}/`);
+    location.pathname === to ||
+    (location.pathname.startsWith(`${to}/`) &&
+      // A more specific item (e.g. /dar/saved under /dar) wins.
+      ![...MAIN, ...SETUP].some(
+        (o) => o.to.startsWith(`${to}/`) && location.pathname.startsWith(o.to),
+      ));
 
   return (
     <div className="layout-wrapper layout-content-navbar">

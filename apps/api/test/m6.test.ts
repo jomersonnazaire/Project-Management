@@ -194,15 +194,12 @@ describe('TC-R04: day status', () => {
       .post('/api/v1/tracker/days/2026-10-12/reopen')
       .set(CSRF)
       .send({ userId: w.member.user._id.toString(), reason: 'Fix remarks' });
-    await w.member.agent
-      .post('/api/v1/tracker/start')
-      .set(CSRF)
-      .send({
-        taskId: t1,
-        activityTypeId: l.configuration,
-        moduleId: l.financials,
-        dayLocationId: l.wfh,
-      });
+    await w.member.agent.post('/api/v1/tracker/start').set(CSRF).send({
+      taskId: t1,
+      activityTypeId: l.configuration,
+      moduleId: l.financials,
+      dayLocationId: l.wfh,
+    });
     at('2026-10-14T03:00:00Z');
     const r = (await dar(w.member.agent, '2026-10-12', '2026-10-14')).body.report;
     expect(r.days.map((d: { status: string }) => d.status)).toEqual([
@@ -258,7 +255,7 @@ describe('TC-R05/R10: exports', () => {
     expect(x.headers['content-type']).toContain('spreadsheetml');
     expect(x.headers['content-disposition']).toContain('DAR_2026-10-13.xlsx');
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(x.body as Buffer);
+    await wb.xlsx.load(x.body as never);
     const ws = wb.getWorksheet('Report')!;
     expect(ws.getCell('A1').value).toBe('Daily Accomplishment Report');
     expect(ws.getCell('A2').value).toBe('Generated range: Oct 13, 2026 to Oct 13, 2026');

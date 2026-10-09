@@ -7,6 +7,7 @@ import {
   emailSchema,
   inviteUserSchema,
   plural,
+  reportCcSchema,
   updateUserSchema,
   type InviteResultDto,
   type TeamDto,
@@ -283,6 +284,9 @@ function EditUserModal({
   const everyone = useUsers({ status: 'ACTIVE' });
   const [supervisorId, setSupervisorId] = useState(user.supervisorId ?? '');
   const [supervisorError, setSupervisorError] = useState('');
+  // FR-DAR-01: Report CC emails, up to 5, set by Admins.
+  const [cc, setCc] = useState((user.reportCc ?? []).join(', '));
+  const [ccError, setCcError] = useState('');
   const {
     register,
     control,
@@ -312,6 +316,8 @@ function EditUserModal({
       const fields = e instanceof ApiError ? e.fieldErrors() : {};
       if (fields.email) setFieldError('email', { message: fields.email });
       else if (fields.supervisorId) setSupervisorError(fields.supervisorId);
+      else if (Object.keys(fields).some((k) => k.startsWith('reportCc')))
+        setCcError(Object.entries(fields).find(([k]) => k.startsWith('reportCc'))![1]);
       else setError(e);
     }
   };
@@ -327,6 +333,15 @@ function EditUserModal({
         return;
       }
     }
+    const ccList = cc
+      .split(/[,;\s]+/)
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean);
+    const ccCheck = reportCcSchema.safeParse(ccList);
+    if (!ccCheck.success) {
+      setCcError(ccCheck.error.issues[0]?.message ?? 'Enter valid email addresses.');
+      return;
+    }
     const body: EditOut = {
       name: v.name,
       ...(email !== user.email ? { email } : {}),
@@ -337,6 +352,7 @@ function EditUserModal({
       ...((supervisorId || null) !== (user.supervisorId ?? null)
         ? { supervisorId: supervisorId || null }
         : {}),
+      ...(ccList.join(',') !== (user.reportCc ?? []).join(',') ? { reportCc: ccList } : {}),
     };
     const parsed = updateUserSchema.safeParse(body);
     if (!parsed.success) {
@@ -433,6 +449,23 @@ function EditUserModal({
             <Form.Text>
               Reopens their timesheet days and gets their leave notices. Without one, leave notices
               go to all Admins.
+            </Form.Text>
+          </Form.Group>
+          <Form.Group className="mb-3" controlId="edit-report-cc">
+            <Form.Label>Report CC emails</Form.Label>
+            <Form.Control
+              value={cc}
+              isInvalid={Boolean(ccError)}
+              placeholder="name@company.com, other@company.com"
+              onChange={(e) => {
+                setCc(e.target.value);
+                setCcError('');
+              }}
+            />
+            <Form.Control.Feedback type="invalid">{ccError}</Form.Control.Feedback>
+            <Form.Text>
+              Up to 5, separated by commas. Shown on their Daily Accomplishment Report; used when
+              sending arrives with Microsoft sign-in.
             </Form.Text>
           </Form.Group>
           <Form.Group controlId="edit-capacity">

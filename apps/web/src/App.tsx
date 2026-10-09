@@ -5,6 +5,7 @@ import { AppShell } from './layout/AppShell';
 import { AccessRulesPage } from './pages/AccessRulesPage';
 import { ForbiddenPage, NotFoundPage } from './pages/ErrorPages';
 import { LoginPage } from './pages/LoginPage';
+import { DarPage, SavedReportsPage } from './pages/dar/DarPage';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { SetupPasswordPage } from './pages/SetupPasswordPage';
 import { AdminPage } from './pages/admin/AdminPage';
@@ -148,6 +149,22 @@ export function App() {
               element={
                 <RequirePermission any={[['time', 'view']]}>
                   <TimePage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/dar"
+              element={
+                <RequirePermission any={[['activities', 'view']]}>
+                  <DarPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/dar/saved"
+              element={
+                <RequirePermission any={[['activities', 'view']]}>
+                  <SavedReportsPage />
                 </RequirePermission>
               }
             />
