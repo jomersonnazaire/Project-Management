@@ -9,6 +9,7 @@ Milestone 2 decisions that are easy to change in `packages/shared/src/projects.t
 
 - **Q-11:** publishing a template counts as Edit on Templates (`TEMPLATE_PUBLISH_PERMISSION`); PMs publish by default and lose it if Edit on Templates is unticked.
 - **Q-12:** PMs view all projects but edit and archive only projects they manage (`PM_PROJECT_EDIT_SCOPE = 'OWN'`; `'ALL'` lets them edit any project). Only Admins delete projects.
+- **Doc 11 §12:** Admins and PMs read the project Activity log on any project they can view (`canViewProjectActivity`; others need View on audit, and the global Audit log is unchanged). Draft and archived templates are visible only with Edit on templates. A PM may hand a project to another PM (confirmed in the UI, audited as `project_handover`).
 - **EC-58:** a missing effort estimate is stored as `null` (never 0), shown as "–" with a "No estimate" hint, and left out of effort variance and over-budget flags.
 
 ## Repository layout
