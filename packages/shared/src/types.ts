@@ -1,3 +1,4 @@
+import type { Health, ProjectStatus, Ref } from './projects.js';
 import type { JobRole, SystemRole, UserStatus } from './roles.js';
 
 /** API response shapes shared with the web app. */
@@ -46,9 +47,11 @@ export interface ContactDto {
   phone: string | null;
   notes: string | null;
   active: boolean;
-  /** Open client-party tasks tagged to this contact (FR-CLI-05). Tasks arrive in a later milestone. */
+  /** Open client-party tasks tagged to this contact (FR-CLI-05). */
   pendingCount: number;
   overdueCount: number;
+  /** Projects (in the caller's scope) where this contact is active (doc 11 deviation 7, M2). */
+  projects?: Ref[];
 }
 
 export interface Paginated<T> {
@@ -79,16 +82,6 @@ export interface InviteResultDto {
   replacedPrevious: boolean;
 }
 
-export const PROJECT_STATUSES = ['ACTIVE', 'DELAYED', 'ON_HOLD', 'COMPLETED'] as const;
-export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
-
-export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  ACTIVE: 'Active',
-  DELAYED: 'Delayed',
-  ON_HOLD: 'On hold',
-  COMPLETED: 'Completed',
-};
-
 /** A row in Clients › Projects (FR-CLI-11). */
 export interface ProjectSummaryDto {
   id: string;
@@ -100,6 +93,9 @@ export interface ProjectSummaryDto {
   progress: number;
   status: ProjectStatus;
   archived: boolean;
+  /** Added in Milestone 2. */
+  health?: Health;
+  managerId?: string | null;
 }
 
 export interface AuditEntryDto {
