@@ -107,7 +107,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
     const id = idParam(req);
     const input = parseBody(updateUserSchema, req);
     const admin = currentUser(req);
-    const user = await UserModel.findById(id).select('+passwordHash');
+    const user = await UserModel.findById(id).select('+passwordHash +invite');
     if (!user) throw notFound();
     assertMayManageAdmins(admin, user.systemRole, input.systemRole);
 
@@ -147,13 +147,17 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
         if ((err as { code?: number }).code === 11000) throw emailInUse();
         throw err;
       }
-      // The password stays valid. The user's existing sessions end so they sign in again with
-      // the new address (the acting Admin's own session is kept when they change their own).
-      if (emailChanged)
+      // FR-USR-06: the password stays valid; the user's sessions end (an Admin changing their own
+      // email keeps the current one) and any unused invite or reset link is cancelled.
+      if (emailChanged) {
         await revokeUserSessions(
           user._id,
           user._id.equals(admin._id) ? req.auth?.sessionId : undefined,
         );
+        const hadLink = !!user.invite?.tokenHash && user.invite.expiresAt > new Date();
+        await UserModel.updateOne({ _id: user._id }, { $set: { invite: null } });
+        if (hadLink) changes.push({ field: 'previousLink', old: 'unused', new: 'cancelled' });
+      }
       await audit({
         actorId: admin._id,
         entityType: 'user',

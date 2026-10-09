@@ -68,6 +68,28 @@ describe('Admin edits a user email', () => {
     expect(await ActivityLogModel.countDocuments({ entityId: user._id })).toBe(0);
   });
 
+  it('FR-USR-06 cancels an unused reset link and audits it', async () => {
+    const admin = await signedInAs(app, 'ADMIN');
+    const user = await createUser();
+    const link = await admin.agent.post(`/api/v1/users/${user._id}/invite`).set(CSRF).send({});
+    expect(link.status).toBe(200);
+    const token = String(link.body.inviteUrl).split('#token=')[1];
+    expect(
+      (await admin.agent.post('/api/v1/auth/invite/verify').set(CSRF).send({ token })).status,
+    ).toBe(200);
+
+    const res = await admin.agent
+      .patch(`/api/v1/users/${user._id}`)
+      .set(CSRF)
+      .send({ email: 'relinked@xceler8.example' });
+    expect(res.status).toBe(200);
+    expect(
+      (await admin.agent.post('/api/v1/auth/invite/verify').set(CSRF).send({ token })).status,
+    ).toBe(400);
+    const log = await ActivityLogModel.findOne({ entityId: user._id, action: 'user_updated' });
+    expect(log?.changes.map((c) => c.field)).toEqual(['email', 'previousLink']);
+  });
+
   it('an Admin changing their own email keeps their current session', async () => {
     const admin = await signedInAs(app, 'ADMIN');
     const res = await admin.agent

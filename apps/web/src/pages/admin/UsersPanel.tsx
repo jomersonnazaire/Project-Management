@@ -14,7 +14,7 @@ import {
 } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, Dropdown, Form, Modal } from 'react-bootstrap';
-import { Controller, useForm, useWatch, type Control } from 'react-hook-form';
+import { Controller, useForm, type Control } from 'react-hook-form';
 import type { z } from 'zod';
 import { ApiError } from '../../api/client';
 import {
@@ -296,8 +296,20 @@ function EditUserModal({
     },
   });
   const [error, setError] = useState<unknown>(null);
-  const emailChanged =
-    (useWatch({ control, name: 'email' }) ?? '').trim().toLowerCase() !== user.email;
+  // FR-USR-06: an email change is confirmed first, since it signs the user out elsewhere.
+  const [confirm, setConfirm] = useState<EditOut | null>(null);
+
+  const save = async (body: EditOut) => {
+    try {
+      await update.mutateAsync({ id: user.id, body });
+      onClose();
+    } catch (e) {
+      setConfirm(null);
+      const fields = e instanceof ApiError ? e.fieldErrors() : {};
+      if (fields.email) setFieldError('email', { message: fields.email });
+      else setError(e);
+    }
+  };
 
   const onSubmit = handleSubmit(async (v) => {
     setError(null);
@@ -325,15 +337,33 @@ function EditUserModal({
       );
       return;
     }
-    try {
-      await update.mutateAsync({ id: user.id, body: parsed.data });
-      onClose();
-    } catch (e) {
-      const fields = e instanceof ApiError ? e.fieldErrors() : {};
-      if (fields.email) setFieldError('email', { message: fields.email });
-      else setError(e);
-    }
+    if (parsed.data.email) setConfirm(parsed.data);
+    else await save(parsed.data);
   });
+
+  if (confirm?.email) {
+    return (
+      <Modal show onHide={() => setConfirm(null)} centered aria-labelledby="email-confirm-title">
+        <Modal.Header closeButton>
+          <Modal.Title as="h5" id="email-confirm-title">
+            Change {user.name}&apos;s email?
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          They&apos;ll sign in with <strong className="text-break">{confirm.email}</strong> from now
+          on. This signs them out on other devices and cancels any unused invite or reset links.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setConfirm(null)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save(confirm)} disabled={update.isPending}>
+            Change email
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    );
+  }
 
   return (
     <Modal show onHide={onClose} centered>
@@ -353,16 +383,8 @@ function EditUserModal({
               type="email"
               {...register('email', { required: true })}
               isInvalid={!!errors.email}
-              aria-describedby="edit-email-hint"
             />
             <Form.Control.Feedback type="invalid">{errors.email?.message}</Form.Control.Feedback>
-            {emailChanged && (
-              <Form.Text id="edit-email-hint">
-                {isSelf
-                  ? 'You’ll sign in with the new email next time. Your password stays the same.'
-                  : `${user.name} signs in with the new email and the same password. Their open sessions end.`}
-              </Form.Text>
-            )}
           </Form.Group>
           <RoleSelects control={control} errors={errors} disableAccess={isSelf} idPrefix="edit" />
           <fieldset className="mb-3">

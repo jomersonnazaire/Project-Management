@@ -43,7 +43,7 @@ async function openEdit() {
 }
 
 describe('Admin edits a user email', () => {
-  it('sends the new email lowercased and warns that sessions end', async () => {
+  it('asks for confirmation, then sends the new email lowercased', async () => {
     let sent: Record<string, unknown> | null = null;
     setup((body) => {
       sent = body;
@@ -54,13 +54,30 @@ describe('Admin edits a user email', () => {
     expect(email).toHaveValue('member@xceler8.example');
     await userEvent.clear(email);
     await userEvent.type(email, 'Maria.New@Xceler8.example');
-    expect(dialog.getByText(/same password\. Their open sessions end/)).toBeInTheDocument();
     await userEvent.click(dialog.getByRole('button', { name: 'Save' }));
+    const confirm = within(
+      await screen.findByRole('dialog', { name: "Change Maria Member's email?" }),
+    );
+    expect(
+      confirm.getByText(
+        (_, el) =>
+          el?.tagName === 'DIV' &&
+          el.textContent ===
+            "They'll sign in with maria.new@xceler8.example from now on. This signs them out on other devices and cancels any unused invite or reset links.",
+      ),
+    ).toBeInTheDocument();
+    expect(sent).toBeNull();
+    // Cancel goes back to the form with the typed value kept.
+    await userEvent.click(confirm.getByRole('button', { name: 'Cancel' }));
+    const form = within(await screen.findByRole('dialog'));
+    expect(form.getByLabelText('Email *')).toHaveValue('Maria.New@Xceler8.example');
+    await userEvent.click(form.getByRole('button', { name: 'Save' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change email' }));
     await waitFor(() => expect(sent).not.toBeNull());
     expect(sent!.email).toBe('maria.new@xceler8.example');
   });
 
-  it('does not send the email when unchanged', async () => {
+  it('does not send the email or ask for confirmation when unchanged', async () => {
     let sent: Record<string, unknown> | null = null;
     setup((body) => {
       sent = body;
@@ -94,7 +111,9 @@ describe('Admin edits a user email', () => {
     await userEvent.clear(email);
     await userEvent.type(email, 'taken@xceler8.example');
     await userEvent.click(dialog.getByRole('button', { name: 'Save' }));
-    expect(await dialog.findByText('Another user already has this email.')).toBeInTheDocument();
-    expect(email).toHaveClass('is-invalid');
+    await userEvent.click(await screen.findByRole('button', { name: 'Change email' }));
+    const form = within(await screen.findByRole('dialog'));
+    expect(await form.findByText('Another user already has this email.')).toBeInTheDocument();
+    expect(form.getByLabelText('Email *')).toHaveClass('is-invalid');
   });
 });
