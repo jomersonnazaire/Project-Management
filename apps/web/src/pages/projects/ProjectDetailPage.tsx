@@ -116,7 +116,8 @@ export function ProjectDetailPage() {
         badge={<ProjectBadge status={p.status} health={p.health} archived={p.archived} />}
       >
         {issues.data?.can.create && !p.archived && (
-          <Button variant="primary" onClick={() => setRaising(true)}>
+          // DR-22: one filled primary button per header (Edit project); Raise issue is outline.
+          <Button variant="outline-primary" onClick={() => setRaising(true)}>
             + Raise issue
           </Button>
         )}

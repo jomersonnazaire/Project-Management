@@ -117,20 +117,29 @@ function IssueView({ issue: i }: { issue: IssueDto }) {
             {ISSUE_STATUS_LABELS[s]}
           </span>
         ))}
-        {transitions
-          .filter((t) => t !== primary)
-          .map((t) => (
-            <Button
-              key={t}
-              size="sm"
-              variant="outline-secondary"
-              className="py-0"
-              onClick={() => move(t)}
-              disabled={mutate.isPending}
-            >
-              {transitionLabel(i.status, t)}
-            </Button>
-          ))}
+        {transitions.some((t) => t !== primary) && (
+          // DR-19: other status moves are actions, set apart from the five steps.
+          <span
+            className="d-inline-flex flex-wrap gap-2 ms-2 ps-3 border-start"
+            role="group"
+            aria-label="Other status changes"
+          >
+            {transitions
+              .filter((t) => t !== primary)
+              .map((t) => (
+                <Button
+                  key={t}
+                  size="sm"
+                  variant="outline-secondary"
+                  className="py-0"
+                  onClick={() => move(t)}
+                  disabled={mutate.isPending}
+                >
+                  {transitionLabel(i.status, t)}
+                </Button>
+              ))}
+          </span>
+        )}
       </div>
 
       <div className="row g-4">
@@ -503,9 +512,20 @@ const FIELD_LABELS: Record<string, string> = {
   title: 'Title',
   description: 'Description',
   reportedByContactId: 'Reported by',
-  taskIds: 'Links',
+  taskIds: 'Linked tasks',
+  messageIds: 'Linked messages',
   resolution: 'Resolution',
 };
+/** DR-20: never show raw field or event keys; "issue_comment_added" → "Issue comment added". */
+function humanize(key: string): string {
+  const words = key
+    .replace(/Id(s)?$/, '')
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 function valueLabel(field: string, v: unknown): string {
   if (v === null || v === undefined || v === '') return '–';
   if (field === 'status') return ISSUE_STATUS_LABELS[v as IssueStatus] ?? String(v);
@@ -522,12 +542,15 @@ const EVENT_TEXT: Record<string, string> = {
   issue_status_changed: 'Changed the status',
   issue_reopened: 'Reopened',
   issue_auto_closed: `Closed automatically after ${ISSUE_AUTO_CLOSE_DAYS} days resolved`,
-  issue_attachment_added: 'Attached a file',
+  issue_attachment_added: 'Attachment added',
 };
 
 function ActivityItem({ a }: { a: IssueActivityDto }) {
   const who = a.actor?.name ?? 'System';
-  const visible = a.changes.filter((c) => c.field !== 'description' && c.field !== 'title');
+  const attachment = a.changes.find((c) => c.field === 'attachments')?.new as string | undefined;
+  const visible = a.changes.filter(
+    (c) => c.field !== 'description' && c.field !== 'title' && c.field !== 'attachments',
+  );
   return (
     <li className="d-flex gap-3 py-3 border-bottom">
       <span className="avatar avatar-sm flex-none" aria-hidden="true">
@@ -540,10 +563,18 @@ function ActivityItem({ a }: { a: IssueActivityDto }) {
         <span className="text-body-secondary">{dateTime(a.at)}</span>
         {a.kind === 'EVENT' && (
           <div className="text-body-secondary">
-            {EVENT_TEXT[a.action ?? ''] ?? a.action}
+            {a.action === 'issue_attachment_added' ? (
+              // DR-20: "Attachment added: ok.pdf", not "attachments: – → ok.pdf".
+              <>
+                {EVENT_TEXT.issue_attachment_added}
+                {attachment ? `: ${attachment}` : ''}
+              </>
+            ) : (
+              (EVENT_TEXT[a.action ?? ''] ?? humanize(a.action ?? ''))
+            )}
             {visible.map((c) => (
               <span key={c.field} className="d-block">
-                {FIELD_LABELS[c.field] ?? c.field}: {valueLabel(c.field, c.old)} →{' '}
+                {FIELD_LABELS[c.field] ?? humanize(c.field)}: {valueLabel(c.field, c.old)} →{' '}
                 <strong>{valueLabel(c.field, c.new)}</strong>
               </span>
             ))}

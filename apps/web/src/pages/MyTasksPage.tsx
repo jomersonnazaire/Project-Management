@@ -139,7 +139,7 @@ function TodayPlan({
               <h3 className="h6 mt-4 mb-2 text-warning" id="aging-today">
                 Aging · {aging.length}{' '}
                 <small className="text-body-secondary fw-normal">
-                  planned date has passed, not done yet
+                  planned start has passed and not started, or past due
                 </small>
               </h3>
               <div className="table-responsive">
