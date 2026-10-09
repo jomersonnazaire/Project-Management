@@ -18,6 +18,7 @@ export const makeUser = (over: Partial<UserDto> = {}): UserDto => ({
   jobRole: 'CONSULTANT',
   teamIds: [],
   weeklyCapacityHours: 40,
+  supervisorId: null,
   status: 'ACTIVE',
   active: true,
   mustChangePassword: false,
@@ -99,3 +100,20 @@ export const emptyDashboard = (over: Partial<DashboardDto> = {}): DashboardDto =
   myProjects: false,
   ...over,
 });
+
+/** Active tracker lists (doc 14 §10 defaults, trimmed) for entry forms. */
+export const LOOKUPS = {
+  activityTypes: [
+    { id: 'at1', name: 'Configuration' },
+    { id: 'at2', name: 'Internal meeting' },
+  ],
+  locations: [
+    { id: 'loc1', name: 'Onsite' },
+    { id: 'loc2', name: 'WFH' },
+    { id: 'loc3', name: 'Office' },
+  ],
+  modules: [
+    { id: 'mod1', name: 'Financials' },
+    { id: 'mod2', name: 'Inventory' },
+  ],
+};

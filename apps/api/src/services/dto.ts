@@ -19,6 +19,7 @@ interface UserLike {
   jobRole: UserDto['jobRole'];
   teamIds?: Id[] | null;
   weeklyCapacityHours?: number | null;
+  supervisorId?: Id | null;
   active?: boolean | null;
   mustChangePassword?: boolean | null;
   passwordHash?: string | null;
@@ -44,6 +45,7 @@ export function toUserDto(u: UserLike): UserDto {
     jobRole: u.jobRole,
     teamIds: (u.teamIds ?? []).map((t) => t.toString()),
     weeklyCapacityHours: u.weeklyCapacityHours ?? 40,
+    supervisorId: u.supervisorId ? u.supervisorId.toString() : null,
     status: userStatus(u),
     active: Boolean(u.active),
     mustChangePassword: Boolean(u.mustChangePassword),

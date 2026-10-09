@@ -4,6 +4,7 @@ import { saveErrorMessage } from '../../api/client';
 import { useSaveTimeLock, useTimeLock } from '../../api/m4Hooks';
 import { useCan } from '../../auth/useCan';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { LookupsPanel } from './LookupsPanel';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -119,7 +120,7 @@ export function TimeLockCard() {
 }
 
 /** Read-only view of the Phase 1 defaults; Admin-editable settings come in a later milestone. */
-export function SettingsPanel() {
+function GeneralSettings() {
   const rows: [string, string][] = [
     ['Session idle timeout', '30 minutes (FR-AUTH-03)'],
     ['Account lockout', '15 minutes after 5 consecutive failed sign-ins (FR-AUTH-07)'],
@@ -148,6 +149,37 @@ export function SettingsPanel() {
           </dl>
         </div>
       </div>
+    </>
+  );
+}
+
+const SETTINGS_TABS = [
+  { key: 'general', label: 'General' },
+  { key: 'ACTIVITY_TYPE', label: 'Activity types' },
+  { key: 'LOCATION', label: 'Locations' },
+  { key: 'MODULE', label: 'Modules' },
+] as const;
+
+/** Admin › Settings with the tracker lists (doc 14 FR-ACT-15, mockup v0.8.7). */
+export function SettingsPanel() {
+  const [tab, setTab] = useState<(typeof SETTINGS_TABS)[number]['key']>('general');
+  return (
+    <>
+      <ul className="nav nav-pills nav-scrollable mb-4" aria-label="Settings sections">
+        {SETTINGS_TABS.map((t) => (
+          <li className="nav-item" key={t.key}>
+            <button
+              type="button"
+              className={`nav-link${tab === t.key ? ' active' : ''}`}
+              aria-current={tab === t.key ? 'page' : undefined}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {tab === 'general' ? <GeneralSettings /> : <LookupsPanel kind={tab} />}
     </>
   );
 }

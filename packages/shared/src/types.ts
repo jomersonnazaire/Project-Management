@@ -10,6 +10,8 @@ export interface UserDto {
   jobRole: JobRole;
   teamIds: string[];
   weeklyCapacityHours: number;
+  /** Direct supervisor (doc 14 §5); null = "Supervisor needed" (FR-LV-10). */
+  supervisorId: string | null;
   status: UserStatus;
   active: boolean;
   mustChangePassword: boolean;

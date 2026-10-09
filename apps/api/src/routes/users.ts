@@ -6,7 +6,7 @@ import {
   type InviteResultDto,
   type SystemRole,
 } from '@xc8/shared';
-import type { FilterQuery } from 'mongoose';
+import type { FilterQuery, Types } from 'mongoose';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import type { AppConfig } from '../config.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
@@ -26,6 +26,24 @@ import { newToken, sha256 } from '../services/tokens.js';
  * locked: Admin). Fixed rule on top: only Admins can grant the Admin role or change, deactivate
  * or reissue links for Admin accounts, so a grant on `users` can't be used to take over an Admin.
  */
+/** Doc 14 §5: an active internal user, not the user themself, and no loop (A→B→A). */
+export async function assertValidSupervisor(userId: Types.ObjectId, supervisorId: string) {
+  const fail = (message: string) =>
+    badRequest(message, [{ path: 'supervisorId', message }], 'VALIDATION_ERROR');
+  if (userId.equals(supervisorId)) throw fail("A user can't be their own supervisor.");
+  const sup = await UserModel.findById(supervisorId).select('name active supervisorId').lean();
+  if (!sup || !sup.active) throw fail('Choose an active user as supervisor.');
+  let next = sup.supervisorId;
+  const seen = new Set<string>([sup._id.toString()]);
+  while (next && !seen.has(next.toString())) {
+    if (next.equals(userId)) {
+      throw fail(`${sup.name} already reports to this user, so they can't be their supervisor.`);
+    }
+    seen.add(next.toString());
+    next = (await UserModel.findById(next).select('supervisorId').lean())?.supervisorId ?? null;
+  }
+}
+
 export function usersRouter(config: AppConfig, registry: RouteRegistry) {
   const router = registry.router('/users');
 
@@ -120,6 +138,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
       if (user.systemRole === 'ADMIN' && user.active) await assertNotLastAdmin(user);
     }
     if (input.teamIds) await assertTeamsExist(input.teamIds);
+    if (input.supervisorId) await assertValidSupervisor(user._id, input.supervisorId);
     const emailChanged = input.email !== undefined && input.email !== user.email;
     if (emailChanged && (await UserModel.exists({ email: input.email, _id: { $ne: user._id } }))) {
       throw emailInUse();
@@ -131,11 +150,18 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
       const same =
         field === 'teamIds'
           ? JSON.stringify((old as unknown[]).map(String)) === JSON.stringify(value)
-          : old === value;
+          : field === 'supervisorId'
+            ? String(old ?? null) === String(value ?? null)
+            : old === value;
       if (!same) {
         changes.push({
           field,
-          old: field === 'teamIds' ? (old as unknown[]).map(String) : old,
+          old:
+            field === 'teamIds'
+              ? (old as unknown[]).map(String)
+              : field === 'supervisorId'
+                ? ((old as Types.ObjectId | null)?.toString() ?? null)
+                : old,
           new: value,
         });
         user.set(field, value);

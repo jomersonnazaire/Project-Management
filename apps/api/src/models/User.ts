@@ -39,6 +39,8 @@ const userSchema = new Schema(
       default: null,
       select: false,
     },
+    /** Direct supervisor (doc 14 §5): DAR, leave notices, "my team" views. */
+    supervisorId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     lastLoginAt: { type: Date, default: null },
     deactivatedAt: { type: Date, default: null },
   },

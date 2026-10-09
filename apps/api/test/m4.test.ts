@@ -11,6 +11,7 @@ import {
 } from '../src/models/index.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
+import { entryFields } from './trackerHelpers.js';
 
 /**
  * Milestone 4: dashboard (FR-DASH, AC-20.x), My projects (doc 14 FR-PMV-01..04), workload
@@ -391,11 +392,12 @@ describe('Time lock setting (Q-09)', () => {
       boundary: '2026-10-19',
       description: "Last week's entries lock every Monday at 12:00 PM Philippine time.",
     });
+    const fields = await entryFields();
     const log = () =>
       w.member.agent
         .post('/api/v1/time')
         .set(CSRF)
-        .send({ taskId: kickoff._id.toString(), workDate: '2026-10-16', hours: 1 });
+        .send({ taskId: kickoff._id.toString(), workDate: '2026-10-16', hours: 1, ...fields });
     expect((await log()).body.error.code).toBe('TIME_LOCKED');
     // Thursday 5 PM: last week is still open on Wednesday.
     const put = await w.admin.agent

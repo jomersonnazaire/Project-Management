@@ -30,7 +30,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
     (row.edit ? 'E' : '') +
     (row.delete ? 'D' : '');
 
-  it('has the 14 record types of §3 plus M3 conversations and notifications and M3.5 issues, in order', () => {
+  it('has the 14 record types of §3 plus M3 conversations and notifications and M3.5 issues and M5 activities, in order', () => {
     expect(RECORD_TYPE_KEYS).toEqual([
       'users',
       'teams',
@@ -43,6 +43,7 @@ describe('access rules defaults and fixed rules (doc 11 §3, §6)', () => {
       'tasks',
       'approvals',
       'time',
+      'activities',
       'documents',
       'issues',
       'conversations',

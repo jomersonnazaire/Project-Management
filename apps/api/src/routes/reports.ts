@@ -113,7 +113,13 @@ export function reportsRouter(registry: RouteRegistry) {
             _id: { userId: Types.ObjectId; type: TimeType };
             hours: number;
           }>([
-            { $match: { userId: { $in: ids }, workDate: { $gte: start, $lte: end } } },
+            {
+              $match: {
+                userId: { $in: ids },
+                workDate: { $gte: start, $lte: end },
+                taskId: { $ne: null },
+              },
+            },
             { $group: { _id: { userId: '$userId', type: '$type' }, hours: { $sum: '$hours' } } },
           ])
         : Promise.resolve([]),
@@ -304,10 +310,10 @@ export function reportsRouter(registry: RouteRegistry) {
         id: e._id.toString(),
         workDate: toDateOnly(e.workDate),
         user: refs.userRef(e.userId) ?? { id: e.userId.toString(), name: 'Unknown user' },
-        project: projectRef(pm.get(e.projectId.toString())!),
+        project: projectRef(pm.get(e.projectId!.toString())!),
         task: {
-          id: e.taskId.toString(),
-          name: taskName.get(e.taskId.toString()) ?? '(deleted task)',
+          id: e.taskId!.toString(),
+          name: taskName.get(e.taskId!.toString()) ?? '(deleted task)',
         },
         type,
         hours: e.hours,
