@@ -75,7 +75,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | FR-TSK-04 | A task can't move to In Progress or Completed while any predecessor is not Completed, unless PM overrides with a reason (logged). | BR-04 | Must |
 | FR-TSK-05 | If requires-approval is set, the task goes to **For Review** instead of Completed; only PM (or a designated reviewer) can approve → Completed or reject → In Progress with a comment. | BR-11 | Must |
 | FR-TSK-06 | Mandatory tasks can't be Cancelled by Members; PM can cancel with a reason. | BR-02 | Must |
-| FR-TSK-07 | Evidence: attach files or links. Files follow the document rules in FR-DOC-13 (≤ 25 MiB = 26,214,400 bytes; PDF, DOCX, XLSX, PNG, JPG) and are stored as documents in the phase folder (FR-DOC-17). | BR-01 | Must |
+| FR-TSK-07 | **Superseded in M3 by FR-EVD-01 to 08 (doc 12): files only, PDF/Word/Excel.** Before M3: attach files or links. Files follow the document rules in FR-DOC-13 (≤ 25 MiB = 26,214,400 bytes; PDF, DOCX, XLSX, PNG, JPG) and are stored as documents in the phase folder (FR-DOC-17). | BR-01 | Must |
 | FR-TSK-08 | Client-party tasks: accountable owner is the internal user who follows up; the client contact is tagged as responsible. | BR-05 | Must |
 | FR-TSK-09 | Overdue = due date < today and status ∉ {Completed, Cancelled}. Days late shown on cards. | BR-08 | Must |
 | FR-TSK-10 | Task board (Kanban) per project with the 5 status columns, drag-and-drop subject to FR-TSK-03/04/05, filter by assignee. | BR-08 | Must |

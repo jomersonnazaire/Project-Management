@@ -86,12 +86,6 @@ td{padding:12px 10px;border-color:#e4e6e8}
 .av{background:var(--pri2);color:var(--pri)}
 .login{background:#f5f5f9}
 .ov{position:fixed;inset:0;background:rgba(34,48,62,.45);display:flex;align-items:center;justify-content:center;z-index:20}.acl td{padding:8px 10px}.acl input{width:17px;height:17px;accent-color:var(--pri)}
-.phase{padding:0;margin-bottom:14px}.ph{display:flex;gap:10px;align-items:center;padding:14px 18px;cursor:pointer;border-bottom:1px solid #e4e6e8}.ph:hover{background:#fafafc}.phase.closed .pb{display:none}.phase.closed .chev{transform:rotate(-90deg)}.chev{transition:.15s;color:var(--pri)}.pb{padding:4px 12px 14px}
-.drag{cursor:grab;color:#a1acb8;width:18px}.dragging{background:#e7e7ff;box-shadow:0 4px 12px rgba(83,85,224,.25)}.dropline td{padding:0;height:3px;background:var(--pri)}.addact{margin-top:10px;font-size:13px}
-.file{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #e4e6e8;border-radius:6px;margin-bottom:8px;font-size:13px}.fi{width:36px;height:36px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}.fi.pdf{background:#b8240a}.fi.xls{background:#2e7d17}.fi.doc{background:#00718a}.fi.grey{background:#ebeef0;color:#5d6878}.legacy{background:#fafafc}
-.bell{position:relative;font-size:18px;cursor:pointer;padding:4px 6px}.bell i{position:absolute;top:-2px;right:-4px;background:var(--bad);color:#fff;font-style:normal;font-size:10px;font-weight:700;border-radius:9px;padding:1px 5px}
-.msg{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #eef0f2}.msg.hidden{opacity:.8;font-style:italic}.tags span{display:inline-block;font-size:12px;background:#f2f3f5;border-radius:4px;padding:2px 8px;margin:6px 6px 0 0}.day{text-align:center;font-size:12px;color:#7a838b;margin:14px 0 4px}.composer{margin-top:14px;padding-top:14px;border-top:1px solid #e4e6e8}.composer textarea{width:100%;border:1px solid #d1d5db;border-radius:6px;padding:9px;font:inherit;box-sizing:border-box}.sel{border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px}
-.nt{display:flex;gap:10px;padding:10px;border-radius:6px;text-decoration:none;color:var(--mut);font-size:13px}.nt:hover{background:#f5f5f9}.nt.un{background:#f3f3ff}.dotu{width:8px;height:8px;border-radius:50%;margin-top:6px}.nt.un .dotu{background:var(--pri)}
 </style></head><body>
 <div class="login" id="login"><div class="lbox">
 <div class="modal"><div class="logo" style="color:var(--ink);padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
@@ -112,9 +106,6 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#projects" data-p="projects">▤ Projects</a>
 <a href="#board" data-p="board">☰ Task board</a>
 <a href="#project" data-p="project">◧ Project detail</a>
-<a href="#checklist" data-p="checklist">☑ Checklist & evidence <span class="pill info" style="margin-left:auto">M3</span></a>
-<a href="#convo" data-p="convo">💬 Conversation <span class="pill info" style="margin-left:auto">M3</span></a>
-<a href="#notif" data-p="notif">🔔 Notifications <span class="pill info" style="margin-left:auto">M3</span></a>
 <a href="#pcontacts" data-p="pcontacts">☏ Project contacts <span class="pill info" style="margin-left:auto">M2</span></a>
 <a href="#docs" data-p="docs">🗀 Documents</a>
 <a href="#time" data-p="time">◷ Time logging</a>
@@ -132,7 +123,7 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <a href="#login" data-p="login">⎋ Login (sign out)</a>
 </aside>
 <main>
-<div class="banner">Mockup v0.6 (Sneat style) for review. All names and numbers are example data, not live data.</div>
+<div class="banner">Mockup v0.5.2 (Sneat style) for review. All names and numbers are example data, not live data.</div>
 
 <!-- DASHBOARD -->
 <section class="page" id="dash">
@@ -396,69 +387,6 @@ td{padding:12px 10px;border-color:#e4e6e8}
 <p class="note">Read-only list; open a project to change it. Members only see projects they're on, and the count in the tab follows the same rule. Archived projects are hidden unless you pick Archived.</p></div>
 <div class="grid g2" style="margin-top:16px"><div class="card"><h3>Empty state (Milestone 1.5)</h3><div class="empty">▤<br><b>No projects yet</b><p class="note">Projects linked to this client will show here.</p></div></div>
 <div class="card"><h3>Member view</h3><p class="note">A Member on only SAP B1 Rollout sees one row and "Projects 1". "+ New project" is hidden.</p></div></div>
-</section>
-<!-- CHECKLIST + EVIDENCE (M3) -->
-<section class="page" id="checklist">
-<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header><div class="tabs"><span class="on" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="" onclick="location.hash='convo'">Conversation</span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
-<div class="grid" style="grid-template-columns:1fr 380px"><div>
-<div class="card phase"><div class="ph" onclick="this.parentElement.classList.toggle('closed')"><span class="chev">▾</span><b>Phase 1 – Data gathering</b><span class="note">4 activities · 2 done</span><span class="sp"></span><div class="bar" style="width:120px"><i style="width:50%"></i></div></div>
-<div class="pb"><table><tr><th></th><th>#</th><th>Activity</th><th>Owner</th><th>Due</th><th>Est / Act</th><th>Status</th></tr>
-<tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>1</td><td><a href="#checklist"><b>Data gathering</b></a></td><td>Maria P.</td><td>Sep 10</td><td>16h / 15h</td><td><span class="pill ok">Completed</span></td></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>2</td><td><a href="#checklist"><b>Submit master data template</b></a></td><td>Maria P.</td><td>Sep 15</td><td>4h / 4h</td><td><span class="pill pur">For review</span></td></tr>
-<tr class="dragging"><td class="drag">⋮⋮</td><td>3</td><td><b>Client master data – Items</b> <span class="pill warn">Client</span></td><td>R. Santos</td><td>Oct 3</td><td>– / –<div class="note">No estimate</div></td><td><span class="pill bad">Blocked</span></td></tr>
-<tr class="dropline"><td colspan="7"></td></tr>
-<tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>4</td><td><a href="#checklist"><b>Client master data – BPs</b></a></td><td>R. Santos</td><td>Oct 10</td><td>– / –<div class="note">No estimate</div></td><td><span class="pill info">In progress</span></td></tr></table>
-<button class="btn ghost addact">+ Add activity to Phase 1</button></div></div>
-<div class="card phase closed"><div class="ph" onclick="this.parentElement.classList.toggle('closed')"><span class="chev">▾</span><b>Phase 2 – Configuration</b><span class="note">2 activities · 0 done</span><span class="sp"></span><div class="bar" style="width:120px"><i style="width:0%"></i></div></div>
-<div class="pb"><table><tr><th></th><th>#</th><th>Activity</th><th>Owner</th><th>Due</th><th>Est / Act</th><th>Status</th></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>5</td><td><a href="#checklist"><b>Validate imported master data</b></a></td><td>Ken L.</td><td>Oct 14</td><td>8h / 12h</td><td><span class="pill info">In progress</span></td></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>6</td><td><a href="#checklist"><b>Configure system &amp; validate</b></a></td><td>Ken L.</td><td>Oct 20</td><td>24h / –</td><td><span class="pill grey">To do</span></td></tr></table><button class="btn ghost addact">+ Add activity to Phase 2</button></div></div>
-<p class="note">Click anywhere on a phase header to open or close it. Drag ⋮⋮ to reorder (keyboard: focus the handle, Alt+↑/↓). Reordering changes display order only, never dependencies or dates. The highlighted row shows a drag in progress.</p>
-</div>
-<div class="card"><h3>Submit master data template</h3><p class="note">Deliverable: completed master data template</p>
-<h4 style="margin:14px 0 8px">Evidence</h4>
-<div class="drop">⇪ Drop a file here or <a href="#checklist">browse</a><div class="note">PDF, Word or Excel · up to 25 MB each</div></div>
-<div class="file"><span class="fi pdf">PDF</span><div><b>Master_Data_Template_v2.pdf</b><div class="note">1.8 MB · Maria P. · Sep 15</div></div><span class="sp"></span><a href="#checklist">Download</a></div>
-<div class="file"><span class="fi xls">XLS</span><div><b>Items_Upload.xlsx</b><div class="note">640 KB · Maria P. · Sep 15</div></div><span class="sp"></span><a href="#checklist">Download</a></div>
-<div class="file up"><span class="fi doc">DOC</span><div style="flex:1"><b>Signoff_Memo.docx</b><div class="bar" style="margin-top:6px"><i style="width:62%"></i></div><div class="note">Uploading… 62%</div></div><a href="#checklist">Cancel</a></div>
-<div class="file legacy"><span class="fi grey">🔗</span><div><b>sharepoint.example/…/template</b><div class="note">Link (legacy) · added before file uploads</div></div></div>
-<div class="field err" style="margin-top:12px"><small>⚠ screenshot.png can't be added. Evidence must be a PDF, Word or Excel file.</small></div>
-<div class="field err"><small>⚠ report.pdf isn't a real PDF, so it wasn't uploaded.</small></div>
-<div class="field err"><small>⚠ Big_Export.xlsx is 31 MB. The limit is 25 MB.</small></div>
-<div class="field err"><small>⚠ Macros.xlsm can't be added. Save it as .xlsx without macros.</small></div>
-<h4 style="margin:14px 0 8px">Follow-up</h4>
-<div class="field"><textarea rows="2" placeholder="Add a follow-up note…"></textarea></div>
-<div class="row"><span class="note">Notifies Maria P., Ken L. (reviewer) and Jomerson N. (PM)</span><span class="sp"></span><button class="btn">Post follow-up</button></div>
-</div></div>
-<div class="card" style="margin-top:16px"><h3>Template editor: + Add activity per phase</h3><p class="note">Each phase card in the template editor ends with its own "+ Add activity to Phase N" button. The new row opens inline in that phase, with no phase picker, and rows drag the same way as above.</p></div>
-</section>
-<!-- CONVERSATION (M3) -->
-<section class="page" id="convo">
-<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header><div class="tabs"><span class="" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="on" onclick="location.hash='convo'">Conversation</span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
-<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
-<div class="row" style="margin-bottom:10px"><div class="search">Search conversation…</div><span class="sp"></span><select class="sel"><option>All types</option><option>Notes</option><option>Calls</option><option>Meetings</option><option>Decisions</option></select><select class="sel"><option>All tasks</option></select></div>
-<div class="day">Thu, Oct 8</div>
-<div class="msg"><div class="av">KL</div><div style="flex:1"><div class="row"><b>Ken L.</b><span class="pill grey">Note</span><span class="note">10:12 AM</span></div><div>Import of item master failed on 14 rows with missing UoM. Sent the list back to the client.</div><div class="tags"><span>☑ Validate imported master data</span></div></div></div>
-<div class="msg"><div class="av">JN</div><div style="flex:1"><div class="row"><b>Jomerson N.</b><span class="pill info">Call</span><span class="note">2:40 PM</span></div><div>Called R. Santos. They will send the corrected items template by Friday.</div><div class="tags"><span>☑ Client master data – Items</span><span>☏ R. Santos · Acme</span></div></div></div>
-<div class="day">Fri, Oct 9</div>
-<div class="msg"><div class="av">MP</div><div style="flex:1"><div class="row"><b>Maria P.</b><span class="pill ok">Decision</span><span class="note">9:05 AM</span></div><div>Agreed with the client to go live with BPs first and add items in week 2.</div><div class="tags"><span>☑ Client master data – BPs</span></div></div></div>
-<div class="msg"><div class="av">MP</div><div style="flex:1"><div class="row"><b>Maria P.</b><span class="pill grey">Note</span><span class="note">9:30 AM</span></div><div>&lt;script&gt;alert(1)&lt;/script&gt; ← shown as plain text, never run</div></div></div>
-<div class="msg hidden"><div class="av">?</div><div class="note">Message hidden by Ada Admin on Oct 9 for breaking the conduct policy. (Q-31, if approved)</div></div>
-<div class="composer"><div class="row" style="margin-bottom:8px"><select class="sel"><option>Note</option><option>Call</option><option>Meeting</option><option>Decision</option></select><select class="sel"><option>Tag a task (optional)</option></select><select class="sel"><option>Tag a client contact (optional)</option></select></div>
-<textarea rows="3" placeholder="Write a message for the project team…"></textarea>
-<div class="row" style="margin-top:8px"><span class="note">Messages are permanent and can't be edited or deleted.</span><span class="sp"></span><button class="btn">Post</button></div></div>
-</div>
-<div><div class="card"><h3>Who sees this</h3><p class="note">Everyone who can see the project. Viewers can read but don't get the message box; they see "You can read this conversation but not post."</p></div>
-<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">💬<br><b>No messages yet</b><p class="note">Record calls, meetings and decisions here so the whole team knows what was agreed.</p></div></div></div></div>
-</section>
-<!-- NOTIFICATIONS (M3) -->
-<section class="page" id="notif">
-<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header>
-<div class="grid g2"><div class="modal" style="max-width:420px"><div class="row"><h3 style="margin:0">Notifications</h3><span class="sp"></span><a href="#notif" class="note">Mark all as read</a></div><br>
-<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Maria P.</b> added a follow-up on <b>Client master data – Items</b> · SAP B1 Rollout<div class="note">5 min ago</div></div></a>
-<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Ken L.</b> uploaded evidence on <b>Validate imported master data</b><div class="note">1 hour ago</div></div></a>
-<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Jomerson N.</b> added a follow-up on <b>Configure system &amp; validate</b><div class="note">Yesterday, 4:10 PM</div></div></a>
-<a class="nt" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Maria P.</b> added a follow-up on <b>Submit master data template</b><div class="note">Oct 7</div></div></a>
-<p class="note" style="text-align:center;margin:10px 0 0">Showing the last 30 days</p></div>
-<div><div class="card"><h3>Bell in the top bar</h3><p class="note">The red count shows unread notifications (9+ above nine). Clicking one opens that task and marks it read. The person who wrote the follow-up isn't notified. Anyone removed from the project stops seeing its notifications.</p><div class="row"><div class="bell">🔔<i>3</i></div><span class="note">unread</span><div class="bell">🔔</div><span class="note">all read</span></div></div>
-<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">🔔<br><b>You're all caught up</b><p class="note">Follow-ups on your tasks will show here.</p></div></div></div></div>
 </section>
 <!-- PROJECT ACTIVE CONTACTS (M2) -->
 <section class="page" id="pcontacts">
