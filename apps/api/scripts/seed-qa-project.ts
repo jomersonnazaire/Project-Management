@@ -11,7 +11,7 @@
  * Usage: npm run seed:qa-project --workspace @xc8/api
  */
 import { todayPH } from '@xc8/shared';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { connectDb, disconnectDb } from '../src/db.js';
 import {
   ClientContactModel,
@@ -21,6 +21,7 @@ import {
   TemplateModel,
   UserModel,
 } from '../src/models/index.js';
+import { audit } from '../src/services/audit.js';
 import { loadCalendar } from '../src/services/calendar.js';
 import { LAUNCH_TEMPLATE_KEY } from '../src/services/launchTemplate.js';
 import { buildPlanTasks, recomputeProject } from '../src/services/projectService.js';
@@ -70,27 +71,53 @@ async function main() {
     const start = todayPH();
     const tasks = buildPlanTasks(template, projectId, start, await loadCalendar());
     const end = tasks.reduce((max, t) => (t.dueDate && t.dueDate > max ? t.dueDate : max), start);
-    await ProjectModel.create({
-      _id: projectId,
-      name: QA_PROJECT_NAME,
-      clientId: client._id,
-      managerId: pm._id,
-      memberIds: [pm._id, member._id],
-      type: 'SAP_B1',
-      description:
-        'QA seed: every task has an owner, so the project can go Active and then On Hold (time logging blocked).',
-      status: 'PLANNING',
-      startDate: start,
-      plannedEndDate: end,
-      templateSnapshot: {
-        templateId: template._id,
-        templateKey: template.templateKey,
-        version: template.version,
-        name: template.name,
-        copy: { phases: template.phases, activities: template.activities },
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await ProjectModel.create(
+          [
+            {
+              _id: projectId,
+              name: QA_PROJECT_NAME,
+              clientId: client._id,
+              managerId: pm._id,
+              memberIds: [pm._id, member._id],
+              type: 'SAP_B1',
+              description:
+                'QA seed: every task has an owner, so the project can go Active and then On Hold (time logging blocked).',
+              status: 'PLANNING',
+              startDate: start,
+              plannedEndDate: end,
+              templateSnapshot: {
+                templateId: template._id,
+                templateKey: template.templateKey,
+                version: template.version,
+                name: template.name,
+                copy: { phases: template.phases, activities: template.activities },
+              },
+              createdBy: pm._id,
+            },
+          ],
+          { session },
+        );
+        if (tasks.length) await TaskModel.insertMany(tasks, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
+    await audit({
+      actorId: pm._id,
+      entityType: 'project',
+      entityId: projectId,
+      projectId,
+      action: 'project_created',
+      meta: {
+        templateId: template._id.toString(),
+        templateVersion: template.version,
+        tasks: tasks.length,
+        seed: 'qa-project',
       },
     });
-    if (tasks.length) await TaskModel.insertMany(tasks);
     project = await ProjectModel.findById(projectId).lean();
     console.log(`Created "${QA_PROJECT_NAME}" with ${tasks.length} tasks.`);
   } else {
@@ -111,7 +138,7 @@ async function main() {
   await recomputeProject(project!._id);
   const missing = await TaskModel.countDocuments({ projectId: project!._id, ownerId: null });
   console.log(
-    `Owners set on ${owned.modifiedCount} task(s); tasks without an owner: ${missing}. Status: ${project!.status}.`,
+    `Owners set on ${owned.modifiedCount} task(s); tasks without an owner: ${missing}. Status: ${project!.status}. Id: ${project!._id.toString()}.`,
   );
   await disconnectDb();
 }
