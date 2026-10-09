@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { JOB_ROLE_LABELS, type JobRole } from '@xc8/shared';
+import { useMemo, useState } from 'react';
 import { useTeams } from '../../api/hooks';
+import { useCan } from '../../auth/useCan';
 import { useWorkload } from '../../api/m4Hooks';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
@@ -21,8 +23,22 @@ export function WorkloadPage() {
   const [week, setWeek] = useState<string | undefined>(undefined);
   const [teamId, setTeamId] = useState('');
   const q = useWorkload(week, teamId || undefined);
-  const teams = useTeams();
+  // DR-29: only people who can read teams ask for them; others get the list from the workload rows.
+  const canTeams = useCan('teams', 'view');
+  const teams = useTeams(false, canTeams);
   const d = q.data;
+  const [seenTeams, setSeenTeams] = useState<Map<string, string>>(new Map());
+  const rowTeams = useMemo(() => {
+    const m = new Map(seenTeams);
+    for (const r of d?.items ?? []) for (const t of r.teams) m.set(t.id, t.name);
+    return m;
+  }, [d, seenTeams]);
+  if (rowTeams.size !== seenTeams.size) setSeenTeams(rowTeams);
+  const teamOptions = canTeams
+    ? (teams.data?.items ?? []).map((t) => ({ id: t.id, name: t.name }))
+    : [...rowTeams]
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
   const start = d?.weekStart;
   return (
     <>
@@ -58,19 +74,21 @@ export function WorkloadPage() {
           >
             This week
           </button>
-          <select
-            className="form-select form-select-sm w-auto ms-auto"
-            aria-label="Team"
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
-          >
-            <option value="">All teams</option>
-            {(teams.data?.items ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          {teamOptions.length > 1 && (
+            <select
+              className="form-select form-select-sm w-auto ms-auto"
+              aria-label="Team"
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+            >
+              <option value="">All teams</option>
+              {teamOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="card-body">
           <ErrorAlert error={q.error} />
@@ -100,7 +118,9 @@ export function WorkloadPage() {
                     <tr key={r.person.id}>
                       <td>
                         <div className="fw-medium">{r.person.name}</div>
-                        <div className="small text-body-secondary">{r.jobRole}</div>
+                        <div className="small text-body-secondary">
+                          {JOB_ROLE_LABELS[r.jobRole as JobRole] ?? r.jobRole}
+                        </div>
                       </td>
                       <td className="small">{r.teams.map((t) => t.name).join(', ') || '–'}</td>
                       <td className="text-end">{hoursLabel(r.capacityHours)}</td>

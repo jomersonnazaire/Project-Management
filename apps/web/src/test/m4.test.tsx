@@ -216,7 +216,7 @@ describe('Team & workload (FR-WL-01..03)', () => {
     expect(await screen.findByText('Over capacity')).toBeInTheDocument();
     expect(screen.getByText('125%')).toHaveClass('text-danger');
     expect(screen.getByText('75%')).toBeInTheDocument();
-    expect(screen.getByText('3.0')).toBeInTheDocument();
+    expect(screen.getByText('03:00')).toBeInTheDocument();
     expect(screen.getByText(/aren't used as a performance score/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Previous week' }));
     await waitFor(() =>
@@ -276,19 +276,17 @@ describe('Reports (FR-RPT-01..06, FR-ISS-16)', () => {
       },
     );
     renderAt('/reports', <App />);
-    expect(await screen.findByText('+4')).toBeInTheDocument();
+    expect(await screen.findByText('+04:00')).toBeInTheDocument();
     expect(screen.getByText('+50%')).toBeInTheDocument();
     expect(screen.getAllByText('No estimate', { selector: 'td' })).toHaveLength(2);
     await userEvent.selectOptions(screen.getByLabelText('Owners'), 'u2');
     expect(screen.queryByText('Design')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Export CSV/ }));
     const lines = csv.replace('\ufeff', '').split('\r\n');
-    expect(lines[0]).toBe(
-      'Task,Project,Client,Owner,Status,Estimate (h),Actual (h),Variance (h),Overrun',
-    );
+    expect(lines[0]).toBe('Task,Project,Client,Owner,Status,Estimate,Actual,Variance,Overrun');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('Kickoff,SAP Rollout,"Acme, Inc.",Maria Member');
-    expect(lines[1]).toContain(',+4,+50%');
+    expect(lines[1]).toContain(',08:00,12:00,+04:00,+50%');
   });
 
   it('the issues tab shows the FR-ISS-16 summary; Timesheets is hidden without Time view', async () => {

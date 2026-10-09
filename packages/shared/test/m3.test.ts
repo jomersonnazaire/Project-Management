@@ -146,10 +146,10 @@ describe('Report formulas (FR-RPT-01, AC-22.1, FR-WL-02)', () => {
       const v = effortVariance({ estHours: est, actualHours: act });
       return [formatSignedHours(v.variance), formatOverrun(v.overrunPct)];
     };
-    expect(row(8, 12)).toEqual(['+4', '+50%']);
-    expect(row(16, 14)).toEqual(['−2', '−12.5%']);
-    expect(row(10, 18)).toEqual(['+8', '+80%']);
-    expect(row(0, 2)).toEqual(['+2', 'No estimate']);
+    expect(row(8, 12)).toEqual(['+04:00', '+50%']);
+    expect(row(16, 14)).toEqual(['−02:00', '−12.5%']);
+    expect(row(10, 18)).toEqual(['+08:00', '+80%']);
+    expect(row(0, 2)).toEqual(['+02:00', 'No estimate']);
     expect(row(null, 2)).toEqual(['–', 'No estimate']);
   });
 

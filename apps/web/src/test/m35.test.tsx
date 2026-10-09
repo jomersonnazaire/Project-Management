@@ -49,7 +49,7 @@ describe('Access rules v0.6.8: Members delete their own time entries', () => {
     api('MEMBER', (url) => (url.endsWith('/time') ? { status: 200, body: week } : undefined));
     renderAt('/time', <App />);
     expect(
-      await screen.findByRole('button', { name: /^Delete .*h on Kickoff/ }),
+      await screen.findByRole('button', { name: /^Delete \d\d:\d\d on Kickoff/ }),
     ).toBeInTheDocument();
   });
 

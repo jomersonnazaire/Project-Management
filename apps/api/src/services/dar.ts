@@ -69,10 +69,8 @@ export async function buildDar(
     ),
   });
   const rows: DarRowDto[] = dtos.map((e) => {
-    const remarks =
-      e.kind === 'QUICK'
-        ? [e.title, e.notes].filter(Boolean).join(' – ')
-        : (e.notes ?? e.task?.name ?? '');
+    // FR-DAR-19: blank remarks fall back to the task name or the quick activity's title, no prefix.
+    const remarks = e.notes?.trim() || (e.kind === 'QUICK' ? e.title : e.task?.name) || '';
     return {
       date: e.date,
       timeIn: e.startAt ? formatTime12(e.startAt) : '',

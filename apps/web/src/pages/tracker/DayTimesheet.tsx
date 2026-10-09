@@ -329,7 +329,7 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
                       {formatHHMM(d.totalMinutes)}
                     </td>
                     <td colSpan={6} className="small text-body-secondary">
-                      Sum of time in/out pairs, exact minutes (running timer counted up to now)
+                      Sum of the day's entries (exact minutes; a running timer counts up to now)
                     </td>
                   </tr>
                 </tfoot>

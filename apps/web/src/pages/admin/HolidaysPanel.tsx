@@ -20,6 +20,7 @@ import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { TopbarActions } from '../../components/PageHeader';
 import { shortDate } from '../../lib/format';
+import { useConfirm } from '../../components/ConfirmModal';
 
 const weekday = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
@@ -268,6 +269,7 @@ export function WorkingDaysCard({
 
 /** Admin › Holidays (FR-CAL-01..05): the year's holidays plus the working-day settings. */
 export function HolidaysPanel() {
+  const [confirm, confirmDialog] = useConfirm();
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [type, setType] = useState<string>('');
   const [editing, setEditing] = useState<HolidayDto | 'new' | null>(null);
@@ -277,11 +279,13 @@ export function HolidaysPanel() {
   const [copied, setCopied] = useState<string | null>(null);
   const items = (cal.data?.holidays ?? []).filter((h) => !type || h.type === type);
 
-  const copy = () => {
+  const copy = async () => {
     if (
-      !window.confirm(
-        `Copy ${year - 1}'s holidays into ${year}? Dates already in ${year} are skipped.`,
-      )
+      !(await confirm({
+        title: `Copy ${year - 1}'s holidays into ${year}?`,
+        body: `Dates already in ${year} are skipped.`,
+        confirmLabel: 'Copy holidays',
+      }))
     )
       return;
     mutation.mutate(
@@ -321,185 +325,191 @@ export function HolidaysPanel() {
   );
 
   return (
-    <div className="row g-6">
-      {/* DR-17: the primary action sits in the page header so the toolbar stays on one row. */}
-      {canEdit && (
-        <TopbarActions>
-          <Button onClick={() => setEditing('new')}>+ Add holiday</Button>
-        </TopbarActions>
-      )}
-      <div className="col-lg-8">
-        <div className="card">
-          <div className="card-body">
-            <div className="d-flex flex-wrap align-items-center gap-2 mb-4">
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                aria-label="Previous year"
-                onClick={() => setYear(year - 1)}
-              >
-                <i className="bx bx-chevron-left" aria-hidden="true" />
-              </Button>
-              <h2 className="h5 mb-0" aria-live="polite">
-                {year}
-              </h2>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                aria-label="Next year"
-                onClick={() => setYear(year + 1)}
-              >
-                <i className="bx bx-chevron-right" aria-hidden="true" />
-              </Button>
-              <Form.Select
-                aria-label="Filter by type"
-                className="ms-auto"
-                style={{ maxWidth: 200 }}
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-              >
-                <option value="">All types</option>
-                {HOLIDAY_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {HOLIDAY_TYPE_LABELS[t]}
-                  </option>
-                ))}
-              </Form.Select>
-              {officialMissing && officialButton}
-              {copyButton}
-            </div>
-            <ErrorAlert error={cal.error} />
-            <ErrorAlert error={mutation.error} action />
-            {copied && (
-              <div className="alert alert-success py-2" role="status">
-                {copied}
+    <>
+      {confirmDialog}
+      <div className="row g-6">
+        {/* DR-17: the primary action sits in the page header so the toolbar stays on one row. */}
+        {canEdit && (
+          <TopbarActions>
+            <Button onClick={() => setEditing('new')}>+ Add holiday</Button>
+          </TopbarActions>
+        )}
+        <div className="col-lg-8">
+          <div className="card">
+            <div className="card-body">
+              <div className="d-flex flex-wrap align-items-center gap-2 mb-4">
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  aria-label="Previous year"
+                  onClick={() => setYear(year - 1)}
+                >
+                  <i className="bx bx-chevron-left" aria-hidden="true" />
+                </Button>
+                <h2 className="h5 mb-0" aria-live="polite">
+                  {year}
+                </h2>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  aria-label="Next year"
+                  onClick={() => setYear(year + 1)}
+                >
+                  <i className="bx bx-chevron-right" aria-hidden="true" />
+                </Button>
+                <Form.Select
+                  aria-label="Filter by type"
+                  className="ms-auto"
+                  style={{ maxWidth: 200 }}
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                >
+                  <option value="">All types</option>
+                  {HOLIDAY_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {HOLIDAY_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </Form.Select>
+                {officialMissing && officialButton}
+                {copyButton}
               </div>
-            )}
-            {cal.isPending ? (
-              <LoadingRows />
-            ) : (cal.data?.holidays.length ?? 0) === 0 ? (
-              <EmptyState
-                icon="bx-calendar"
-                title={`No holidays for ${year} yet`}
-                action={
-                  <div className="d-flex flex-wrap justify-content-center gap-2">
-                    {officialButton}
-                    {copyButton}
-                  </div>
-                }
-              >
-                Due dates will count only the working days set here.
-              </EmptyState>
-            ) : items.length === 0 ? (
-              <p className="text-body-secondary">No holidays of this type in {year}.</p>
-            ) : (
-              <div className="table-responsive">
-                <table className="table table-stack-md">
-                  <thead>
-                    <tr>
-                      <th scope="col">Date</th>
-                      <th scope="col">Day</th>
-                      <th scope="col">Name</th>
-                      <th scope="col">Type</th>
-                      <th scope="col">Note</th>
-                      <th scope="col">
-                        <span className="visually-hidden">Actions</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((h) => (
-                      <tr key={h.id}>
-                        <td className="cell-primary text-nowrap">{shortDate(h.date)}</td>
-                        <td data-label="Day" className="text-body-secondary">
-                          {weekday(h.date)}
-                        </td>
-                        <td data-label="Name" className="fw-medium text-heading">
-                          {h.name}
-                        </td>
-                        <td data-label="Type">
-                          <span className={`badge bg-label-${HOLIDAY_TYPE_VARIANTS[h.type]}`}>
-                            {HOLIDAY_TYPE_SHORT[h.type]}
-                          </span>
-                        </td>
-                        <td data-label="Note" className="small text-body-secondary">
-                          {h.note ?? ''}
-                        </td>
-                        <td className="text-end text-nowrap">
-                          {canEdit && (
-                            <>
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 me-3"
-                                aria-label={`Edit ${h.name}`}
-                                onClick={() => setEditing(h)}
-                              >
-                                <i className="bx bx-edit-alt" aria-hidden="true" />
-                              </Button>
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 text-danger"
-                                aria-label={`Remove ${h.name}`}
-                                onClick={() => {
-                                  if (
-                                    window.confirm(
-                                      `Remove ${h.name} (${shortDate(h.date, true)})? Existing due dates won't change.`,
-                                    )
-                                  ) {
-                                    mutation.mutate({
-                                      path: `/holidays/${h.id}`,
-                                      method: 'DELETE',
-                                    });
-                                  }
-                                }}
-                              >
-                                <i className="bx bx-trash" aria-hidden="true" />
-                              </Button>
-                            </>
-                          )}
-                        </td>
+              <ErrorAlert error={cal.error} />
+              <ErrorAlert error={mutation.error} action />
+              {copied && (
+                <div className="alert alert-success py-2" role="status">
+                  {copied}
+                </div>
+              )}
+              {cal.isPending ? (
+                <LoadingRows />
+              ) : (cal.data?.holidays.length ?? 0) === 0 ? (
+                <EmptyState
+                  icon="bx-calendar"
+                  title={`No holidays for ${year} yet`}
+                  action={
+                    <div className="d-flex flex-wrap justify-content-center gap-2">
+                      {officialButton}
+                      {copyButton}
+                    </div>
+                  }
+                >
+                  Due dates will count only the working days set here.
+                </EmptyState>
+              ) : items.length === 0 ? (
+                <p className="text-body-secondary">No holidays of this type in {year}.</p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-stack-md">
+                    <thead>
+                      <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Day</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Note</th>
+                        <th scope="col">
+                          <span className="visually-hidden">Actions</span>
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <p className="small text-body-secondary mt-3 mb-0">
-              Admins enter each year's proclaimed holidays. Due dates skip regular holidays and
-              special non-working days. A special working day counts as a workday, even on a
-              Saturday or Sunday.
-            </p>
+                    </thead>
+                    <tbody>
+                      {items.map((h) => (
+                        <tr key={h.id}>
+                          <td className="cell-primary text-nowrap">{shortDate(h.date)}</td>
+                          <td data-label="Day" className="text-body-secondary">
+                            {weekday(h.date)}
+                          </td>
+                          <td data-label="Name" className="fw-medium text-heading">
+                            {h.name}
+                          </td>
+                          <td data-label="Type">
+                            <span className={`badge bg-label-${HOLIDAY_TYPE_VARIANTS[h.type]}`}>
+                              {HOLIDAY_TYPE_SHORT[h.type]}
+                            </span>
+                          </td>
+                          <td data-label="Note" className="small text-body-secondary">
+                            {h.note ?? ''}
+                          </td>
+                          <td className="text-end text-nowrap">
+                            {canEdit && (
+                              <>
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 me-3"
+                                  aria-label={`Edit ${h.name}`}
+                                  onClick={() => setEditing(h)}
+                                >
+                                  <i className="bx bx-edit-alt" aria-hidden="true" />
+                                </Button>
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 text-danger"
+                                  aria-label={`Remove ${h.name}`}
+                                  onClick={async () => {
+                                    if (
+                                      await confirm({
+                                        title: `Remove ${h.name} (${shortDate(h.date, true)})?`,
+                                        body: "Existing due dates won't change.",
+                                        confirmLabel: 'Remove',
+                                        danger: true,
+                                      })
+                                    ) {
+                                      mutation.mutate({
+                                        path: `/holidays/${h.id}`,
+                                        method: 'DELETE',
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <i className="bx bx-trash" aria-hidden="true" />
+                                </Button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="small text-body-secondary mt-3 mb-0">
+                Admins enter each year's proclaimed holidays. Due dates skip regular holidays and
+                special non-working days. A special working day counts as a workday, even on a
+                Saturday or Sunday.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-      <div className="col-lg-4">
-        {cal.data && (
-          <WorkingDaysCard
-            key={`${cal.data.version}-${cal.data.workingDays.join()}`}
-            days={cal.data.workingDays}
-            version={cal.data.version}
-            canEdit={canEdit}
+        <div className="col-lg-4">
+          {cal.data && (
+            <WorkingDaysCard
+              key={`${cal.data.version}-${cal.data.workingDays.join()}`}
+              days={cal.data.workingDays}
+              version={cal.data.version}
+              canEdit={canEdit}
+            />
+          )}
+          <div className="card">
+            <div className="card-body">
+              <h2 className="h6">What changes</h2>
+              <p className="small text-body-secondary mb-0">
+                Adding a holiday never moves existing due dates; it only affects dates worked out
+                from then on. Every change is logged.
+              </p>
+            </div>
+          </div>
+        </div>
+        {editing && (
+          <HolidayModal
+            holiday={editing === 'new' ? null : editing}
+            year={year}
+            onClose={() => setEditing(null)}
           />
         )}
-        <div className="card">
-          <div className="card-body">
-            <h2 className="h6">What changes</h2>
-            <p className="small text-body-secondary mb-0">
-              Adding a holiday never moves existing due dates; it only affects dates worked out from
-              then on. Every change is logged.
-            </p>
-          </div>
-        </div>
       </div>
-      {editing && (
-        <HolidayModal
-          holiday={editing === 'new' ? null : editing}
-          year={year}
-          onClose={() => setEditing(null)}
-        />
-      )}
-    </div>
+    </>
   );
 }

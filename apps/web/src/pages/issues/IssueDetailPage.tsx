@@ -42,6 +42,7 @@ import { ReasonModal } from '../../components/ReasonModal';
 import { dateTime, initials, shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 import { FileChip } from '../projects/EvidenceSection';
+import { useConfirm } from '../../components/ConfirmModal';
 
 /** Issue detail (FR-ISS-04..11, mockup v7-issue). */
 export function IssueDetailPage() {
@@ -64,6 +65,7 @@ export function IssueDetailPage() {
 type Pending = { to: IssueStatus; kind: 'resolution' | 'reason' } | null;
 
 function IssueView({ issue: i }: { issue: IssueDto }) {
+  const [confirm, confirmDialog] = useConfirm();
   const mutate = useIssueMutation(i.id);
   const navigate = useNavigate();
   const [pending, setPending] = useState<Pending>(null);
@@ -85,169 +87,177 @@ function IssueView({ issue: i }: { issue: IssueDto }) {
 
   return (
     <>
-      <PageHeader title={`${i.key} ${i.title}`}>
-        {i.can.edit && (
-          <Button variant="outline-secondary" onClick={() => setEditing((x) => !x)}>
-            {editing ? 'Done' : 'Edit'}
-          </Button>
-        )}
-        {primary && (
-          <Button onClick={() => move(primary)} disabled={mutate.isPending}>
-            {transitionLabel(i.status, primary)}
-          </Button>
-        )}
-      </PageHeader>
-      <Link to={`/projects/${i.project.id}/issues`} className="d-inline-block mb-3 small">
-        {i.project.name} › Issues
-      </Link>
-      {i.projectArchived ? (
-        <LockNotice>{ISSUE_ARCHIVED_NOTE}</LockNotice>
-      ) : (
-        i.projectStatus === 'COMPLETED' && <Alert variant="info">{ISSUE_COMPLETED_BANNER}</Alert>
-      )}
-      <ErrorAlert error={mutate.error} action />
-
-      <div className="d-flex flex-wrap gap-2 mb-4" aria-label="Status">
-        {ISSUE_STATUSES.map((s) => (
-          <span
-            key={s}
-            className={`badge ${s === i.status ? 'bg-label-info fw-bold' : 'bg-label-secondary'}`}
-            aria-current={s === i.status ? 'step' : undefined}
-          >
-            {ISSUE_STATUS_LABELS[s]}
-          </span>
-        ))}
-        {transitions.some((t) => t !== primary) && (
-          // DR-19: other status moves are actions, set apart from the five steps.
-          <span
-            className="d-inline-flex flex-wrap gap-2 ms-2 ps-3 border-start"
-            role="group"
-            aria-label="Other status changes"
-          >
-            {transitions
-              .filter((t) => t !== primary)
-              .map((t) => (
-                <Button
-                  key={t}
-                  size="sm"
-                  variant="outline-secondary"
-                  className="py-0"
-                  onClick={() => move(t)}
-                  disabled={mutate.isPending}
-                >
-                  {transitionLabel(i.status, t)}
-                </Button>
-              ))}
-          </span>
-        )}
-      </div>
-
-      <div className="row g-4">
-        <div className="col-lg-8">
-          <div className="card mb-4">
-            <div className="card-body">
-              {editing ? (
-                <EditText issue={i} onSave={update} pending={mutate.isPending} />
-              ) : (
-                <>
-                  <h2 className="h6">Description</h2>
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{i.description}</p>
-                </>
-              )}
-              <Attachments issue={i} />
-              <Links issue={i} />
-            </div>
-          </div>
-          <Comments issue={i} />
-        </div>
-        <div className="col-lg-4">
-          <SidePanel
-            issue={i}
-            onUpdate={update}
-            onMove={move}
-            onDue={(d) => setDueAsk(d)}
-            disabled={mutate.isPending}
-          />
-          {(i.status === 'CLOSED' || i.status === 'RESOLVED') && <ClosedState issue={i} />}
-          {i.can.delete && (
-            <Button
-              variant="outline-danger"
-              size="sm"
-              className="mt-3"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Delete ${i.key}? Closing it as a duplicate is usually better. This cannot be undone.`,
-                  )
-                ) {
-                  mutate.mutate(
-                    { kind: 'delete' },
-                    { onSuccess: () => navigate(`/projects/${i.project.id}/issues`) },
-                  );
-                }
-              }}
-            >
-              Delete issue
+      {confirmDialog}
+      <>
+        <PageHeader title={`${i.key} ${i.title}`}>
+          {i.can.edit && (
+            <Button variant="outline-secondary" onClick={() => setEditing((x) => !x)}>
+              {editing ? 'Done' : 'Edit'}
             </Button>
           )}
-        </div>
-      </div>
+          {primary && (
+            <Button onClick={() => move(primary)} disabled={mutate.isPending}>
+              {transitionLabel(i.status, primary)}
+            </Button>
+          )}
+        </PageHeader>
+        <Link to={`/projects/${i.project.id}/issues`} className="d-inline-block mb-3 small">
+          {i.project.name} › Issues
+        </Link>
+        {i.projectArchived ? (
+          <LockNotice>{ISSUE_ARCHIVED_NOTE}</LockNotice>
+        ) : (
+          i.projectStatus === 'COMPLETED' && <Alert variant="info">{ISSUE_COMPLETED_BANNER}</Alert>
+        )}
+        <ErrorAlert error={mutate.error} action />
 
-      {pending && (
-        <ReasonModal
-          title={
-            pending.kind === 'resolution' ? 'Mark resolved' : transitionLabel(i.status, pending.to)
-          }
-          label={pending.kind === 'resolution' ? 'Resolution' : 'Reason'}
-          confirmLabel={transitionLabel(i.status, pending.to)}
-          intro={
-            pending.kind === 'resolution'
-              ? `Say what fixed it. The reporter or PM confirms; it closes automatically after ${ISSUE_AUTO_CLOSE_DAYS} days otherwise.`
-              : undefined
-          }
-          error={mutate.error}
-          pending={mutate.isPending}
-          onClose={() => setPending(null)}
-          onSubmit={(text) =>
-            mutate.mutate(
-              {
-                kind: 'status',
-                body: {
-                  version: i.version,
-                  status: pending.to,
-                  ...(pending.kind === 'resolution' ? { resolution: text } : { reason: text }),
+        <div className="d-flex flex-wrap gap-2 mb-4" aria-label="Status">
+          {ISSUE_STATUSES.map((s) => (
+            <span
+              key={s}
+              className={`badge ${s === i.status ? 'bg-label-info fw-bold' : 'bg-label-secondary'}`}
+              aria-current={s === i.status ? 'step' : undefined}
+            >
+              {ISSUE_STATUS_LABELS[s]}
+            </span>
+          ))}
+          {transitions.some((t) => t !== primary) && (
+            // DR-19: other status moves are actions, set apart from the five steps.
+            <span
+              className="d-inline-flex flex-wrap gap-2 ms-2 ps-3 border-start"
+              role="group"
+              aria-label="Other status changes"
+            >
+              {transitions
+                .filter((t) => t !== primary)
+                .map((t) => (
+                  <Button
+                    key={t}
+                    size="sm"
+                    variant="outline-secondary"
+                    className="py-0"
+                    onClick={() => move(t)}
+                    disabled={mutate.isPending}
+                  >
+                    {transitionLabel(i.status, t)}
+                  </Button>
+                ))}
+            </span>
+          )}
+        </div>
+
+        <div className="row g-4">
+          <div className="col-lg-8">
+            <div className="card mb-4">
+              <div className="card-body">
+                {editing ? (
+                  <EditText issue={i} onSave={update} pending={mutate.isPending} />
+                ) : (
+                  <>
+                    <h2 className="h6">Description</h2>
+                    <p style={{ whiteSpace: 'pre-wrap' }}>{i.description}</p>
+                  </>
+                )}
+                <Attachments issue={i} />
+                <Links issue={i} />
+              </div>
+            </div>
+            <Comments issue={i} />
+          </div>
+          <div className="col-lg-4">
+            <SidePanel
+              issue={i}
+              onUpdate={update}
+              onMove={move}
+              onDue={(d) => setDueAsk(d)}
+              disabled={mutate.isPending}
+            />
+            {(i.status === 'CLOSED' || i.status === 'RESOLVED') && <ClosedState issue={i} />}
+            {i.can.delete && (
+              <Button
+                variant="outline-danger"
+                size="sm"
+                className="mt-3"
+                onClick={async () => {
+                  if (
+                    await confirm({
+                      title: `Delete ${i.key}?`,
+                      body: 'Closing it as a duplicate is usually better. This cannot be undone.',
+                      confirmLabel: 'Delete issue',
+                      danger: true,
+                    })
+                  ) {
+                    mutate.mutate(
+                      { kind: 'delete' },
+                      { onSuccess: () => navigate(`/projects/${i.project.id}/issues`) },
+                    );
+                  }
+                }}
+              >
+                Delete issue
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {pending && (
+          <ReasonModal
+            title={
+              pending.kind === 'resolution'
+                ? 'Mark resolved'
+                : transitionLabel(i.status, pending.to)
+            }
+            label={pending.kind === 'resolution' ? 'Resolution' : 'Reason'}
+            confirmLabel={transitionLabel(i.status, pending.to)}
+            intro={
+              pending.kind === 'resolution'
+                ? `Say what fixed it. The reporter or PM confirms; it closes automatically after ${ISSUE_AUTO_CLOSE_DAYS} days otherwise.`
+                : undefined
+            }
+            error={mutate.error}
+            pending={mutate.isPending}
+            onClose={() => setPending(null)}
+            onSubmit={(text) =>
+              mutate.mutate(
+                {
+                  kind: 'status',
+                  body: {
+                    version: i.version,
+                    status: pending.to,
+                    ...(pending.kind === 'resolution' ? { resolution: text } : { reason: text }),
+                  },
                 },
-              },
-              { onSuccess: () => setPending(null) },
-            )
-          }
-        />
-      )}
-      {dueAsk !== null && (
-        <ReasonModal
-          title="Change due date"
-          label="Why is the due date changing?"
-          confirmLabel="Change due date"
-          intro={`New due date: ${dueAsk ? shortDate(dueAsk, true) : 'back to the severity default'}.`}
-          optional={!dueAsk}
-          error={mutate.error}
-          pending={mutate.isPending}
-          onClose={() => setDueAsk(null)}
-          onSubmit={(reason) =>
-            mutate.mutate(
-              {
-                kind: 'update',
-                body: {
-                  version: i.version,
-                  dueDate: dueAsk || null,
-                  ...(reason ? { dueReason: reason } : {}),
+                { onSuccess: () => setPending(null) },
+              )
+            }
+          />
+        )}
+        {dueAsk !== null && (
+          <ReasonModal
+            title="Change due date"
+            label="Why is the due date changing?"
+            confirmLabel="Change due date"
+            intro={`New due date: ${dueAsk ? shortDate(dueAsk, true) : 'back to the severity default'}.`}
+            optional={!dueAsk}
+            error={mutate.error}
+            pending={mutate.isPending}
+            onClose={() => setDueAsk(null)}
+            onSubmit={(reason) =>
+              mutate.mutate(
+                {
+                  kind: 'update',
+                  body: {
+                    version: i.version,
+                    dueDate: dueAsk || null,
+                    ...(reason ? { dueReason: reason } : {}),
+                  },
                 },
-              },
-              { onSuccess: () => setDueAsk(null) },
-            )
-          }
-        />
-      )}
+                { onSuccess: () => setDueAsk(null) },
+              )
+            }
+          />
+        )}
+      </>
     </>
   );
 }

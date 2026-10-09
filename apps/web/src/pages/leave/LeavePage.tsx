@@ -1,7 +1,9 @@
 import {
   DAY_PARTS,
   DAY_PART_LABELS,
+  FULL_DAY_AM_PM,
   LEAVE_REASON_HINT,
+  mergeHalfDays,
   NO_SUPERVISOR_LEAVE,
   leaveRangeLabel,
   recordLeaveSchema,
@@ -10,9 +12,10 @@ import {
   type DayPart,
   type LeaveBalanceDto,
   type LeaveDto,
+  type LeaveRow,
 } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
-import { Button, Form, Modal, Table } from 'react-bootstrap';
+import { Button, Dropdown, Form, Modal, Table } from 'react-bootstrap';
 import { useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
@@ -28,7 +31,11 @@ import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { shortDate } from '../../lib/format';
 
-const num = (n: number | null) => (n === null ? '–' : String(n));
+/** Days with a real minus sign (DR-38): -3.5 → "−3.5". */
+const num = (n: number | null) => (n === null ? '–' : n < 0 ? `−${Math.abs(n)}` : String(n));
+
+/** DR-33: a merged AM + PM row reads "Full day (AM + PM)". */
+const dayPartLabel = (l: LeaveRow) => (l.halves ? FULL_DAY_AM_PM : DAY_PART_LABELS[l.dayPart]);
 
 /** Leave (doc 14 §4, Q-46: no approval; §16 FR-LV-11; mockup v0.8.7). */
 export function LeavePage() {
@@ -38,12 +45,12 @@ export function LeavePage() {
   return (
     <>
       <PageHeader title="Leave">
-        <Button onClick={() => setRecording(true)}>
+        <Button onClick={() => setRecording(true)} aria-label="Record leave" title="Record leave">
           <i className="bx bx-plus me-1" aria-hidden="true" />
-          Record leave
+          <span className="btn-collapse-label">Record leave</span>
         </Button>
       </PageHeader>
-      <ul className="nav nav-tabs mb-0" role="tablist">
+      <ul className="nav nav-tabs nav-scrollable mb-0" role="tablist">
         {(
           [
             ['mine', 'My leave'],
@@ -142,11 +149,11 @@ function MyLeave({ onRecord }: { onRecord: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {leave.data.map((l) => (
+              {mergeHalfDays(leave.data).map((l) => (
                 <tr key={l.id}>
                   <td className="text-nowrap">{leaveRangeLabel(l.from, l.to)}</td>
                   <td>{l.type.name}</td>
-                  <td>{DAY_PART_LABELS[l.dayPart]}</td>
+                  <td>{dayPartLabel(l)}</td>
                   <td className="text-end">{l.days}</td>
                   <td className="text-nowrap">{shortDate(l.recordedAt.slice(0, 10))}</td>
                   <td>
@@ -157,7 +164,27 @@ function MyLeave({ onRecord }: { onRecord: () => void }) {
                     )}
                   </td>
                   <td className="text-end text-nowrap">
-                    {l.can.cancel ? (
+                    {l.halves && l.can.cancel ? (
+                      <Dropdown align="end">
+                        <Dropdown.Toggle size="sm" variant="outline-danger" id={`cancel-${l.id}`}>
+                          Cancel
+                        </Dropdown.Toggle>
+                        <Dropdown.Menu>
+                          {l.halves.map(
+                            (h) =>
+                              h.can.cancel && (
+                                <Dropdown.Item
+                                  key={h.id}
+                                  as="button"
+                                  onClick={() => setCancelling(h)}
+                                >
+                                  Cancel {h.dayPart === 'AM' ? 'morning (AM)' : 'afternoon (PM)'}
+                                </Dropdown.Item>
+                              ),
+                          )}
+                        </Dropdown.Menu>
+                      </Dropdown>
+                    ) : l.can.cancel ? (
                       <Button size="sm" variant="outline-danger" onClick={() => setCancelling(l)}>
                         Cancel
                       </Button>
@@ -217,7 +244,7 @@ function BalancesTable({ items }: { items: LeaveBalanceDto[] }) {
                   <td className="text-end">{b.type.paid ? b.carryOver : '–'}</td>
                   <td className="text-end">{b.recorded}</td>
                   <td className="text-end">
-                    {b.balance === null ? 'No limit' : b.balance}
+                    {b.balance === null ? 'No limit' : num(b.balance)}
                     {b.negative && <span className="badge bg-label-danger ms-1">Negative</span>}
                   </td>
                 </>
@@ -462,12 +489,12 @@ function TeamLeaveTab() {
               </tr>
             </thead>
             <tbody>
-              {d.items.map((l) => (
+              {mergeHalfDays(d.items).map((l) => (
                 <tr key={l.id}>
                   <td>{l.user.name}</td>
                   <td>{l.type.name}</td>
                   <td className="text-nowrap">{leaveRangeLabel(l.from, l.to)}</td>
-                  <td>{DAY_PART_LABELS[l.dayPart]}</td>
+                  <td>{dayPartLabel(l)}</td>
                   <td className="text-end">{l.days}</td>
                   <td style={{ whiteSpace: 'pre-wrap' }}>{l.reason ?? ''}</td>
                   <td className="text-nowrap">{shortDate(l.recordedAt.slice(0, 10))}</td>
@@ -509,7 +536,8 @@ function TeamLeaveTab() {
                     </td>
                     {p.items.map((b) => (
                       <td key={b.type.id} className={`text-end ${b.negative ? 'text-danger' : ''}`}>
-                        {num(b.balance)}
+                        <span>{num(b.balance)}</span>
+                        {b.negative && <span className="badge bg-label-danger ms-1">Negative</span>}
                       </td>
                     ))}
                   </tr>

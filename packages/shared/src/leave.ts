@@ -189,3 +189,53 @@ export const carryOverLimitMessage = (type: string, limit: number) =>
   `Carry-over for ${type} can be up to ${days(limit)}.`;
 export const NO_SUPERVISOR_LEAVE =
   "You don't have a supervisor yet, so your leave notices go to all Admins. Ask an Admin to set your supervisor.";
+
+// ---------- DR-33: AM + PM halves shown as one full day (FR-LV-11) ----------
+export const FULL_DAY_AM_PM = 'Full day (AM + PM)';
+export type LeaveRow = LeaveDto & {
+  /** The morning and afternoon records merged into this row; each can still be cancelled. */
+  halves?: [LeaveDto, LeaveDto];
+};
+/**
+ * Merges a recorded Half day AM and Half day PM of the same person, type and date into one row
+ * (1 working day, "Full day (AM + PM)"). Order is kept at the first half's position.
+ */
+export function mergeHalfDays(items: LeaveDto[]): LeaveRow[] {
+  const key = (l: LeaveDto) => `${l.user.id}|${l.type.id}|${l.from}`;
+  const pm = new Map<string, LeaveDto>();
+  const am = new Map<string, LeaveDto>();
+  for (const l of items) {
+    if (l.status !== 'RECORDED' || l.from !== l.to) continue;
+    if (l.dayPart === 'AM' && !am.has(key(l))) am.set(key(l), l);
+    if (l.dayPart === 'PM' && !pm.has(key(l))) pm.set(key(l), l);
+  }
+  const used = new Set<string>();
+  const out: LeaveRow[] = [];
+  for (const l of items) {
+    if (used.has(l.id)) continue;
+    const k = key(l);
+    const a = am.get(k);
+    const p = pm.get(k);
+    if (a && p && (l.id === a.id || l.id === p.id)) {
+      used.add(a.id);
+      used.add(p.id);
+      out.push({
+        ...a,
+        id: `${a.id}+${p.id}`,
+        dayPart: 'FULL',
+        days: a.days + p.days,
+        byYear: a.byYear.map((y) => ({
+          year: y.year,
+          days: y.days + (p.byYear.find((x) => x.year === y.year)?.days ?? 0),
+        })),
+        reason:
+          [a.reason, p.reason].filter((r, i, arr) => r && arr.indexOf(r) === i).join(' / ') || null,
+        can: { cancel: a.can.cancel || p.can.cancel },
+        halves: [a, p],
+      });
+      continue;
+    }
+    out.push(l);
+  }
+  return out;
+}

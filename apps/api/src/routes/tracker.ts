@@ -290,6 +290,8 @@ export function trackerRouter(registry: RouteRegistry) {
       .lean();
     if (current) await stopEntry(current._id, now);
     await assertNoOverlap(user._id, now, new Date(now.getTime() + 60_000));
+    // TC-Q05: no new timer on a day that already has 24 hours.
+    await assertDailyCap(user._id, date, 1);
     const entry = await TimeEntryModel.create({
       userId: user._id,
       ...target,

@@ -102,7 +102,7 @@ function MenuItem({ item, active }: { item: NavItem; active: boolean }) {
     <li className={`menu-item${active ? ' active' : ''}`}>
       <NavLink to={item.to} className="menu-link" aria-current={active ? 'page' : undefined}>
         <i className={`menu-icon bx ${item.icon}`} aria-hidden="true" />
-        <div className="text-truncate">{item.label}</div>
+        <div className="menu-label-wrap">{item.label}</div>
       </NavLink>
     </li>
   );

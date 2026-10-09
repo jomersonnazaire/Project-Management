@@ -1,6 +1,6 @@
 # 14 — Microsoft Sign-in, Activity Tracker, Daily Activity Report, Leave, PM View
 
-**Status:** v0.9.4 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.9.5 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson via Lean (room, 8:19 PM); Deven's and UIE's technical and design points.
 Nothing here is built until Jomerson approves. Items marked **⚑** change an existing design decision.
 
@@ -223,3 +223,10 @@ Nothing here is built until Jomerson approves. Items marked **⚑** change an ex
 - **FR-LV-11** A user can record Half day AM and Half day PM on the same date. Same leave type: shown and counted as **one full day** (1.0 against that type). Different types: each half counts **0.5 against its own type**, and both show on that day.
 - A second AM, or a second PM, on a date that already has one is refused: "You already have leave recorded for this morning." / "…for this afternoon." A Full day can't be added on a date with any half day (and vice versa).
 - A full day of leave, or both halves, marks the day "On leave" in the timesheet and report (FR-LV-06). One half marks it "Half day leave (AM)" or "(PM)".
+
+## 17. M4–M7 build notes (PR #10–#13, 2026-10-09)
+- **FR-DAR-19 Remarks fallback (Lean):** when an entry has no remarks, Activity Remarks shows the task name (or the quick activity title), exactly like normal remarks, with no prefix.
+- **Accepted:** day status (Submitted / Not submitted / Reopened) shows on screen but not in the exported report, which follows Jomerson's sample columns (FR-ACT-14 stays a screen feature).
+- **Accepted:** Latest / Earlier version tags appear only when the exact same range was saved more than once.
+- **FR-ACT-19 Deleting quick activities (DR-35):** users can delete their own quick activities and timed entries on days that aren't submitted or locked, with an in-app confirmation (not the browser's). Deletes are audited.
+- **Deferred:** leave document uploads (FR-LV-07 attachments), the "On leave" marker in workload (FR-LV-06), and the leave balances export (FR-LV-09). All three are tracked for after M8.

@@ -32,7 +32,13 @@ import {
   type TimeEntry,
 } from '../models/index.js';
 import { assertLeaveAllowsTime } from '../services/leaveHook.js';
-import { assertLookup, getOrCreateDay, loadDay, touchDay } from '../services/tracker.js';
+import {
+  assertLookup,
+  dayMinutes,
+  getOrCreateDay,
+  loadDay,
+  touchDay,
+} from '../services/tracker.js';
 import { audit } from '../services/audit.js';
 import { currentLockBoundary, loadTimeLock } from '../services/timeLock.js';
 import { recomputeProject } from '../services/projectService.js';
@@ -120,11 +126,8 @@ async function assertDateAndCap(user: ScopeUser, workDate: Date, hours: number, 
   if ((await loadDay(user._id, workDate))?.status === 'SUBMITTED') {
     throw unprocessable(DAY_LOCKED, 'DAY_LOCKED');
   }
-  const [sum] = await TimeEntryModel.aggregate<{ total: number }>([
-    { $match: { userId: user._id, workDate, ...(ignoreId ? { _id: { $ne: ignoreId } } : {}) } },
-    { $group: { _id: null, total: { $sum: '$hours' } } },
-  ]);
-  const total = Math.round(((sum?.total ?? 0) + hours) * 60);
+  // TC-Q05: the same exact-minute total as the tracker, including a running timer.
+  const total = (await dayMinutes(user._id, workDate, ignoreId)) + Math.round(hours * 60);
   if (total > 24 * 60) {
     throw unprocessable(dailyCapMessage(toDateOnly(workDate), total), 'DAILY_LIMIT');
   }

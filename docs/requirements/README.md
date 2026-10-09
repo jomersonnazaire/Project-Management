@@ -67,3 +67,4 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.9.2 | 2026-10-09 | Saved reports (FR-DAR-11 to 16, 18): save is final, supervisor sees all saves, no deletes, Latest/Earlier version. |
 | v0.9.3 | 2026-10-09 | Saved reports private to the owner (FR-DAR-14); no purge; Q-48 deferred. |
 | v0.9.4 | 2026-10-09 | Doc 14 approved for build; FR-LV-11 same-day AM+PM leave rule. |
+| v0.9.5 | 2026-10-09 | M4–M7 build notes: remarks fallback (FR-DAR-19), quick-activity delete (FR-ACT-19), accepted deviations, deferred leave items. |

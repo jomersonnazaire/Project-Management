@@ -234,7 +234,9 @@ export function DashboardPage() {
             <div className="col-xl-8">
               <div className="card h-100">
                 <div className="card-body">
-                  <h2 className="h5 mb-4">Waiting on client</h2>
+                  <h2 className="h5 mb-4" id="waiting-on-client" tabIndex={-1}>
+                    Waiting on client
+                  </h2>
                   {d.waitingOnClient.length === 0 && docItems.length === 0 && !docs.isPending ? (
                     <EmptyState icon="bx-check-circle" title="Nothing waiting on clients">
                       Client tasks and documents requested from client contacts show here.

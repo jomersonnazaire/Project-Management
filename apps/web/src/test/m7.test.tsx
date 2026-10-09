@@ -233,7 +233,9 @@ describe('TC-S06: Team on leave', () => {
     const row = (await screen.findByText('Personal appointment')).closest('tr')!;
     expect(row).toHaveTextContent('Ken L.');
     expect(row).toHaveTextContent('Half day AM');
-    expect(screen.getByText('-2')).toHaveClass('text-danger');
+    expect(screen.getByText('−2').closest('td')).toHaveClass('text-danger');
+    // DR-38: a real minus sign and the Negative badge, as in My balances.
+    expect(screen.getByText('−2').closest('td')).toHaveTextContent('−2Negative');
   });
 });
 

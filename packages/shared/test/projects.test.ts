@@ -161,9 +161,9 @@ describe('EC-58: tasks without an estimate', () => {
 
   it('shows "–", has no variance and is never over budget; summaries count unestimated tasks; time still counts', () => {
     expect(formatHours(null)).toBe('–');
-    expect(formatHours(0)).toBe('0h');
-    expect(formatHours(2.5)).toBe('2.5h');
-    expect(formatHours(4)).toBe('4h');
+    expect(formatHours(0)).toBe('00:00');
+    expect(formatHours(2.5)).toBe('02:30');
+    expect(formatHours(4)).toBe('04:00');
     expect(effortVariance({ estHours: null, actualHours: 5 })).toEqual({
       variance: null,
       overrunPct: null,
@@ -264,5 +264,17 @@ describe('Reordering (template activities and project tasks)', () => {
       true,
     );
     expect(reorderTasksSchema.safeParse({ phase: 'P', taskIds: [] }).success).toBe(false);
+  });
+});
+
+describe('DR-25: hours as HH:MM', () => {
+  it('formats decimal hours from timed entries without raw decimals', async () => {
+    const { hoursHHMM, formatSignedHours } = await import('../src/index');
+    expect(hoursHHMM(0.03333333333333333)).toBe('00:02');
+    expect(hoursHHMM(4.883333333333333)).toBe('04:53');
+    expect(hoursHHMM(0.3666666666666667)).toBe('00:22');
+    expect(hoursHHMM(40)).toBe('40:00');
+    expect(hoursHHMM(null)).toBe('–');
+    expect(formatSignedHours(-0.25)).toBe('−00:15');
   });
 });

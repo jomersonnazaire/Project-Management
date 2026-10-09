@@ -90,6 +90,8 @@ describe('Today › Time in / Time out (TC-Q01, Q02, Q08)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Time in' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Start timer' }));
     expect(within(dialog).getByText('Choose where you’re working today.')).toBeInTheDocument();
+    // DR-30: the entry that sets the day's location doesn't ask for a per-entry Location too.
+    expect(within(dialog).queryByLabelText('Location')).not.toBeInTheDocument();
     // Prefilled from today's last entry on the same task.
     expect(within(dialog).getByLabelText('Activity type *')).toHaveValue('at1');
     await userEvent.selectOptions(
@@ -127,10 +129,13 @@ describe('Today › Time in / Time out (TC-Q01, Q02, Q08)', () => {
     renderAt('/my-tasks', <App />);
     const row = await screen.findByTestId('planned-t1');
     expect(await within(row).findByText('Running')).toBeInTheDocument();
+    // DR-31: the running row is tinted and shows its live elapsed time.
+    expect(row).toHaveClass('row-running');
+    expect(row).toHaveTextContent(/01:1\d\s*Running/);
     const pill = await screen.findByTestId('running-timer');
     expect(pill).toHaveTextContent('Prepare UAT scripts');
     expect(pill).toHaveTextContent('01:12');
-    await userEvent.click(within(pill).getByRole('button', { name: '■ Time out' }));
+    await userEvent.click(within(pill).getByRole('button', { name: 'Time out' }));
     await waitFor(() => expect(sent(fetchMock, '/tracker/stop')).toEqual({}));
   });
 });
@@ -400,5 +405,64 @@ describe('Notifications: personal notices', () => {
     expect(
       await screen.findByText(/reopened your timesheet for 2026-10-08: Missing call\./),
     ).toBeInTheDocument();
+  });
+});
+
+describe('FR-ACT-19 / DR-35 / DR-38: the entry modal', () => {
+  const quick = entry({
+    id: 'q1',
+    kind: 'QUICK',
+    project: null,
+    client: null,
+    task: null,
+    title: 'QA quick activity check',
+    startAt: '2026-10-09T02:20:00.000Z',
+    endAt: '2026-10-09T02:30:00.000Z',
+    minutes: 10,
+    billable: false,
+    type: null,
+    module: null,
+    activityType: { id: 'at2', name: 'Internal meeting' },
+  });
+
+  it('deletes your own entry after the app confirm, not the browser one', async () => {
+    const native = vi.fn(() => true);
+    vi.stubGlobal('confirm', native);
+    const fetchMock = tracker('MEMBER', trackerDay({ entries: [quick] }), (url, init) =>
+      init?.method === 'DELETE' && url.endsWith('/tracker/entries/q1')
+        ? { status: 204, body: null }
+        : undefined,
+    );
+    renderAt('/my-tasks?tab=day', <App />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Edit QA quick activity check' }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Edit entry' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete entry' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete this entry?' });
+    expect(confirm).toHaveTextContent('QA quick activity check · 00:10 on Fri, Oct 9');
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete entry' }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([u, i]) => String(u).endsWith('/tracker/entries/q1') && i?.method === 'DELETE',
+        ),
+      ).toBe(true),
+    );
+    expect(native).not.toHaveBeenCalled();
+  });
+
+  it('has no Delete on a submitted day', async () => {
+    tracker(
+      'MEMBER',
+      trackerDay({
+        entries: [{ ...quick, locked: true }],
+        status: 'SUBMITTED',
+        can: { edit: false, submit: false, reopen: false },
+      }),
+    );
+    renderAt('/my-tasks?tab=day', <App />);
+    await screen.findByTestId('entry-q1');
+    expect(screen.queryByRole('button', { name: 'Delete entry' })).not.toBeInTheDocument();
   });
 });

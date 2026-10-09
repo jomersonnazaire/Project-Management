@@ -544,3 +544,67 @@ describe('Supervisor (doc 14 §5, TC-S08)', () => {
     expect(cleared.body.user.supervisorId).toBeNull();
   });
 });
+
+describe('TC-Q05 mixed: hours-only entries, timed entries and a running timer share the 24-hour cap', () => {
+  it('counts the running timer, stops it at 24:00 of the day and refuses a new timer', async () => {
+    const { w, l, t1 } = await setup();
+    const hoursOnly = (hours: number) =>
+      w.member.agent.post('/api/v1/time').set(CSRF).send({
+        taskId: t1,
+        workDate: '2026-10-14',
+        hours,
+        activityTypeId: l.configuration,
+        moduleId: l.financials,
+      });
+    expect((await hoursOnly(18)).status).toBe(201);
+    expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(
+      201,
+    );
+    at('2026-10-14T06:00:00Z'); // 14:00 PHT: the timer has run 4h, so the day holds 22h
+    const over = await hoursOnly(3);
+    expect(over.status).toBe(422);
+    expect(over.body.error.code).toBe('DAILY_LIMIT');
+    expect(over.body.error.message).toContain('25h 00m');
+    expect((await hoursOnly(1)).status).toBe(201); // 23h
+    at('2026-10-14T08:30:00Z'); // 16:30 PHT: 6.5h on the timer would make 25.5h
+    const stopped = await stop(w.member.agent);
+    expect(stopped.status).toBe(200);
+    expect(stopped.body.entry).toMatchObject({ minutes: 300, autoStopped: true });
+    const d = await day(w.member.agent, '2026-10-14');
+    expect(d.body.day.totalMinutes).toBe(24 * 60);
+    const again = await start(w.member.agent, { ...task(l, t1) });
+    expect(again.status).toBe(422);
+    expect(again.body.error.code).toBe('DAILY_LIMIT');
+  });
+});
+
+describe('FR-ACT-19 (DR-35): deleting your own entries', () => {
+  it('deletes a quick activity on an open day, audits it, and refuses others and submitted days', async () => {
+    const { w, l } = await setup();
+    const q = (timeIn: string, timeOut: string) =>
+      manual(w.member.agent, {
+        title: 'QA quick activity check',
+        activityTypeId: l.internalMeeting,
+        date: '2026-10-13',
+        timeIn,
+        timeOut,
+        dayLocationId: l.office,
+      });
+    const a = (await q('09:00', '09:30')).body.entry.id as string;
+    const b = (await q('10:00', '10:30')).body.entry.id as string;
+    const del = (who: Agent, id: string) => who.delete(`/api/v1/tracker/entries/${id}`).set(CSRF);
+    expect((await del(w.pm.agent, a)).status).toBe(403); // supervisor: view only
+    expect((await del(w.pm2.agent, a)).status).toBe(404);
+    expect((await del(w.member.agent, a)).status).toBe(204);
+    expect(await TimeEntryModel.exists({ _id: a })).toBeNull();
+    const log = await ActivityLogModel.findOne({ entityId: a, action: 'time_deleted' }).lean();
+    expect(log).toMatchObject({ actorId: w.member.user._id });
+    expect(
+      (await w.member.agent.post('/api/v1/tracker/days/2026-10-13/submit').set(CSRF).send({}))
+        .status,
+    ).toBe(200);
+    const locked = await del(w.member.agent, b);
+    expect(locked.status).toBe(422);
+    expect(locked.body.error.code).toBe('DAY_LOCKED');
+  });
+});

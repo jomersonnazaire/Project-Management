@@ -33,6 +33,7 @@ import { DragHandle, ReorderControls } from '../../components/ReorderControls';
 import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
 import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
+import { useConfirm } from '../../components/ConfirmModal';
 
 interface Draft {
   name: string;
@@ -61,6 +62,7 @@ const nextId = (prefix: string, taken: { id: string }[]) => {
  * projects use, and earlier projects keep the version they were created from (FR-TPL-04).
  */
 export function TemplateEditorPage() {
+  const [confirm, confirmDialog] = useConfirm();
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const template = useTemplate(id);
@@ -167,378 +169,392 @@ export function TemplateEditorPage() {
 
   return (
     <>
-      <PageHeader
-        title={`${t.name} · v${t.version}`}
-        badge={
-          <>
-            <TemplateStatusBadge status={t.status} />
-            {t.superseded && <span className="badge bg-label-secondary ms-1">Older version</span>}
-          </>
-        }
-      >
-        {editable && (
-          <>
-            <Button
-              variant="outline-secondary"
-              disabled={!dirty || save.isPending}
-              onClick={() =>
-                save.mutate({ id: t.id, body: body() }, { onSuccess: () => setDirty(false) })
-              }
-            >
-              Save draft
-            </Button>
-            <Button disabled={action.isPending || save.isPending} onClick={() => run('publish')}>
-              Publish v{t.version}
-            </Button>
-          </>
-        )}
-      </PageHeader>
-
-      <Link to="/templates" className="d-inline-block mb-4">
-        ‹ All templates
-      </Link>
-      {notice && <Alert variant="success">{notice}</Alert>}
-      <ErrorAlert error={save.error || action.error || remove.error} action />
-      {!editable && t.status === 'DRAFT' && (
-        <LockNotice>You can view this draft. Editing templates needs Edit on Templates.</LockNotice>
-      )}
-      {t.status !== 'DRAFT' && (
-        <p className="text-body-secondary">
-          Published versions are read-only. Projects keep the version they were created from;
-          {t.superseded
-            ? ' a newer version is now used for new projects.'
-            : ' new projects use this version.'}
-        </p>
-      )}
-
-      <div className="row g-6">
-        <div className="col-lg-8">
-          <div className="card mb-6">
-            <div className="card-body">
-              <div className="row g-3">
-                <Form.Group className="col-md-7" controlId="tpl-edit-name">
-                  <Form.Label>Template name</Form.Label>
-                  <Form.Control
-                    value={draft.name}
-                    disabled={!editable}
-                    onChange={(e) => update({ name: e.target.value })}
-                  />
-                </Form.Group>
-                <Form.Group className="col-md-5" controlId="tpl-edit-type">
-                  <Form.Label>Type</Form.Label>
-                  <Form.Select
-                    value={draft.type}
-                    disabled={!editable}
-                    onChange={(e) => update({ type: e.target.value as TemplateType })}
-                  >
-                    {TEMPLATE_TYPES.map((x) => (
-                      <option key={x} value={x}>
-                        {TEMPLATE_TYPE_LABELS[x]}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-                <Form.Group className="col-12" controlId="tpl-edit-desc">
-                  <Form.Label>Description</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={2}
-                    value={draft.description}
-                    disabled={!editable}
-                    onChange={(e) => update({ description: e.target.value })}
-                  />
-                </Form.Group>
-              </div>
-            </div>
-          </div>
-
-          {draft.phases.length === 0 && (
-            <EmptyState icon="bx-list-ol" title="No phases yet">
-              {editable ? 'Add a phase, then its activities.' : 'This template has no activities.'}
-            </EmptyState>
-          )}
-          {draft.phases.map((ph, pi) => (
-            <div
-              className="card mb-4"
-              key={ph.id}
-              {...dropTargetProps(editable, 'template-activity', (id) =>
-                dropActivity(id, ph.id, null),
-              )}
-            >
-              <div className="card-header d-flex align-items-center gap-2">
-                {editable ? (
-                  <Form.Control
-                    aria-label={`Phase ${pi + 1} name`}
-                    value={ph.name}
-                    onChange={(e) =>
-                      update({
-                        phases: draft.phases.map((x) =>
-                          x.id === ph.id ? { ...x, name: e.target.value } : x,
-                        ),
-                      })
-                    }
-                  />
-                ) : (
-                  <h2 className="h6 mb-0">{ph.name}</h2>
-                )}
-                {editable && activitiesByPhase(ph.id).length === 0 && (
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="text-danger"
-                    onClick={() => update({ phases: draft.phases.filter((x) => x.id !== ph.id) })}
-                  >
-                    Remove
-                  </Button>
-                )}
-              </div>
-              <div className="table-responsive">
-                <table className="table mb-0">
-                  <thead>
-                    <tr>
-                      {editable && (
-                        <th scope="col">
-                          <span className="visually-hidden">Reorder</span>
-                        </th>
-                      )}
-                      <th scope="col">#</th>
-                      <th scope="col">Activity</th>
-                      <th scope="col">Party</th>
-                      <th scope="col">Est. hours</th>
-                      <th scope="col">Day / days</th>
-                      <th scope="col">Depends on</th>
-                      {editable && (
-                        <th scope="col">
-                          <span className="visually-hidden">Actions</span>
-                        </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activitiesByPhase(ph.id).map((a, i, group) => (
-                      <tr
-                        key={a.id}
-                        {...dropTargetProps(editable, 'template-activity', (id) =>
-                          dropActivity(id, ph.id, i),
-                        )}
-                      >
-                        {editable && (
-                          <td style={{ width: '2rem' }}>
-                            <DragHandle
-                              name={a.name}
-                              index={i}
-                              count={group.length}
-                              onMove={(to) => moveActivity(ph.id, i, to)}
-                              dragProps={dragHandleProps(editable, 'template-activity', a.id)}
-                            />
-                          </td>
-                        )}
-                        <td>{draft.activities.indexOf(a) + 1}</td>
-                        <td className="text-heading">
-                          {a.name}
-                          <div className="small text-body-secondary">
-                            {[
-                              a.mandatory ? 'Mandatory' : 'Optional',
-                              a.requiresApproval && 'Needs approval',
-                              a.isMilestone && 'Milestone',
-                              a.deliverable && `Deliverable: ${a.deliverable}`,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </div>
-                        </td>
-                        <td>{PARTY_LABELS[a.party]}</td>
-                        <td>
-                          <Estimate hours={a.estHours} />
-                        </td>
-                        <td className="text-nowrap">
-                          +{a.offsetDays} / {a.durationDays}
-                        </td>
-                        <td className="small">{a.dependsOn.map(nameOf).join(', ') || '–'}</td>
-                        {editable && (
-                          <td className="text-end text-nowrap">
-                            <ReorderControls
-                              name={a.name}
-                              index={i}
-                              count={group.length}
-                              onMove={(to) => moveActivity(ph.id, i, to)}
-                            />
-                            <Button
-                              variant="link"
-                              size="sm"
-                              onClick={() => setEditing(a)}
-                              aria-label={`Edit ${a.name}`}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              variant="link"
-                              size="sm"
-                              className="text-danger"
-                              aria-label={`Remove ${a.name}`}
-                              onClick={() =>
-                                update({
-                                  activities: draft.activities
-                                    .filter((x) => x.id !== a.id)
-                                    .map((x) => ({
-                                      ...x,
-                                      dependsOn: x.dependsOn.filter((d) => d !== a.id),
-                                    })),
-                                })
-                              }
-                            >
-                              Remove
-                            </Button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {editable && (
-                <div className="card-footer py-3">
-                  <Button
-                    variant="outline-primary"
-                    size="sm"
-                    title={`Add an activity to ${ph.name}`}
-                    onClick={() => setEditing({ newInPhase: ph.id })}
-                  >
-                    + Add activity to Phase {pi + 1}
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))}
+      {confirmDialog}
+      <>
+        <PageHeader
+          title={`${t.name} · v${t.version}`}
+          badge={
+            <>
+              <TemplateStatusBadge status={t.status} />
+              {t.superseded && <span className="badge bg-label-secondary ms-1">Older version</span>}
+            </>
+          }
+        >
           {editable && (
-            <div className="d-flex gap-2">
+            <>
               <Button
-                variant="outline-primary"
+                variant="outline-secondary"
+                disabled={!dirty || save.isPending}
                 onClick={() =>
-                  update({
-                    phases: [
-                      ...draft.phases,
-                      { id: nextId('p', draft.phases), name: `Phase ${draft.phases.length + 1}` },
-                    ],
-                  })
+                  save.mutate({ id: t.id, body: body() }, { onSuccess: () => setDirty(false) })
                 }
               >
-                + Add phase
+                Save draft
               </Button>
-            </div>
+              <Button disabled={action.isPending || save.isPending} onClick={() => run('publish')}>
+                Publish v{t.version}
+              </Button>
+            </>
           )}
-        </div>
+        </PageHeader>
 
-        <div className="col-lg-4">
-          <div className="card mb-6">
-            <div className="card-body">
-              <h2 className="h6">Summary</h2>
-              <p className="mb-1">
-                {plural(draft.activities.length, 'activity', 'activities')} in{' '}
-                {plural(draft.phases.length, 'phase')}
-              </p>
-              <p className="mb-1">
-                {plural(
-                  draft.activities.reduce((n, a) => n + a.dependsOn.length, 0),
-                  'dependency',
-                  'dependencies',
-                )}{' '}
-                · {plural(draft.activities.filter((a) => a.deliverable).length, 'deliverable')}
-              </p>
-              <p className="mb-0 text-body-secondary small">
-                {draft.activities.filter((a) => a.estHours === null).length} without an estimate
-              </p>
+        <Link to="/templates" className="d-inline-block mb-4">
+          ‹ All templates
+        </Link>
+        {notice && <Alert variant="success">{notice}</Alert>}
+        <ErrorAlert error={save.error || action.error || remove.error} action />
+        {!editable && t.status === 'DRAFT' && (
+          <LockNotice>
+            You can view this draft. Editing templates needs Edit on Templates.
+          </LockNotice>
+        )}
+        {t.status !== 'DRAFT' && (
+          <p className="text-body-secondary">
+            Published versions are read-only. Projects keep the version they were created from;
+            {t.superseded
+              ? ' a newer version is now used for new projects.'
+              : ' new projects use this version.'}
+          </p>
+        )}
+
+        <div className="row g-6">
+          <div className="col-lg-8">
+            <div className="card mb-6">
+              <div className="card-body">
+                <div className="row g-3">
+                  <Form.Group className="col-md-7" controlId="tpl-edit-name">
+                    <Form.Label>Template name</Form.Label>
+                    <Form.Control
+                      value={draft.name}
+                      disabled={!editable}
+                      onChange={(e) => update({ name: e.target.value })}
+                    />
+                  </Form.Group>
+                  <Form.Group className="col-md-5" controlId="tpl-edit-type">
+                    <Form.Label>Type</Form.Label>
+                    <Form.Select
+                      value={draft.type}
+                      disabled={!editable}
+                      onChange={(e) => update({ type: e.target.value as TemplateType })}
+                    >
+                      {TEMPLATE_TYPES.map((x) => (
+                        <option key={x} value={x}>
+                          {TEMPLATE_TYPE_LABELS[x]}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                  <Form.Group className="col-12" controlId="tpl-edit-desc">
+                    <Form.Label>Description</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      value={draft.description}
+                      disabled={!editable}
+                      onChange={(e) => update({ description: e.target.value })}
+                    />
+                  </Form.Group>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="card mb-6">
-            <div className="card-body">
-              <h2 className="h6">Versions</h2>
-              <ul className="list-unstyled mb-0">
-                {t.versions.map((v) => (
-                  <li key={v.id} className="d-flex justify-content-between py-1">
-                    {v.id === t.id ? (
-                      <strong>v{v.version}</strong>
-                    ) : (
-                      <Link to={`/templates/${v.id}`}>v{v.version}</Link>
-                    )}
-                    <span className="small text-body-secondary">
-                      {v.status === 'DRAFT'
-                        ? 'Draft'
-                        : v.superseded
-                          ? `Older · ${shortDate(v.publishedAt, true)}`
-                          : `${v.status === 'ARCHIVED' ? 'Archived' : 'Current'} · ${shortDate(v.publishedAt, true)}`}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <div className="d-grid gap-2">
-            {t.status === 'PUBLISHED' &&
-              !t.superseded &&
-              canEdit &&
-              (t.draftId ? (
-                <Link className="btn btn-outline-primary" to={`/templates/${t.draftId}`}>
-                  Open draft v{t.version + 1}
-                </Link>
-              ) : (
-                <Button variant="outline-primary" onClick={() => run('new-version')}>
-                  New version
-                </Button>
-              ))}
-            {canCreate && (
-              <Button variant="outline-secondary" onClick={() => run('duplicate')}>
-                Duplicate
-              </Button>
+
+            {draft.phases.length === 0 && (
+              <EmptyState icon="bx-list-ol" title="No phases yet">
+                {editable
+                  ? 'Add a phase, then its activities.'
+                  : 'This template has no activities.'}
+              </EmptyState>
             )}
-            {t.status === 'PUBLISHED' && !t.superseded && canEdit && (
-              <Button variant="outline-secondary" onClick={() => run('archive')}>
-                Archive
-              </Button>
-            )}
-            {t.status === 'ARCHIVED' && !t.superseded && canEdit && (
-              <Button variant="outline-secondary" onClick={() => run('restore')}>
-                Restore
-              </Button>
-            )}
-            {t.status === 'DRAFT' && canDelete && (
-              <Button
-                variant="outline-danger"
-                onClick={() => {
-                  if (window.confirm('Discard this draft? This cannot be undone.')) {
-                    remove.mutate(t.id, { onSuccess: () => navigate('/templates') });
-                  }
-                }}
+            {draft.phases.map((ph, pi) => (
+              <div
+                className="card mb-4"
+                key={ph.id}
+                {...dropTargetProps(editable, 'template-activity', (id) =>
+                  dropActivity(id, ph.id, null),
+                )}
               >
-                Discard draft
-              </Button>
+                <div className="card-header d-flex align-items-center gap-2">
+                  {editable ? (
+                    <Form.Control
+                      aria-label={`Phase ${pi + 1} name`}
+                      value={ph.name}
+                      onChange={(e) =>
+                        update({
+                          phases: draft.phases.map((x) =>
+                            x.id === ph.id ? { ...x, name: e.target.value } : x,
+                          ),
+                        })
+                      }
+                    />
+                  ) : (
+                    <h2 className="h6 mb-0">{ph.name}</h2>
+                  )}
+                  {editable && activitiesByPhase(ph.id).length === 0 && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="text-danger"
+                      onClick={() => update({ phases: draft.phases.filter((x) => x.id !== ph.id) })}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <div className="table-responsive">
+                  <table className="table mb-0">
+                    <thead>
+                      <tr>
+                        {editable && (
+                          <th scope="col">
+                            <span className="visually-hidden">Reorder</span>
+                          </th>
+                        )}
+                        <th scope="col">#</th>
+                        <th scope="col">Activity</th>
+                        <th scope="col">Party</th>
+                        <th scope="col">Est. hours</th>
+                        <th scope="col">Day / days</th>
+                        <th scope="col">Depends on</th>
+                        {editable && (
+                          <th scope="col">
+                            <span className="visually-hidden">Actions</span>
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activitiesByPhase(ph.id).map((a, i, group) => (
+                        <tr
+                          key={a.id}
+                          {...dropTargetProps(editable, 'template-activity', (id) =>
+                            dropActivity(id, ph.id, i),
+                          )}
+                        >
+                          {editable && (
+                            <td style={{ width: '2rem' }}>
+                              <DragHandle
+                                name={a.name}
+                                index={i}
+                                count={group.length}
+                                onMove={(to) => moveActivity(ph.id, i, to)}
+                                dragProps={dragHandleProps(editable, 'template-activity', a.id)}
+                              />
+                            </td>
+                          )}
+                          <td>{draft.activities.indexOf(a) + 1}</td>
+                          <td className="text-heading">
+                            {a.name}
+                            <div className="small text-body-secondary">
+                              {[
+                                a.mandatory ? 'Mandatory' : 'Optional',
+                                a.requiresApproval && 'Needs approval',
+                                a.isMilestone && 'Milestone',
+                                a.deliverable && `Deliverable: ${a.deliverable}`,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </div>
+                          </td>
+                          <td>{PARTY_LABELS[a.party]}</td>
+                          <td>
+                            <Estimate hours={a.estHours} />
+                          </td>
+                          <td className="text-nowrap">
+                            +{a.offsetDays} / {a.durationDays}
+                          </td>
+                          <td className="small">{a.dependsOn.map(nameOf).join(', ') || '–'}</td>
+                          {editable && (
+                            <td className="text-end text-nowrap">
+                              <ReorderControls
+                                name={a.name}
+                                index={i}
+                                count={group.length}
+                                onMove={(to) => moveActivity(ph.id, i, to)}
+                              />
+                              <Button
+                                variant="link"
+                                size="sm"
+                                onClick={() => setEditing(a)}
+                                aria-label={`Edit ${a.name}`}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="text-danger"
+                                aria-label={`Remove ${a.name}`}
+                                onClick={() =>
+                                  update({
+                                    activities: draft.activities
+                                      .filter((x) => x.id !== a.id)
+                                      .map((x) => ({
+                                        ...x,
+                                        dependsOn: x.dependsOn.filter((d) => d !== a.id),
+                                      })),
+                                  })
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {editable && (
+                  <div className="card-footer py-3">
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      title={`Add an activity to ${ph.name}`}
+                      onClick={() => setEditing({ newInPhase: ph.id })}
+                    >
+                      + Add activity to Phase {pi + 1}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {editable && (
+              <div className="d-flex gap-2">
+                <Button
+                  variant="outline-primary"
+                  onClick={() =>
+                    update({
+                      phases: [
+                        ...draft.phases,
+                        { id: nextId('p', draft.phases), name: `Phase ${draft.phases.length + 1}` },
+                      ],
+                    })
+                  }
+                >
+                  + Add phase
+                </Button>
+              </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {editing && (
-        <ActivityModal
-          activity={'newInPhase' in editing ? null : editing}
-          phaseId={'newInPhase' in editing ? editing.newInPhase : editing.phaseId}
-          draft={draft}
-          onClose={() => setEditing(null)}
-          onSave={(a) => {
-            const exists = draft.activities.some((x) => x.id === a.id);
-            if (exists) {
-              update({ activities: draft.activities.map((x) => (x.id === a.id ? a : x)) });
-            } else {
-              // Insert after the phase's last activity so numbering follows the phases.
-              const last = draft.activities.map((x) => x.phaseId).lastIndexOf(a.phaseId);
-              const at = last < 0 ? draft.activities.length : last + 1;
-              update({
-                activities: [...draft.activities.slice(0, at), a, ...draft.activities.slice(at)],
-              });
-            }
-            setEditing(null);
-          }}
-        />
-      )}
+          <div className="col-lg-4">
+            <div className="card mb-6">
+              <div className="card-body">
+                <h2 className="h6">Summary</h2>
+                <p className="mb-1">
+                  {plural(draft.activities.length, 'activity', 'activities')} in{' '}
+                  {plural(draft.phases.length, 'phase')}
+                </p>
+                <p className="mb-1">
+                  {plural(
+                    draft.activities.reduce((n, a) => n + a.dependsOn.length, 0),
+                    'dependency',
+                    'dependencies',
+                  )}{' '}
+                  · {plural(draft.activities.filter((a) => a.deliverable).length, 'deliverable')}
+                </p>
+                <p className="mb-0 text-body-secondary small">
+                  {draft.activities.filter((a) => a.estHours === null).length} without an estimate
+                </p>
+              </div>
+            </div>
+            <div className="card mb-6">
+              <div className="card-body">
+                <h2 className="h6">Versions</h2>
+                <ul className="list-unstyled mb-0">
+                  {t.versions.map((v) => (
+                    <li key={v.id} className="d-flex justify-content-between py-1">
+                      {v.id === t.id ? (
+                        <strong>v{v.version}</strong>
+                      ) : (
+                        <Link to={`/templates/${v.id}`}>v{v.version}</Link>
+                      )}
+                      <span className="small text-body-secondary">
+                        {v.status === 'DRAFT'
+                          ? 'Draft'
+                          : v.superseded
+                            ? `Older · ${shortDate(v.publishedAt, true)}`
+                            : `${v.status === 'ARCHIVED' ? 'Archived' : 'Current'} · ${shortDate(v.publishedAt, true)}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="d-grid gap-2">
+              {t.status === 'PUBLISHED' &&
+                !t.superseded &&
+                canEdit &&
+                (t.draftId ? (
+                  <Link className="btn btn-outline-primary" to={`/templates/${t.draftId}`}>
+                    Open draft v{t.version + 1}
+                  </Link>
+                ) : (
+                  <Button variant="outline-primary" onClick={() => run('new-version')}>
+                    New version
+                  </Button>
+                ))}
+              {canCreate && (
+                <Button variant="outline-secondary" onClick={() => run('duplicate')}>
+                  Duplicate
+                </Button>
+              )}
+              {t.status === 'PUBLISHED' && !t.superseded && canEdit && (
+                <Button variant="outline-secondary" onClick={() => run('archive')}>
+                  Archive
+                </Button>
+              )}
+              {t.status === 'ARCHIVED' && !t.superseded && canEdit && (
+                <Button variant="outline-secondary" onClick={() => run('restore')}>
+                  Restore
+                </Button>
+              )}
+              {t.status === 'DRAFT' && canDelete && (
+                <Button
+                  variant="outline-danger"
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: 'Discard this draft?',
+                        body: 'This cannot be undone.',
+                        confirmLabel: 'Discard draft',
+                        danger: true,
+                      })
+                    ) {
+                      remove.mutate(t.id, { onSuccess: () => navigate('/templates') });
+                    }
+                  }}
+                >
+                  Discard draft
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {editing && (
+          <ActivityModal
+            activity={'newInPhase' in editing ? null : editing}
+            phaseId={'newInPhase' in editing ? editing.newInPhase : editing.phaseId}
+            draft={draft}
+            onClose={() => setEditing(null)}
+            onSave={(a) => {
+              const exists = draft.activities.some((x) => x.id === a.id);
+              if (exists) {
+                update({ activities: draft.activities.map((x) => (x.id === a.id ? a : x)) });
+              } else {
+                // Insert after the phase's last activity so numbering follows the phases.
+                const last = draft.activities.map((x) => x.phaseId).lastIndexOf(a.phaseId);
+                const at = last < 0 ? draft.activities.length : last + 1;
+                update({
+                  activities: [...draft.activities.slice(0, at), a, ...draft.activities.slice(at)],
+                });
+              }
+              setEditing(null);
+            }}
+          />
+        )}
+      </>
     </>
   );
 }

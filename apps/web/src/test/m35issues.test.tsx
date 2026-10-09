@@ -331,8 +331,6 @@ describe('Delete a task or phase (M3.5)', () => {
   });
 
   it('a deletable task asks to confirm, then sends DELETE', async () => {
-    const confirm = vi.fn(() => true);
-    vi.stubGlobal('confirm', confirm);
     const fetchMock = api(
       'PROJECT_MANAGER',
       projectRoutes((url, init) =>
@@ -345,7 +343,9 @@ describe('Delete a task or phase (M3.5)', () => {
     );
     renderAt(`/projects/${PID}?task=k1`, <App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
-    expect(confirm).toHaveBeenCalled();
+    // DR-35: the app's confirm modal, not the browser's.
+    const dlg = await screen.findByRole('dialog', { name: 'Delete "Kickoff"?' });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(
@@ -356,7 +356,6 @@ describe('Delete a task or phase (M3.5)', () => {
   });
 
   it('phases: blocked phases show the reason; an empty phase can be deleted after confirming', async () => {
-    vi.stubGlobal('confirm', () => true);
     const fetchMock = api(
       'PROJECT_MANAGER',
       projectRoutes((url, init) => {
@@ -393,6 +392,8 @@ describe('Delete a task or phase (M3.5)', () => {
     ).toBeInTheDocument();
     const empty = await screen.findByTestId('empty-phase-Go-live');
     await userEvent.click(within(empty).getByRole('button', { name: 'Delete phase' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Delete the phase "Go-live"?' });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Delete phase' }));
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(
