@@ -568,9 +568,13 @@ $board-gap: 0.75rem;
     letter-spacing: 0;
     font-weight: 600;
     font-size: 0.75rem;
+    // Headers wrap between words only ("Rendered / Hrs", never "Render / ed").
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
   }
   td {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
   .dar-remarks {
     white-space: pre-wrap;
@@ -591,9 +595,15 @@ $board-gap: 0.75rem;
     min-width: 0;
     width: 100%;
     font-size: 0.7rem;
+    > :not(caption) > * > * {
+      padding: 0.375rem 0.25rem;
+    }
     > thead th.dar-head {
       font-size: 0.7rem;
     }
+  }
+  .dar-report {
+    padding: 0.5rem;
   }
 }
 .dar-footer {
@@ -615,7 +625,7 @@ $board-gap: 0.75rem;
 }
 
 // DR-38: long menu labels ("Daily Accomplishment Report") wrap to two lines as in the mockup.
-.layout-menu .menu-link > div.menu-label-wrap {
+.layout-menu.menu-vertical .menu-item .menu-link > div.menu-label-wrap:not(.badge) {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;

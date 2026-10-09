@@ -50,7 +50,7 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
         onClick={() => stop.mutate({ path: '/stop' })}
       >
         <span aria-hidden="true">■</span>
-        <span className="timer-pill-stop-text"> Time out</span>
+        <span className="timer-pill-stop-text ms-1">Time out</span>
       </Button>
     </div>
   );

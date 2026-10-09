@@ -73,7 +73,7 @@ export function DarReportView({ report }: { report: DarReportDto }) {
 }
 
 /** Column widths (%) that fit all 11 columns from 1200px with Remarks wrapping (DR-26). */
-const DAR_COL_WIDTHS = [9.5, 8, 8, 6.5, 9, 11, 9, 6.5, 6, 8.5, 18];
+const DAR_COL_WIDTHS = [8.5, 7.5, 7.5, 7.5, 11, 10, 8.5, 7.5, 7, 8, 17];
 
 export function SavedTagBadge({ tag }: { tag: SavedTag }) {
   if (tag === 'LATEST') return <span className="badge bg-label-success">{SAVED_LATEST}</span>;
