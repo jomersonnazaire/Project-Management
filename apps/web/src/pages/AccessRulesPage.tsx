@@ -20,6 +20,7 @@ import {
 } from '@xc8/shared';
 import { useEffect, useState } from 'react';
 import { Alert, Button, Modal } from 'react-bootstrap';
+import { useBlocker } from 'react-router-dom';
 import { ApiError, NO_LONGER_PERMITTED } from '../api/client';
 import { useAccessRules, useResetAccessRules, useSaveAccessRules } from '../api/hooks';
 import { useCan } from '../auth/useCan';
@@ -88,6 +89,11 @@ export function AccessRulesPage() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [anyDirty]);
+  // ...and on moving to another page in the app (TC-M17, Milestone 2).
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      anyDirty && currentLocation.pathname !== nextLocation.pathname,
+  );
 
   const toggle = (record: RecordType, action: AccessAction, checked: boolean) => {
     if (!grid) return;
@@ -267,6 +273,22 @@ export function AccessRulesPage() {
           </Button>
           <Button variant="danger" onClick={() => void doReset()}>
             Reset
+          </Button>
+        </Modal.Footer>
+      </Modal>
+      <Modal show={blocker.state === 'blocked'} onHide={() => blocker.reset?.()} centered>
+        <Modal.Header closeButton>
+          <Modal.Title as="h5">Leave without saving?</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          You have unsaved access rule changes. They will be lost if you leave.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => blocker.reset?.()}>
+            Stay on this page
+          </Button>
+          <Button variant="danger" onClick={() => blocker.proceed?.()}>
+            Leave
           </Button>
         </Modal.Footer>
       </Modal>
