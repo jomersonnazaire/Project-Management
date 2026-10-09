@@ -36,7 +36,7 @@ export interface BlobStore {
 const contentDisposition = (fileName: string) =>
   `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 
-class AzureBlobStore implements BlobStore {
+export class AzureBlobStore implements BlobStore {
   readonly kind = 'azure' as const;
   private delegationKey: { key: UserDelegationKey; expires: number } | null = null;
 
@@ -108,7 +108,11 @@ class AzureBlobStore implements BlobStore {
   }
 
   async read(key: string, maxBytes: number) {
-    return this.container.getBlockBlobClient(key).downloadToBuffer(0, maxBytes);
+    const blob = this.container.getBlockBlobClient(key);
+    // A range past the end of the blob is refused (416), so never ask for more than it holds.
+    const size = (await blob.getProperties()).contentLength ?? 0;
+    const count = Math.min(size, maxBytes);
+    return count > 0 ? blob.downloadToBuffer(0, count) : Buffer.alloc(0);
   }
 
   async remove(key: string) {

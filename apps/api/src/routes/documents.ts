@@ -758,7 +758,8 @@ export function documentsRouter(
       );
     }
     if (info.size === 0) throw await reject(422, 'EMPTY_FILE', `${up.fileName} is empty.`, 'empty');
-    const buf = await s.read(up.blobKey, MAX_UPLOAD_BYTES);
+    // Read exactly the blob's size: asking Azure for more than it holds is a 416.
+    const buf = await s.read(up.blobKey, info.size);
     const verdict = malwareVerdict(buf, info.tags);
     if (verdict) throw await reject(422, 'MALWARE_DETECTED', malwareMessage(up.fileName), verdict);
     const detected = detectFileType(buf, up.fileName);
