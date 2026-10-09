@@ -1,9 +1,10 @@
 import { SYSTEM_ROLE_LABELS, type SystemRole } from '@xc8/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
+import { TopbarContext, type TopbarSlots } from '../components/topbar';
 
 interface NavItem {
   to: string;
@@ -72,6 +73,13 @@ export function AppShell() {
   const location = useLocation();
   // The off-canvas menu is open only on the page where it was opened, so navigating closes it.
   const [openedOn, setOpenedOn] = useState<string | null>(null);
+  // DOM nodes in the top bar that pages portal their title and primary action into (DR-02).
+  const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null);
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  const slots = useMemo<TopbarSlots>(
+    () => ({ title: titleSlot, actions: actionsSlot }),
+    [titleSlot, actionsSlot],
+  );
   const menuOpen = openedOn === location.pathname;
   const setMenuOpen = (open: boolean) => setOpenedOn(open ? location.pathname : null);
 
@@ -146,8 +154,13 @@ export function AppShell() {
                 <i className="bx bx-menu fs-4" aria-hidden="true" />
               </button>
             </div>
-            <div className="navbar-nav-right d-flex align-items-center justify-content-end w-100">
-              <ul className="navbar-nav flex-row align-items-center ms-auto">
+            <div className="navbar-nav-right d-flex align-items-center gap-3 w-100 min-w-0">
+              <div ref={setTitleSlot} className="topbar-title flex-grow-1 min-w-0" />
+              <div
+                ref={setActionsSlot}
+                className="topbar-actions d-flex align-items-center gap-2"
+              />
+              <ul className="navbar-nav flex-row align-items-center">
                 <li className="nav-item">
                   <Dropdown align="end">
                     <Dropdown.Toggle
@@ -186,7 +199,9 @@ export function AppShell() {
               className="container-xxl flex-grow-1 container-p-y"
               tabIndex={-1}
             >
-              <Outlet />
+              <TopbarContext.Provider value={slots}>
+                <Outlet />
+              </TopbarContext.Provider>
             </main>
             <footer className="content-footer footer bg-footer-theme">
               <div className="container-xxl py-3 small text-body-secondary">

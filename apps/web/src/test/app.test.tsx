@@ -75,7 +75,7 @@ describe('Role-gated UI', () => {
     expect(screen.getByRole('link', { name: /Client contacts/ })).toBeInTheDocument();
   });
 
-  it('an Admin sees the invite form with separate Access role and Job role fields (TC-B09)', async () => {
+  it('an Admin opens the invite form with separate Access role and Job role fields (TC-B09)', async () => {
     mockApi((url) => {
       if (url.endsWith('/auth/me'))
         return { status: 200, body: { user: user({ systemRole: 'ADMIN', name: 'Ada Admin' }) } };
@@ -84,6 +84,7 @@ describe('Role-gated UI', () => {
       return { status: 200, body: { items: [] } };
     });
     renderAt('/admin/users', <App />);
+    await userEvent.click(await screen.findByRole('button', { name: '+ Invite user' }));
     expect(await screen.findByLabelText('Access role * (what they can do)')).toBeInTheDocument();
     expect(screen.getByLabelText('Job role * (what they do)')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('member@xceler8.example')).toBeInTheDocument());

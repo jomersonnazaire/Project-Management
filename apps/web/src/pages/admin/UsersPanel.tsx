@@ -29,6 +29,7 @@ import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { CopyLinkField } from '../../components/CopyLinkField';
 import { hoursUntil } from '../../components/linkExpiry';
 import { InviteLinkModal } from '../../components/InviteLinkModal';
+import { TopbarActions } from '../../components/PageHeader';
 
 type InviteIn = z.input<typeof inviteUserSchema>;
 type InviteOut = z.output<typeof inviteUserSchema>;
@@ -118,7 +119,8 @@ function RoleSelects({
   );
 }
 
-function InviteUserForm({ teams }: { teams: TeamDto[] }) {
+/** Invite form in a modal opened from "+ Invite user" in the top bar (DR-01, mockup v0.4.2). */
+function InviteUserModal({ teams, onClose }: { teams: TeamDto[]; onClose: () => void }) {
   const invite = useInviteUser();
   const [created, setCreated] = useState<InviteResultDto | null>(null);
   const {
@@ -158,55 +160,76 @@ function InviteUserForm({ teams }: { teams: TeamDto[] }) {
   });
 
   return (
-    <Form noValidate onSubmit={(e) => void onSubmit(e)} aria-labelledby="invite-title">
-      <h5 id="invite-title" className="mb-4">
-        Invite user
-      </h5>
-      <Form.Group className="mb-3" controlId="invite-name">
-        <Form.Label>Full name *</Form.Label>
-        <Form.Control {...register('name')} isInvalid={!!errors.name} />
-        <Form.Control.Feedback type="invalid">{errors.name?.message}</Form.Control.Feedback>
-      </Form.Group>
-      <Form.Group className="mb-3" controlId="invite-email">
-        <Form.Label>Email *</Form.Label>
-        <Form.Control type="email" {...register('email')} isInvalid={!!errors.email} />
-        <Form.Control.Feedback type="invalid">{errors.email?.message}</Form.Control.Feedback>
-      </Form.Group>
-      <RoleSelects control={control} errors={errors} idPrefix="invite" />
-      <fieldset className="mb-4">
-        <legend className="form-label fs-6">Teams</legend>
-        <Controller
-          control={control}
-          name="teamIds"
-          render={({ field }) => (
-            <TeamChecklist
-              teams={teams}
-              value={field.value ?? []}
-              onChange={field.onChange}
-              idPrefix="invite-team"
+    <Modal show onHide={onClose} centered aria-labelledby="invite-title">
+      <Modal.Header closeButton>
+        <Modal.Title as="h5" id="invite-title">
+          Invite user
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form noValidate onSubmit={(e) => void onSubmit(e)} aria-labelledby="invite-title">
+          <Form.Group className="mb-3" controlId="invite-name">
+            <Form.Label>Full name *</Form.Label>
+            <Form.Control {...register('name')} isInvalid={!!errors.name} />
+            <Form.Control.Feedback type="invalid">{errors.name?.message}</Form.Control.Feedback>
+          </Form.Group>
+          <Form.Group className="mb-3" controlId="invite-email">
+            <Form.Label>Email *</Form.Label>
+            <Form.Control type="email" {...register('email')} isInvalid={!!errors.email} />
+            <Form.Control.Feedback type="invalid">{errors.email?.message}</Form.Control.Feedback>
+          </Form.Group>
+          <RoleSelects control={control} errors={errors} idPrefix="invite" />
+          <fieldset className="mb-4">
+            <legend className="form-label fs-6">Teams</legend>
+            <Controller
+              control={control}
+              name="teamIds"
+              render={({ field }) => (
+                <TeamChecklist
+                  teams={teams}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  idPrefix="invite-team"
+                />
+              )}
             />
+          </fieldset>
+          {errors.root && <div className="text-danger small mb-2">{errors.root.message}</div>}
+          <Button type="submit" className="w-100" disabled={isSubmitting}>
+            {isSubmitting ? 'Creating…' : 'Create invite link'}
+          </Button>
+          {created ? (
+            <div className="mt-4">
+              <CopyLinkField
+                id="invite-link"
+                label={`Invite link for ${created.user.name} (single use, expires in ${hoursUntil(created.inviteExpiresAt)} hours, share it yourself)`}
+                url={created.inviteUrl}
+              />
+            </div>
+          ) : (
+            <p className="form-text mt-2 mb-0">
+              You&apos;ll get a single-use invite link to share yourself; the person sets their own
+              password.
+            </p>
           )}
-        />
-      </fieldset>
-      {errors.root && <div className="text-danger small mb-2">{errors.root.message}</div>}
-      <Button type="submit" className="w-100" disabled={isSubmitting}>
-        {isSubmitting ? 'Creating…' : 'Create invite link'}
-      </Button>
-      {created ? (
-        <div className="mt-4">
-          <CopyLinkField
-            id="invite-link"
-            label={`Invite link for ${created.user.name} (single use, expires in ${hoursUntil(created.inviteExpiresAt)} hours, share it yourself)`}
-            url={created.inviteUrl}
-          />
-        </div>
-      ) : (
-        <p className="form-text mt-2 mb-0">
-          You&apos;ll get a single-use invite link to share yourself; the person sets their own
-          password.
-        </p>
-      )}
-    </Form>
+        </Form>
+      </Modal.Body>
+    </Modal>
+  );
+}
+
+/** Team names joined as "Management, Consulting"; each name keeps its comma when wrapping (DR-04). */
+export function TeamNames({ names }: { names: string[] }) {
+  if (!names.length) return <>–</>;
+  return (
+    <>
+      {names.map((n, i) => (
+        <span key={`${n}-${i}`} className="text-nowrap">
+          {n}
+          {i < names.length - 1 ? ', ' : ''}
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -343,145 +366,146 @@ export function UsersPanel() {
   };
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [confirm, setConfirm] = useState<UserDto | null>(null);
+  const [inviting, setInviting] = useState(false);
   const teamName = new Map((teams.data?.items ?? []).map((t) => [t.id, t.name]));
 
   return (
-    <div className="row g-6">
-      <div className="col-xxl-8">
-        <div className="card h-100">
-          <div className="card-body">
-            <div className="d-flex flex-wrap gap-3 mb-4">
-              <Form.Control
-                type="search"
-                placeholder="Search name or email…"
-                aria-label="Search users"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                style={{ maxWidth: 280 }}
-              />
-              <Form.Select
-                aria-label="Filter by status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                style={{ maxWidth: 200 }}
-              >
-                <option value="">All statuses</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INVITED">Invited</option>
-                <option value="DEACTIVATED">Deactivated</option>
-              </Form.Select>
-            </div>
-            <ErrorAlert error={users.error ?? action.error ?? reissue.error} />
-            {users.isPending ? (
-              <LoadingRows rows={4} />
-            ) : users.data && users.data.items.length === 0 ? (
-              <EmptyState icon="bx-user" title="No users match">
-                Try clearing the search or status filter.
-              </EmptyState>
-            ) : (
-              <div className="table-responsive">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Name / email</th>
-                      <th scope="col">Access</th>
-                      <th scope="col">Job role</th>
-                      <th scope="col">Teams</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">
-                        <span className="visually-hidden">Actions</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.data?.items.map((u) => (
-                      <tr key={u.id}>
-                        <td>
-                          <div className="text-heading">
-                            {u.name}
-                            {u.id === me?.id && <span className="text-body-secondary"> (you)</span>}
-                          </div>
-                          <small className="text-body-secondary">{u.email}</small>
-                        </td>
-                        <td>{SYSTEM_ROLE_LABELS[u.systemRole]}</td>
-                        <td>{JOB_ROLE_LABELS[u.jobRole]}</td>
-                        <td>
-                          {u.teamIds
+    <>
+      <TopbarActions>
+        <Button size="sm" onClick={() => setInviting(true)}>
+          + Invite user
+        </Button>
+      </TopbarActions>
+      <div className="card">
+        <div className="card-body">
+          <div className="d-flex flex-wrap gap-3 mb-4">
+            <Form.Control
+              type="search"
+              placeholder="Search name or email…"
+              aria-label="Search users"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              style={{ maxWidth: 280 }}
+            />
+            <Form.Select
+              aria-label="Filter by status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              style={{ maxWidth: 200 }}
+            >
+              <option value="">All statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INVITED">Invited</option>
+              <option value="DEACTIVATED">Deactivated</option>
+            </Form.Select>
+          </div>
+          <ErrorAlert error={users.error ?? action.error ?? reissue.error} />
+          {users.isPending ? (
+            <LoadingRows rows={4} />
+          ) : users.data && users.data.items.length === 0 ? (
+            <EmptyState icon="bx-user" title="No users match">
+              Try clearing the search or status filter.
+            </EmptyState>
+          ) : (
+            <div className="table-responsive">
+              {/* Below 768px each row renders as a stacked card (DR-03, see main.scss). */}
+              <table className="table table-stack-md users-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Name / email</th>
+                    <th scope="col">Access</th>
+                    <th scope="col">Job role</th>
+                    <th scope="col">Teams</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">
+                      <span className="visually-hidden">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.data?.items.map((u) => (
+                    <tr key={u.id}>
+                      <td className="cell-primary">
+                        <div className="text-heading">
+                          {u.name}
+                          {u.id === me?.id && <span className="text-body-secondary"> (you)</span>}
+                        </div>
+                        <small className="text-body-secondary">{u.email}</small>
+                      </td>
+                      <td data-label="Access">{SYSTEM_ROLE_LABELS[u.systemRole]}</td>
+                      <td data-label="Job role">{JOB_ROLE_LABELS[u.jobRole]}</td>
+                      <td data-label="Teams">
+                        <TeamNames
+                          names={u.teamIds
                             .map((t) => teamName.get(t))
-                            .filter(Boolean)
-                            .join(', ') || '–'}
-                        </td>
-                        <td>
-                          <UserStatusBadge status={u.status} />
-                        </td>
-                        <td className="text-end text-nowrap">
-                          {u.active && (
-                            <Button
-                              size="sm"
-                              variant="outline-secondary"
-                              className="me-2"
-                              disabled={reissue.isPending}
-                              onClick={() => void issueLink(u.id)}
-                            >
-                              {u.status === 'INVITED' ? 'New invite link' : 'Copy reset link'}
-                            </Button>
-                          )}
-                          <Dropdown align="end" className="d-inline-block">
-                            <Dropdown.Toggle
-                              variant="link"
-                              size="sm"
-                              className="hide-arrow p-0"
-                              aria-label={`Actions for ${u.name}`}
-                            >
-                              <i className="bx bx-dots-vertical-rounded fs-5" aria-hidden="true" />
-                            </Dropdown.Toggle>
-                            <Dropdown.Menu>
-                              <Dropdown.Item as="button" onClick={() => setEditing(u)}>
-                                Edit
-                              </Dropdown.Item>
-                              {u.id !== me?.id &&
-                                (u.active ? (
-                                  <Dropdown.Item
-                                    as="button"
-                                    className="text-danger"
-                                    onClick={() => setConfirm(u)}
-                                  >
-                                    Deactivate
-                                  </Dropdown.Item>
-                                ) : (
-                                  <Dropdown.Item
-                                    as="button"
-                                    onClick={() =>
-                                      action.mutate({ id: u.id, action: 'reactivate' })
-                                    }
-                                  >
-                                    Reactivate
-                                  </Dropdown.Item>
-                                ))}
-                            </Dropdown.Menu>
-                          </Dropdown>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <p className="small text-body-secondary mt-3 mb-0">
-              Client contacts are managed under Clients and never appear here, because they
-              don&apos;t have accounts. Reset links are single use and expire in 24 hours. Creating
-              a new link cancels any earlier unused one.
-            </p>
-          </div>
+                            .filter((n): n is string => !!n)}
+                        />
+                      </td>
+                      <td data-label="Status">
+                        <UserStatusBadge status={u.status} />
+                      </td>
+                      <td className="cell-actions text-end text-nowrap">
+                        {u.active && (
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            className="me-2"
+                            disabled={reissue.isPending}
+                            onClick={() => void issueLink(u.id)}
+                          >
+                            {u.status === 'INVITED' ? 'New invite link' : 'Copy reset link'}
+                          </Button>
+                        )}
+                        <Dropdown align="end" className="d-inline-block">
+                          <Dropdown.Toggle
+                            variant="link"
+                            size="sm"
+                            className="hide-arrow p-0"
+                            aria-label={`Actions for ${u.name}`}
+                          >
+                            <i className="bx bx-dots-vertical-rounded fs-5" aria-hidden="true" />
+                          </Dropdown.Toggle>
+                          <Dropdown.Menu>
+                            <Dropdown.Item as="button" onClick={() => setEditing(u)}>
+                              Edit
+                            </Dropdown.Item>
+                            {u.id !== me?.id &&
+                              (u.active ? (
+                                <Dropdown.Item
+                                  as="button"
+                                  className="text-danger"
+                                  onClick={() => setConfirm(u)}
+                                >
+                                  Deactivate
+                                </Dropdown.Item>
+                              ) : (
+                                <Dropdown.Item
+                                  as="button"
+                                  onClick={() => action.mutate({ id: u.id, action: 'reactivate' })}
+                                >
+                                  Reactivate
+                                </Dropdown.Item>
+                              ))}
+                          </Dropdown.Menu>
+                        </Dropdown>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="small text-body-secondary mt-3 mb-0">
+            Client contacts are managed under Clients and never appear here, because they don&apos;t
+            have accounts. Reset links are single use and expire in 24 hours. Creating a new link
+            cancels any earlier unused one.
+          </p>
         </div>
       </div>
-      <div className="col-xxl-4">
-        <div className="card">
-          <div className="card-body">
-            <InviteUserForm teams={teams.data?.items ?? []} />
-          </div>
-        </div>
-      </div>
+
+      {inviting && (
+        <InviteUserModal teams={teams.data?.items ?? []} onClose={() => setInviting(false)} />
+      )}
 
       <InviteLinkModal
         result={link?.result ?? null}
@@ -521,6 +545,6 @@ export function UsersPanel() {
           </Modal.Footer>
         </Modal>
       )}
-    </div>
+    </>
   );
 }

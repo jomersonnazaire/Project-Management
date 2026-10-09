@@ -139,3 +139,62 @@ a:focus-visible,
   font-size: 0.625rem;
   padding: 0.2rem 0.35rem;
 }
+
+// --- Top bar with page title and primary action (DR-02, mockup v0.4.2) ---
+.min-w-0 {
+  min-width: 0;
+}
+.layout-navbar .page-title {
+  color: $headings-color;
+  font-weight: 600;
+}
+
+// --- Tables that become stacked cards on phones (DR-03) ---
+@include media-breakpoint-down(md) {
+  .table-stack-md {
+    thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    tbody,
+    tr,
+    td {
+      display: block;
+      width: 100%;
+    }
+    tr {
+      border: 1px solid $border-color;
+      border-radius: $border-radius;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+    > :not(caption) > * > * {
+      border-bottom-width: 0;
+      padding: 0.25rem 0;
+    }
+    td[data-label] {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      text-align: end;
+      &::before {
+        content: attr(data-label);
+        font-weight: 500;
+        color: $headings-color;
+        text-align: start;
+      }
+    }
+    td.cell-primary {
+      padding-bottom: 0.5rem;
+    }
+    td.cell-actions {
+      text-align: start !important;
+      white-space: normal !important;
+      padding-top: 0.5rem;
+    }
+  }
+}
