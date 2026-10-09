@@ -279,6 +279,10 @@ function EditUserModal({
   onClose: () => void;
 }) {
   const update = useUpdateUser();
+  // Doc 14 §5: direct supervisor (active users only, never themself).
+  const everyone = useUsers({ status: 'ACTIVE' });
+  const [supervisorId, setSupervisorId] = useState(user.supervisorId ?? '');
+  const [supervisorError, setSupervisorError] = useState('');
   const {
     register,
     control,
@@ -307,6 +311,7 @@ function EditUserModal({
       setConfirm(null);
       const fields = e instanceof ApiError ? e.fieldErrors() : {};
       if (fields.email) setFieldError('email', { message: fields.email });
+      else if (fields.supervisorId) setSupervisorError(fields.supervisorId);
       else setError(e);
     }
   };
@@ -329,6 +334,9 @@ function EditUserModal({
       teamIds: v.teamIds ?? [],
       weeklyCapacityHours: Number(v.weeklyCapacityHours),
       ...(isSelf ? {} : { systemRole: v.systemRole }),
+      ...((supervisorId || null) !== (user.supervisorId ?? null)
+        ? { supervisorId: supervisorId || null }
+        : {}),
     };
     const parsed = updateUserSchema.safeParse(body);
     if (!parsed.success) {
@@ -402,6 +410,31 @@ function EditUserModal({
               )}
             />
           </fieldset>
+          <Form.Group className="mb-3" controlId="edit-supervisor">
+            <Form.Label>Direct supervisor</Form.Label>
+            <Form.Select
+              value={supervisorId}
+              isInvalid={Boolean(supervisorError)}
+              onChange={(e) => {
+                setSupervisorId(e.target.value);
+                setSupervisorError('');
+              }}
+            >
+              <option value="">No supervisor</option>
+              {(everyone.data?.items ?? [])
+                .filter((u) => u.id !== user.id && u.active)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+            </Form.Select>
+            <Form.Control.Feedback type="invalid">{supervisorError}</Form.Control.Feedback>
+            <Form.Text>
+              Reopens their timesheet days and gets their leave notices. Without one, leave notices
+              go to all Admins.
+            </Form.Text>
+          </Form.Group>
           <Form.Group controlId="edit-capacity">
             <Form.Label>Weekly capacity (hours)</Form.Label>
             <Form.Control
@@ -525,6 +558,14 @@ export function UsersPanel() {
                       </td>
                       <td data-label="Status">
                         <UserStatusBadge status={u.status} />
+                        {/* FR-LV-10, EC-77: no supervisor, or a deactivated one. */}
+                        {u.active &&
+                          (!u.supervisorId ||
+                            users.data?.items.some(
+                              (s) => s.id === u.supervisorId && !s.active,
+                            )) && (
+                            <span className="badge bg-label-warning ms-1">Supervisor needed</span>
+                          )}
                       </td>
                       <td className="cell-actions text-end text-nowrap">
                         {u.active && (

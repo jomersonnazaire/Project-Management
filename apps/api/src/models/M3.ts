@@ -53,20 +53,43 @@ const holidaySchema = new Schema(
 export type Holiday = InferSchemaType<typeof holidaySchema>;
 export const HolidayModel = model('Holiday', holidaySchema);
 
-/** Time entries (FR-TIME-01..08). */
+/**
+ * Time entries (FR-TIME-01..08) and, since M5, tracker entries (doc 14 FR-ACT): one model.
+ * Hours-only entries have no `startAt`; timed entries keep exact minutes (12.2) and `hours` =
+ * minutes / 60. Quick activities (`kind` QUICK) have no project or task, and no time type.
+ */
 const timeEntrySchema = new Schema(
   {
     userId: { type: ObjectId, ref: 'User', required: true },
-    projectId: { type: ObjectId, ref: 'Project', required: true, index: true },
-    taskId: { type: ObjectId, ref: 'Task', required: true, index: true },
+    kind: { type: String, enum: ['TASK', 'QUICK'], default: 'TASK' },
+    projectId: { type: ObjectId, ref: 'Project', default: null, index: true },
+    taskId: { type: ObjectId, ref: 'Task', default: null, index: true },
+    title: { type: String, default: null },
+    /** The Philippine calendar date, at UTC midnight (A-17). */
     workDate: { type: Date, required: true },
-    hours: { type: Number, required: true, min: 0.25, max: 24 },
-    type: { type: String, enum: TIME_TYPES, default: 'EXECUTION' },
+    hours: { type: Number, required: true, min: 0, max: 24 },
+    startAt: { type: Date, default: null },
+    endAt: { type: Date, default: null },
+    minutes: { type: Number, default: null },
+    running: { type: Boolean, default: false },
+    autoStopped: { type: Boolean, default: false },
+    activityTypeId: { type: ObjectId, ref: 'Lookup', default: null },
+    moduleId: { type: ObjectId, ref: 'Lookup', default: null },
+    /** Null = the day's location (FR-ACT-17). */
+    locationId: { type: ObjectId, ref: 'Lookup', default: null },
+    billable: { type: Boolean, default: true },
+    /** Project entries only (FR-ACT-18); null on quick activities. */
+    type: { type: String, enum: [...TIME_TYPES, null], default: 'EXECUTION' },
     notes: { type: String, default: null },
   },
   { timestamps: true, strict: 'throw', collection: 'timeEntries', versionKey: false },
 );
 timeEntrySchema.index({ userId: 1, workDate: 1 });
+// FR-ACT-03: at most one running timer per user, even with concurrent requests.
+timeEntrySchema.index(
+  { userId: 1 },
+  { unique: true, partialFilterExpression: { running: true }, name: 'one_running_per_user' },
+);
 export type TimeEntry = InferSchemaType<typeof timeEntrySchema>;
 export const TimeEntryModel = model('TimeEntry', timeEntrySchema);
 
@@ -209,8 +232,12 @@ export const UploadModel = model('Upload', uploadSchema);
 const notificationSchema = new Schema(
   {
     userId: { type: ObjectId, ref: 'User', required: true },
-    projectId: { type: ObjectId, ref: 'Project', required: true },
+    /** Null for personal notices (tracker, leave) that aren't about a project. */
+    projectId: { type: ObjectId, ref: 'Project', default: null },
     taskId: { type: ObjectId, ref: 'Task', default: null },
+    /** Personal notices carry their own text and in-app link. */
+    message: { type: String, default: null },
+    link: { type: String, default: null },
     issueId: { type: ObjectId, ref: 'Issue', default: null },
     type: { type: String, enum: NOTIFICATION_TYPES, required: true },
     actorId: { type: ObjectId, ref: 'User', default: null },

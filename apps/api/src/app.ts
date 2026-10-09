@@ -35,6 +35,7 @@ import { reportsRouter } from './routes/reports.js';
 import { documentsRouter } from './routes/documents.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { settingsRouter } from './routes/settings.js';
+import { trackerRouter } from './routes/tracker.js';
 import { timeRouter } from './routes/time.js';
 import { createBlobStore, type BlobStore } from './storage/blobStore.js';
 
@@ -123,6 +124,7 @@ export function createApp(
     auditRouter(registry),
     settingsRouter(registry),
     ...timeRouter(registry),
+    ...trackerRouter(registry),
     ...documentsRouter(config, registry, blobStore),
     documentRequestsRouter(registry),
     notificationsRouter(registry),

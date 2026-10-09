@@ -316,7 +316,8 @@ export async function hoursByType(filter: FilterQuery<unknown>) {
     _id: { userId: Id; type: TimeType };
     hours: number;
   }>([
-    { $match: filter },
+    // Project time only: quick activities have no time type (doc 14 FR-ACT-18).
+    { $match: { ...filter, taskId: { $ne: null } } },
     { $group: { _id: { userId: '$userId', type: '$type' }, hours: { $sum: '$hours' } } },
   ]);
   return rows;

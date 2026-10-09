@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectModel, TaskModel } from '../src/models/index.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
+import { entryFields } from './trackerHelpers.js';
 
 /** Time logging (doc 12 FR-TIME-01..08). "Now" is Wed Oct 14, 2026 11:00 Manila time. */
 useDatabase();
@@ -15,11 +16,11 @@ afterEach(() => vi.useRealTimers());
 type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
 
-const log = (agent: Agent, taskId: string, workDate: string, hours: number, extra = {}) =>
+const log = async (agent: Agent, taskId: string, workDate: string, hours: number, extra = {}) =>
   agent
     .post('/api/v1/time')
     .set(CSRF)
-    .send({ taskId, workDate, hours, ...extra });
+    .send({ taskId, workDate, hours, ...(await entryFields()), ...extra });
 
 async function setup() {
   const w = await world(app);

@@ -288,6 +288,8 @@ describe('Notification bell: issues', () => {
     const n: NotificationDto = {
       id: 'n1',
       type: 'ISSUE_ASSIGNED',
+      message: null,
+      link: null,
       actor: { id: 'u2', name: 'Paolo PM' },
       task: null,
       project: { id: PID, name: 'SAP B1 Rollout' },

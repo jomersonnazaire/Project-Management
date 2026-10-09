@@ -76,3 +76,14 @@ export function timeOfDay(iso: string): string {
 export function hoursLabel(h: number): string {
   return Number.isInteger(h) ? h.toFixed(1) : String(h);
 }
+
+/** "Oct 9, 9:05 AM" in Philippine time (doc 14 A-17), whatever the browser's timezone. */
+export function phDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Manila',
+  });
+}

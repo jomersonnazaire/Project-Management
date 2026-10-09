@@ -59,6 +59,13 @@ export const RECORD_TYPES = [
   },
   { key: 'time', label: 'Time entries', actions: ALL },
   {
+    key: 'activities',
+    label: 'Activity tracker',
+    actions: ALL,
+    notes:
+      'Own timers, timesheet days and quick activities. Supervisors and Admins view their team’s, never edit (FR-ACT-07)',
+  },
+  {
     key: 'documents',
     label: 'Documents & folders',
     actions: ALL,
@@ -140,6 +147,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     tasks: 'VCED',
     approvals: 'E',
     time: 'VCED',
+    activities: 'VCED',
     documents: 'VCED',
     issues: 'VCED',
     conversations: 'VC',
@@ -159,6 +167,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     tasks: 'VCED',
     approvals: 'E',
     time: 'VCED',
+    activities: 'VCED',
     documents: 'VCED',
     issues: 'VCE',
     conversations: 'VC',
@@ -179,6 +188,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: 'E',
     // Delete on own entries only (FR-TIME-06; doc 11 §6, Lean 2026-10-09). Was 'VCE' before v0.6.8.
     time: 'VCED',
+    activities: 'VCED',
     documents: 'VC',
     issues: 'VCE',
     conversations: 'VC',
@@ -198,6 +208,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     tasks: 'V',
     approvals: '',
     time: '',
+    activities: 'VCED',
     documents: 'V',
     issues: 'V',
     conversations: 'V',
@@ -294,6 +305,7 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     tasks: 'Plan changes only in projects they manage',
     approvals: 'Own projects only',
     issues: 'Edit issues on projects they manage',
+    activities: 'Own; view (not edit) their direct reports',
   },
   MEMBER: {
     clients: 'Clients of projects they belong to',
@@ -305,6 +317,10 @@ export const FIXED_SCOPES: Partial<Record<SystemRole, Partial<Record<RecordType,
     documents: 'Projects they belong to',
     issues: 'Projects they belong to; edit issues they own or reported',
     conversations: 'Projects they belong to',
+    activities: 'Own; view (not edit) their direct reports',
+  },
+  VIEWER: {
+    activities: 'Own; view (not edit) their direct reports',
   },
 };
 

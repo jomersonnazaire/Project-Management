@@ -6,6 +6,7 @@ import { App } from '../App';
 import { followUpRecipients } from '../lib/m3ui';
 import { ME_PM, PID, api, project, task, type Route } from './m2fixtures';
 import { renderAt } from './utils';
+import { LOOKUPS } from './fixtures';
 
 beforeEach(() => {
   // Bootstrap modals and off-canvas panels read matchMedia, which jsdom lacks.
@@ -145,6 +146,7 @@ describe('My tasks › Due (FR-TSK-20/21/22, AC-TODAY-1, TC-N22)', () => {
         };
       if (url.endsWith('/time') && init?.method === 'POST')
         return { status: 201, body: { entry: {} } };
+      if (url.endsWith('/lookups')) return { status: 200, body: LOOKUPS };
       return mine([myTask({ id: 't1', name: 'Prepare UAT scripts' })])(url, init);
     });
     renderAt('/my-tasks', <App />);
@@ -155,6 +157,14 @@ describe('My tasks › Due (FR-TSK-20/21/22, AC-TODAY-1, TC-N22)', () => {
     await userEvent.type(within(dialog).getByLabelText('Hours *'), '0');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save entry' }));
     expect(within(dialog).getByText('Enter between 0.25 and 24.')).toBeInTheDocument();
+    // Doc 14 FR-ACT-15: Activity type and Module are required on Log time too.
+    expect(within(dialog).getByText('Choose an activity type.')).toBeInTheDocument();
+    expect(within(dialog).getByText('Choose a module.')).toBeInTheDocument();
+    await userEvent.selectOptions(
+      within(dialog).getByLabelText('Activity type *'),
+      'Configuration',
+    );
+    await userEvent.selectOptions(within(dialog).getByLabelText('Module *'), 'Financials');
     await userEvent.clear(within(dialog).getByLabelText('Hours *'));
     await userEvent.type(within(dialog).getByLabelText('Hours *'), '1.5');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save entry' }));
@@ -166,6 +176,9 @@ describe('My tasks › Due (FR-TSK-20/21/22, AC-TODAY-1, TC-N22)', () => {
         taskId: 't1',
         hours: 1.5,
         type: 'EXECUTION',
+        activityTypeId: 'at1',
+        moduleId: 'mod1',
+        billable: true,
       });
     });
   });
@@ -175,6 +188,8 @@ const note = (i: number, read = false): NotificationDto => ({
   id: `n${i}`,
   type: 'FOLLOW_UP',
   actor: { id: 'u2', name: 'Maria Perez' },
+  message: null,
+  link: null,
   task: { id: 'k1', name: 'Kickoff' },
   project: { id: PID, name: 'SAP B1 Rollout' },
   issue: null,

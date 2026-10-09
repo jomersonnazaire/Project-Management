@@ -19,7 +19,8 @@ async function visibleFilter(req: Request) {
   const projects = await ProjectModel.find(projectScopeFilter(user)).select('_id').lean();
   return {
     userId: user._id,
-    projectId: { $in: projects.map((p) => p._id) },
+    // Personal notices (projectId null) are always visible to their recipient.
+    projectId: { $in: [...projects.map((p) => p._id), null] },
     createdAt: { $gte: new Date(Date.now() - 90 * 86_400_000) },
   };
 }
@@ -38,7 +39,7 @@ export function notificationsRouter(registry: RouteRegistry) {
       TaskModel.find({ _id: { $in: docs.map((d) => d.taskId).filter(Boolean) } })
         .select('name')
         .lean(),
-      ProjectModel.find({ _id: { $in: docs.map((d) => d.projectId) } })
+      ProjectModel.find({ _id: { $in: docs.map((d) => d.projectId).filter(Boolean) } })
         .select('name')
         .lean(),
       IssueModel.find({ _id: { $in: docs.map((d) => d.issueId).filter(Boolean) } })
@@ -62,7 +63,11 @@ export function notificationsRouter(registry: RouteRegistry) {
           const i = d.issueId ? iss.get(d.issueId.toString()) : null;
           return i ? { id: i._id.toString(), key: i.key, title: i.title } : null;
         })(),
-        project: { id: d.projectId.toString(), name: pn.get(d.projectId.toString()) ?? '' },
+        project: d.projectId
+          ? { id: d.projectId.toString(), name: pn.get(d.projectId.toString()) ?? '' }
+          : null,
+        message: d.message ?? null,
+        link: d.link ?? null,
         read: Boolean(d.readAt),
         at: d.createdAt.toISOString(),
       };

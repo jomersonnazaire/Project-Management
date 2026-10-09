@@ -79,6 +79,8 @@ export const updateUserSchema = z
     jobRole: jobRoleSchema.optional(),
     teamIds: z.array(objectId).max(50).optional(),
     weeklyCapacityHours: capacitySchema.optional(),
+    /** Direct supervisor (doc 14 §5); null clears it. */
+    supervisorId: objectId.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

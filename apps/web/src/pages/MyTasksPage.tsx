@@ -3,11 +3,17 @@ import {
   HOLIDAY_TYPE_LABELS,
   ageLabel,
   ageTone,
+  formatHHMM,
+  formatTime12,
   type MyTaskDto,
+  type TrackerDayDto,
 } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, Form, Nav } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useTrackerDay, useTrackerMutation } from '../api/trackerHooks';
+import { TrackerEntryModal, type TrackerModalMode } from '../components/tracker/TrackerEntryModal';
+import { DayTimesheet, LocationChip } from './tracker/DayTimesheet';
 import { useDocumentRequests, useTimeWeek } from '../api/m3Hooks';
 import { DocumentRequestList } from '../components/DocumentRequestList';
 import { useMyTasks } from '../api/projectHooks';
@@ -26,6 +32,7 @@ const VIEWS = [
   { key: 'accountable', label: "I'm accountable" },
   { key: 'review', label: 'To review' },
   { key: 'completed', label: 'Completed' },
+  { key: 'day', label: 'Day timesheet' },
 ] as const;
 
 const ROLE_LABELS = {
@@ -57,14 +64,26 @@ function TaskCell({ t }: { t: MyTaskDto }) {
 function TodayPlan({
   items,
   today,
-  onLog,
   onShowDue,
+  tracker,
+  onTimeIn,
+  onQuick,
 }: {
   items: MyTaskDto[];
   today: string;
-  onLog: (t: MyTaskDto) => void;
   onShowDue: () => void;
+  /** Today's tracker day (doc 14 FR-ACT-01), when the user has the tracker. */
+  tracker?: TrackerDayDto;
+  onTimeIn: (t: MyTaskDto) => void;
+  onQuick: () => void;
 }) {
+  const stop = useTrackerMutation();
+  const entries = tracker?.entries ?? [];
+  const minutesOn = (taskId: string) =>
+    entries.filter((e) => e.task?.id === taskId).reduce((s, e) => s + e.minutes, 0);
+  const runningOn = (taskId: string) => entries.some((e) => e.running && e.task?.id === taskId);
+  const quick = entries.filter((e) => e.kind === 'QUICK');
+  const canTime = Boolean(tracker?.can.edit);
   const planned = items.filter((t) => t.section === 'PLANNED');
   const aging = items.filter((t) => t.section === 'AGING');
   const dueCell = (t: MyTaskDto) => (
@@ -73,21 +92,58 @@ function TodayPlan({
       {t.overdue && ' · overdue'}
     </td>
   );
+  const todayCell = (t: MyTaskDto) => (
+    <td data-label="Today" className="font-monospace">
+      {minutesOn(t.id) ? formatHHMM(minutesOn(t.id)) : '–'}
+    </td>
+  );
+  // FR-ACT-01/02: Time in / Time out on each row; one timer at a time.
   const logCell = (t: MyTaskDto) => (
-    <td className="text-end">
-      <Button size="sm" variant="outline-primary" onClick={() => onLog(t)}>
-        Log time
-      </Button>
+    <td className="text-end text-nowrap">
+      {runningOn(t.id) ? (
+        <>
+          <span className="badge bg-label-success me-2">Running</span>
+          <Button
+            size="sm"
+            variant="outline-danger"
+            disabled={stop.isPending}
+            onClick={() => stop.mutate({ path: '/stop' })}
+          >
+            ■ Time out
+          </Button>
+        </>
+      ) : (
+        canTime && (
+          <Button
+            size="sm"
+            variant="outline-primary"
+            onClick={() => onTimeIn(t)}
+            aria-label={`Time in on ${t.name}`}
+          >
+            ▶ Time in
+          </Button>
+        )
+      )}
     </td>
   );
   return (
     <>
-      <div className="d-flex align-items-baseline gap-2">
+      <div className="d-flex flex-wrap align-items-baseline gap-2">
         <strong className="text-heading">{longDay(today)}</strong>
+        {tracker?.location && <LocationChip day={tracker} editable={tracker.can.edit} />}
         <small className="text-body-secondary">Philippine time · by planned date</small>
+        {tracker && (
+          <span className="ms-auto small">
+            Hours rendered today:{' '}
+            <strong className="font-monospace" data-testid="rendered-today">
+              {formatHHMM(tracker.totalMinutes)}
+            </strong>
+          </span>
+        )}
       </div>
       {items.length === 0 ? (
         <EmptyState icon="bx-sun" title="Nothing planned for today">
+          {tracker && 'Use + Quick activity to time non-project work. '}
           No aging tasks either.{' '}
           <Button variant="link" className="p-0 align-baseline" onClick={onShowDue}>
             Check what’s due
@@ -108,6 +164,7 @@ function TodayPlan({
                       <th scope="col">Planned</th>
                       <th scope="col">Due</th>
                       <th scope="col">Status</th>
+                      {tracker && <th scope="col">Today</th>}
                       <th scope="col">
                         <span className="visually-hidden">Actions</span>
                       </th>
@@ -126,7 +183,8 @@ function TodayPlan({
                         <td data-label="Status">
                           <TaskStatusBadge status={t.status} />
                         </td>
-                        {logCell(t)}
+                        {tracker && todayCell(t)}
+                        {tracker && logCell(t)}
                       </tr>
                     ))}
                   </tbody>
@@ -151,6 +209,7 @@ function TodayPlan({
                       <th scope="col">Due</th>
                       <th scope="col">Age</th>
                       <th scope="col">Status</th>
+                      {tracker && <th scope="col">Today</th>}
                       <th scope="col">
                         <span className="visually-hidden">Actions</span>
                       </th>
@@ -178,7 +237,8 @@ function TodayPlan({
                           <td data-label="Status">
                             <TaskStatusBadge status={t.status} />
                           </td>
-                          {logCell(t)}
+                          {tracker && todayCell(t)}
+                          {tracker && logCell(t)}
                         </tr>
                       );
                     })}
@@ -188,6 +248,57 @@ function TodayPlan({
             </section>
           )}
         </>
+      )}
+      {tracker && (
+        <section aria-labelledby="quick-today">
+          <div className="d-flex align-items-center mt-4 mb-2">
+            <h3 className="h6 mb-0" id="quick-today">
+              Quick activities today · {quick.length}
+            </h3>
+            {canTime && (
+              <Button size="sm" variant="link" className="ms-auto" onClick={onQuick}>
+                + Quick activity
+              </Button>
+            )}
+          </div>
+          {quick.length > 0 && (
+            <div className="table-responsive">
+              <table className="table table-stack-md">
+                <thead>
+                  <tr>
+                    <th scope="col">Activity</th>
+                    <th scope="col">Activity type</th>
+                    <th scope="col">Time in – out</th>
+                    <th scope="col">Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quick.map((e) => (
+                    <tr key={e.id}>
+                      <td className="cell-primary">
+                        <span className="fw-medium">{e.title}</span>
+                        <div className="small text-body-secondary">No project</div>
+                      </td>
+                      <td data-label="Activity type">{e.activityType?.name}</td>
+                      <td data-label="Time in – out" className="text-nowrap">
+                        {e.startAt ? formatTime12(e.startAt) : '–'} –{' '}
+                        {e.running ? 'Running' : e.endAt ? formatTime12(e.endAt) : '–'}
+                      </td>
+                      <td data-label="Duration" className="font-monospace">
+                        {formatHHMM(e.minutes)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="small text-body-secondary mb-0">
+            One timer at a time: starting another task stops the running one at the same moment.
+            Times are set by the server in Philippine time. A timer left running stops automatically
+            at 11:59 PM PH time.
+          </p>
+        </section>
       )}
       <p className="small text-body-secondary mt-3 mb-0">
         Open tasks assigned to you (owner or assignee), by planned date in Philippine time. Age
@@ -289,11 +400,24 @@ function DueList({
 
 /** My tasks: the sign-in landing page (FR-TSK-13, FR-TSK-20..25, AC-17.1, AC-TODAY-1..5). */
 export function MyTasksPage() {
-  const { user } = useAuth();
-  const [view, setView] = useState<string>('today');
+  const { user, permissions } = useAuth();
+  const [params] = useSearchParams();
+  const [view, setView] = useState<string>(params.get('tab') === 'day' ? 'day' : 'today');
+  const hasTracker = Boolean(permissions?.activities?.view);
+  const [trackerModal, setTrackerModal] = useState<TrackerModalMode | null>(null);
   const [q, setQ] = useState('');
   const [logging, setLogging] = useState<MyTaskDto | null>(null);
-  const mine = useMyTasks(view, q || undefined);
+  const mine = useMyTasks(view === 'day' ? 'today' : view, q || undefined);
+  const todayKey = mine.data?.today ?? '';
+  const trackerDay = useTrackerDay(todayKey, undefined, hasTracker);
+  const tracker = hasTracker && todayKey ? trackerDay.data : undefined;
+  const timeIn = (t: MyTaskDto) =>
+    setTrackerModal({
+      kind: 'start',
+      date: todayKey,
+      task: { id: t.id, name: t.name, projectName: t.project.name },
+      last: [...(tracker?.entries ?? [])].reverse().find((e) => e.task?.id === t.id),
+    });
   // FR-DOC-26: documents requested from me (overdue ones in red), shown with the Today tab.
   const requests = useDocumentRequests('mine', useCan('documents', 'view'));
   const week = useTimeWeek();
@@ -325,7 +449,13 @@ export function MyTasksPage() {
 
   return (
     <>
-      <PageHeader title="My tasks" />
+      <PageHeader title="My tasks">
+        {tracker?.can.edit && (
+          <Button size="sm" onClick={() => setTrackerModal({ kind: 'quick', date: todayKey })}>
+            + Quick activity
+          </Button>
+        )}
+      </PageHeader>
       {holiday && (
         <div className="alert alert-info" role="status">
           <i className="bx bx-calendar me-2" aria-hidden="true" />
@@ -350,7 +480,7 @@ export function MyTasksPage() {
         <div className="card-body">
           <div className="d-flex flex-wrap align-items-center gap-3 mb-4">
             <Nav variant="pills" activeKey={view} onSelect={(k) => setView(k ?? 'today')}>
-              {VIEWS.map((v) => (
+              {VIEWS.filter((v) => v.key !== 'day' || hasTracker).map((v) => (
                 <Nav.Item key={v.key}>
                   <Nav.Link eventKey={v.key} as="button">
                     {v.label}
@@ -390,11 +520,15 @@ export function MyTasksPage() {
               <TodayPlan
                 items={items}
                 today={mine.data?.today ?? ''}
-                onLog={setLogging}
                 onShowDue={() => setView('due')}
+                tracker={tracker}
+                onTimeIn={timeIn}
+                onQuick={() => setTrackerModal({ kind: 'quick', date: todayKey })}
               />
               {requestsSection}
             </>
+          ) : view === 'day' ? (
+            <DayTimesheet today={todayKey} initialDate={params.get('date') ?? undefined} />
           ) : view === 'due' ? (
             <>
               <DueList items={items} today={mine.data?.today ?? ''} onLog={setLogging} />
@@ -451,6 +585,9 @@ export function MyTasksPage() {
           )}
         </div>
       </div>
+      {trackerModal && (
+        <TrackerEntryModal mode={trackerModal} onClose={() => setTrackerModal(null)} />
+      )}
       {logging && (
         <LogTimeModal
           preset={{ projectId: logging.project.id, taskId: logging.id }}

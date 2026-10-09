@@ -1,16 +1,11 @@
-import {
-  HOURS_MESSAGE,
-  TIME_TYPES,
-  TIME_TYPE_LABELS,
-  todayPH,
-  toDateOnly,
-  type TimeType,
-} from '@xc8/shared';
+import { HOURS_MESSAGE, todayPH, toDateOnly } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Button, Form } from 'react-bootstrap';
 import { ApiError } from '../api/client';
 import { useTimeMutation, useTimeOptions } from '../api/m3Hooks';
 import { ErrorAlert } from './Feedback';
+import { EntryFields } from './tracker/EntryFields';
+import { emptyFields, fieldErrors, type EntryFieldValues } from './tracker/entryFieldValues';
 
 export interface TimePreset {
   projectId?: string;
@@ -41,9 +36,9 @@ export function TimeEntryForm({
     taskId: preset?.taskId ?? '',
     workDate: maxDate,
     hours: '',
-    type: 'EXECUTION' as TimeType,
-    notes: '',
   });
+  // Doc 14 FR-ACT-15, FR-DAR-09: Activity type and Module on every entry, Log time included.
+  const [fields, setFields] = useState<EntryFieldValues>(emptyFields('TASK'));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const projects = options.data ?? [];
   const tasks = projects.find((p) => p.project.id === form.projectId)?.tasks ?? [];
@@ -57,6 +52,7 @@ export function TimeEntryForm({
     if (!form.workDate) next.workDate = 'Enter the work date.';
     else if (form.workDate > maxDate) next.workDate = "Work date can't be in the future.";
     if (!form.hours || !validHours(h)) next.hours = HOURS_MESSAGE;
+    Object.assign(next, fieldErrors(fields, 'TASK'));
     setErrors(next);
     if (Object.keys(next).length) return;
     save.mutate(
@@ -65,13 +61,18 @@ export function TimeEntryForm({
           taskId: form.taskId,
           workDate: form.workDate,
           hours: h,
-          type: form.type,
-          ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
+          type: fields.type,
+          activityTypeId: fields.activityTypeId,
+          moduleId: fields.moduleId,
+          billable: fields.billable,
+          ...(fields.locationId ? { locationId: fields.locationId } : {}),
+          ...(fields.notes.trim() ? { notes: fields.notes.trim() } : {}),
         },
       },
       {
         onSuccess: () => {
-          setForm((f) => ({ ...f, hours: '', notes: '' }));
+          setForm((f) => ({ ...f, hours: '' }));
+          setFields((f) => ({ ...f, notes: '' }));
           onSaved?.();
         },
         onError: (err) => {
@@ -154,26 +155,20 @@ export function TimeEntryForm({
           <Form.Control.Feedback type="invalid">{errors.hours}</Form.Control.Feedback>
         </Form.Group>
       </div>
-      <Form.Group className="mb-3" controlId={`${idPrefix}-type`}>
-        <Form.Label>Type</Form.Label>
-        <Form.Select value={form.type} onChange={(e) => set('type', e.target.value)}>
-          {TIME_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {TIME_TYPE_LABELS[t]}
-            </option>
-          ))}
-        </Form.Select>
-      </Form.Group>
-      <Form.Group className="mb-3" controlId={`${idPrefix}-notes`}>
-        <Form.Label>Notes</Form.Label>
-        <Form.Control
-          as="textarea"
-          rows={2}
-          maxLength={1000}
-          value={form.notes}
-          onChange={(e) => set('notes', e.target.value)}
-        />
-      </Form.Group>
+      <EntryFields
+        kind="TASK"
+        values={fields}
+        onChange={(patch) => {
+          setFields((f) => ({ ...f, ...patch }));
+          setErrors((x) => ({
+            ...x,
+            ...Object.fromEntries(Object.keys(patch).map((k) => [k, ''])),
+          }));
+        }}
+        errors={errors}
+        dayLocation={null}
+        idPrefix={idPrefix}
+      />
       <div className="d-flex gap-2 justify-content-end">
         {onCancel && (
           <Button variant="outline-secondary" onClick={onCancel}>

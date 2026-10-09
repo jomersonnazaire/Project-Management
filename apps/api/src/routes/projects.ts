@@ -52,6 +52,7 @@ import {
 } from '../services/projectService.js';
 import { assertProjectScope, projectScopeFilter } from '../services/scope.js';
 import { loadCalendar } from '../services/calendar.js';
+import { stopTimersForProject } from '../services/tracker.js';
 
 /**
  * Projects (FR-PRJ-01..13, doc 11 FR-PRJ-11..13). The central gate checks `projects.*`; these
@@ -512,8 +513,10 @@ export function projectsRouter(registry: RouteRegistry) {
       if (newEnd) project.plannedEndDate = parseDateOnly(newEnd);
     }
 
+    let closedNow = false;
     if (input.status !== undefined && input.status !== project.status) {
       const from = project.status as ProjectStatus;
+      closedNow = input.status !== 'ACTIVE';
       if (!PROJECT_TRANSITIONS[from].includes(input.status)) {
         throw unprocessable(
           `A project can't move from ${from} to ${input.status}.`,
@@ -558,6 +561,10 @@ export function projectsRouter(registry: RouteRegistry) {
       throw e;
     });
     await recomputeProject(project._id);
+    // EC-76: running timers on a project that goes On Hold (or closes) stop now.
+    if (closedNow) {
+      await stopTimersForProject(project, user._id);
+    }
     // EC-66: open issues owned by people just removed from the project need a new owner.
     if (removedMembers.length) {
       await notifyOwnerNeeded({
@@ -615,6 +622,7 @@ export function projectsRouter(registry: RouteRegistry) {
         project.archived = archived;
         project.archivedAt = archived ? new Date() : null;
         await project.save();
+        if (archived) await stopTimersForProject(project, currentUser(req)._id);
         await audit({
           actorId: currentUser(req)._id,
           entityType: 'project',

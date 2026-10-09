@@ -7,6 +7,7 @@ import { ensureDefaultAccessRules } from './services/accessRules.js';
 import { runIssueSweeps } from './services/issues.js';
 import { ensureLaunchTemplate } from './services/launchTemplate.js';
 import { migrateProjectCodes } from './services/projectCodes.js';
+import { ensureDefaultLookups, sweepAutoStop } from './services/tracker.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
@@ -22,6 +23,8 @@ await applyAccessDefaultChanges(logger);
 await ensureLaunchTemplate(logger);
 // DR-23: every project gets a unique code and issues use it as their ID prefix (idempotent).
 await migrateProjectCodes(logger);
+// M5: seed the Activity types, Locations and Modules lists once (FR-ACT-15).
+await ensureDefaultLookups(logger);
 const app = createApp(config, logger);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'API listening');
@@ -34,6 +37,15 @@ const sweep = () =>
   );
 void sweep();
 setInterval(() => void sweep(), 60 * 60 * 1000).unref();
+
+// FR-ACT-04, EC-75: timers left running stop at 23:59 PHT. Checked every 5 minutes (requests
+// also stop overdue timers lazily, so the stop time is always exactly 23:59).
+const timers = () =>
+  sweepAutoStop()
+    .then((n) => n && logger.info({ stopped: n }, 'Auto-stopped timers'))
+    .catch((err: unknown) => logger.error({ err }, 'Timer sweep failed'));
+void timers();
+setInterval(() => void timers(), 5 * 60 * 1000).unref();
 
 const shutdown = (signal: string) => {
   logger.info({ signal }, 'Shutting down');

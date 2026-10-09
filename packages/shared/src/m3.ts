@@ -132,6 +132,11 @@ export const timeEntrySchema = z.strictObject({
   hours,
   type: z.enum(TIME_TYPES).default('EXECUTION'),
   notes: optionalText(1000),
+  /** Doc 14 FR-ACT-15, FR-DAR-09: required on every entry, Log time included. */
+  activityTypeId: objectId,
+  moduleId: objectId,
+  locationId: objectId.nullable().optional(),
+  billable: z.boolean().default(true),
 });
 export type TimeEntryInput = z.input<typeof timeEntrySchema>;
 export const updateTimeEntrySchema = z.strictObject({
@@ -139,6 +144,10 @@ export const updateTimeEntrySchema = z.strictObject({
   hours: hours.optional(),
   type: z.enum(TIME_TYPES).optional(),
   notes: optionalText(1000),
+  activityTypeId: objectId.optional(),
+  moduleId: objectId.optional(),
+  locationId: objectId.nullable().optional(),
+  billable: z.boolean().optional(),
 });
 export const timeWeekQuerySchema = z.strictObject({ week: dateOnly('week').optional() });
 
@@ -149,6 +158,13 @@ export interface TimeEntryDto {
   task: Ref;
   workDate: string;
   hours: number;
+  /** Exact minutes (timed entries) or hours × 60. */
+  minutes: number;
+  /** Logged with Time in / Time out (doc 14 FR-ACT-02); hours change on the Day timesheet. */
+  timed: boolean;
+  activityType: Ref | null;
+  module: Ref | null;
+  billable: boolean;
   type: TimeType;
   notes: string | null;
   locked: boolean;
@@ -625,6 +641,11 @@ export const NOTIFICATION_TYPES = [
   'ISSUE_COMMENT',
   'ISSUE_OVERDUE',
   'ISSUE_OWNER_NEEDED',
+  // Activity tracker (doc 14 §10, EC-76) and leave (Q-46)
+  'DAY_REOPENED',
+  'TIMER_STOPPED',
+  'LEAVE_RECORDED',
+  'LEAVE_CANCELLED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -640,7 +661,11 @@ export interface NotificationDto {
   task: Ref | null;
   /** Issue notifications: the issue's key and title. */
   issue: { id: string; key: string; title: string } | null;
-  project: Ref;
+  /** Null on personal notices (tracker, leave). */
+  project: Ref | null;
+  /** Personal notices: the full sentence and where it opens. */
+  message: string | null;
+  link: string | null;
   read: boolean;
   at: string;
 }
@@ -671,6 +696,10 @@ export const NOTIFICATION_VERBS: Record<NotificationType, string> = {
   ISSUE_COMMENT: 'commented on',
   ISSUE_OVERDUE: 'Overdue:',
   ISSUE_OWNER_NEEDED: 'Owner needed:',
+  DAY_REOPENED: 'reopened your timesheet',
+  TIMER_STOPPED: 'Timer stopped:',
+  LEAVE_RECORDED: 'recorded leave',
+  LEAVE_CANCELLED: 'cancelled leave',
 };
 
 // ---------- Project conversation (FR-CNV-01..08) ----------

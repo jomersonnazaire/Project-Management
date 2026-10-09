@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
 import { NotificationBell } from '../components/NotificationBell';
 import { TopbarContext, type TopbarSlots } from '../components/topbar';
+import { RunningTimerPill } from '../components/tracker/RunningTimerPill';
 
 interface NavItem {
   to: string;
@@ -197,6 +198,9 @@ export function AppShell() {
                 className="topbar-actions d-flex align-items-center gap-2"
               />
               <ul className="navbar-nav flex-row align-items-center gap-3">
+                <li className="nav-item">
+                  <RunningTimerPill enabled={Boolean(permissions?.activities?.view)} />
+                </li>
                 <li className="nav-item">
                   <NotificationBell />
                 </li>
