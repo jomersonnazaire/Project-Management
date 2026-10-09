@@ -17,6 +17,7 @@ import {
   type MyProjectsDto,
   type OverdueRowDto,
   type ProjectStatusRowDto,
+  type ReportFilterOptionsDto,
   type ReportList,
   type TimeType,
   type TimesheetReportDto,
@@ -192,6 +193,23 @@ export function reportsRouter(registry: RouteRegistry) {
       res.json(body);
     });
   }
+
+  // DR-43: filter options from the same scope as the report rows (no /clients or /projects
+  // access needed, and nothing outside the caller's scope).
+  r.get('/filters', perm('reports', 'view'), async (req, res) => {
+    const projects = await scopedProjects(currentUser(req));
+    const refs = await refMaps({ clients: projects.map((p) => p.clientId) });
+    const clients = new Map<string, { id: string; name: string }>();
+    for (const p of projects) {
+      const c = refs.client(p.clientId);
+      if (c.name) clients.set(c.id, c);
+    }
+    const body: ReportFilterOptionsDto = {
+      projects: projects.map((p) => ({ id: p._id.toString(), name: p.name })),
+      clients: [...clients.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    };
+    res.json(body);
+  });
 
   // FR-RPT-01: effort variance per task (EC-58: tasks without an estimate have no variance).
   report('effort-variance', async (req) => {

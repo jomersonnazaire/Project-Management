@@ -24,6 +24,7 @@ import { AllIssuesPage } from './pages/issues/AllIssuesPage';
 import { IssueDetailPage } from './pages/issues/IssueDetailPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { WorkloadPage } from './pages/workload/WorkloadPage';
+import { TimesheetReviewPage } from './pages/tracker/DayTimesheet';
 import { useCan } from './auth/useCan';
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
@@ -158,6 +159,14 @@ export function App() {
               element={
                 <RequirePermission any={[['activities', 'view']]}>
                   <DarPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/timesheets/review"
+              element={
+                <RequirePermission any={[['activities', 'view']]}>
+                  <TimesheetReviewPage />
                 </RequirePermission>
               }
             />

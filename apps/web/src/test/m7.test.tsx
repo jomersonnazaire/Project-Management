@@ -370,7 +370,10 @@ describe('TC-S07: Admin entitlements', () => {
     const input = await screen.findByLabelText('A. Reyes entitlement');
     await userEvent.clear(input);
     await userEvent.type(input, '4');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    // FR-LV-13: no Save button; leaving the field saves.
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    await userEvent.tab();
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
     expect(
       await screen.findByText(
         /A\. Reyes has already taken 6 days of Vacation\. Setting 4 makes the balance −2/,

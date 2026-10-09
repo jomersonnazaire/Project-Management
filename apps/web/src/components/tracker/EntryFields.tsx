@@ -1,6 +1,7 @@
 import {
   MODULE_COUNTER_FROM,
   MODULE_MAX,
+  moduleLength,
   TIME_TYPES,
   TIME_TYPE_LABELS,
   toDateOnly,
@@ -46,7 +47,8 @@ export function EntryFields({
     kept?: { id: string; name: string } | null,
   ) => (kept && !items.some((i) => i.id === kept.id) ? [...items, kept] : items);
   const activityTypes = withKept(lists.data?.activityTypes ?? [], keep?.activityType);
-  const moduleLength = values.module.trim().length;
+  // DEF-010: user-visible characters (an emoji counts as 1), the same rule the API uses.
+  const moduleChars = moduleLength(values.module);
   return (
     <>
       <div className="row g-3 mb-3">
@@ -89,6 +91,7 @@ export function EntryFields({
             <Form.Label>Location</Form.Label>
             <Form.Select
               value={values.locationId}
+              isInvalid={Boolean(errors.locationId)}
               onChange={(e) => onChange({ locationId: e.target.value })}
             >
               <option value="">
@@ -100,6 +103,7 @@ export function EntryFields({
                 </option>
               ))}
             </Form.Select>
+            <Form.Control.Feedback type="invalid">{errors.locationId}</Form.Control.Feedback>
             <Form.Text>Change for this entry only</Form.Text>
           </Form.Group>
         )}
@@ -125,6 +129,7 @@ export function EntryFields({
               onChange={() => onChange({ billable: false })}
             />
           </div>
+          {errors.billable && <div className="invalid-feedback d-block">{errors.billable}</div>}
           <Form.Text>
             {kind === 'TASK' ? 'Yes for client projects' : 'No for quick activities'}
           </Form.Text>
@@ -139,18 +144,18 @@ export function EntryFields({
           autoComplete="off"
           isInvalid={Boolean(errors.module)}
           aria-describedby={
-            moduleLength >= MODULE_COUNTER_FROM ? `${idPrefix}-module-count` : undefined
+            moduleChars >= MODULE_COUNTER_FROM ? `${idPrefix}-module-count` : undefined
           }
           onChange={(e) => onChange({ module: e.target.value })}
         />
         <Form.Control.Feedback type="invalid">{errors.module}</Form.Control.Feedback>
-        {moduleLength >= MODULE_COUNTER_FROM && (
+        {moduleChars >= MODULE_COUNTER_FROM && (
           <Form.Text
             id={`${idPrefix}-module-count`}
-            className={moduleLength > MODULE_MAX ? 'text-danger' : undefined}
+            className={moduleChars > MODULE_MAX ? 'text-danger' : undefined}
             aria-live="polite"
           >
-            {moduleLength}/{MODULE_MAX}
+            {moduleChars}/{MODULE_MAX}
           </Form.Text>
         )}
       </Form.Group>
@@ -161,8 +166,10 @@ export function EntryFields({
           rows={2}
           maxLength={1000}
           value={values.notes}
+          isInvalid={Boolean(errors.notes)}
           onChange={(e) => onChange({ notes: e.target.value })}
         />
+        <Form.Control.Feedback type="invalid">{errors.notes}</Form.Control.Feedback>
       </Form.Group>
     </>
   );

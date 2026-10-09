@@ -1,3 +1,4 @@
+import { MODULE_MAX, graphemeSlice } from '@xc8/shared';
 import type { Logger } from 'pino';
 import { LookupModel, MigrationModel, TimeEntryModel } from '../models/index.js';
 
@@ -5,11 +6,18 @@ import { LookupModel, MigrationModel, TimeEntryModel } from '../models/index.js'
  * Doc 14 FR-ACT-21: Module became free text. Copies each entry's old Modules-list name into the
  * new `module` text field, so every entry keeps its label (saved reports already hold the text).
  *
- * Idempotent: only entries that still have a legacy `moduleId` and no text yet are touched, so a
- * re-run (or a second instance starting at the same time) changes nothing. The Modules list
- * itself and each entry's `moduleId` are left exactly as they were (FR-ACT-22).
+ * Runs once (DEF-010): the `module-free-text` marker in `migrations` is checked first and written
+ * when the copy finishes, so a restart never copies again (before, it re-ran on every start and
+ * brought back modules users had cleared). Within a run only entries that still have a legacy
+ * `moduleId` and no text are touched; saving any Module (blank included) clears `moduleId`, so
+ * even a forced re-run can't restore a cleared module. The Modules list is left as it was
+ * (FR-ACT-22).
  */
+export const MODULE_MIGRATION_ID = 'module-free-text';
+
 export async function migrateModuleText(logger?: Logger): Promise<number> {
+  const done = await MigrationModel.exists({ _id: MODULE_MIGRATION_ID, status: 'DONE' });
+  if (done) return 0;
   const pending = {
     moduleId: { $ne: null },
     $or: [{ module: null }, { module: { $exists: false } }],
@@ -23,14 +31,14 @@ export async function migrateModuleText(logger?: Logger): Promise<number> {
     for (const l of names) {
       const res = await TimeEntryModel.updateMany(
         { ...pending, moduleId: l._id },
-        { $set: { module: l.name.trim().slice(0, 100) || null } },
+        { $set: { module: graphemeSlice(l.name.trim(), MODULE_MAX) || null } },
         { timestamps: false },
       );
       updated += res.modifiedCount;
     }
   }
   await MigrationModel.updateOne(
-    { _id: 'module-free-text' },
+    { _id: MODULE_MIGRATION_ID },
     {
       $set: { kind: 'data', status: 'DONE', finishedAt: new Date(), result: { updated } },
       $setOnInsert: { startedAt: new Date() },

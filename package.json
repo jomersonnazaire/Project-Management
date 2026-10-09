@@ -2,7 +2,7 @@
   "name": "xc8-project-management",
   "private": true,
   "version": "0.1.0",
-  "description": "Xceler8 Implementation Tracker (Project Management) monorepo",
+  "description": "Xceler8 project management monorepo",
   "workspaces": [
     "packages/*",
     "apps/*"

@@ -9,6 +9,7 @@ import type { AppConfig } from './config.js';
 import { dbState } from './db.js';
 import { HttpError } from './lib/errors.js';
 import { createLogger, httpLogger } from './logger.js';
+import { requestContextMiddleware } from './lib/requestContext.js';
 import { rateLimitKey, resolveClientIp } from './middleware/clientIp.js';
 import { authorize } from './middleware/authorize.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
@@ -77,11 +78,14 @@ export function createApp(
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
 
+  const ipOpts = { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET };
+  // Audit entries carry the client IP and user agent (same trusted IP logic as the limiter).
+  app.use(requestContextMiddleware(ipOpts));
+
   // Per-IP limiter on sign-in and password setup (NFR-05). Its counters live in this process's
   // memory (the default MemoryStore), so the App Service must stay pinned to ONE instance.
   // Tech debt TD-01: move the limiter (and lockout counters) to a shared store such as MongoDB
   // or Redis before scaling out to more than one instance.
-  const ipOpts = { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET };
   const authLimiter = rateLimit({
     windowMs: config.AUTH_RATE_LIMIT_WINDOW_MINUTES * 60_000,
     limit: config.AUTH_RATE_LIMIT_MAX,

@@ -1,6 +1,7 @@
 import { useContext, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { TopbarContext } from './topbar';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { useIsCompact } from '../lib/useMediaQuery';
 
 /**
@@ -18,6 +19,7 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   const slots = useContext(TopbarContext);
+  useDocumentTitle(title);
   // DR-40: on phones (and small tablets, below 768px) the top bar has no room for the title, so it
   // becomes the page's heading with the page's actions next to it; the top bar keeps the menu,
   // timer, bell and avatar.

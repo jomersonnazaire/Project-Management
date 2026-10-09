@@ -108,7 +108,7 @@ export function LookupsPanel({ kind }: { kind: EditableLookupKind }) {
               </thead>
               <tbody>
                 {items.map((i) => (
-                  <tr key={i.id} className={i.active ? '' : 'text-body-secondary'}>
+                  <tr key={i.id} className={i.active ? '' : 'row-inactive'}>
                     <td className="cell-primary fw-medium">
                       {i.name}
                       {!i.active && i.deactivatedAt && (
@@ -120,9 +120,7 @@ export function LookupsPanel({ kind }: { kind: EditableLookupKind }) {
                     </td>
                     <td data-label="Used by">{i.usedBy ? entries(i.usedBy) : 'Not used'}</td>
                     <td data-label="Status">
-                      <span
-                        className={`badge ${i.active ? 'bg-label-success' : 'bg-label-secondary'}`}
-                      >
+                      <span className={`badge ${i.active ? 'bg-label-success' : 'badge-inactive'}`}>
                         {i.active ? 'Active' : 'Inactive'}
                       </span>
                     </td>

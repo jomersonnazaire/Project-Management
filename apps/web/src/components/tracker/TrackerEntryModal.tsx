@@ -1,4 +1,10 @@
-import { formatHHMM, formatTime24, type TrackerEntryDto } from '@xc8/shared';
+import {
+  formatHHMM,
+  formatTime24,
+  switchTimerQuestion,
+  type TimerRunningDetails,
+  type TrackerEntryDto,
+} from '@xc8/shared';
 import { longDayShort } from '../../lib/format';
 import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
@@ -39,6 +45,46 @@ function fromEntry(e: TrackerEntryDto): EntryFieldValues {
  * Time in on a task, "+ Quick activity", "Add entry" and editing an entry (doc 14 FR-ACT-02, -06,
  * -10, -15..18; mockup v0.8.7 tracker and daysheet). The server sets live timer times.
  */
+/** API paths that belong to another form field (FR-ACT-28). */
+const FIELD_ALIASES: Record<string, string> = { taskId: 'target' };
+/** Errors the form shows under a field; anything else is for the banner. */
+const SHOWN_FIELDS = new Set([
+  'target',
+  'title',
+  'timeIn',
+  'timeOut',
+  'dayLocationId',
+  'activityTypeId',
+  'locationId',
+  'billable',
+  'module',
+  'notes',
+]);
+
+/**
+ * FR-ACT-28: the top banner is for server and network problems. A validation error whose fields
+ * all show under their inputs stays out of it; one naming a field the form doesn't show is
+ * spelled out ("module: ...") so nobody sees a bare "Some fields are invalid".
+ */
+function bannerError(error: unknown, targetShown: boolean): unknown {
+  if (!(error instanceof ApiError)) return error;
+  const f = error.fieldErrors();
+  const keys = Object.keys(f);
+  if (!keys.length) return error;
+  const hidden = keys.filter((k) => {
+    const field = FIELD_ALIASES[k] ?? k;
+    if (field === 'target' && !targetShown) return true;
+    return !SHOWN_FIELDS.has(field);
+  });
+  if (!hidden.length) return null;
+  return new ApiError(
+    error.status,
+    error.code,
+    hidden.map((k) => `${k}: ${f[k]}`).join(' '),
+    error.details,
+  );
+}
+
 export function TrackerEntryModal({
   mode,
   onClose,
@@ -139,8 +185,29 @@ export function TrackerEntryModal({
         when === 'now'
           ? { path: '/start', body }
           : { path: '/entries', body: { ...body, date, timeIn, timeOut } };
+      // FR-ACT-26: one timer at a time. Ask before stopping the running one.
+      if (when === 'now' && runningEntry) {
+        setSwitchPrompt({
+          id: runningEntry.id,
+          name: runningEntry.task?.name ?? runningEntry.title ?? 'Quick activity',
+          req,
+        });
+        return;
+      }
     }
     send(req);
+  };
+
+  const [switchPrompt, setSwitchPrompt] = useState<{
+    id: string;
+    name: string;
+    req: SaveReq;
+  } | null>(null);
+  const doSwitch = () => {
+    if (!switchPrompt) return;
+    const { id, req } = switchPrompt;
+    setSwitchPrompt(null);
+    send({ ...req, body: { ...(req.body as object), switchFrom: id } });
   };
 
   // Half-day leave (FR-LV-06, TC-S09): a warning the user can confirm; a full day is refused.
@@ -151,6 +218,14 @@ export function TrackerEntryModal({
       onSuccess: onClose,
       onError: (err) => {
         if (err instanceof ApiError) {
+          if (err.code === 'TIMER_RUNNING') {
+            // Another tab or the top bar started a timer meanwhile: offer Switch for that one.
+            const running = (err.details as TimerRunningDetails | undefined)?.running;
+            if (running) {
+              setSwitchPrompt({ id: running.id, name: running.name, req });
+              return;
+            }
+          }
           if (err.code === 'HALF_DAY_LEAVE') {
             setLeaveWarning({
               message: err.message,
@@ -160,7 +235,10 @@ export function TrackerEntryModal({
           }
           const f = err.fieldErrors();
           if (err.code === 'TIME_OVERLAP' || err.code === 'DAILY_LIMIT') return;
-          setErrors(f);
+          // FR-ACT-28: each error goes under its field; aliases map API paths to form fields.
+          const mapped: Record<string, string> = {};
+          for (const [k, v] of Object.entries(f)) mapped[FIELD_ALIASES[k] ?? k] = v;
+          setErrors(mapped);
         }
       },
     });
@@ -185,7 +263,21 @@ export function TrackerEntryModal({
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {leaveWarning ? (
+          {switchPrompt ? (
+            <div
+              className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
+              role="alertdialog"
+              aria-label="Switch timer"
+            >
+              <span className="me-auto">{switchTimerQuestion(switchPrompt.name)}</span>
+              <Button size="sm" variant="primary" onClick={doSwitch}>
+                Switch
+              </Button>
+              <Button size="sm" variant="outline-secondary" onClick={() => setSwitchPrompt(null)}>
+                Cancel
+              </Button>
+            </div>
+          ) : leaveWarning ? (
             <div
               className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
               role="alert"
@@ -196,7 +288,10 @@ export function TrackerEntryModal({
               </Button>
             </div>
           ) : (
-            <ErrorAlert error={save.error ?? remove.error} action />
+            <ErrorAlert
+              error={bannerError(save.error, mode.kind === 'add') ?? remove.error}
+              action
+            />
           )}
           {mode.kind === 'start' && (
             <p className="mb-3">
@@ -323,10 +418,10 @@ export function TrackerEntryModal({
               <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
             </div>
           )}
-          {stopsRunning && (
-            <p className="small text-warning mb-0" role="status">
-              Starting this stops the running timer on "
-              {runningEntry.task?.name ?? runningEntry.title}".
+          {stopsRunning && !switchPrompt && (
+            <p className="small text-body-secondary mb-0" role="status">
+              A timer is running on "{runningEntry.task?.name ?? runningEntry.title}". You can
+              switch to this one.
             </p>
           )}
         </Modal.Body>

@@ -45,6 +45,18 @@ $label-pairs: (
   color: #5d6878 !important;
 }
 
+// Inactive list rows (Admin › Activity types, Locations): the shared $text-inactive token on the
+// row, every cell (tables set their own cell colour) and the Inactive badge.
+.row-inactive,
+.row-inactive > td,
+.row-inactive > th {
+  color: $text-inactive !important;
+}
+.badge.badge-inactive {
+  background-color: $secondary-bg-subtle !important;
+  color: $text-inactive !important;
+}
+
 // --- App shell tweaks (React replaces Sneat's menu.js) ---
 .layout-menu .menu-link.disabled {
   opacity: 0.7;
@@ -57,17 +69,15 @@ a:focus-visible,
   outline: 2px solid $primary;
   outline-offset: 2px;
 }
-.app-brand-logo-box {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.app-brand-mark {
   inline-size: 1.75rem;
   block-size: 1.75rem;
-  border-radius: 0.375rem;
-  background: $primary;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.95rem;
+  flex: none;
+}
+.app-brand-lockup {
+  display: block;
+  block-size: 40px; // logo README: min lockup height 32px
+  inline-size: auto;
 }
 .empty-state {
   text-align: center;
@@ -656,11 +666,34 @@ $board-gap: 0.75rem;
   }
 }
 
-// DR-38: negative leave balances in a danger red that passes AA (5.7:1 on white, 4.6:1 on the badge).
+// DR-38, DR-44: negative leave balances use the danger token ($danger #b8240a, AA on white and
+// on the badge's #ffe0db).
 .text-negative {
-  color: #c22d0e !important;
+  color: $danger !important;
 }
 .badge.badge-negative {
-  background-color: #ffe0db;
-  color: #c22d0e;
+  background-color: $danger-bg-subtle;
+  color: $danger;
+}
+
+// NFR-27: the left menu scrolls on its own on short or small screens (Sneat's menu.js scrollbar
+// isn't used), so every item stays reachable.
+.layout-menu.menu-vertical {
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+  max-height: 100dvh;
+
+  .menu-inner {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .menu-inner-shadow {
+    display: none;
+  }
 }

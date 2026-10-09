@@ -36,7 +36,7 @@ describe('Rate-limited sign-in (DEF-002, NFR-05)', () => {
       return unauth;
     });
     renderAt('/setup-password', <App />);
-    await screen.findByText(/Welcome, New Person/);
+    await screen.findByText(/Welcome to .+, New Person/);
     await userEvent.type(screen.getByLabelText('New password'), 'Good-pass-42!');
     await userEvent.type(screen.getByLabelText('Confirm password'), 'Good-pass-42!');
     await userEvent.click(screen.getByRole('button', { name: 'Set password & continue' }));

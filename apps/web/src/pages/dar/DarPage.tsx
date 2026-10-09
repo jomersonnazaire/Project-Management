@@ -9,6 +9,10 @@ import {
   phDateOf,
   rangeLabel,
   savedCopyNote,
+  savedBeforeRenameNote,
+  oldNameOnOlderCopiesNote,
+  darExportName,
+  DAR_EXPORT_NAME,
   todayPH,
   toDateOnly,
   type DarRange,
@@ -341,6 +345,9 @@ export function SavedReportsPage() {
             are &quot;Earlier version&quot;. An overlapping range is a separate report with no tag.
             Only you can see them. Saved reports can&apos;t be edited or deleted.
           </p>
+          <p className="small text-body-secondary">
+            <b>Old app name on older copies:</b> {oldNameOnOlderCopiesNote()}
+          </p>
           {list.isLoading && <LoadingRows rows={3} />}
           {list.error ? <ErrorAlert error={list.error} /> : null}
           {list.data && items.length === 0 && !filtered && (
@@ -423,6 +430,11 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
               />
             </div>
             <p className="small">{savedCopyNote(savedOn(s.savedAt).replace(' ·', ','))}</p>
+            {darExportName(s.report) !== DAR_EXPORT_NAME && (
+              <p className="small text-body-secondary" data-testid="old-name-note">
+                {savedBeforeRenameNote()}
+              </p>
+            )}
             {s.changedDates.map((d) => (
               <div key={d} className="alert alert-info py-2 small">
                 {changedAfterSaveMessage(formatShortDate(d))}.{' '}

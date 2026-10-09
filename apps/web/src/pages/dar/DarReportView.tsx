@@ -1,6 +1,6 @@
 import {
   DAR_COLUMNS,
-  DAR_FOOTER,
+  darFooter,
   DAR_TITLE,
   moduleLabel,
   SAVED_EARLIER,
@@ -68,7 +68,7 @@ export function DarReportView({ report }: { report: DarReportDto }) {
           </tfoot>
         </table>
       </div>
-      <p className="dar-footer mb-0">{DAR_FOOTER}</p>
+      <p className="dar-footer mb-0">{darFooter(report)}</p>
     </div>
   );
 }

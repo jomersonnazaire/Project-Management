@@ -107,6 +107,12 @@ export const startTimerSchema = z
     dayLocationId: objectId.optional(),
     /** Confirms the half-day leave warning (FR-LV-06). */
     confirmLeave: z.boolean().optional(),
+    /**
+     * FR-ACT-26 Switch: the running timer the user agreed to stop. Without it, Time in while a
+     * timer runs answers 409 TIMER_RUNNING; with a stale id (that timer already stopped and
+     * another started), it answers 409 too, so two starts can never both win.
+     */
+    switchFrom: objectId.optional(),
   })
   .refine(oneTarget, { message: TARGET_MESSAGE, path: ['taskId'] });
 export type StartTimerInput = z.input<typeof startTimerSchema>;
@@ -225,6 +231,8 @@ export interface TrackerDayDto {
   can: { edit: boolean; submit: boolean; reopen: boolean };
   /** Filled by M7 Leave: "On leave", "Half day leave (AM)" … */
   leave: string | null;
+  /** FR-LV-12: the recorded leave on this day, shown as grey read-only rows at the top. */
+  leaveRows: TrackerLeaveRowDto[];
 }
 
 export interface RunningDto {
@@ -271,6 +279,12 @@ export function phInstant(date: string, hhmm: string): Date {
 export function autoStopAt(date: string): Date {
   return phInstant(date, '23:59');
 }
+/**
+ * DR-45: timer times are saved floored to the whole minute (01:02:40 → 01:02:00), so an entry's
+ * minutes always equal end minus start as shown (01:02 → 01:05 is 00:03).
+ */
+export const floorToMinute = (d: Date) => new Date(Math.floor(d.getTime() / 60_000) * 60_000);
+
 export const minutesBetween = (a: Date, b: Date) =>
   Math.max(0, Math.round((b.getTime() - a.getTime()) / 60_000));
 
@@ -289,3 +303,22 @@ export const reopenedMessage = (name: string, date: string, reason: string) =>
   `${name} reopened your timesheet for ${date}: ${reason}. Make your changes and submit it again before the weekly lock.`;
 export const onHoldStoppedMessage = (project: string, task: string, time: string) =>
   `${project} was put on hold, so your timer on "${task}" stopped at ${time}.`;
+
+/** FR-ACT-26: the Switch prompt shown when Time in finds another timer running. */
+export const switchTimerQuestion = (name: string) => `Stop '${name}' and start this one?`;
+export const TIMER_RUNNING_MESSAGE = 'A timer is already running. Stop it first or switch.';
+/** 409 TIMER_RUNNING details: the timer that's running. */
+export interface TimerRunningDetails {
+  running: { id: string; name: string };
+}
+
+/** FR-LV-12: one recorded leave on a Day timesheet ("Vacation · Full day"). */
+export interface TrackerLeaveRowDto {
+  id: string;
+  type: string;
+  dayPart: 'FULL' | 'AM' | 'PM';
+  label: string;
+}
+export function leaveRowLabel(type: string, dayPart: 'FULL' | 'AM' | 'PM'): string {
+  return `${type} · ${dayPart === 'FULL' ? 'Full day' : `Half day ${dayPart}`}`;
+}

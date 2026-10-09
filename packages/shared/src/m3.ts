@@ -16,11 +16,35 @@ export const MODULE_MAX = 100;
 /** The counter shows from this many characters (FR-ACT-20). */
 export const MODULE_COUNTER_FROM = 80;
 export const MODULE_TOO_LONG = `Keep the module under ${MODULE_MAX} characters.`;
-/** Trimmed free text, max 100 after trimming; blank or spaces-only saves as blank (null). */
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+/**
+ * DEF-010: lengths users see. Counts grapheme clusters, so an emoji (even a multi-code-point
+ * one such as a flag or a family) counts as 1. The web counter and the API use this same rule.
+ */
+export const graphemeLength = (s: string) => {
+  let n = 0;
+  for (const _ of graphemes.segment(s)) n++;
+  return n;
+};
+/** The first `max` user-visible characters of `s` (never splits an emoji). */
+export const graphemeSlice = (s: string, max: number) => {
+  let out = '';
+  let n = 0;
+  for (const { segment } of graphemes.segment(s)) {
+    if (n++ >= max) break;
+    out += segment;
+  }
+  return out;
+};
+/** Module length in user-visible characters, after trimming (FR-ACT-20, DEF-010). */
+export const moduleLength = (s: string) => graphemeLength(s.trim());
+
+/** Trimmed free text, max 100 characters after trimming; blank or spaces-only saves as blank (null). */
 export const moduleText = z
   .string()
   .trim()
-  .max(MODULE_MAX, MODULE_TOO_LONG)
+  .refine((v) => graphemeLength(v) <= MODULE_MAX, MODULE_TOO_LONG)
   .nullable()
   .optional()
   .transform((v) => (v === undefined ? undefined : v || null));

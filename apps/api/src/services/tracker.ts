@@ -5,6 +5,7 @@ import {
   autoStopAt,
   dailyCapMessage,
   formatTime12,
+  floorToMinute,
   minutesBetween,
   onHoldStoppedMessage,
   overlapMessage,
@@ -234,22 +235,26 @@ export async function stopEntry(id: Id, at: Date, opts: { auto?: boolean } = {})
   const e = (await TimeEntryModel.findById(id).lean()) as EntryDoc | null;
   if (!e || !e.running || !e.startAt) return null;
   const cap = autoStopAt(dateKey(e.workDate));
-  let endAt = at > cap ? cap : at < e.startAt ? e.startAt : at;
+  // DR-45: both ends on whole minutes (older timers may have started mid-minute).
+  const startAt = floorToMinute(e.startAt);
+  const stopAt = floorToMinute(at);
+  let endAt = stopAt > cap ? cap : stopAt < startAt ? startAt : stopAt;
   // TC-Q05: with hours-only entries on the same day, a timer stops where the day reaches 24:00
   // (flagged "Auto-stopped – please check") rather than pushing the total past 24 hours.
   const others = await dayMinutes(e.userId, e.workDate, e._id, endAt);
   const room = Math.max(0, 24 * 60 - others);
   let capped = false;
-  if (minutesBetween(e.startAt, endAt) > room) {
-    endAt = new Date(e.startAt.getTime() + room * 60_000);
+  if (minutesBetween(startAt, endAt) > room) {
+    endAt = new Date(startAt.getTime() + room * 60_000);
     capped = true;
   }
-  const minutes = minutesBetween(e.startAt, endAt);
+  const minutes = minutesBetween(startAt, endAt);
   const done = (await TimeEntryModel.findOneAndUpdate(
     { _id: id, running: true },
     {
       $set: {
         running: false,
+        startAt,
         endAt,
         minutes,
         hours: minutes / 60,
@@ -276,7 +281,11 @@ export async function recomputeTask(taskId: Id, projectId: Id | null) {
 
 /**
  * FR-ACT-04, EC-75: timers still running past 23:59 PHT of their own day stop at 23:59 and are
- * flagged "Auto-stopped – please check". Runs lazily on tracker requests and hourly.
+ * flagged "Auto-stopped – please check". Runs lazily on the owner's tracker and DAR requests and
+ * every 5 minutes from server.ts. The end time comes from stopEntry's cap (23:59, or earlier when
+ * the day would pass 24 hours), not from when the sweep happens to run. Each stop is audited as
+ * `timer_auto_stopped` with the system as actor (actorId null, meta.actor 'system'; the audit log
+ * shows "System"), the entry ID, the stop time and `autoStopped: true` (NFR-28).
  */
 export async function sweepAutoStop(now = new Date(), userId?: Id): Promise<number> {
   const running = await TimeEntryModel.find({ running: true, ...(userId ? { userId } : {}) })
@@ -285,7 +294,24 @@ export async function sweepAutoStop(now = new Date(), userId?: Id): Promise<numb
   let n = 0;
   for (const e of running) {
     if (autoStopAt(dateKey(e.workDate)) <= now) {
-      if (await stopEntry(e._id, now, { auto: true })) n++;
+      const done = await stopEntry(e._id, now, { auto: true });
+      if (!done) continue;
+      n++;
+      await audit({
+        actorId: null,
+        entityType: 'time',
+        entityId: done._id,
+        projectId: done.projectId ?? null,
+        action: 'timer_auto_stopped',
+        changes: [{ field: 'endAt', old: null, new: done.endAt!.toISOString() }],
+        meta: {
+          actor: 'system',
+          userId: done.userId.toString(),
+          stoppedAt: done.endAt!.toISOString(),
+          minutes: done.minutes ?? null,
+          autoStopped: true,
+        },
+      });
     }
   }
   return n;

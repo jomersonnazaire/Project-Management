@@ -1,4 +1,4 @@
-import { MODULE_MAX, MODULE_TOO_LONG, type TimeType } from '@xc8/shared';
+import { MODULE_MAX, MODULE_TOO_LONG, moduleLength, type TimeType } from '@xc8/shared';
 
 export interface EntryFieldValues {
   activityTypeId: string;
@@ -24,7 +24,7 @@ export const emptyFields = (kind: 'TASK' | 'QUICK'): EntryFieldValues => ({
 export function fieldErrors(v: EntryFieldValues, _kind: 'TASK' | 'QUICK') {
   const e: Record<string, string> = {};
   if (!v.activityTypeId) e.activityTypeId = 'Choose an activity type.';
-  if (v.module.trim().length > MODULE_MAX) e.module = MODULE_TOO_LONG;
+  if (moduleLength(v.module) > MODULE_MAX) e.module = MODULE_TOO_LONG;
   return e;
 }
 

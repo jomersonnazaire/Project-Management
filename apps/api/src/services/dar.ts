@@ -12,6 +12,7 @@ import {
   type SavedReportDto,
   type SavedReportSummaryDto,
   type SavedTag,
+  DAR_EXPORT_NAME,
 } from '@xc8/shared';
 import type { Types } from 'mongoose';
 import {
@@ -138,6 +139,7 @@ export async function buildDar(
     rows: shown,
     days,
     runningExcluded,
+    exportName: DAR_EXPORT_NAME,
   };
 }
 

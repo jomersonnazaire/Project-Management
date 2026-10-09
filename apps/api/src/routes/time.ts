@@ -242,6 +242,7 @@ export function timeRouter(registry: RouteRegistry) {
       activityTypeId,
       // FR-ACT-20: optional free text; blank saves as blank.
       module: input.module ?? null,
+      moduleId: null,
       locationId,
       billable: input.billable,
     });
@@ -303,7 +304,11 @@ export function timeRouter(registry: RouteRegistry) {
         entry.activityTypeId,
       );
     }
-    if (input.module !== undefined) entry.module = input.module ?? null;
+    if (input.module !== undefined) {
+      // DEF-010: a Module save, blank included, also drops the legacy moduleId link.
+      entry.module = input.module ?? null;
+      entry.moduleId = null;
+    }
     if (input.locationId !== undefined) {
       entry.locationId = input.locationId
         ? await assertLookup(input.locationId, 'LOCATION', 'locationId', entry.locationId)

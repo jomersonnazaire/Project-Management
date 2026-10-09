@@ -1,4 +1,5 @@
 import type { Types } from 'mongoose';
+import { requestContext } from '../lib/requestContext.js';
 import { ActivityLogModel } from '../models/index.js';
 
 interface AuditInput {
@@ -12,33 +13,32 @@ interface AuditInput {
   meta?: Record<string, unknown> | null;
 }
 
+/** Client IP and user agent of the current request; both null for system jobs. */
+function origin() {
+  const ctx = requestContext();
+  return { ip: ctx?.ip ?? null, userAgent: ctx?.userAgent ?? null };
+}
+
+const toDoc = (input: AuditInput, from: ReturnType<typeof origin>) => ({
+  actorId: input.actorId,
+  entityType: input.entityType,
+  entityId: input.entityId,
+  action: input.action,
+  changes: input.changes ?? [],
+  reason: input.reason ?? null,
+  projectId: input.projectId ?? null,
+  meta: input.meta ?? null,
+  ...from,
+});
+
 /** Appends an audit entry (FR-AUD-01). Entries are never edited or deleted (FR-AUD-03). */
 export async function audit(input: AuditInput): Promise<void> {
-  await ActivityLogModel.create({
-    actorId: input.actorId,
-    entityType: input.entityType,
-    entityId: input.entityId,
-    action: input.action,
-    changes: input.changes ?? [],
-    reason: input.reason ?? null,
-    projectId: input.projectId ?? null,
-    meta: input.meta ?? null,
-  });
+  await ActivityLogModel.create(toDoc(input, origin()));
 }
 
 /** Appends several entries in one write (e.g. one per changed access rule cell, AC-33.4). */
 export async function auditMany(inputs: AuditInput[]): Promise<void> {
   if (!inputs.length) return;
-  await ActivityLogModel.insertMany(
-    inputs.map((input) => ({
-      actorId: input.actorId,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      action: input.action,
-      changes: input.changes ?? [],
-      reason: input.reason ?? null,
-      projectId: input.projectId ?? null,
-      meta: input.meta ?? null,
-    })),
-  );
+  const from = origin();
+  await ActivityLogModel.insertMany(inputs.map((input) => toDoc(input, from)));
 }

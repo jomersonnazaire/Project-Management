@@ -49,6 +49,9 @@ Run 9 Oct 2026 23:28 PHT to 10 Oct 2026 00:03 PHT against the milestone-7 web pr
 | FR-DAR-19 remarks fallback | pm@ 2026-10-07: a task entry and an hours-only entry with no notes show "Day0". A quick activity with no notes shows its title ("QA DAR quick Señor", ñ correct). Notes of only spaces also fall back to the title. Real notes are shown as entered. No prefix. Preview, PDF and XLSX all match | Pass |
 | FR-ACT-19 delete | Own quick activity (outsider@, Member role), own timed task entry and own hours-only entry (pm@) on an open day: 204. A repeat delete: 404. Submitted day: delete and patch give 422 DAY_LOCKED. Locked week (2026-10-02): tracker delete gives 422 DAY_LOCKED, and a Member can't create there (422). Someone else's entry: pm2@, Viewer, a non-supervisor PM and outsider@ get 404 on delete and patch. Admin gets 403 VIEW_ONLY, as TC-Q07 specifies. Every delete is in the audit log (`time_deleted`, with actor, minutes or hours and date) | Pass |
 | NFR-25 outsider sweep | outsider@ on records from QA FR P02, pm@'s entries, pm@'s saved DAR and member@'s leave: 35 requests (read, change and delete across project, activity, tasks, task history and status, issues and comments, folders, documents, document-request cancel, conversation, project time, /time patch and delete, another user's tracker day, tracker entries, saved DAR and its export, leave view and cancel). 34 returned 404. Reopening pm@'s day returned 403 NOT_SUPERVISOR (TC-Q11 design for Members, see note 2). Nothing changed | Pass |
+| TC-Q03 23:59 auto-stop | member@ entry "QA auto-stop check" on 2026-10-09: startAt `2026-10-09T14:58:01.189Z`, endAt `2026-10-09T15:58:25.009Z`, minutes `60`, running `false`, autoStopped `false`. Running timer now: null. Expected endAt 15:59Z (23:59 PHT) and autoStopped true | Fail |
+
+TC-Q03 re-check 2026-10-10 01:01 PHT, member@: `/tracker/running` entry null; entry 6ac900f9d92bc40873fb51cc unchanged (endAt `2026-10-09T15:58:25.009Z` = 23:58 PHT, minutes 60, autoStopped false). Still **Fail**; it stopped after about 60 minutes rather than at 23:59, with no auto-stop flag. Rerun is scheduled (timer start 10 Oct 22:43 PHT, verify 11 Oct 00:41 PHT).
 
 Extra setup (requested): outsider@xceler8.example now has a 2026 **Vacation** balance of **-3.5**. Leave recorded: 9–12 Nov full days (4) plus 13 Nov AM (0.5). The entitlement was then lowered from 5 to 1; the API returns `balance: -3.5, negative: true`, with the warning "…Setting 1 makes the balance -3.5."
 
@@ -59,3 +62,5 @@ Notes (not defects):
 4. The cap message shows the date as "2026-10-08". The spec's `{date}` format isn't defined.
 
 Test data left behind: project QA FR P02 9721 and QA FR P05 new (code SBO1-X). Also entries for pm@ (10-07 to 10-10) and pm2@ (10-09, a full 24h day), a saved DAR for pm@, and the outsider@ leave above.
+
+- TC-Q03 status correction (01:05 PHT Oct 10): VOID, not a defect. Per Deven, the audit log shows a manual `timer_stopped` by member@ (borrowed by Jomerson) at 23:58:25 PHT. Rerun on a QA-only account is scheduled for Oct 10 at 23:59 PHT.

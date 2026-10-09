@@ -14,6 +14,7 @@ import {
 } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import {
   useLookups,
   useTrackerDay,
@@ -21,7 +22,10 @@ import {
   useTrackerPeople,
 } from '../../api/trackerHooks';
 import { useAuth } from '../../auth/AuthContext';
+import { useCan } from '../../auth/useCan';
+import { RecordLeaveModal } from '../leave/LeavePage';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
+import { PageHeader } from '../../components/PageHeader';
 import { LockedIcon } from '../../components/LockedIcon';
 import { ReasonModal } from '../../components/ReasonModal';
 import {
@@ -121,15 +125,28 @@ export function LocationChip({ day, editable }: { day: TrackerDayDto; editable: 
 
 /**
  * Day timesheet (doc 14 FR-ACT-10..14, §10; mockup v0.8.7 daysheet): every timed entry of a day,
- * hours rendered, Submit day, reopen history. Supervisors and Admins pick a person and view only.
+ * hours rendered, Submit day, reopen history. FR-ACT-27: My tasks › Day timesheet only ever shows
+ * the signed-in user's own day. Supervisors and Admins review others' days (view only, reopen)
+ * on the separate Timesheet review page (`review`).
  */
-export function DayTimesheet({ today, initialDate }: { today: string; initialDate?: string }) {
+export function DayTimesheet({
+  today,
+  initialDate,
+  review = false,
+}: {
+  today: string;
+  initialDate?: string;
+  review?: boolean;
+}) {
   const { user } = useAuth();
   const [date, setDate] = useState(initialDate ?? today);
   const [person, setPerson] = useState<string>('');
   const people = useTrackerPeople();
   const others = (people.data ?? []).filter((p: Ref) => p.id !== user?.id);
-  const day = useTrackerDay(date, person || undefined);
+  const canLeave = useCan('leave', 'create');
+  const [recordingLeave, setRecordingLeave] = useState(false);
+  // Outside review only the own day is ever asked for (no userId).
+  const day = useTrackerDay(date, review && person ? person : undefined, !review || !!person);
   const save = useTrackerMutation();
   const stop = useTrackerMutation();
   const [modal, setModal] = useState<TrackerModalMode | null>(null);
@@ -173,7 +190,12 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
         {d && <LocationChip day={d} editable={d.can.edit} />}
         {d && <DayStatusBadge day={d} />}
         {d?.leave && <span className="badge bg-label-primary">{d.leave}</span>}
-        {others.length > 0 && (
+        {!review && others.length > 0 && (
+          <Link to="/timesheets/review" className="small ms-auto">
+            Review your team’s timesheets
+          </Link>
+        )}
+        {review && (
           <Form.Select
             size="sm"
             aria-label="Person"
@@ -182,7 +204,7 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
             className="ms-auto"
             onChange={(e) => setPerson(e.target.value)}
           >
-            <option value="">My timesheet</option>
+            <option value="">Choose a person…</option>
             {others.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -191,9 +213,16 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
           </Form.Select>
         )}
       </div>
+      {review && !person && (
+        <EmptyState icon="bx-group" title="Choose a person">
+          {others.length
+            ? 'Pick someone who reports to you to review their day.'
+            : 'Nobody reports to you, so there are no timesheets to review.'}
+        </EmptyState>
+      )}
       <ErrorAlert error={day.error} />
       <ErrorAlert error={save.error} />
-      {day.isPending ? (
+      {review && !person ? null : day.isPending ? (
         <LoadingRows />
       ) : d ? (
         <>
@@ -222,6 +251,11 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
                 + Add entry
               </Button>
             )}
+            {d.own && canLeave && (
+              <Button size="sm" variant="outline-secondary" onClick={() => setRecordingLeave(true)}>
+                + Add leave
+              </Button>
+            )}
             {d.can.submit && (
               <>
                 <Button size="sm" disabled={running} onClick={() => setConfirmSubmit(true)}>
@@ -240,7 +274,7 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
               </Button>
             )}
           </div>
-          {d.entries.length === 0 ? (
+          {d.entries.length === 0 && !(d.leaveRows ?? []).length ? (
             <EmptyState icon="bx-time" title={`No entries on ${shortDate(d.date)}`}>
               {d.can.edit
                 ? 'Add an entry (asks for the day’s location first).'
@@ -265,6 +299,19 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
                   </tr>
                 </thead>
                 <tbody>
+                  {/* FR-LV-12: leave first, grey and read-only. */}
+                  {(d.leaveRows ?? []).map((l) => (
+                    <tr
+                      key={`leave-${l.id}`}
+                      className="table-secondary leave-row"
+                      data-testid="leave-row"
+                    >
+                      <td colSpan={9} className="text-body-secondary">
+                        <i className="bx bx-sun me-1" aria-hidden="true" />
+                        {l.label}
+                      </td>
+                    </tr>
+                  ))}
                   {d.entries.map((e) => (
                     <tr key={e.id} data-testid={`entry-${e.id}`}>
                       <td data-label="Time in">
@@ -397,6 +444,9 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
           </Modal.Footer>
         </Modal>
       )}
+      {recordingLeave && (
+        <RecordLeaveModal initialDate={date} onClose={() => setRecordingLeave(false)} />
+      )}
       {reopening && d && (
         <ReasonModal
           title={`Reopen ${shortDate(d.date)} · ${d.user.name}`}
@@ -414,6 +464,16 @@ export function DayTimesheet({ today, initialDate }: { today: string; initialDat
           }
         />
       )}
+    </>
+  );
+}
+
+/** FR-ACT-27: supervisors and Admins review a person's day here (view only; reopen). */
+export function TimesheetReviewPage() {
+  return (
+    <>
+      <PageHeader title="Timesheet review" />
+      <DayTimesheet today={toDateOnly(todayPH())} review />
     </>
   );
 }

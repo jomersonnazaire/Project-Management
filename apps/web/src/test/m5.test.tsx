@@ -344,8 +344,10 @@ describe('Day timesheet (TC-Q10, Q11, Q12)', () => {
           }
         : undefined,
     );
-    renderAt('/my-tasks?tab=day', <App />);
-    await userEvent.selectOptions(await screen.findByLabelText('Person'), 'Maria Perez');
+    // FR-ACT-27: review happens on Timesheet review, not in My tasks › Day timesheet.
+    renderAt('/timesheets/review', <App />);
+    await screen.findByRole('option', { name: 'Maria Perez' });
+    await userEvent.selectOptions(screen.getByLabelText('Person'), 'Maria Perez');
     expect(
       await screen.findByText(/Submitted Oct 9, 6:12 PM · entries locked/),
     ).toBeInTheDocument();

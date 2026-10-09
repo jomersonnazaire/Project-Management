@@ -243,6 +243,7 @@ describe('Route policy table', () => {
       'GET /dashboard reports.view',
       'GET /dashboard/my-projects reports.view',
       'GET /workload workload.view',
+      'GET /reports/filters reports.view',
       'GET /reports/effort-variance reports.view',
       'GET /reports/effort-variance/export reports.export',
       'GET /reports/overdue reports.view',

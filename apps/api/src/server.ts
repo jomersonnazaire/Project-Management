@@ -49,8 +49,10 @@ const sweep = () =>
 void sweep();
 setInterval(() => void sweep(), 60 * 60 * 1000).unref();
 
-// FR-ACT-04, EC-75: timers left running stop at 23:59 PHT. Checked every 5 minutes (requests
-// also stop overdue timers lazily, so the stop time is always exactly 23:59).
+// FR-ACT-04, EC-75: timers left running stop at 23:59 PHT. Checked every 5 minutes, and lazily on
+// the owner's tracker requests. The recorded end time is capped by stopEntry (23:59, or earlier if
+// the day would pass 24 hours), so it doesn't depend on when the sweep runs. Audited as
+// `timer_auto_stopped` with a system actor.
 const timers = () =>
   sweepAutoStop()
     .then((n) => n && logger.info({ stopped: n }, 'Auto-stopped timers'))

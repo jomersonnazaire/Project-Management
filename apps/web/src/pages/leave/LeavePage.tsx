@@ -302,7 +302,14 @@ function CancelLeaveModal({
   );
 }
 
-export function RecordLeaveModal({ onClose }: { onClose: () => void }) {
+export function RecordLeaveModal({
+  onClose,
+  initialDate,
+}: {
+  onClose: () => void;
+  /** FR-LV-12: the Day timesheet's + Add leave opens the form for that date. */
+  initialDate?: string;
+}) {
   const types = useLeaveTypes();
   const year = todayPH().getUTCFullYear();
   const balances = useLeaveBalances(year);
@@ -310,8 +317,8 @@ export function RecordLeaveModal({ onClose }: { onClose: () => void }) {
   const today = toDateOnly(todayPH());
   const [leaveTypeId, setType] = useState('');
   const [dayPart, setDayPart] = useState<DayPart>('FULL');
-  const [from, setFrom] = useState(today);
-  const [to, setTo] = useState(today);
+  const [from, setFrom] = useState(initialDate ?? today);
+  const [to, setTo] = useState(initialDate ?? today);
   const [reason, setReason] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const type = types.data?.find((t) => t.id === leaveTypeId);

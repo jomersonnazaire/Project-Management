@@ -250,6 +250,89 @@ describe('FR-ACT-21/22: migration; the Modules list stays untouched', () => {
     ]);
   });
 
+  it('DEF-010: a cleared Module stays cleared after the migration re-runs (restart)', async () => {
+    const { w, l, t1 } = await setup();
+    const fin = await LookupModel.create({
+      kind: 'MODULE',
+      name: 'Financials',
+      nameKey: 'financials',
+      order: 0,
+    });
+    const timed = await manual(w.member.agent, {
+      taskId: t1,
+      activityTypeId: l.configuration,
+      date: '2026-10-13',
+      dayLocationId: l.onsite,
+      timeIn: '08:00',
+      timeOut: '09:00',
+    });
+    const hoursOnly = await w.member.agent
+      .post('/api/v1/time')
+      .set(CSRF)
+      .send({ taskId: t1, workDate: '2026-10-13', hours: 1, activityTypeId: l.configuration });
+    expect(hoursOnly.status).toBe(201);
+    const ids = [timed.body.entry.id as string, hoursOnly.body.entry.id as string].map(
+      (id) => new Types.ObjectId(id),
+    );
+    // Legacy rows pointing at the old list, no text yet.
+    await TimeEntryModel.collection.updateMany(
+      { _id: { $in: ids } },
+      { $set: { moduleId: fin._id, module: null } },
+    );
+    expect(await migrateModuleText()).toBe(2);
+    // The user clears the Module on both (Day timesheet and Time logging).
+    expect(
+      (
+        await w.member.agent
+          .patch(`/api/v1/tracker/entries/${ids[0]!.toString()}`)
+          .set(CSRF)
+          .send({ module: '' })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await w.member.agent
+          .patch(`/api/v1/time/${ids[1]!.toString()}`)
+          .set(CSRF)
+          .send({ module: '   ' })
+      ).status,
+    ).toBe(200);
+    const cleared = await TimeEntryModel.find({ _id: { $in: ids } }).lean();
+    expect(cleared.map((e) => [e.module, e.moduleId])).toEqual([
+      [null, null],
+      [null, null],
+    ]);
+    // Restart: the marker makes the migration skip.
+    expect(await migrateModuleText()).toBe(0);
+    // Even a forced re-run (marker gone) finds nothing to restore.
+    await MigrationModel.deleteOne({ _id: 'module-free-text' });
+    expect(await migrateModuleText()).toBe(0);
+    const after = await TimeEntryModel.find({ _id: { $in: ids } }).lean();
+    expect(after.map((e) => e.module)).toEqual([null, null]);
+  });
+
+  it('DEF-010: the 100-character Module limit counts user-visible characters', async () => {
+    const { w, l, t1 } = await setup();
+    const family = '👨‍👩‍👧'; // one character on screen, 8 UTF-16 units
+    const body = (module: string, timeIn: string, timeOut: string) => ({
+      taskId: t1,
+      activityTypeId: l.configuration,
+      date: '2026-10-13',
+      dayLocationId: l.onsite,
+      timeIn,
+      timeOut,
+      module,
+    });
+    const ok = await manual(w.member.agent, body(family.repeat(100), '08:00', '09:00'));
+    expect(ok.status).toBe(201);
+    expect(ok.body.entry.module).toBe(family.repeat(100));
+    const long = await manual(w.member.agent, body(family.repeat(101), '09:00', '10:00'));
+    expect(long.status).toBe(400);
+    expect(long.body.error.details).toEqual([
+      { path: 'module', message: 'Keep the module under 100 characters.' },
+    ]);
+  });
+
   it("no Modules screen or list in the API; old values can't be edited or deleted", async () => {
     const { w } = await setup();
     const mod = await LookupModel.create({

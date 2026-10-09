@@ -4,6 +4,8 @@ import {
   EDITABLE_LOOKUP_KINDS,
   LOOKUP_LABELS,
   STOP_TIMER_FIRST,
+  TIMER_RUNNING_MESSAGE,
+  type TimerRunningDetails,
   WHERE_WORKING,
   dayLocationSchema,
   stopTimerSchema,
@@ -25,16 +27,24 @@ import {
   type LookupKind,
   type RunningDto,
   type TrackerDayDto,
+  floorToMinute,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import { Types } from 'mongoose';
 import { AUTHENTICATED, perm, type RouteRegistry } from '../access/registry.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { HttpError, badRequest, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith, unprocessable } from '../lib/http422.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
-import { LookupModel, TimeEntryModel, TimesheetDayModel, UserModel } from '../models/index.js';
+import {
+  LookupModel,
+  TaskModel,
+  TimeEntryModel,
+  TimesheetDayModel,
+  UserModel,
+} from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { leaveRowsFor } from '../services/leave.js';
 import { assertLeaveAllowsTime, leaveLabelFor } from '../services/leaveHook.js';
 import { notifyPersonal } from '../services/notify.js';
 import { userRefs } from '../services/projectService.js';
@@ -116,8 +126,12 @@ async function resolveFields(input: FieldInput, kind: 'TASK' | 'QUICK', current?
     );
   }
   // FR-ACT-20: optional free text on every entry; blank or spaces-only saves as blank.
-  if (input.module !== undefined) out.module = input.module || null;
-  else if (!current) out.module = null;
+  // DEF-010: any Module save (blank included) also drops the legacy Modules-list link, so the
+  // free-text migration can never bring a cleared module back.
+  if (input.module !== undefined || !current) {
+    out.module = input.module || null;
+    out.moduleId = null;
+  }
   if (input.locationId) {
     out.locationId = await assertLookup(
       input.locationId,
@@ -228,7 +242,16 @@ async function buildDay(
       reopen: canReopenRole && lockedNow && (!state.weekLocked || isAdmin),
     },
     leave: await leaveLabelFor(userId, date),
+    leaveRows: await leaveRowsFor(userId, date),
   };
+}
+
+async function timerRunning(e: Pick<EntryDoc, '_id' | 'kind' | 'title' | 'taskId'>) {
+  const task = e.taskId ? await TaskModel.findById(e.taskId).select('name').lean() : null;
+  const details: TimerRunningDetails = {
+    running: { id: e._id.toString(), name: task?.name ?? e.title ?? 'Quick activity' },
+  };
+  return new HttpError(409, 'TIMER_RUNNING', TIMER_RUNNING_MESSAGE, details);
 }
 
 export function trackerRouter(registry: RouteRegistry) {
@@ -267,7 +290,8 @@ export function trackerRouter(registry: RouteRegistry) {
   r.post('/start', perm('activities', 'create'), async (req, res) => {
     const input = parseBody(startTimerSchema, req);
     const user = currentUser(req);
-    const now = new Date();
+    // DR-45: the timer starts on the whole minute.
+    const now = floorToMinute(new Date());
     await sweepAutoStop(now, user._id);
     const target = await resolveTarget(req, input);
     const fields = await resolveFields(input, target.kind);
@@ -281,10 +305,16 @@ export function trackerRouter(registry: RouteRegistry) {
       input.locationId,
     );
     if (inherit) fields.locationId = null;
-    const current = await TimeEntryModel.findOne({ userId: user._id, running: true })
-      .select('_id')
-      .lean();
-    if (current) await stopEntry(current._id, now);
+    // FR-ACT-26: one timer per person. A running timer is only stopped when the user chose
+    // Switch for that very timer; otherwise 409. The create below is guarded by the unique
+    // partial index (one running entry per user), so two simultaneous starts can't both win.
+    const current = (await TimeEntryModel.findOne({ userId: user._id, running: true })
+      .select('_id kind title taskId')
+      .lean()) as Pick<EntryDoc, '_id' | 'kind' | 'title' | 'taskId'> | null;
+    if (current) {
+      if (input.switchFrom !== current._id.toString()) throw await timerRunning(current);
+      await stopEntry(current._id, now);
+    }
     await assertNoOverlap(user._id, now, new Date(now.getTime() + 60_000));
     // TC-Q05: no new timer on a day that already has 24 hours.
     await assertDailyCap(user._id, date, 1);
@@ -300,7 +330,7 @@ export function trackerRouter(registry: RouteRegistry) {
       ...fields,
     }).catch((e: unknown) => {
       if ((e as { code?: number }).code === 11000) {
-        throw conflictWith('A timer is already running. Stop it first.', 'TIMER_RUNNING');
+        throw conflictWith(TIMER_RUNNING_MESSAGE, 'TIMER_RUNNING');
       }
       throw e;
     });

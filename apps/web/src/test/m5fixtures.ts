@@ -43,6 +43,7 @@ export const trackerDay = (over: Partial<TrackerDayDto> = {}): TrackerDayDto => 
     own: true,
     can: { edit: true, submit: true, reopen: false },
     leave: null,
+    leaveRows: [],
     ...over,
     entries,
   };

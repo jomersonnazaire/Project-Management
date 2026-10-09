@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  ReportFilterOptionsDto,
   DashboardDto,
   EffortRowDto,
   IssueReportDto,
@@ -51,6 +52,14 @@ export interface ReportBodies {
   timesheets: TimesheetReportDto;
   'project-status': ReportList<ProjectStatusRowDto>;
   issues: IssueReportDto;
+}
+
+/** DR-43: Project and Client filter options within the caller's report scope. */
+export function useReportFilters() {
+  return useQuery({
+    queryKey: ['reports', 'filters'],
+    queryFn: () => api<ReportFilterOptionsDto>('/reports/filters'),
+  });
 }
 
 export function useReport<K extends ReportKey>(key: K, filters: Filters, enabled = true) {

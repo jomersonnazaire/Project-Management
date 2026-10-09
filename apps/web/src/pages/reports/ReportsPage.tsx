@@ -23,9 +23,13 @@ import {
   type Ref,
   type TimesheetRowDto,
 } from '@xc8/shared';
-import { useClients } from '../../api/hooks';
-import { fetchReportExport, useReport, type Filters, type ReportKey } from '../../api/m4Hooks';
-import { useProjects } from '../../api/projectHooks';
+import {
+  fetchReportExport,
+  useReport,
+  useReportFilters,
+  type Filters,
+  type ReportKey,
+} from '../../api/m4Hooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
@@ -212,13 +216,16 @@ export function ReportsPage() {
   const tab = tabs.find((t) => t.key === requested) ?? tabs[0]!;
   const [f, setF] = useState<Record<string, string>>({});
   const set = (k: string) => (v: string) => setF((s) => ({ ...s, [k]: v }));
-  const projects = useProjects();
-  const clients = useClients();
-  const projectOptions: [string, string][] = (projects.data?.items ?? []).map((p) => [
+  // DR-43: options come from the report scope, so Members (no /clients access) get them too.
+  const options = useReportFilters();
+  const projectOptions: [string, string][] = (options.data?.projects ?? []).map((p) => [
     p.id,
     p.name,
   ]);
-  const clientOptions: [string, string][] = (clients.data?.items ?? []).map((c) => [c.id, c.name]);
+  const clientOptions: [string, string][] = (options.data?.clients ?? []).map((c) => [
+    c.id,
+    c.name,
+  ]);
 
   const pick = (...keys: string[]): Filters =>
     Object.fromEntries(keys.map((k) => [k, f[k] || undefined]));

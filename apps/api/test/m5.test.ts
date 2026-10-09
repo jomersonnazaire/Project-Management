@@ -131,7 +131,13 @@ describe('TC-Q01/Q02: Time in and Time out', () => {
     const { w, l, t1, t2 } = await setup();
     const a = await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite });
     at('2026-10-14T02:30:00Z');
-    const b = await start(w.member.agent, task(l, t2));
+    // FR-ACT-26: a plain start while A runs is refused; Switch names A.
+    const refused = await start(w.member.agent, task(l, t2));
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe('TIMER_RUNNING');
+    expect(refused.body.error.details.running.id).toBe(a.body.entry.id);
+    const b = await start(w.member.agent, { ...task(l, t2), switchFrom: a.body.entry.id });
+    expect(b.status).toBe(201);
     expect(b.body.stopped).toBe(a.body.entry.id);
     const first = await TimeEntryModel.findById(a.body.entry.id).lean();
     expect(first!.endAt!.toISOString()).toBe(b.body.entry.startAt);
@@ -309,7 +315,7 @@ describe('TC-Q08: location per day', () => {
     const b = await start(w.member.agent, task(l, t1, { locationId: l.onsite }));
     expect(b.body.entry).toMatchObject({ location: { name: 'Onsite' }, locationOverridden: true });
     at('2026-10-14T06:00:00Z');
-    const c = await start(w.member.agent, task(l, t1));
+    const c = await start(w.member.agent, { ...task(l, t1), switchFrom: b.body.entry.id });
     expect(c.body.entry.location.name).toBe('WFH');
     // Changing the day's location moves entries that follow it.
     const put = await w.member.agent
