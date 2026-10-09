@@ -1,0 +1,21 @@
+// ===================================================================================================================
+// ? TIP:  It is recommended to use this file for overriding bootstrap extended variables (_bootstrap-extended/_variables.scss).
+// Copy and paste variables as needed, modify their values, and remove the !default flag.
+// ===================================================================================================================
+
+// Xceler8 overrides: WCAG AA colours from docs/design/THEME_TOKENS.md (mockup v0.4).
+// Text colours meet 4.5:1 on white and on their badge tint. Tints are Sneat's default
+// colours at 16% over white, as specified in the tokens file.
+$primary: #5355e0;
+$secondary: #5d6878;
+$success: #2e7d17;
+$info: #00718a;
+$warning: #9a5b00;
+$danger: #b8240a;
+
+$primary-bg-subtle: #e7e7ff;
+$secondary-bg-subtle: #ebeef0;
+$success-bg-subtle: #e8fadf;
+$info-bg-subtle: #d7f5fc;
+$warning-bg-subtle: #fff2d6;
+$danger-bg-subtle: #ffe0db;

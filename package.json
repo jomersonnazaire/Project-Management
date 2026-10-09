@@ -1,0 +1,39 @@
+{
+  "name": "xc8-project-management",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Xceler8 Implementation Tracker (Project Management) monorepo",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @xc8/api & npm run dev --workspace @xc8/web",
+    "dev:api": "npm run dev --workspace @xc8/api",
+    "dev:web": "npm run dev --workspace @xc8/web",
+    "dev:db": "npm run dev:db --workspace @xc8/api",
+    "seed": "npm run seed --workspace @xc8/api",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.4.0",
+    "prettier": "^3.6.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^4.1.11"
+  }
+}

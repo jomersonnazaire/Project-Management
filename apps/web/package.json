@@ -1,0 +1,38 @@
+{
+  "name": "@xc8/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Xceler8 Implementation Tracker web app (React + TypeScript + Vite, Sneat theme)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource/public-sans": "^5.2.0",
+    "@hookform/resolvers": "^5.2.0",
+    "@tanstack/react-query": "^5.90.0",
+    "@xc8/shared": "*",
+    "bootstrap": "5.3.3",
+    "react": "^18.3.1",
+    "react-bootstrap": "^2.10.10",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.62.0",
+    "react-router-dom": "^7.9.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^18.3.24",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^27.0.0",
+    "sass-embedded": "^1.93.0",
+    "vite": "^7.1.0"
+  }
+}

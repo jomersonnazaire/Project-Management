@@ -1,0 +1,80 @@
+name: Deploy API (Azure App Service)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'packages/shared/**'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+env:
+  AZURE_WEBAPP_NAME: xc8-projectmgmt-api-tc3w
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://xc8-projectmgmt-api-tc3w.azurewebsites.net/api/v1/health
+    steps:
+      - name: Check for publish profile
+        id: secret
+        env:
+          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          if [ -z "$PUBLISH_PROFILE" ]; then
+            echo "::notice title=Deploy skipped::AZURE_WEBAPP_PUBLISH_PROFILE is not set, so the API was not deployed."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secret.outputs.present == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.secret.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build API
+        if: steps.secret.outputs.present == 'true'
+        run: |
+          npm ci
+          npm run build --workspace @xc8/api
+
+      - name: Assemble deploy package
+        if: steps.secret.outputs.present == 'true'
+        run: |
+          node apps/api/scripts/prepare-deploy.mjs "$RUNNER_TEMP/api-deploy"
+          cd "$RUNNER_TEMP/api-deploy"
+          npm install --omit=dev --no-audit --no-fund
+
+      - name: Deploy to Azure Web App
+        if: steps.secret.outputs.present == 'true'
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ${{ runner.temp }}/api-deploy
+
+      - name: Smoke test
+        if: steps.secret.outputs.present == 'true'
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS "https://${AZURE_WEBAPP_NAME}.azurewebsites.net/api/v1/health"; then exit 0; fi
+            sleep 10
+          done
+          echo "::warning::Health check did not succeed within 2 minutes."
