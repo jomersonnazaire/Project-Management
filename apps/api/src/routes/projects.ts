@@ -25,6 +25,7 @@ import {
   ActivityLogModel,
   ClientContactModel,
   ClientModel,
+  IssueModel,
   ProjectModel,
   TaskModel,
   TemplateModel,
@@ -32,6 +33,7 @@ import {
   type Project,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { notifyOwnerNeeded } from '../services/issues.js';
 import { openIssueKeys } from './issues.js';
 import {
   buildPlanTasks,
@@ -127,6 +129,26 @@ async function assertInternalUsers(ids: string[], label: string, roles?: string[
   const n = await UserModel.countDocuments(q);
   if (n !== new Set(ids).size)
     throw unprocessable(`${label} must be active internal users.`, 'INVALID_USER');
+}
+
+/** EC-68: keys of this project's issues whose reporting contact belongs to `clientId`. */
+async function issuesWithOldClientContacts(projectId: Types.ObjectId, clientId: Types.ObjectId) {
+  const issues = await IssueModel.find({ projectId, reportedByContactId: { $ne: null } })
+    .select('key reportedByContactId')
+    .sort({ number: 1 })
+    .lean();
+  if (!issues.length) return [];
+  const old = new Set(
+    (
+      await ClientContactModel.find({
+        _id: { $in: issues.map((i) => i.reportedByContactId) },
+        clientId,
+      })
+        .select('_id')
+        .lean()
+    ).map((c) => c._id.toString()),
+  );
+  return issues.filter((i) => old.has(i.reportedByContactId!.toString())).map((i) => i.key);
 }
 
 export function projectsRouter(registry: RouteRegistry) {
@@ -370,6 +392,7 @@ export function projectsRouter(registry: RouteRegistry) {
       track('managerId', project.managerId?.toString() ?? null, input.managerId);
       project.managerId = new Types.ObjectId(input.managerId);
     }
+    let removedMembers: string[] = [];
     if (input.memberIds !== undefined) {
       const current = project.memberIds.map(String);
       const added = input.memberIds.filter((id) => !current.includes(id));
@@ -378,6 +401,7 @@ export function projectsRouter(registry: RouteRegistry) {
         ...new Set([...input.memberIds, project.managerId?.toString()].filter(Boolean) as string[]),
       ];
       track('memberIds', current.sort(), [...next].sort());
+      removedMembers = current.filter((id) => !next.includes(id));
       project.memberIds = next.map((id) => new Types.ObjectId(id));
     } else if (
       project.managerId &&
@@ -403,6 +427,17 @@ export function projectsRouter(registry: RouteRegistry) {
           "Changing this project's client clears its active contacts. Confirm to continue.",
           'CONFIRM_CLEAR_CONTACTS',
         );
+      }
+      // EC-68: issues keep their contacts; warn first, listing issues reported by the old client.
+      if (!input.confirmIssueContacts) {
+        const keys = await issuesWithOldClientContacts(project._id, project.clientId);
+        if (keys.length) {
+          throw conflictWith(
+            `${keys.length} issue${keys.length === 1 ? ' keeps a contact' : 's keep contacts'} from the current client: ${keys.join(', ')}. They stay as they are. Confirm to change the client.`,
+            'ISSUE_CONTACTS_OLD_CLIENT',
+            { issues: keys },
+          );
+        }
       }
       track('clientId', project.clientId.toString(), input.clientId);
       if (project.activeContactIds.length)
@@ -496,6 +531,14 @@ export function projectsRouter(registry: RouteRegistry) {
 
     await project.save();
     await recomputeProject(project._id);
+    // EC-66: open issues owned by people just removed from the project need a new owner.
+    if (removedMembers.length) {
+      await notifyOwnerNeeded({
+        ownerIds: removedMembers.map((x) => new Types.ObjectId(x)),
+        projectId: project._id,
+        actorId: user._id,
+      });
+    }
     if (changes.length) {
       await audit({
         actorId: user._id,

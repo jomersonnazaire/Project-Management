@@ -1,4 +1,5 @@
 import {
+  OPEN_ISSUE_STATUSES,
   ISSUE_AUTO_CLOSE_DAYS,
   ISSUE_SEVERITY_DUE_DAYS,
   ISSUE_TRANSITIONS,
@@ -397,4 +398,44 @@ export async function runIssueSweeps(opts: { force?: boolean; logger?: Logger; n
   }
   if (closed || reminded) opts.logger?.info({ closed, reminded }, 'Issue sweeps');
   return { closed, reminded };
+}
+
+/**
+ * EC-66: when an issue owner is deactivated or removed from the project, their open issues show
+ * "Owner needed" (computed on read) and the project's PM is notified once per issue.
+ */
+export async function notifyOwnerNeeded(opts: {
+  ownerIds: Id[];
+  projectId?: Id;
+  actorId: Id | null;
+}): Promise<number> {
+  if (!opts.ownerIds.length) return 0;
+  const issues = await IssueModel.find({
+    ownerId: { $in: opts.ownerIds },
+    status: { $in: OPEN_ISSUE_STATUSES },
+    ...(opts.projectId ? { projectId: opts.projectId } : {}),
+  })
+    .select('_id projectId')
+    .lean();
+  if (!issues.length) return 0;
+  const projects = await ProjectModel.find({
+    _id: { $in: issues.map((i) => i.projectId) },
+    archived: { $ne: true },
+  })
+    .select('managerId memberIds')
+    .lean();
+  const byId = new Map(projects.map((p) => [p._id.toString(), p]));
+  let sent = 0;
+  for (const i of issues) {
+    const project = byId.get(i.projectId.toString());
+    if (!project?.managerId) continue;
+    sent += await notify({
+      type: 'ISSUE_OWNER_NEEDED',
+      project,
+      issueId: i._id,
+      actorId: opts.actorId,
+      recipients: [project.managerId],
+    });
+  }
+  return sent;
 }
