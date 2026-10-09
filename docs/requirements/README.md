@@ -41,3 +41,4 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.4.6 | 2026-10-09 | M2 rulings: template short name, accepted placeholders, holidays still required, three proposals pending Lean (doc 11 §12). |
 | v0.4.7 | 2026-10-09 | Lean decided the three M2 proposals (PM activity log, draft visibility, PM handover); PH holidays scheduled for M3. |
 | v0.5.0 draft | 2026-10-09 | Doc 12: add-activity, reordering, phase-card click (PR #3); evidence uploads, follow-up notifications, Conversation tab (M3). |
+| v0.6.0 draft | 2026-10-09 | Doc 13: Project Issue Tracking (Milestone 3.5), with access rows for issues, conversations and notifications. |
