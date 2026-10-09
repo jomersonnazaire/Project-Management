@@ -4,6 +4,7 @@ import {
   TASK_TRANSITIONS,
   effortSummary,
   formatHours,
+  moveWithinGroup,
   plural,
   type ProjectDto,
   type TaskDto,
@@ -13,7 +14,16 @@ import { useState, type DragEvent } from 'react';
 import { useEdgeFade } from '../../lib/useEdgeFade';
 import { Button, Form } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { useContactOptions, useProjectActivity, useProjectContact } from '../../api/projectHooks';
+import {
+  useContactOptions,
+  useProjectActivity,
+  useProjectContact,
+  useReorderTasks,
+} from '../../api/projectHooks';
+import { DragHandle } from '../../components/ReorderControls';
+import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
+import { useAuth } from '../../auth/AuthContext';
+import { TaskFormModal } from './TaskFormModal';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
@@ -35,10 +45,55 @@ function DueCell({ t }: { t: TaskDto }) {
   );
 }
 
-/** Checklist: tasks grouped by phase (FR-TSK-11). */
+/** Checklist: tasks grouped by phase (FR-TSK-11), with collapsible phases and reordering (doc 12). */
+const OTHER = 'Other tasks';
+const phaseOf = (t: TaskDto) => t.phase || OTHER;
+
+/** Which phases this user has closed on this project, remembered per user per project (FR-PRJ-14). */
+function useCollapsedPhases(userId: string | undefined, projectId: string) {
+  const key = `xc8.checklist.collapsed.${userId ?? 'anon'}.${projectId}`;
+  const [collapsed, setCollapsed] = useState<string[]>(() => {
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(key) ?? '[]');
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+  const toggle = (phase: string) => {
+    const next = collapsed.includes(phase)
+      ? collapsed.filter((p) => p !== phase)
+      : [...collapsed, phase];
+    setCollapsed(next);
+    try {
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // Storage full or blocked: the phase still opens and closes for this visit.
+    }
+  };
+  return { isOpen: (phase: string) => !collapsed.includes(phase), toggle };
+}
+
 export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
-  const phases = Array.from(new Set(tasks.map((t) => t.phase ?? 'Other tasks')));
+  const { user } = useAuth();
+  const phases = Array.from(new Set(tasks.map(phaseOf)));
   const summary = effortSummary(tasks);
+  const reorder = useReorderTasks(project.id);
+  const { isOpen, toggle } = useCollapsedPhases(user?.id, project.id);
+  const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [announce, setAnnounce] = useState('');
+  // Planners reorder within a phase with the ⋮⋮ handle (drag, or Alt+↑/↓). Display order only:
+  // dependencies, dates, owners and status never change (FR-PRJ-16).
+  const canPlan = project.can.planTasks && !project.archived;
+  const move = (ph: string, from: number, to: number) => {
+    const group = tasks.filter((t) => phaseOf(t) === ph);
+    const ids = group.map((t) => t.id);
+    const next = moveWithinGroup(ids, () => true, from, to);
+    if (next.join() === ids.join()) return;
+    setAnnounce(`Moved ${group[from]!.name} to position ${to + 1} of ${ids.length} in ${ph}.`);
+    reorder.mutate({ phase: ph === OTHER ? null : ph, taskIds: next });
+  };
+
   if (tasks.length === 0) {
     return (
       <EmptyState icon="bx-list-check" title="No tasks yet">
@@ -55,58 +110,142 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         {plural(tasks.length - summary.unestimatedCount, 'task')} ·{' '}
         <span data-testid="unestimated-count">{summary.unestimatedCount}</span> without an estimate
       </p>
-      {phases.map((ph) => (
-        <div key={ph} className="card mb-4">
-          <div className="card-header py-3">
-            <h3 className="h6 mb-0">{ph}</h3>
-          </div>
-          <div className="table-responsive">
-            <table className="table table-stack-md mb-0">
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">Task</th>
-                  <th scope="col">Owner</th>
-                  <th scope="col">Due</th>
-                  <th scope="col">Est. / actual</th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks
-                  .filter((t) => (t.phase ?? 'Other tasks') === ph)
-                  .map((t) => (
-                    <tr key={t.id}>
-                      <td data-label="#">{t.order}</td>
-                      <td className="cell-primary">
-                        <Button
-                          variant="link"
-                          className="p-0 text-start fw-medium"
-                          onClick={() => onOpen(t.id)}
-                        >
-                          {t.name}
-                        </Button>
-                        {t.party === 'CLIENT' && (
-                          <span className="badge bg-label-info ms-2">Client</span>
-                        )}
-                      </td>
-                      <td data-label="Owner">{t.owner?.name ?? '–'}</td>
-                      <td data-label="Due" className="text-nowrap">
-                        <DueCell t={t} />
-                      </td>
-                      <td data-label="Est. / actual">
-                        <EstAct est={t.estHours} act={t.actualHours} />
-                      </td>
-                      <td data-label="Status">
-                        <TaskStatusBadge status={t.status} />
-                      </td>
+      <ErrorAlert error={reorder.error} action />
+      <div className="visually-hidden" role="status" aria-live="polite">
+        {announce}
+      </div>
+      {phases.map((ph, phaseIndex) => {
+        const group = tasks.filter((t) => phaseOf(t) === ph);
+        const done = group.filter((t) => t.status === 'COMPLETED').length;
+        const open = isOpen(ph);
+        const bodyId = `phase-body-${phaseIndex}`;
+        const scope = `checklist-${phaseIndex}`;
+        const addLabel =
+          ph === OTHER ? '+ Add activity' : `+ Add activity to Phase ${phaseIndex + 1}`;
+        return (
+          <div key={ph} className="card mb-4">
+            <div
+              className="card-header py-3 d-flex align-items-center gap-2 phase-toggle"
+              role="button"
+              tabIndex={0}
+              aria-expanded={open}
+              aria-controls={bodyId}
+              onClick={() => toggle(ph)}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggle(ph);
+                }
+              }}
+            >
+              <span className="phase-caret text-primary" aria-hidden="true">
+                ▸
+              </span>
+              <h3 className="h6 mb-0">{ph}</h3>
+              <span className="small text-body-secondary">
+                {plural(group.length, 'activity', 'activities')} · {done} done
+              </span>
+              <div
+                className="progress phase-progress ms-auto"
+                aria-hidden="true"
+                title={`${done} of ${group.length} done`}
+              >
+                <div
+                  className="progress-bar"
+                  style={{ width: `${group.length ? (done / group.length) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+            <div id={bodyId} hidden={!open}>
+              <div className="table-responsive">
+                <table className="table table-stack-md mb-0">
+                  <thead>
+                    <tr>
+                      {canPlan && (
+                        <th scope="col">
+                          <span className="visually-hidden">Reorder</span>
+                        </th>
+                      )}
+                      <th scope="col">#</th>
+                      <th scope="col">Task</th>
+                      <th scope="col">Owner</th>
+                      <th scope="col">Due</th>
+                      <th scope="col">Est. / actual</th>
+                      <th scope="col">Status</th>
                     </tr>
-                  ))}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {group.map((t, i) => (
+                      <tr
+                        key={t.id}
+                        {...dropTargetProps(canPlan, scope, (from) => move(ph, Number(from), i))}
+                      >
+                        {canPlan && (
+                          <td className="text-nowrap" style={{ width: '2rem' }}>
+                            <DragHandle
+                              name={t.name}
+                              index={i}
+                              count={group.length}
+                              disabled={reorder.isPending}
+                              onMove={(to) => move(ph, i, to)}
+                              dragProps={dragHandleProps(canPlan, scope, String(i))}
+                            />
+                          </td>
+                        )}
+                        <td data-label="#">{t.order}</td>
+                        <td className="cell-primary">
+                          <Button
+                            variant="link"
+                            className="p-0 text-start fw-medium"
+                            onClick={() => onOpen(t.id)}
+                          >
+                            {t.name}
+                          </Button>
+                          {t.party === 'CLIENT' && (
+                            <span className="badge bg-label-info ms-2">Client</span>
+                          )}
+                        </td>
+                        <td data-label="Owner">{t.owner?.name ?? '–'}</td>
+                        <td data-label="Due" className="text-nowrap">
+                          <DueCell t={t} />
+                        </td>
+                        <td data-label="Est. / actual">
+                          <EstAct est={t.estHours} act={t.actualHours} />
+                        </td>
+                        <td data-label="Status">
+                          <TaskStatusBadge status={t.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {canPlan && (
+                <div className="card-footer py-3">
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    title={ph === OTHER ? undefined : `Add an activity to ${ph}`}
+                    onClick={() => setAddingTo(ph)}
+                  >
+                    {addLabel}
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
+      {addingTo !== null && (
+        <TaskFormModal
+          project={project}
+          task={null}
+          tasks={tasks}
+          fixedPhase={addingTo === OTHER ? null : addingTo}
+          onClose={() => setAddingTo(null)}
+        />
+      )}
     </>
   );
 }

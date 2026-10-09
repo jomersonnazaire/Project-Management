@@ -8,6 +8,7 @@ import {
   PRIORITY_LABELS,
   TEMPLATE_TYPE_LABELS,
   TEMPLATE_TYPES,
+  moveWithinGroup,
   plural,
   type TemplateActivityDto,
   type TemplateDto,
@@ -28,6 +29,8 @@ import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { Estimate, TemplateStatusBadge } from '../../components/ProjectBadges';
+import { DragHandle, ReorderControls } from '../../components/ReorderControls';
+import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
 import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 
@@ -69,7 +72,8 @@ export function TemplateEditorPage() {
   const remove = useDeleteTemplate();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [editing, setEditing] = useState<TemplateActivityDto | 'new' | null>(null);
+  // A new activity is created in the phase whose "+ Add activity" was used (no phase picker).
+  const [editing, setEditing] = useState<TemplateActivityDto | { newInPhase: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const t = template.data;
@@ -124,6 +128,36 @@ export function TemplateEditorPage() {
     else go();
   };
 
+  // Reorder within a phase (⋮⋮ drag, Alt+↑/↓, or Move up/down); saved with the draft.
+  // Dependencies refer to ids, so reordering never changes them (FR-TPL-13, FR-PRJ-16).
+  const moveActivity = (phaseId: string, from: number, to: number) =>
+    update({
+      activities: moveWithinGroup(draft.activities, (x) => x.phaseId === phaseId, from, to),
+    });
+  // A drop on a row puts the dragged activity at that row's place; a drop on a phase card (e.g. an
+  // empty phase) puts it at the end of that phase. Dragging into another phase moves it there.
+  const dropActivity = (id: string, phaseId: string, toIndex: number | null) => {
+    const moving = draft.activities.find((x) => x.id === id);
+    if (!moving) return;
+    if (moving.phaseId === phaseId) {
+      const group = activitiesByPhase(phaseId);
+      moveActivity(phaseId, group.indexOf(moving), toIndex ?? group.length - 1);
+      return;
+    }
+    const rest = draft.activities.filter((x) => x.id !== id);
+    const inPhase = rest.filter((x) => x.phaseId === phaseId);
+    let at: number;
+    if (toIndex !== null && inPhase[toIndex]) at = rest.indexOf(inPhase[toIndex]);
+    else if (inPhase.length) at = rest.indexOf(inPhase[inPhase.length - 1]!) + 1;
+    else {
+      const later = new Set(
+        draft.phases.slice(draft.phases.findIndex((p) => p.id === phaseId) + 1).map((p) => p.id),
+      );
+      const i = rest.findIndex((x) => later.has(x.phaseId));
+      at = i < 0 ? rest.length : i;
+    }
+    update({ activities: [...rest.slice(0, at), { ...moving, phaseId }, ...rest.slice(at)] });
+  };
   const activitiesByPhase = (phaseId: string) =>
     draft.activities.filter((x) => x.phaseId === phaseId);
   const nameOf = (aid: string) => {
@@ -224,7 +258,13 @@ export function TemplateEditorPage() {
             </EmptyState>
           )}
           {draft.phases.map((ph, pi) => (
-            <div className="card mb-4" key={ph.id}>
+            <div
+              className="card mb-4"
+              key={ph.id}
+              {...dropTargetProps(editable, 'template-activity', (id) =>
+                dropActivity(id, ph.id, null),
+              )}
+            >
               <div className="card-header d-flex align-items-center gap-2">
                 {editable ? (
                   <Form.Control
@@ -256,6 +296,11 @@ export function TemplateEditorPage() {
                 <table className="table mb-0">
                   <thead>
                     <tr>
+                      {editable && (
+                        <th scope="col">
+                          <span className="visually-hidden">Reorder</span>
+                        </th>
+                      )}
                       <th scope="col">#</th>
                       <th scope="col">Activity</th>
                       <th scope="col">Party</th>
@@ -270,8 +315,24 @@ export function TemplateEditorPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activitiesByPhase(ph.id).map((a) => (
-                      <tr key={a.id}>
+                    {activitiesByPhase(ph.id).map((a, i, group) => (
+                      <tr
+                        key={a.id}
+                        {...dropTargetProps(editable, 'template-activity', (id) =>
+                          dropActivity(id, ph.id, i),
+                        )}
+                      >
+                        {editable && (
+                          <td style={{ width: '2rem' }}>
+                            <DragHandle
+                              name={a.name}
+                              index={i}
+                              count={group.length}
+                              onMove={(to) => moveActivity(ph.id, i, to)}
+                              dragProps={dragHandleProps(editable, 'template-activity', a.id)}
+                            />
+                          </td>
+                        )}
                         <td>{draft.activities.indexOf(a) + 1}</td>
                         <td className="text-heading">
                           {a.name}
@@ -296,6 +357,12 @@ export function TemplateEditorPage() {
                         <td className="small">{a.dependsOn.map(nameOf).join(', ') || '–'}</td>
                         {editable && (
                           <td className="text-end text-nowrap">
+                            <ReorderControls
+                              name={a.name}
+                              index={i}
+                              count={group.length}
+                              onMove={(to) => moveActivity(ph.id, i, to)}
+                            />
                             <Button
                               variant="link"
                               size="sm"
@@ -329,6 +396,18 @@ export function TemplateEditorPage() {
                   </tbody>
                 </table>
               </div>
+              {editable && (
+                <div className="card-footer py-3">
+                  <Button
+                    variant="outline-primary"
+                    size="sm"
+                    title={`Add an activity to ${ph.name}`}
+                    onClick={() => setEditing({ newInPhase: ph.id })}
+                  >
+                    + Add activity to Phase {pi + 1}
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
           {editable && (
@@ -345,13 +424,6 @@ export function TemplateEditorPage() {
                 }
               >
                 + Add phase
-              </Button>
-              <Button
-                variant="outline-primary"
-                disabled={!draft.phases.length}
-                onClick={() => setEditing('new')}
-              >
-                + Add activity
               </Button>
             </div>
           )}
@@ -447,16 +519,22 @@ export function TemplateEditorPage() {
 
       {editing && (
         <ActivityModal
-          activity={editing === 'new' ? null : editing}
+          activity={'newInPhase' in editing ? null : editing}
+          phaseId={'newInPhase' in editing ? editing.newInPhase : editing.phaseId}
           draft={draft}
           onClose={() => setEditing(null)}
           onSave={(a) => {
             const exists = draft.activities.some((x) => x.id === a.id);
-            update({
-              activities: exists
-                ? draft.activities.map((x) => (x.id === a.id ? a : x))
-                : [...draft.activities, a],
-            });
+            if (exists) {
+              update({ activities: draft.activities.map((x) => (x.id === a.id ? a : x)) });
+            } else {
+              // Insert after the phase's last activity so numbering follows the phases.
+              const last = draft.activities.map((x) => x.phaseId).lastIndexOf(a.phaseId);
+              const at = last < 0 ? draft.activities.length : last + 1;
+              update({
+                activities: [...draft.activities.slice(0, at), a, ...draft.activities.slice(at)],
+              });
+            }
             setEditing(null);
           }}
         />
@@ -467,11 +545,14 @@ export function TemplateEditorPage() {
 
 function ActivityModal({
   activity,
+  phaseId,
   draft,
   onClose,
   onSave,
 }: {
   activity: TemplateActivityDto | null;
+  /** The phase a new activity goes into (from that phase's "+ Add activity"). */
+  phaseId: string;
   draft: Draft;
   onClose: () => void;
   onSave: (a: TemplateActivityDto) => void;
@@ -480,7 +561,7 @@ function ActivityModal({
     () =>
       activity ?? {
         id: nextId('a', draft.activities),
-        phaseId: draft.phases[draft.phases.length - 1]!.id,
+        phaseId,
         name: '',
         taskType: null,
         priority: 'MEDIUM',
@@ -496,7 +577,7 @@ function ActivityModal({
         isMilestone: false,
         dependsOn: [],
       },
-    [activity, draft],
+    [activity, phaseId, draft],
   );
   const [a, setA] = useState(initial);
   const [est, setEst] = useState(initial.estHours === null ? '' : String(initial.estHours));
@@ -533,16 +614,25 @@ function ActivityModal({
                 autoFocus
               />
             </Form.Group>
-            <Form.Group className="col-md-4" controlId="act-phase">
-              <Form.Label>Phase</Form.Label>
-              <Form.Select value={a.phaseId} onChange={(e) => set({ phaseId: e.target.value })}>
-                {draft.phases.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
+            {activity ? (
+              <Form.Group className="col-md-4" controlId="act-phase">
+                <Form.Label>Phase</Form.Label>
+                <Form.Select value={a.phaseId} onChange={(e) => set({ phaseId: e.target.value })}>
+                  {draft.phases.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            ) : (
+              <div className="col-md-4">
+                <span className="form-label d-block">Phase</span>
+                <span className="text-heading" data-testid="act-phase-fixed">
+                  {draft.phases.find((p) => p.id === phaseId)?.name}
+                </span>
+              </div>
+            )}
             <Form.Group className="col-md-4" controlId="act-party">
               <Form.Label>Party</Form.Label>
               <Form.Select

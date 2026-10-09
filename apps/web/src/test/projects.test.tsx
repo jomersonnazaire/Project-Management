@@ -306,7 +306,7 @@ describe('Template editor (FR-TPL-02..04, EC-58)', () => {
     expect(screen.getByText('No estimate')).toBeInTheDocument();
     expect(screen.getByText('v1')).toHaveAttribute('href', '/templates/t1');
 
-    await userEvent.click(screen.getByRole('button', { name: '+ Add activity' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Add activity to Phase 1' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('Activity name'), 'Design');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add activity' }));
@@ -330,7 +330,8 @@ describe('Template editor (FR-TPL-02..04, EC-58)', () => {
     renderAt('/templates/t2', <App />);
     expect(await screen.findByText('Kickoff')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Publish/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Add activity' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add activity/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Template name')).toBeDisabled();
   });
 });

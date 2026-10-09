@@ -20,11 +20,14 @@ export function TaskFormModal({
   project,
   task,
   tasks,
+  fixedPhase,
   onClose,
 }: {
   project: ProjectDto;
   task: TaskDto | null;
   tasks: TaskDto[];
+  /** Set by a phase's "+ Add activity": the task goes into that phase, with no phase picker. */
+  fixedPhase?: string | null;
   onClose: () => void;
 }) {
   const mutation = useTaskMutation();
@@ -35,7 +38,7 @@ export function TaskFormModal({
   );
 
   const [name, setName] = useState(task?.name ?? '');
-  const [phase, setPhase] = useState(task?.phase ?? '');
+  const [phase, setPhase] = useState(task?.phase ?? fixedPhase ?? '');
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'MEDIUM');
   const [party, setParty] = useState<Party>(task?.party ?? 'INTERNAL');
   const [ownerId, setOwnerId] = useState(task?.owner?.id ?? '');
@@ -116,19 +119,28 @@ export function TaskFormModal({
               />
               <Form.Control.Feedback type="invalid">{err('name')}</Form.Control.Feedback>
             </Form.Group>
-            <Form.Group className="col-md-4" controlId="task-phase">
-              <Form.Label>Phase</Form.Label>
-              <Form.Control
-                list="task-phase-list"
-                value={phase}
-                onChange={(e) => setPhase(e.target.value)}
-              />
-              <datalist id="task-phase-list">
-                {phases.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-            </Form.Group>
+            {!task && fixedPhase !== undefined ? (
+              <div className="col-md-4">
+                <span className="form-label d-block">Phase</span>
+                <span className="text-heading" data-testid="task-phase-fixed">
+                  {fixedPhase ?? 'No phase'}
+                </span>
+              </div>
+            ) : (
+              <Form.Group className="col-md-4" controlId="task-phase">
+                <Form.Label>Phase</Form.Label>
+                <Form.Control
+                  list="task-phase-list"
+                  value={phase}
+                  onChange={(e) => setPhase(e.target.value)}
+                />
+                <datalist id="task-phase-list">
+                  {phases.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
+              </Form.Group>
+            )}
             <Form.Group className="col-md-4" controlId="task-priority">
               <Form.Label>Priority</Form.Label>
               <Form.Select

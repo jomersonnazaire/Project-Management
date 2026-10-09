@@ -4,6 +4,7 @@ import type {
   CreateTaskInput,
   MyTasksDto,
   PersonDto,
+  ReorderTasksInput,
   ProjectDto,
   ProjectListItemDto,
   TaskDto,
@@ -241,4 +242,18 @@ export function taskPatch(id: string, body: UpdateTaskInput) {
 
 export function taskCreate(projectId: string, body: CreateTaskInput) {
   return { path: `/projects/${projectId}/tasks`, method: 'POST' as const, body };
+}
+
+/** Reorder one phase's tasks (Checklist drag-and-drop / Move up/down). */
+export function useReorderTasks(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ReorderTasksInput) =>
+      api<{ items: TaskDto[] }>(`/projects/${projectId}/tasks/reorder`, { method: 'POST', body }),
+    onSuccess: (res) => {
+      // Show the new order at once, then refetch everything that numbers tasks.
+      qc.setQueryData(['tasks', 'project', projectId, ''], res.items);
+    },
+    onSettled: () => invalidateProjects(qc),
+  });
 }
