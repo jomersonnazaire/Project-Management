@@ -472,6 +472,12 @@ $board-gap: 0.75rem;
 .timer-pill-label {
   max-width: 180px;
 }
+// 768–1199px: no sidebar, but the title and actions share the top bar with the pill.
+@include media-breakpoint-between(md, xl) {
+  .timer-pill-label {
+    max-width: 7rem;
+  }
+}
 @keyframes timer-pulse {
   0%,
   100% {
@@ -489,6 +495,12 @@ $board-gap: 0.75rem;
     animation: none;
   }
 }
+// Small tablets (576–767px): the pill drops the task name (the time and Time out stay).
+@include media-breakpoint-down(md) {
+  .timer-pill-label {
+    display: none;
+  }
+}
 @include media-breakpoint-down(sm) {
   .timer-pill {
     padding-inline: 0.5rem !important;
@@ -496,7 +508,7 @@ $board-gap: 0.75rem;
   }
   .timer-pill-label,
   .timer-pill-stop-text,
-  .btn-collapse-label {
+  .layout-navbar .btn-collapse-label {
     display: none;
   }
   .layout-navbar .navbar-nav-right {

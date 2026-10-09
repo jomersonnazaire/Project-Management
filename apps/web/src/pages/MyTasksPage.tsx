@@ -27,12 +27,13 @@ import { hoursLabel, longDay, shortDate } from '../lib/format';
 
 const VIEWS = [
   { key: 'today', label: 'Today' },
+  // FR-TSK-22 (doc 14 update): Day timesheet sits right after Today.
+  { key: 'day', label: 'Day timesheet' },
   { key: 'due', label: 'Due' },
   { key: 'assigned', label: 'Assigned to me' },
   { key: 'accountable', label: "I'm accountable" },
   { key: 'review', label: 'To review' },
   { key: 'completed', label: 'Completed' },
-  { key: 'day', label: 'Day timesheet' },
 ] as const;
 
 const ROLE_LABELS = {

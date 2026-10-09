@@ -1,6 +1,7 @@
-import { TIME_TYPES, TIME_TYPE_LABELS, type TimeType } from '@xc8/shared';
+import { TIME_TYPES, TIME_TYPE_LABELS, toDateOnly, todayPH, type TimeType } from '@xc8/shared';
 import { Form } from 'react-bootstrap';
 import { useLookups } from '../../api/trackerHooks';
+import { whereWorkingQuestion } from '../../lib/format';
 import type { EntryFieldValues } from './entryFieldValues';
 
 /**
@@ -152,22 +153,29 @@ export function EntryFields({
   );
 }
 
-/** "Where are you working today?" (FR-ACT-17), asked on the first entry of a day. */
+/**
+ * "Where are you working today?" (FR-ACT-17), asked on the first entry of a day. For an
+ * earlier day it reads "Where were you working on Wed, Oct 7?" (DR-41).
+ */
 export function DayLocationField({
+  date,
   value,
   onChange,
   error,
   idPrefix,
 }: {
+  /** The entry's day, YYYY-MM-DD (Philippine time). */
+  date: string;
   value: string;
   onChange: (v: string) => void;
   error?: string;
   idPrefix: string;
 }) {
   const lists = useLookups();
+  const today = toDateOnly(todayPH());
   return (
     <Form.Group className="mb-3" controlId={`${idPrefix}-day-location`}>
-      <Form.Label>Where are you working today? *</Form.Label>
+      <Form.Label>{whereWorkingQuestion(date, today)} *</Form.Label>
       <Form.Select
         value={value}
         isInvalid={Boolean(error)}
@@ -181,7 +189,9 @@ export function DayLocationField({
         ))}
       </Form.Select>
       <Form.Control.Feedback type="invalid">{error}</Form.Control.Feedback>
-      <Form.Text>Every entry today uses it; you can change one entry later.</Form.Text>
+      <Form.Text>
+        Every entry {date === today ? 'today' : 'that day'} uses it; you can change one entry later.
+      </Form.Text>
     </Form.Group>
   );
 }

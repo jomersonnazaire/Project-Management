@@ -86,18 +86,20 @@ describe('My tasks › Due (FR-TSK-20/21/22, AC-TODAY-1, TC-N22)', () => {
     renderAt('/my-tasks', <App />);
     expect(await screen.findByText('Friday, Oct 9')).toBeInTheDocument();
     const tabs = await screen.findAllByRole('button', {
-      name: /^(Today|Due|Assigned to me|I'm accountable|To review|Completed)/,
+      name: /^(Today|Day timesheet|Due|Assigned to me|I'm accountable|To review|Completed)/,
     });
+    // FR-TSK-22 update: Day timesheet comes right after Today.
     expect(tabs.map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual([
       'Today',
+      'Day timesheet',
       'Due',
       'Assigned to me',
       "I'm accountable",
       'To review',
       'Completed',
     ]);
-    expect(tabs[1]).toHaveTextContent('Due3');
-    await userEvent.click(tabs[1]!);
+    expect(tabs[2]).toHaveTextContent('Due3');
+    await userEvent.click(tabs[2]!);
     expect(await screen.findByText('Philippine time')).toBeInTheDocument();
     const overdue = screen.getByRole('heading', { name: 'Overdue · 2' });
     expect(overdue).toHaveClass('text-danger');

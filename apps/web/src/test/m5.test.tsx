@@ -140,6 +140,81 @@ describe('Today › Time in / Time out (TC-Q01, Q02, Q08)', () => {
   });
 });
 
+describe('Time in → Time out lands on the day timesheet (FR-ACT-01/02, TC-Q01/Q02/Q10)', () => {
+  it('needs no typing: the prefilled Time in plus Time out creates the entry on that day', async () => {
+    // An earlier entry on the same task today prefills Activity type and Module; the day already
+    // has its location, so Time in → Start timer → Time out is the whole flow.
+    const entries = [entry({ id: 'e0', notes: null })];
+    const fetchMock = api('MEMBER', (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url.endsWith('/lookups')) return { status: 200, body: LOOKUPS };
+      if (url.includes('/tracker/day'))
+        return { status: 200, body: { day: trackerDay({ entries: [...entries] }) } };
+      if (url.includes('/tracker/running'))
+        return {
+          status: 200,
+          body: {
+            entry: entries.find((e) => e.running) ?? null,
+            now: '2026-10-09T04:00:00.000Z',
+          },
+        };
+      if (method === 'POST' && url.endsWith('/tracker/start')) {
+        const started = entry({
+          id: 'r2',
+          notes: null,
+          running: true,
+          startAt: '2026-10-09T03:50:00.000Z',
+          endAt: null,
+          minutes: 0,
+        });
+        entries.push(started);
+        return { status: 201, body: { entry: started } };
+      }
+      if (method === 'POST' && url.endsWith('/tracker/stop')) {
+        const i = entries.findIndex((e) => e.running);
+        entries[i] = {
+          ...entries[i]!,
+          running: false,
+          endAt: '2026-10-09T04:00:00.000Z',
+          minutes: 10,
+        };
+        return { status: 200, body: { entry: entries[i] } };
+      }
+      return myTasks(url, init);
+    });
+    const user = userEvent.setup();
+    renderAt('/my-tasks', <App />);
+    const row = await screen.findByTestId('planned-t1');
+    await user.click(
+      await within(row).findByRole('button', { name: 'Time in on Prepare UAT scripts' }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Time in' });
+    expect(within(dialog).queryByLabelText(/Where are you working/)).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Start timer' }));
+    await waitFor(() =>
+      expect(sent(fetchMock, '/tracker/start')).toEqual({
+        taskId: 't1',
+        activityTypeId: 'at1',
+        moduleId: 'mod1',
+        billable: true,
+        type: 'EXECUTION',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Time in' })).not.toBeInTheDocument(),
+    );
+    await user.click(await within(row).findByRole('button', { name: '■ Time out' }));
+    await waitFor(() => expect(sent(fetchMock, '/tracker/stop')).toEqual({}));
+    await user.click(screen.getByRole('button', { name: 'Day timesheet' }));
+    const added = await screen.findByTestId('entry-r2');
+    expect(within(added).getByText('11:50 AM')).toBeInTheDocument();
+    expect(within(added).getByText('12:00 PM')).toBeInTheDocument();
+    expect(within(added).getByText('00:10')).toBeInTheDocument();
+    expect(within(added).getByText('Prepare UAT scripts')).toBeInTheDocument();
+    expect(screen.getByTestId('hours-rendered')).toHaveTextContent('01:25');
+  });
+});
+
 describe('+ Quick activity (TC-Q06)', () => {
   it('needs a title and Activity type, has no Time type and defaults Billable to No', async () => {
     const fetchMock = tracker('MEMBER');

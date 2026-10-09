@@ -230,3 +230,6 @@ Nothing here is built until Jomerson approves. Items marked **⚑** change an ex
 - **Accepted:** Latest / Earlier version tags appear only when the exact same range was saved more than once.
 - **FR-ACT-19 Deleting quick activities (DR-35):** users can delete their own quick activities and timed entries on days that aren't submitted or locked, with an in-app confirmation (not the browser's). Deletes are audited.
 - **Deferred:** leave document uploads (FR-LV-07 attachments), the "On leave" marker in workload (FR-LV-06), and the leave balances export (FR-LV-09). All three are tracked for after M8.
+- **24-hour cap with a running timer:** a running timer's elapsed time counts toward the day's 24-hour cap (Deven, fix round c81519c).
+- **Hours display:** HH:MM everywhere on screen and in CSV exports, replacing DR-08's "4h" style.
+- **My tasks tab order (Jomerson):** Today, Day timesheet, Due, Assigned to me, I'm accountable, To review, Completed (FR-TSK-22). Time in/out on a task fills the Day timesheet automatically, with no typing (FR-ACT-02, FR-ACT-10).

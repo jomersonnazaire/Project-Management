@@ -68,3 +68,4 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 | v0.9.3 | 2026-10-09 | Saved reports private to the owner (FR-DAR-14); no purge; Q-48 deferred. |
 | v0.9.4 | 2026-10-09 | Doc 14 approved for build; FR-LV-11 same-day AM+PM leave rule. |
 | v0.9.5 | 2026-10-09 | M4–M7 build notes: remarks fallback (FR-DAR-19), quick-activity delete (FR-ACT-19), accepted deviations, deferred leave items. |
+| v0.9.6 | 2026-10-09 | FR-TSK-22 tab order adds Day timesheet after Today. |

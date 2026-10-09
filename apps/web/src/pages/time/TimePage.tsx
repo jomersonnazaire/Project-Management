@@ -6,7 +6,8 @@ import { useCan } from '../../auth/useCan';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { TimeEntryForm } from '../../components/TimeEntryForm';
-import { hoursLabel, shortDate } from '../../lib/format';
+import { hoursLabel, shortDate, weekRangeShort } from '../../lib/format';
+import { useIsCompact } from '../../lib/useMediaQuery';
 import { TIME_TYPE_BADGE } from '../../lib/m3ui';
 import { useConfirm } from '../../components/ConfirmModal';
 
@@ -24,31 +25,36 @@ export function TimePage() {
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
+  // DR-39: on phones the week switcher sits in the page body (PageHeader, DR-40) with a short label
+  // ("‹ Oct 5–11 ›"), so the page is never wider than the screen.
+  const compact = useIsCompact();
+  const weekNav = (
+    <ButtonGroup aria-label="Week">
+      <Button
+        variant="outline-secondary"
+        aria-label="Previous week"
+        disabled={!w}
+        onClick={() => w && setWeek(shift(w.weekStart, -7))}
+      >
+        <i className="bx bx-chevron-left" aria-hidden="true" />
+      </Button>
+      <Button variant="outline-secondary" className="text-nowrap" disabled>
+        {w ? (compact ? weekRangeShort(w.weekStart) : `Week of ${shortDate(w.weekStart)}`) : '…'}
+      </Button>
+      <Button
+        variant="outline-secondary"
+        aria-label="Next week"
+        disabled={!w}
+        onClick={() => w && setWeek(shift(w.weekStart, 7))}
+      >
+        <i className="bx bx-chevron-right" aria-hidden="true" />
+      </Button>
+    </ButtonGroup>
+  );
+
   return (
     <>
-      <PageHeader title="Time logging">
-        <ButtonGroup aria-label="Week">
-          <Button
-            variant="outline-secondary"
-            aria-label="Previous week"
-            disabled={!w}
-            onClick={() => w && setWeek(shift(w.weekStart, -7))}
-          >
-            <i className="bx bx-chevron-left" aria-hidden="true" />
-          </Button>
-          <Button variant="outline-secondary" disabled>
-            Week of {w ? shortDate(w.weekStart) : '…'}
-          </Button>
-          <Button
-            variant="outline-secondary"
-            aria-label="Next week"
-            disabled={!w}
-            onClick={() => w && setWeek(shift(w.weekStart, 7))}
-          >
-            <i className="bx bx-chevron-right" aria-hidden="true" />
-          </Button>
-        </ButtonGroup>
-      </PageHeader>
+      <PageHeader title="Time logging">{weekNav}</PageHeader>
       <div className="row g-6">
         <div className="col-lg-8">
           <div className="card">

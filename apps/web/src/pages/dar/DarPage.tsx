@@ -50,7 +50,21 @@ function Tabs({ active }: { active: 'report' | 'saved' }) {
   );
 }
 
-function ExportButtons({ href }: { href: (fmt: 'pdf' | 'xlsx') => string }) {
+/** No exports for a range without entries: there is nothing to put in the file (DR-42). */
+const DAR_EXPORT_EMPTY = 'Nothing to export: no entries in this range.';
+
+function ExportButtons({
+  href,
+  loading = false,
+  empty = false,
+}: {
+  href: (fmt: 'pdf' | 'xlsx') => string;
+  /** No report yet (first preview still loading). */
+  loading?: boolean;
+  /** The range has no entries (leave lines don't count): both exports are disabled (DR-42). */
+  empty?: boolean;
+}) {
+  const disabled = loading || empty;
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const run = async (fmt: 'pdf' | 'xlsx') => {
@@ -66,14 +80,29 @@ function ExportButtons({ href }: { href: (fmt: 'pdf' | 'xlsx') => string }) {
   };
   return (
     <>
-      <Button variant="outline-secondary" disabled={busy !== null} onClick={() => run('pdf')}>
+      <Button
+        variant="outline-secondary"
+        disabled={disabled || busy !== null}
+        aria-describedby={empty ? 'dar-export-empty' : undefined}
+        onClick={() => run('pdf')}
+      >
         <i className="bx bx-download me-1" aria-hidden="true" />
         Export PDF
       </Button>
-      <Button variant="outline-secondary" disabled={busy !== null} onClick={() => run('xlsx')}>
+      <Button
+        variant="outline-secondary"
+        disabled={disabled || busy !== null}
+        aria-describedby={empty ? 'dar-export-empty' : undefined}
+        onClick={() => run('xlsx')}
+      >
         <i className="bx bx-download me-1" aria-hidden="true" />
         Export Excel
       </Button>
+      {empty && (
+        <span id="dar-export-empty" className="small text-body-secondary align-self-center">
+          {DAR_EXPORT_EMPTY}
+        </span>
+      )}
       {error ? <ErrorAlert error={error} /> : null}
     </>
   );
@@ -167,8 +196,10 @@ export function DarPage() {
               >
                 Save report
               </Button>
-              {r && range && (
+              {range && (
                 <ExportButtons
+                  loading={!r}
+                  empty={r?.totalActivities === 0}
                   href={(fmt) => `/dar/export/${fmt}?from=${range.from}&to=${range.to}`}
                 />
               )}
@@ -386,7 +417,10 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
         {s && (
           <>
             <div className="d-flex flex-wrap gap-2 mb-3">
-              <ExportButtons href={(fmt) => `/dar/saved/${s.id}/export/${fmt}`} />
+              <ExportButtons
+                empty={s.totalActivities === 0}
+                href={(fmt) => `/dar/saved/${s.id}/export/${fmt}`}
+              />
             </div>
             <p className="small">{savedCopyNote(savedOn(s.savedAt).replace(' ·', ','))}</p>
             {s.changedDates.map((d) => (

@@ -6,6 +6,7 @@ import {
   formatTime12,
   parseDateOnly,
   toDateOnly,
+  todayPH,
   type Ref,
   type TrackerDayDto,
   type TrackerEntryDto,
@@ -25,7 +26,7 @@ import {
   TrackerEntryModal,
   type TrackerModalMode,
 } from '../../components/tracker/TrackerEntryModal';
-import { longDay, phDateTime, shortDate } from '../../lib/format';
+import { longDay, phDateTime, shortDate, whereWorkingQuestion } from '../../lib/format';
 
 const shift = (d: string, n: number) => toDateOnly(addDays(parseDateOnly(d), n));
 
@@ -70,7 +71,7 @@ export function LocationChip({ day, editable }: { day: TrackerDayDto; editable: 
         <Modal show onHide={() => setOpen(false)} centered aria-labelledby="day-location-title">
           <Modal.Header closeButton>
             <Modal.Title as="h2" className="h5" id="day-location-title">
-              Where are you working on {shortDate(day.date)}?
+              {whereWorkingQuestion(day.date, toDateOnly(todayPH()))}
             </Modal.Title>
           </Modal.Header>
           <Modal.Body>

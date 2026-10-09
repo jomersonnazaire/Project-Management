@@ -256,6 +256,7 @@ export function TrackerEntryModal({
           )}
           {needsDayLocation && (
             <DayLocationField
+              date={date}
               idPrefix="tracker"
               value={dayLocationId}
               error={errors.dayLocationId}

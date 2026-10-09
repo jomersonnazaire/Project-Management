@@ -145,8 +145,8 @@ describe('TC-R01/R02/R04/R06: report preview', () => {
     expect(
       screen.getByText(/Supervisor: Jomerson Nazaire · CC: hr@xceler8.example/),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export Excel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export PDF' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export Excel' })).toBeEnabled();
   });
 
   it('TC-R03: refuses over 31 days and From after To before asking the server', async () => {
@@ -182,6 +182,12 @@ describe('TC-R01/R02/R04/R06: report preview', () => {
     );
     renderAt('/dar?from=2026-09-30&to=2026-10-02', <App />);
     expect(await screen.findByText('No time entries in this range')).toBeInTheDocument();
+    // DR-42: nothing to export, so both exports are disabled and say why.
+    for (const name of ['Export PDF', 'Export Excel']) {
+      const b = screen.getByRole('button', { name });
+      expect(b).toBeDisabled();
+      expect(b).toHaveAccessibleDescription('Nothing to export: no entries in this range.');
+    }
     await userEvent.click(screen.getByRole('button', { name: 'Save report' }));
     expect(await screen.findByText('View saved reports')).toHaveAttribute('href', '/dar/saved');
     const post = fetch.mock.calls.find(

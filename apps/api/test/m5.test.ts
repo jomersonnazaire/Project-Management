@@ -96,6 +96,37 @@ describe('TC-Q01/Q02: Time in and Time out', () => {
     expect((await stop(w.member.agent)).body.error.code).toBe('NO_TIMER');
   });
 
+  it("Time in then Time out puts the entry on that day's timesheet and DAR, nothing typed", async () => {
+    const { w, l, t1 } = await setup();
+    // The body is what the Time in dialog sends with its prefilled values: no times at all.
+    expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(
+      201,
+    );
+    at('2026-10-14T03:25:00Z');
+    expect((await stop(w.member.agent)).status).toBe(200);
+    const d = (await day(w.member.agent, '2026-10-14')).body.day;
+    expect(d.entries).toHaveLength(1);
+    expect(d.entries[0]).toMatchObject({
+      kind: 'TASK',
+      task: { id: t1 },
+      date: '2026-10-14',
+      startAt: '2026-10-14T02:00:00.000Z',
+      endAt: '2026-10-14T03:25:00.000Z',
+      minutes: 85,
+      running: false,
+      timed: true,
+      location: { id: l.onsite },
+    });
+    expect(d.totalMinutes).toBe(85);
+    const dar = (await w.member.agent.get('/api/v1/dar?from=2026-10-14&to=2026-10-14')).body.report;
+    expect(dar.rows).toHaveLength(1);
+    expect(dar.rows[0]).toMatchObject({
+      timeIn: '10:00 AM',
+      timeOut: '11:25 AM',
+      rendered: '01:25',
+    });
+  });
+
   it('starting B stops A at the same moment; only one runs', async () => {
     const { w, l, t1, t2 } = await setup();
     const a = await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite });
