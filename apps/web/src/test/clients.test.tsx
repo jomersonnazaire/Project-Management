@@ -173,18 +173,31 @@ describe('Clients › Details / Contacts / Projects tabs (FR-CLI-09..12)', () =>
     }
   });
 
-  it('AC-35.3 the Projects tab shows "No projects yet" in Milestone 1.5', async () => {
+  it('AC-35.3 the Projects tab: empty state, M2 status filters, and + New project for creators', async () => {
     const fetchMock = clientApi('ADMIN');
     renderAt(`/clients/${ACME.id}/projects`, <App />);
     expect(await screen.findByText('No projects yet')).toBeInTheDocument();
     expect(screen.getByText('Projects linked to this client will show here.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /New project/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '+ New project' })).toHaveAttribute(
+      'href',
+      `/projects/new?clientId=${ACME.id}`,
+    );
     const status = screen.getByRole('combobox', { name: 'Project status' });
     expect(
       within(status)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['All statuses', 'Active', 'Delayed', 'On hold', 'Completed', 'Archived']);
+    ).toEqual([
+      'All statuses',
+      'Planning',
+      'Active',
+      'Delayed',
+      'At risk',
+      'On hold',
+      'Completed',
+      'Cancelled',
+      'Archived',
+    ]);
     await userEvent.selectOptions(status, 'ARCHIVED');
     await waitFor(() =>
       expect(
@@ -193,7 +206,7 @@ describe('Clients › Details / Contacts / Projects tabs (FR-CLI-09..12)', () =>
     );
   });
 
-  it('FR-CLI-12 a Member’s Projects tab lists what the API returns for their scope, and the count matches', async () => {
+  it('FR-CLI-12 a Member’s Projects tab lists what the API returns for their scope, linked, and the count matches', async () => {
     clientApi('MEMBER', {
       projectCount: 1,
       projects: [
@@ -202,24 +215,47 @@ describe('Clients › Details / Contacts / Projects tabs (FR-CLI-09..12)', () =>
           name: 'SAP B1 Rollout',
           clientId: ACME.id,
           managerName: 'Jomerson N.',
-          startDate: '2026-08-18T00:00:00.000Z',
-          plannedEndDate: '2026-11-20T00:00:00.000Z',
+          startDate: '2026-08-18',
+          plannedEndDate: '2026-11-20',
           progress: 42,
-          status: 'DELAYED',
+          status: 'ACTIVE',
+          health: 'DELAYED',
           archived: false,
         },
       ],
     });
     renderAt(`/clients/${ACME.id}/projects`, <App />);
-    const row = (await screen.findByText('SAP B1 Rollout')).closest('tr')!;
+    const link = await screen.findByRole('link', { name: 'SAP B1 Rollout' });
+    expect(link).toHaveAttribute('href', '/projects/p1');
+    const row = link.closest('tr')!;
     expect(within(row).getByText('Jomerson N.')).toBeInTheDocument();
+    // Calendar dates never shift with the viewer's timezone.
     expect(within(row).getByText('Aug 18')).toBeInTheDocument();
+    expect(within(row).getByText('Nov 20')).toBeInTheDocument();
     expect(within(row).getByText('42%')).toBeInTheDocument();
     expect(within(row).getByText('Delayed')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '+ New project' })).not.toBeInTheDocument();
     const projectsTab = screen
       .getAllByRole('link')
-      .find((l) => l.textContent?.startsWith('Projects'));
+      .find((l) => l.getAttribute('href') === `/clients/${ACME.id}/projects`);
     expect(projectsTab).toHaveTextContent('Projects1');
+  });
+
+  it('the Contacts table shows each contact’s projects as links', async () => {
+    clientApi('ADMIN', {
+      contacts: [
+        contact({ projects: [{ id: 'p1', name: 'SAP B1 Rollout' }] }),
+        contact({ id: 'c2', name: 'L. Cruz', projects: [] }),
+      ],
+    });
+    renderAt(`/clients/${ACME.id}/contacts`, <App />);
+    expect(await screen.findByRole('columnheader', { name: 'Projects' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'SAP B1 Rollout' })).toHaveAttribute(
+      'href',
+      '/projects/p1',
+    );
+    const cruz = screen.getByText('L. Cruz').closest('tr')!;
+    expect(within(cruz).getByText('–', { selector: 'span' })).toBeInTheDocument();
   });
 
   it('the Details tab shows the client fields; Deactivate only with Delete on clients', async () => {
