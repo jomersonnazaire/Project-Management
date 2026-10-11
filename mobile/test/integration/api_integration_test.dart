@@ -207,6 +207,7 @@ void main() {
 
       test(
         'errors: 422 maps details to fields; 403 for forbidden writes',
+        skip: readOnly ? 'IT_READ_ONLY: no writes' : null,
         () async {
           try {
             await api.post('/projects', {'name': ''});
@@ -233,7 +234,13 @@ void main() {
 class ReadOnlyClient extends http.BaseClient {
   ReadOnlyClient(this._inner);
   final http.Client _inner;
-  static const allowed = {'/auth/login', '/auth/logout'};
+  static const allowed = {
+    '/auth/login',
+    '/auth/logout',
+    '/auth/mobile/login',
+    '/auth/mobile/refresh',
+    '/auth/mobile/logout',
+  };
   @override
   Future<http.StreamedResponse> send(http.BaseRequest r) {
     final path = r.url.path.replaceFirst(RegExp(r'^.*/api/v1'), '');

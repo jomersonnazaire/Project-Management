@@ -273,10 +273,19 @@ class ApiProjectAdminRepository implements ProjectAdminRepository {
   ApiProjectAdminRepository(this.api);
   final ApiClient api;
   @override
-  Future<List<ProjectTypeInfo>> projectTypes() async =>
-      _items(await api.get('/project-types'))
+  Future<List<ProjectTypeInfo>> projectTypes() async {
+    try {
+      return _items(await api.get('/project-types'))
           .map(ProjectTypeInfo.fromJson)
           .toList();
+    } on ApiException catch (e) {
+      // APIs deployed before project types (m8-project-type) don't have the route:
+      // the form and filters work without types instead of failing.
+      if (e.status == 404) return const [];
+      rethrow;
+    }
+  }
+
   @override
   Future<List<NamedRef>> templates() async => [
     for (final t in _items(await api.get('/templates')))
