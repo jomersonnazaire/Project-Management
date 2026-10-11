@@ -1,11 +1,12 @@
+import { ensureProjectCode } from './projectCodes.js';
 import {
+  OPEN_ISSUE_STATUSES,
   ISSUE_AUTO_CLOSE_DAYS,
   ISSUE_SEVERITY_DUE_DAYS,
   ISSUE_TRANSITIONS,
   addWorkingDays,
   isIssueOpen,
   isIssueOverdue,
-  issuePrefix,
   issueTransition,
   phDateOf,
   parseDateOnly,
@@ -109,24 +110,17 @@ export function defaultIssueDue(severity: IssueSeverity, raisedAt: Date, cal: Wo
   return addWorkingDays(parseDateOnly(phDateOf(raisedAt)), ISSUE_SEVERITY_DUE_DAYS[severity], cal);
 }
 
-/** Next running number and the project's fixed prefix (atomic; numbers are never reused). */
+/**
+ * Next running number and the project's prefix: its code (DR-23). Atomic; numbers are never
+ * reused, and the code can't change once the project has issues.
+ */
 export async function nextIssueNumber(
   p: IssueProject,
 ): Promise<{ number: number; prefix: string }> {
-  let prefix = p.issuePrefix;
-  if (!prefix) {
-    const client = await ClientModel.findById(p.clientId).select('name').lean();
-    prefix = issuePrefix(client?.name ?? p.name, p.type);
-    await ProjectModel.updateOne(
-      { _id: p._id, issuePrefix: null },
-      { $set: { issuePrefix: prefix } },
-    );
-    prefix =
-      (await ProjectModel.findById(p._id).select('issuePrefix').lean())?.issuePrefix ?? prefix;
-  }
+  const prefix = await ensureProjectCode(p);
   const updated = await ProjectModel.findOneAndUpdate(
     { _id: p._id },
-    { $inc: { issueSeq: 1 } },
+    { $inc: { issueSeq: 1 }, $set: { issuePrefix: prefix } },
     { new: true, projection: { issueSeq: 1 } },
   );
   return { number: updated!.issueSeq ?? 1, prefix };
@@ -397,4 +391,44 @@ export async function runIssueSweeps(opts: { force?: boolean; logger?: Logger; n
   }
   if (closed || reminded) opts.logger?.info({ closed, reminded }, 'Issue sweeps');
   return { closed, reminded };
+}
+
+/**
+ * EC-66: when an issue owner is deactivated or removed from the project, their open issues show
+ * "Owner needed" (computed on read) and the project's PM is notified once per issue.
+ */
+export async function notifyOwnerNeeded(opts: {
+  ownerIds: Id[];
+  projectId?: Id;
+  actorId: Id | null;
+}): Promise<number> {
+  if (!opts.ownerIds.length) return 0;
+  const issues = await IssueModel.find({
+    ownerId: { $in: opts.ownerIds },
+    status: { $in: OPEN_ISSUE_STATUSES },
+    ...(opts.projectId ? { projectId: opts.projectId } : {}),
+  })
+    .select('_id projectId')
+    .lean();
+  if (!issues.length) return 0;
+  const projects = await ProjectModel.find({
+    _id: { $in: issues.map((i) => i.projectId) },
+    archived: { $ne: true },
+  })
+    .select('managerId memberIds')
+    .lean();
+  const byId = new Map(projects.map((p) => [p._id.toString(), p]));
+  let sent = 0;
+  for (const i of issues) {
+    const project = byId.get(i.projectId.toString());
+    if (!project?.managerId) continue;
+    sent += await notify({
+      type: 'ISSUE_OWNER_NEEDED',
+      project,
+      issueId: i._id,
+      actorId: opts.actorId,
+      recipients: [project.managerId],
+    });
+  }
+  return sent;
 }

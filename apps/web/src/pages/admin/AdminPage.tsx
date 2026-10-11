@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/PageHeader';
 import { ForbiddenPage, NotFoundPage } from '../ErrorPages';
 import { HolidaysPanel } from './HolidaysPanel';
+import { LeavePanel } from './LeavePanel';
 import { SettingsPanel } from './SettingsPanel';
 import { TeamsPanel } from './TeamsPanel';
 import { UsersPanel } from './UsersPanel';
@@ -13,6 +14,7 @@ const TABS: { path: string; label: string; need: [RecordType, AccessAction] }[] 
   { path: 'teams', label: 'Teams', need: ['teams', 'view'] },
   { path: 'settings', label: 'Settings', need: ['settings', 'view'] },
   { path: 'holidays', label: 'Holidays', need: ['settings', 'view'] },
+  { path: 'leave', label: 'Leave', need: ['settings', 'view'] },
 ];
 
 const PANELS = {
@@ -20,6 +22,7 @@ const PANELS = {
   teams: <TeamsPanel />,
   settings: <SettingsPanel />,
   holidays: <HolidaysPanel />,
+  leave: <LeavePanel />,
 };
 
 /** Admin area. Tabs follow the access rules (default: Admin only); the API enforces the same. */

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  APP_NAME,
   checkPassword,
   isPasswordValid,
   type InviteInfoDto,
@@ -95,7 +96,9 @@ export function SetupPasswordPage() {
   }
 
   return (
-    <AuthCard>
+    <AuthCard
+      title={info.data?.purpose === 'RESET' ? 'Choose a new password' : 'Set your password'}
+    >
       <h4 className="mb-1">
         {info.data?.purpose === 'RESET' ? 'Choose a new password' : 'Set your password'}
       </h4>
@@ -103,7 +106,7 @@ export function SetupPasswordPage() {
         <LoadingRows rows={2} />
       ) : (
         <p className="small text-body-secondary">
-          Welcome, {info.data.name}.
+          Welcome to {APP_NAME}, {info.data.name}.
           {info.data.invitedByName && info.data.purpose === 'INVITE'
             ? ` You were invited by ${info.data.invitedByName}.`
             : ''}{' '}

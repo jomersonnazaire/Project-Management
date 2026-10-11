@@ -75,11 +75,13 @@ export function NotificationBell() {
                     if (!n.read) mark.mutate(n.id);
                     setOpen(false);
                     navigate(
-                      n.issue
-                        ? `/issues/${n.issue.id}`
-                        : n.task
-                          ? `/projects/${n.project.id}?task=${n.task.id}`
-                          : `/projects/${n.project.id}`,
+                      n.link
+                        ? n.link
+                        : n.issue
+                          ? `/issues/${n.issue.id}`
+                          : n.task && n.project
+                            ? `/projects/${n.project.id}?task=${n.task.id}`
+                            : `/projects/${n.project?.id ?? ''}`,
                     );
                   }}
                 >
@@ -88,7 +90,10 @@ export function NotificationBell() {
                     aria-label={n.read ? undefined : 'Unread'}
                   />
                   <span className="flex-grow-1 small">
-                    {n.issue && !n.actor ? (
+                    {n.message ? (
+                      // Personal notices (tracker, leave) carry their own sentence.
+                      <>{n.message}</>
+                    ) : n.issue && !n.actor ? (
                       // System reminders (overdue, owner needed) have no actor.
                       <>
                         {NOTIFICATION_VERBS[n.type]}{' '}
@@ -104,8 +109,8 @@ export function NotificationBell() {
                           {n.issue ? `${n.issue.key} ${n.issue.title}` : (n.task?.name ?? 'a task')}
                         </strong>
                       </>
-                    )}{' '}
-                    · {n.project.name}
+                    )}
+                    {n.project && ` · ${n.project.name}`}
                     <span className="d-block text-body-secondary">{relativeTime(n.at)}</span>
                   </span>
                 </button>

@@ -31,6 +31,11 @@ const week: TimeWeekDto = {
       task: { id: 'k1', name: 'Kickoff' },
       workDate: '2026-10-06',
       hours: 2,
+      minutes: 120,
+      timed: false,
+      activityType: null,
+      module: null,
+      billable: true,
       type: 'EXECUTION',
       notes: null,
       locked: false,
@@ -44,7 +49,7 @@ describe('Access rules v0.6.8: Members delete their own time entries', () => {
     api('MEMBER', (url) => (url.endsWith('/time') ? { status: 200, body: week } : undefined));
     renderAt('/time', <App />);
     expect(
-      await screen.findByRole('button', { name: /^Delete .*h on Kickoff/ }),
+      await screen.findByRole('button', { name: /^Delete \d\d:\d\d on Kickoff/ }),
     ).toBeInTheDocument();
   });
 

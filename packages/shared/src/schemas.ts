@@ -70,6 +70,11 @@ export const inviteUserSchema = z.strictObject({
 });
 export type InviteUserInput = z.input<typeof inviteUserSchema>;
 
+export const reportCcSchema = z
+  .array(emailSchema)
+  .max(5, 'Up to 5 CC emails.')
+  .refine((list) => new Set(list).size === list.length, 'Each CC email can be listed once.');
+
 export const updateUserSchema = z
   .strictObject({
     name: requiredText('Full name', 120).optional(),
@@ -79,6 +84,10 @@ export const updateUserSchema = z
     jobRole: jobRoleSchema.optional(),
     teamIds: z.array(objectId).max(50).optional(),
     weeklyCapacityHours: capacitySchema.optional(),
+    /** Direct supervisor (doc 14 §5); null clears it. */
+    supervisorId: objectId.nullable().optional(),
+    /** Report CC emails (FR-DAR-01): up to 5, Admin-managed. */
+    reportCc: reportCcSchema.optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectModel, TaskModel } from '../src/models/index.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
-import { clientWithContacts, grant, publishedTemplate, resetRules, world } from './m2helpers.js';
+import {
+  clientWithContacts,
+  grant,
+  publishedTemplate,
+  resetRules,
+  world,
+  ptypeId,
+} from './m2helpers.js';
 
 useDatabase();
 const app = makeApp();
@@ -17,6 +24,7 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
     const { admin, template, acme } = await world(app);
     const base = {
       name: 'X',
+      projectTypeId: await ptypeId(),
       clientId: acme.client.id,
       managerId: admin.user._id.toString(),
       startDate: '2026-10-12',
@@ -33,7 +41,10 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
       const res = await admin.agent
         .post('/api/v1/projects')
         .set(CSRF)
-        .send({ ...base, plannedEndDate: end });
+        .send({
+          ...base,
+          plannedEndDate: end,
+        });
       expect(res.status).toBe(400);
       expect(res.body.error.details).toContainEqual({
         path: 'plannedEndDate',
@@ -47,7 +58,10 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
         await admin.agent
           .post('/api/v1/projects')
           .set(CSRF)
-          .send({ ...base, managerId: member.user._id.toString() })
+          .send({
+            ...base,
+            managerId: member.user._id.toString(),
+          })
       ).status,
     ).toBe(422);
     expect(
@@ -55,7 +69,10 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
         await admin.agent
           .post('/api/v1/projects')
           .set(CSRF)
-          .send({ ...base, memberIds: [acme.active[0].id] })
+          .send({
+            ...base,
+            memberIds: [acme.active[0].id],
+          })
       ).status,
     ).toBe(422);
   });
@@ -108,28 +125,36 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
     const t = await publishedTemplate(admin.agent);
     const { client } = await clientWithContacts(admin.agent);
     vi.spyOn(TaskModel, 'insertMany').mockRejectedValueOnce(new Error('boom'));
-    const res = await admin.agent.post('/api/v1/projects').set(CSRF).send({
-      name: 'Atomic',
-      clientId: client.id,
-      managerId: admin.user._id.toString(),
-      startDate: '2026-10-12',
-      plannedEndDate: '2026-12-18',
-      templateId: t.id,
-    });
+    const res = await admin.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        projectTypeId: await ptypeId(),
+        name: 'Atomic',
+        clientId: client.id,
+        managerId: admin.user._id.toString(),
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        templateId: t.id,
+      });
     expect(res.status).toBe(500);
     expect(await ProjectModel.countDocuments({ name: 'Atomic' })).toBe(0);
   });
 
   it('EC-13 / EC-27 / EC-29 warn but still create', async () => {
     const { admin, template, acme } = await world(app);
-    const res = await admin.agent.post('/api/v1/projects').set(CSRF).send({
-      name: 'rollout p',
-      clientId: acme.client.id,
-      managerId: admin.user._id.toString(),
-      startDate: '2020-01-06',
-      plannedEndDate: '2020-01-08',
-      templateId: template.id,
-    });
+    const res = await admin.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        projectTypeId: await ptypeId(),
+        name: 'rollout p',
+        clientId: acme.client.id,
+        managerId: admin.user._id.toString(),
+        startDate: '2020-01-06',
+        plannedEndDate: '2020-01-08',
+        templateId: template.id,
+      });
     expect(res.status).toBe(201);
     expect(res.body.warnings).toEqual([
       'Plan exceeds baseline end by 5 days.',
@@ -141,14 +166,18 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
   it('only roles with Create on projects create them (Member, Viewer: 403)', async () => {
     const { member, viewer, template, acme } = await world(app);
     for (const u of [member, viewer]) {
-      const res = await u.agent.post('/api/v1/projects').set(CSRF).send({
-        name: 'Nope',
-        clientId: acme.client.id,
-        managerId: u.user._id.toString(),
-        startDate: '2026-10-12',
-        plannedEndDate: '2026-12-18',
-        templateId: template.id,
-      });
+      const res = await u.agent
+        .post('/api/v1/projects')
+        .set(CSRF)
+        .send({
+          projectTypeId: await ptypeId(),
+          name: 'Nope',
+          clientId: acme.client.id,
+          managerId: u.user._id.toString(),
+          startDate: '2026-10-12',
+          plannedEndDate: '2026-12-18',
+          templateId: template.id,
+        });
       expect(res.status).toBe(403);
     }
   });
@@ -446,14 +475,18 @@ describe('Project Active contacts (FR-PRJ-11..13, AC-36.1)', () => {
   it('contacts show a Projects column (scoped) and pending / overdue counts of open client tasks', async () => {
     const { admin, pm, member, outsider, project, acme, template } = await world(app);
     // A second project for the same client that the Member isn't on.
-    const secret = await pm.agent.post('/api/v1/projects').set(CSRF).send({
-      name: 'Secret Rollout',
-      clientId: acme.client.id,
-      managerId: pm.user._id.toString(),
-      startDate: '2020-01-06',
-      plannedEndDate: '2020-03-06',
-      templateId: template.id,
-    });
+    const secret = await pm.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        projectTypeId: await ptypeId(),
+        name: 'Secret Rollout',
+        clientId: acme.client.id,
+        managerId: pm.user._id.toString(),
+        startDate: '2020-01-06',
+        plannedEndDate: '2020-03-06',
+        templateId: template.id,
+      });
     for (const p of [project.id, secret.body.project.id]) {
       await pm.agent
         .post(`/api/v1/projects/${p}/contacts`)
@@ -499,6 +532,7 @@ describe('Clients › Projects tab with real projects (FR-CLI-11/12, AC-35.2, TC
           .post('/api/v1/projects')
           .set(CSRF)
           .send({
+            projectTypeId: await ptypeId(),
             name,
             clientId: acme.client.id,
             managerId: pm.user._id.toString(),

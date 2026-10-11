@@ -22,8 +22,8 @@ export function ProjectTimeTab({ project }: { project: ProjectDto }) {
             </h2>
             {d && (
               <small className="text-body-secondary">
-                {hoursLabel(d.total)}h total ·{' '}
-                {TIME_TYPES.map((t) => `${TIME_TYPE_SHORT[t]} ${hoursLabel(d.byType[t])}h`).join(
+                {hoursLabel(d.total)} total ·{' '}
+                {TIME_TYPES.map((t) => `${TIME_TYPE_SHORT[t]} ${hoursLabel(d.byType[t])}`).join(
                   ' · ',
                 )}
               </small>

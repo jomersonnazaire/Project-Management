@@ -4,6 +4,7 @@ import {
   type SystemRole,
   PROJECT_FILTERS,
   createProjectSchema,
+  issuePrefix,
   parseDateOnly,
   projectContactSchema,
   projectListQuerySchema,
@@ -12,6 +13,8 @@ import {
   updateProjectSchema,
   type ProjectFilter,
   type ProjectStatus,
+  PROJECT_TYPE_INACTIVE_PICK,
+  PROJECT_TYPE_REQUIRED,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
@@ -25,13 +28,23 @@ import {
   ActivityLogModel,
   ClientContactModel,
   ClientModel,
+  IssueModel,
   ProjectModel,
+  ProjectTypeModel,
   TaskModel,
   TemplateModel,
   UserModel,
   type Project,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { notifyOwnerNeeded } from '../services/issues.js';
+import {
+  assertCodeFree,
+  codeLocked,
+  codeTaken,
+  isDuplicateCode,
+  uniqueCode,
+} from '../services/projectCodes.js';
 import { openIssueKeys } from './issues.js';
 import {
   buildPlanTasks,
@@ -42,6 +55,7 @@ import {
 } from '../services/projectService.js';
 import { assertProjectScope, projectScopeFilter } from '../services/scope.js';
 import { loadCalendar } from '../services/calendar.js';
+import { stopTimersForProject } from '../services/tracker.js';
 
 /**
  * Projects (FR-PRJ-01..13, doc 11 FR-PRJ-11..13). The central gate checks `projects.*`; these
@@ -120,6 +134,26 @@ export function applyProjectFilter(filter: FilterQuery<Project>, status?: string
   }
 }
 
+/**
+ * FR-PTY-02: the chosen project type must exist and be active, unless it is the project's
+ * current type (a type deactivated later stays valid on save).
+ */
+async function assertProjectType(id: string, current: Types.ObjectId | null) {
+  if (current && current.toString() === id) return current;
+  const doc = await ProjectTypeModel.findById(id).select('active').lean();
+  if (!doc) {
+    throw unprocessable(PROJECT_TYPE_REQUIRED, 'INVALID_PROJECT_TYPE', [
+      { path: 'projectTypeId', message: PROJECT_TYPE_REQUIRED },
+    ]);
+  }
+  if (doc.active === false) {
+    throw unprocessable(PROJECT_TYPE_INACTIVE_PICK, 'INVALID_PROJECT_TYPE', [
+      { path: 'projectTypeId', message: PROJECT_TYPE_INACTIVE_PICK },
+    ]);
+  }
+  return doc._id;
+}
+
 async function assertInternalUsers(ids: string[], label: string, roles?: string[]) {
   if (!ids.length) return;
   const q: FilterQuery<unknown> = { _id: { $in: ids }, active: true };
@@ -127,6 +161,26 @@ async function assertInternalUsers(ids: string[], label: string, roles?: string[
   const n = await UserModel.countDocuments(q);
   if (n !== new Set(ids).size)
     throw unprocessable(`${label} must be active internal users.`, 'INVALID_USER');
+}
+
+/** EC-68: keys of this project's issues whose reporting contact belongs to `clientId`. */
+async function issuesWithOldClientContacts(projectId: Types.ObjectId, clientId: Types.ObjectId) {
+  const issues = await IssueModel.find({ projectId, reportedByContactId: { $ne: null } })
+    .select('key reportedByContactId')
+    .sort({ number: 1 })
+    .lean();
+  if (!issues.length) return [];
+  const old = new Set(
+    (
+      await ClientContactModel.find({
+        _id: { $in: issues.map((i) => i.reportedByContactId) },
+        clientId,
+      })
+        .select('_id')
+        .lean()
+    ).map((c) => c._id.toString()),
+  );
+  return issues.filter((i) => old.has(i.reportedByContactId!.toString())).map((i) => i.key);
 }
 
 export function projectsRouter(registry: RouteRegistry) {
@@ -158,6 +212,10 @@ export function projectsRouter(registry: RouteRegistry) {
     const filter: FilterQuery<Project> = { ...scope };
     applyProjectFilter(filter, q.status);
     if (q.clientId) filter.clientId = q.clientId;
+    // FR-PTY-07: filter by project type ("none" = Not set).
+    if (q.projectTypeId) {
+      filter.projectTypeId = q.projectTypeId === 'none' ? null : q.projectTypeId;
+    }
     if (q.mine === 'true') filter.managerId = user._id;
     if (q.q) filter.name = new RegExp(escapeRegex(q.q), 'i');
     const { skip, limit } = paginate(q.page, q.pageSize);
@@ -219,6 +277,8 @@ export function projectsRouter(registry: RouteRegistry) {
       'PROJECT_MANAGER',
     ]);
     await assertInternalUsers(input.memberIds, 'Project members');
+    // FR-PTY-02: a new project picks an active project type.
+    const projectType = await assertProjectType(input.projectTypeId, null);
 
     const template = await TemplateModel.findById(input.templateId).lean();
     if (!template || template.status !== 'PUBLISHED') {
@@ -243,6 +303,11 @@ export function projectsRouter(registry: RouteRegistry) {
       );
     }
 
+    // DR-23: the code is the issue ID prefix; unique ignoring case. Suggested when left out.
+    const code =
+      input.code ?? (await uniqueCode(issuePrefix(client.name, input.type ?? template.type)));
+    if (input.code) await assertCodeFree(code);
+
     const start = parseDateOnly(input.startDate);
     const end = parseDateOnly(input.plannedEndDate);
     const projectId = new Types.ObjectId();
@@ -261,10 +326,12 @@ export function projectsRouter(registry: RouteRegistry) {
             {
               _id: projectId,
               name: input.name,
+              code,
               clientId: client._id,
               managerId,
               memberIds,
               type: input.type ?? template.type,
+              projectTypeId: projectType,
               description: input.description || null,
               status: 'PLANNING',
               startDate: start,
@@ -284,6 +351,9 @@ export function projectsRouter(registry: RouteRegistry) {
         if (tasks.length) await TaskModel.insertMany(tasks, { session });
         await recomputeProject(projectId, session);
       });
+    } catch (e) {
+      if (isDuplicateCode(e)) throw codeTaken();
+      throw e;
     } finally {
       await session.endSession();
     }
@@ -297,6 +367,7 @@ export function projectsRouter(registry: RouteRegistry) {
         templateId: template._id.toString(),
         templateVersion: template.version,
         tasks: tasks.length,
+        projectTypeId: projectType.toString(),
       },
     });
     // Creating a project for another manager hands it over at once (doc 11 §12): audit it.
@@ -353,6 +424,13 @@ export function projectsRouter(registry: RouteRegistry) {
       track('name', project.name, input.name);
       project.name = input.name;
     }
+    // DR-23: the code can't change once the project has issues (issue IDs stay the same).
+    if (input.code !== undefined && input.code !== project.code) {
+      if ((project.issueSeq ?? 0) > 0) throw codeLocked();
+      await assertCodeFree(input.code, project._id);
+      track('code', project.code ?? null, input.code);
+      project.code = input.code;
+    }
     if (input.description !== undefined) {
       track('description', project.description, input.description || null);
       project.description = input.description || null;
@@ -360,6 +438,19 @@ export function projectsRouter(registry: RouteRegistry) {
     if (input.type !== undefined) {
       track('type', project.type, input.type);
       project.type = input.type;
+    }
+    // FR-PTY-02/03: required on every save once projects have types; a project created before
+    // them ("Not set") picks one on its next edit. Keeping an inactive type stays valid.
+    // FR-PTY-05: changing the type never touches existing time entries.
+    if (input.projectTypeId === undefined && !project.projectTypeId) {
+      throw unprocessable(PROJECT_TYPE_REQUIRED, 'PROJECT_TYPE_REQUIRED', [
+        { path: 'projectTypeId', message: PROJECT_TYPE_REQUIRED },
+      ]);
+    }
+    if (input.projectTypeId !== undefined) {
+      const next = await assertProjectType(input.projectTypeId, project.projectTypeId ?? null);
+      track('projectTypeId', project.projectTypeId?.toString() ?? null, next.toString());
+      project.projectTypeId = next;
     }
     const previousManager = project.managerId?.toString() ?? null;
     if (input.managerId !== undefined && input.managerId !== project.managerId?.toString()) {
@@ -370,6 +461,7 @@ export function projectsRouter(registry: RouteRegistry) {
       track('managerId', project.managerId?.toString() ?? null, input.managerId);
       project.managerId = new Types.ObjectId(input.managerId);
     }
+    let removedMembers: string[] = [];
     if (input.memberIds !== undefined) {
       const current = project.memberIds.map(String);
       const added = input.memberIds.filter((id) => !current.includes(id));
@@ -378,6 +470,7 @@ export function projectsRouter(registry: RouteRegistry) {
         ...new Set([...input.memberIds, project.managerId?.toString()].filter(Boolean) as string[]),
       ];
       track('memberIds', current.sort(), [...next].sort());
+      removedMembers = current.filter((id) => !next.includes(id));
       project.memberIds = next.map((id) => new Types.ObjectId(id));
     } else if (
       project.managerId &&
@@ -403,6 +496,17 @@ export function projectsRouter(registry: RouteRegistry) {
           "Changing this project's client clears its active contacts. Confirm to continue.",
           'CONFIRM_CLEAR_CONTACTS',
         );
+      }
+      // EC-68: issues keep their contacts; warn first, listing issues reported by the old client.
+      if (!input.confirmIssueContacts) {
+        const keys = await issuesWithOldClientContacts(project._id, project.clientId);
+        if (keys.length) {
+          throw conflictWith(
+            `${keys.length} issue${keys.length === 1 ? ' keeps a contact' : 's keep contacts'} from the current client: ${keys.join(', ')}. They stay as they are. Confirm to change the client.`,
+            'ISSUE_CONTACTS_OLD_CLIENT',
+            { issues: keys },
+          );
+        }
       }
       track('clientId', project.clientId.toString(), input.clientId);
       if (project.activeContactIds.length)
@@ -453,8 +557,10 @@ export function projectsRouter(registry: RouteRegistry) {
       if (newEnd) project.plannedEndDate = parseDateOnly(newEnd);
     }
 
+    let closedNow = false;
     if (input.status !== undefined && input.status !== project.status) {
       const from = project.status as ProjectStatus;
+      closedNow = input.status !== 'ACTIVE';
       if (!PROJECT_TRANSITIONS[from].includes(input.status)) {
         throw unprocessable(
           `A project can't move from ${from} to ${input.status}.`,
@@ -494,8 +600,23 @@ export function projectsRouter(registry: RouteRegistry) {
       project.status = input.status;
     }
 
-    await project.save();
+    await project.save().catch((e: unknown) => {
+      if (isDuplicateCode(e)) throw codeTaken();
+      throw e;
+    });
     await recomputeProject(project._id);
+    // EC-76: running timers on a project that goes On Hold (or closes) stop now.
+    if (closedNow) {
+      await stopTimersForProject(project, user._id);
+    }
+    // EC-66: open issues owned by people just removed from the project need a new owner.
+    if (removedMembers.length) {
+      await notifyOwnerNeeded({
+        ownerIds: removedMembers.map((x) => new Types.ObjectId(x)),
+        projectId: project._id,
+        actorId: user._id,
+      });
+    }
     if (changes.length) {
       await audit({
         actorId: user._id,
@@ -545,6 +666,7 @@ export function projectsRouter(registry: RouteRegistry) {
         project.archived = archived;
         project.archivedAt = archived ? new Date() : null;
         await project.save();
+        if (archived) await stopTimersForProject(project, currentUser(req)._id);
         await audit({
           actorId: currentUser(req)._id,
           entityType: 'project',

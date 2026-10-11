@@ -1,5 +1,14 @@
-import { END_AFTER_START, TEMPLATE_TYPE_LABELS, plural, todayPH, toDateOnly } from '@xc8/shared';
-import { useMemo, useState, type FormEvent } from 'react';
+import {
+  END_AFTER_START,
+  PROJECT_TYPE_REQUIRED,
+  TEMPLATE_TYPE_LABELS,
+  issuePrefix,
+  plural,
+  projectCodeSchema,
+  todayPH,
+  toDateOnly,
+} from '@xc8/shared';
+import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, saveErrorMessage } from '../../api/client';
@@ -9,6 +18,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { HandoverModal } from '../../components/HandoverModal';
 import { PageHeader } from '../../components/PageHeader';
+import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
 
 const MANAGER_ROLES = new Set(['ADMIN', 'PROJECT_MANAGER']);
 
@@ -23,8 +33,10 @@ export function NewProjectPage() {
   const create = useCreateProject();
 
   const [name, setName] = useState('');
+  const [codeInput, setCode] = useState<string | null>(null);
   const [clientId, setClientId] = useState(params.get('clientId') ?? '');
   const [templateId, setTemplateId] = useState(params.get('templateId') ?? '');
+  const [projectTypeId, setProjectTypeId] = useState('');
   const [managerId, setManagerId] = useState(
     user && MANAGER_ROLES.has(user.systemRole) ? user.id : '',
   );
@@ -38,23 +50,26 @@ export function NewProjectPage() {
   const activeClients = (clients.data?.items ?? []).filter((c) => c.active);
   const template = templates.data?.items.find((t) => t.id === templateId);
   const managers = (people.data ?? []).filter((p) => MANAGER_ROLES.has(p.systemRole));
+  // DR-23: suggested from the client and template type until the user types their own.
+  const clientName = activeClients.find((c) => c.id === clientId)?.name;
+  const code = codeInput ?? (clientName ? issuePrefix(clientName, template?.type) : '');
   const serverErrors = create.error instanceof ApiError ? create.error.fieldErrors() : {};
   const fieldError = (k: string) => errors[k] ?? serverErrors[k];
 
-  const preview = useMemo(
-    () =>
-      template
-        ? `Generates ${plural(template.activityCount, 'activity', 'activities')}, ${plural(template.dependencyCount, 'dependency', 'dependencies')} and ${plural(template.deliverableCount, 'deliverable')}.`
-        : null,
-    [template],
-  );
+  const preview = template
+    ? `Generates ${plural(template.activityCount, 'activity', 'activities')}, ${plural(template.dependencyCount, 'dependency', 'dependencies')} and ${plural(template.deliverableCount, 'deliverable')}.`
+    : null;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Project name is required.';
+    const codeCheck = projectCodeSchema.safeParse(code);
+    if (!code.trim()) next.code = 'Project code is required.';
+    else if (!codeCheck.success) next.code = codeCheck.error.issues[0]?.message ?? 'Invalid code.';
     if (!clientId) next.clientId = 'Choose a client.';
     if (!templateId) next.templateId = 'Choose a template.';
+    if (!projectTypeId) next.projectTypeId = PROJECT_TYPE_REQUIRED;
     if (!managerId) next.managerId = 'Choose a project manager.';
     if (!startDate) next.startDate = 'Baseline start is required.';
     if (!plannedEndDate) next.plannedEndDate = 'Baseline end is required.';
@@ -74,9 +89,11 @@ export function NewProjectPage() {
     create.mutate(
       {
         name: name.trim(),
+        code: code.trim().toUpperCase(),
         clientId,
         templateId,
         templateVersion: template?.version,
+        projectTypeId,
         managerId,
         memberIds: memberIds.filter((m) => m !== managerId),
         startDate,
@@ -136,6 +153,21 @@ export function NewProjectPage() {
                 />
                 <Form.Control.Feedback type="invalid">{fieldError('name')}</Form.Control.Feedback>
               </Form.Group>
+              <Form.Group className="col-md-6" controlId="prj-code">
+                <Form.Label>Project code</Form.Label>
+                <Form.Control
+                  value={code}
+                  style={{ textTransform: 'uppercase' }}
+                  maxLength={20}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  isInvalid={Boolean(fieldError('code'))}
+                  aria-describedby="prj-code-hint"
+                />
+                <Form.Control.Feedback type="invalid">{fieldError('code')}</Form.Control.Feedback>
+                <Form.Text id="prj-code-hint">
+                  Issue IDs start with this code, e.g. {code || 'ACME-SAP'}-ISS-001.
+                </Form.Text>
+              </Form.Group>
               <Form.Group className="col-md-6" controlId="prj-client">
                 <Form.Label>Client</Form.Label>
                 <Form.Select
@@ -182,6 +214,19 @@ export function NewProjectPage() {
                   </Form.Text>
                 )}
               </Form.Group>
+              <ProjectTypeSelect
+                id="prj-type"
+                value={projectTypeId}
+                onChange={(v) => {
+                  setProjectTypeId(v);
+                  setErrors((prev) => {
+                    const rest = { ...prev };
+                    delete rest.projectTypeId;
+                    return rest;
+                  });
+                }}
+                error={fieldError('projectTypeId')}
+              />
               <Form.Group className="col-md-6" controlId="prj-start">
                 <Form.Label>Baseline start</Form.Label>
                 <Form.Control

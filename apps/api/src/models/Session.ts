@@ -11,6 +11,8 @@ const sessionSchema = new Schema(
     lastSeenAt: { type: Date, required: true },
     expiresAt: { type: Date, required: true },
     absoluteExpiresAt: { type: Date, required: true },
+    /** `web` = HttpOnly cookie (FR-AUTH-03). `mobile` = bearer token from /auth/mobile/login. */
+    kind: { type: String, enum: ['web', 'mobile'], default: 'web' },
     ip: { type: String, default: null },
     userAgent: { type: String, default: null, maxlength: 300 },
   },

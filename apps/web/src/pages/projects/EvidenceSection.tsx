@@ -22,6 +22,7 @@ import {
 } from '../../api/m3Hooks';
 import { useTaskMutation } from '../../api/projectHooks';
 import { shortDate } from '../../lib/format';
+import { useConfirm } from '../../components/ConfirmModal';
 
 const CHIP: Record<string, { label: string; className: string }> = {
   PDF: { label: 'PDF', className: 'bg-label-danger' },
@@ -255,19 +256,29 @@ function RemoveButton({
   task: TaskDto;
   mutate: ReturnType<typeof useTaskMutation>['mutate'];
 }) {
+  const [confirm, confirmDialog] = useConfirm();
   return (
-    <Button
-      variant="link"
-      size="sm"
-      className="p-0 text-danger"
-      aria-label={`Remove ${ev.name}`}
-      onClick={() => {
-        if (window.confirm(`Remove ${ev.name} from this task?`)) {
-          mutate({ path: `/tasks/${task.id}/evidence/${ev.id}`, method: 'DELETE' });
-        }
-      }}
-    >
-      Remove
-    </Button>
+    <>
+      {confirmDialog}
+      <Button
+        variant="link"
+        size="sm"
+        className="p-0 text-danger"
+        aria-label={`Remove ${ev.name}`}
+        onClick={async () => {
+          if (
+            await confirm({
+              title: `Remove ${ev.name} from this task?`,
+              confirmLabel: 'Remove',
+              danger: true,
+            })
+          ) {
+            mutate({ path: `/tasks/${task.id}/evidence/${ev.id}`, method: 'DELETE' });
+          }
+        }}
+      >
+        Remove
+      </Button>
+    </>
   );
 }

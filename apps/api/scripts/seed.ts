@@ -25,14 +25,17 @@ import {
   ClientContactModel,
   ClientModel,
   ProjectModel,
+  ProjectTypeModel,
   TaskModel,
   TeamModel,
   TemplateModel,
   UserModel,
 } from '../src/models/index.js';
 import { LAUNCH_TEMPLATE_KEY, ensureLaunchTemplate } from '../src/services/launchTemplate.js';
+import { ensureDefaultProjectTypes } from '../src/services/projectTypes.js';
 import { buildPlanTasks, recomputeProject } from '../src/services/projectService.js';
 import {
+  addMissingCells,
   addMissingRecordTypes,
   applyAccessDefaultChanges,
 } from '../src/services/accessDefaults.js';
@@ -195,6 +198,7 @@ async function main() {
   const seededRules = await ensureDefaultAccessRules();
   console.log(`Access rules: ${seededRules ? `seeded ${seededRules} role(s)` : 'already present'}`);
   await addMissingRecordTypes();
+  await addMissingCells();
   // Later default changes (doc 11 §12), e.g. Member Delete on time; only cells still at the old default.
   for (const m of await applyAccessDefaultChanges()) {
     const switched = m.cells.filter((c) => c.outcome === 'switched').length;
@@ -274,6 +278,11 @@ async function main() {
   const seededTemplate = await ensureLaunchTemplate();
   console.log(`Launch template: ${seededTemplate ? 'seeded' : 'already present'}`);
 
+  // Project types (doc 14 FR-PTY-01, Q-51): the nine starting types, once (idempotent).
+  const seededTypes = await ensureDefaultProjectTypes();
+  console.log(`Project types: ${seededTypes ? `${seededTypes} seeded` : 'already present'}`);
+  const implementation = await ProjectTypeModel.findOne({ nameKey: 'implementation' }).lean();
+
   // QA sample projects (QA plan §4), created once by name and never changed afterwards.
   const template = await TemplateModel.findOne({
     templateKey: LAUNCH_TEMPLATE_KEY,
@@ -296,6 +305,7 @@ async function main() {
         managerId: pm._id,
         memberIds: [pm._id, member._id],
         type: 'SAP_B1',
+        projectTypeId: implementation?._id ?? null,
         description: 'QA sample project (seed).',
         status: 'PLANNING',
         startDate: start,

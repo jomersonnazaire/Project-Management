@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ActivityLogModel, TaskModel } from '../src/models/index.js';
 import { FILES, uploadEvidence } from './m3helpers.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { resetRules, world } from './m2helpers.js';
+import { resetRules, world, ptypeId } from './m2helpers.js';
 
 useDatabase();
 const app = makeApp();
@@ -432,6 +432,7 @@ describe('Board and My tasks (FR-TSK-10/13, AC-12.4, AC-17.1)', () => {
         .post('/api/v1/projects')
         .set(CSRF)
         .send({
+          projectTypeId: await ptypeId(),
           name: 'Late One',
           clientId: w.acme.client.id,
           managerId: w.pm.user._id.toString(),

@@ -93,7 +93,9 @@ export interface ProjectList {
   counts: Record<string, number>;
 }
 
-export function useProjects(params: { status?: string; q?: string; clientId?: string } = {}) {
+export function useProjects(
+  params: { status?: string; q?: string; clientId?: string; projectTypeId?: string } = {},
+) {
   return useQuery({
     queryKey: ['projects', 'list', params],
     queryFn: () => api<ProjectList>(`/projects${qs({ ...params, pageSize: 100 })}`),

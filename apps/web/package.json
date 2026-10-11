@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Xceler8 Implementation Tracker web app (React + TypeScript + Vite, Sneat theme)",
+  "description": "Xceler8 project management web app (React + TypeScript + Vite, Sneat theme)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",

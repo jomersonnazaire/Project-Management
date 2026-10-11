@@ -13,10 +13,14 @@ const projectSchema = new Schema(
     managerId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     memberIds: { type: [Schema.Types.ObjectId], ref: 'User', default: [], index: true },
     type: { type: String, enum: [...TEMPLATE_TYPES, null], default: null },
+    /** FR-PTY-02: the project type (by ID); null = "Not set" (created before project types). */
+    projectTypeId: { type: Schema.Types.ObjectId, ref: 'ProjectType', default: null, index: true },
     description: { type: String, default: null },
     status: { type: String, enum: PROJECT_STATUSES, default: 'PLANNING', index: true },
     archived: { type: Boolean, default: false },
     archivedAt: { type: Date, default: null },
+    /** DR-23: project code, the issue ID prefix. Stored in capitals; unique ignoring case. */
+    code: { type: String, default: null, trim: true, uppercase: true },
     /** Issue ids (doc 13 §3): prefix fixed at the first issue, running number never reused. */
     issuePrefix: { type: String, default: null },
     issueSeq: { type: Number, default: 0 },
@@ -78,6 +82,10 @@ const projectSchema = new Schema(
 );
 projectSchema.index({ 'templateSnapshot.templateKey': 1 });
 projectSchema.index({ 'computed.health': 1 });
+projectSchema.index(
+  { code: 1 },
+  { unique: true, partialFilterExpression: { code: { $type: 'string' } }, name: 'code_unique' },
+);
 
 export type Project = InferSchemaType<typeof projectSchema>;
 export const ProjectModel = model('Project', projectSchema);

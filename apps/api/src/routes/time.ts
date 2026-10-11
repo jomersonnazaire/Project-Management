@@ -1,9 +1,10 @@
 import {
   OPEN_TASK_STATUSES,
   addDays,
+  dailyCapMessage,
+  describeTimeLock,
   parseDateOnly,
   timeEntrySchema,
-  timeLockBoundary,
   timeWeekQuerySchema,
   toDateOnly,
   todayPH,
@@ -22,13 +23,24 @@ import { unprocessable } from '../lib/http422.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
 import {
+  LookupModel,
   ProjectModel,
   TaskModel,
   TimeEntryModel,
   UserModel,
   type TimeEntry,
 } from '../models/index.js';
+import { assertLeaveAllowsTime } from '../services/leaveHook.js';
+import {
+  assertLookup,
+  dayMinutes,
+  getOrCreateDay,
+  assertDayEditable,
+  lockedDayKeys,
+  touchDay,
+} from '../services/tracker.js';
 import { audit } from '../services/audit.js';
+import { loadTimeLock } from '../services/timeLock.js';
 import { recomputeProject } from '../services/projectService.js';
 import { isProjectMember, type ScopeUser } from '../services/scope.js';
 import { loadProject } from './projects.js';
@@ -43,8 +55,6 @@ type Id = Types.ObjectId;
 type EntryDoc = TimeEntry & { _id: Id; createdAt?: Date };
 
 const CLOSED_PROJECT = new Set(['ON_HOLD', 'COMPLETED', 'CANCELLED']);
-const canBypassLock = (u: ScopeUser) =>
-  u.systemRole === 'ADMIN' || u.systemRole === 'PROJECT_MANAGER';
 
 export async function recomputeActualHours(taskId: Id) {
   const [sum] = await TimeEntryModel.aggregate<{ total: number }>([
@@ -55,7 +65,8 @@ export async function recomputeActualHours(taskId: Id) {
 }
 
 async function toDtos(entries: EntryDoc[]): Promise<TimeEntryDto[]> {
-  const [projects, tasks, users] = await Promise.all([
+  const lookupIds = entries.map((e) => e.activityTypeId).filter(Boolean);
+  const [projects, tasks, users, lookups] = await Promise.all([
     ProjectModel.find({ _id: { $in: entries.map((e) => e.projectId) } })
       .select('name')
       .lean(),
@@ -65,21 +76,31 @@ async function toDtos(entries: EntryDoc[]): Promise<TimeEntryDto[]> {
     UserModel.find({ _id: { $in: entries.map((e) => e.userId) } })
       .select('name')
       .lean(),
+    LookupModel.find({ _id: { $in: lookupIds } })
+      .select('name')
+      .lean(),
   ]);
   const name = (list: { _id: Id; name: string }[]) =>
     new Map(list.map((x) => [x._id.toString(), x.name]));
-  const [pn, tn, un] = [name(projects), name(tasks), name(users)];
-  const boundary = timeLockBoundary();
+  const [pn, tn, un, ln] = [name(projects), name(tasks), name(users), name(lookups)];
+  const ref = (id: Id | null | undefined) =>
+    id ? { id: id.toString(), name: ln.get(id.toString()) ?? '' } : null;
+  const locked = await lockedDayKeys(entries);
   return entries.map((e) => ({
     id: e._id.toString(),
     user: { id: e.userId.toString(), name: un.get(e.userId.toString()) ?? 'Unknown user' },
-    project: { id: e.projectId.toString(), name: pn.get(e.projectId.toString()) ?? '' },
-    task: { id: e.taskId.toString(), name: tn.get(e.taskId.toString()) ?? '(deleted task)' },
+    project: { id: String(e.projectId), name: pn.get(String(e.projectId)) ?? '' },
+    task: { id: String(e.taskId), name: tn.get(String(e.taskId)) ?? '(deleted task)' },
     workDate: toDateOnly(e.workDate),
     hours: e.hours,
-    type: e.type as TimeType,
+    minutes: e.startAt && e.minutes != null ? e.minutes : Math.round(e.hours * 60),
+    timed: Boolean(e.startAt),
+    activityType: ref(e.activityTypeId),
+    module: e.module ?? null,
+    billable: e.billable ?? true,
+    type: (e.type ?? 'EXECUTION') as TimeType,
     notes: e.notes ?? null,
-    locked: e.workDate < boundary,
+    locked: locked.has(`${e.userId.toString()}|${toDateOnly(e.workDate)}`),
     createdAt: (e.createdAt ?? new Date()).toISOString(),
   }));
 }
@@ -93,26 +114,16 @@ async function assertDateAndCap(user: ScopeUser, workDate: Date, hours: number, 
       'VALIDATION_ERROR',
     );
   }
-  if (workDate < timeLockBoundary() && !canBypassLock(user)) {
-    throw unprocessable(
-      'That week is locked. Ask your project manager to change it.',
-      'TIME_LOCKED',
-    );
-  }
-  const [sum] = await TimeEntryModel.aggregate<{ total: number }>([
-    { $match: { userId: user._id, workDate, ...(ignoreId ? { _id: { $ne: ignoreId } } : {}) } },
-    { $group: { _id: null, total: { $sum: '$hours' } } },
-  ]);
-  const total = (sum?.total ?? 0) + hours;
-  if (total > 24) {
-    throw unprocessable(
-      `That would make ${total} hours on ${toDateOnly(workDate)}. A day can't have more than 24 hours.`,
-      'DAILY_LIMIT',
-    );
+  // FR-ACT-24: the one shared lock rule (submitted day, or past the weekly lock and not reopened).
+  await assertDayEditable(user._id, workDate);
+  // TC-Q05: the same exact-minute total as the tracker, including a running timer.
+  const total = (await dayMinutes(user._id, workDate, ignoreId)) + Math.round(hours * 60);
+  if (total > 24 * 60) {
+    throw unprocessable(dailyCapMessage(toDateOnly(workDate), total), 'DAILY_LIMIT');
   }
 }
 
-async function loadLoggableTask(req: Request, taskId: string) {
+export async function loadLoggableTask(req: Request, taskId: string) {
   const user = currentUser(req);
   const task = await TaskModel.findById(taskId);
   if (!task) throw notFound();
@@ -142,9 +153,12 @@ export function timeRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const start = weekStartOf(q.week ? parseDateOnly(q.week) : todayPH());
     const end = addDays(start, 6);
+    // Project time only; quick activities live on the Day timesheet (doc 14 FR-ACT-10).
     const entries = (await TimeEntryModel.find({
       userId: user._id,
       workDate: { $gte: start, $lte: end },
+      taskId: { $ne: null },
+      running: { $ne: true },
     })
       .sort({ workDate: 1, createdAt: 1 })
       .lean()) as EntryDoc[];
@@ -155,6 +169,7 @@ export function timeRouter(registry: RouteRegistry) {
       items,
       total: items.reduce((s, e) => s + e.hours, 0),
       capacity: user.weeklyCapacityHours ?? 40,
+      lockDescription: describeTimeLock((await loadTimeLock()).policy),
     };
     res.json(body);
   });
@@ -196,16 +211,42 @@ export function timeRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const { task, project } = await loadLoggableTask(req, input.taskId);
     const workDate = parseDateOnly(input.workDate);
+    await assertLeaveAllowsTime(user._id, workDate, input.confirmLeave);
+    const activityTypeId = await assertLookup(
+      input.activityTypeId,
+      'ACTIVITY_TYPE',
+      'activityTypeId',
+    );
+    let locationId = input.locationId
+      ? await assertLookup(input.locationId, 'LOCATION', 'locationId')
+      : null;
     await assertDateAndCap(user, workDate, input.hours);
+    // FR-ACT-17: the first entry of a day sets the day's location; later ones inherit it.
+    if (locationId) {
+      const day = await getOrCreateDay(user._id, workDate);
+      if (!day.locationId) {
+        day.locationId = locationId;
+        await day.save();
+        locationId = null;
+      } else if (day.locationId.equals(locationId)) locationId = null;
+    }
     const entry = await TimeEntryModel.create({
       userId: user._id,
+      kind: 'TASK',
       projectId: project._id,
       taskId: task._id,
       workDate,
       hours: input.hours,
       type: input.type,
       notes: input.notes || null,
+      activityTypeId,
+      // FR-ACT-20: optional free text; blank saves as blank.
+      module: input.module ?? null,
+      moduleId: null,
+      locationId,
+      billable: input.billable,
     });
+    await touchDay(user._id, workDate);
     await recomputeActualHours(task._id);
     await recomputeProject(project._id);
     await audit({
@@ -221,23 +262,26 @@ export function timeRouter(registry: RouteRegistry) {
     res.status(201).json({ entry: dto });
   });
 
-  // FR-TIME-06: own unlocked entries only (PM/Admin may also change their own locked ones).
+  // FR-TIME-06: own entries only. FR-ACT-24: on a locked day or week nobody changes them here,
+  // PMs included (same shared check as the tracker); an Admin reopens the day first.
   async function loadOwn(req: Request) {
     const entry = await TimeEntryModel.findById(idParam(req));
     const user = currentUser(req);
     if (!entry || !entry.userId.equals(user._id)) throw notFound();
-    if (entry.workDate < timeLockBoundary() && !canBypassLock(user)) {
-      throw unprocessable(
-        'That week is locked. Ask your project manager to change it.',
-        'TIME_LOCKED',
-      );
-    }
+    await assertDayEditable(user._id, entry.workDate);
     return entry;
   }
 
   r.patch('/:id', perm('time', 'edit'), async (req, res) => {
     const input = parseBody(updateTimeEntrySchema, req);
     const entry = await loadOwn(req);
+    if (!entry.taskId) throw notFound();
+    if (entry.startAt && (input.hours !== undefined || input.workDate !== undefined)) {
+      throw unprocessable(
+        'This entry was timed. Change its time in and time out on the Day timesheet.',
+        'TIMED_ENTRY',
+      );
+    }
     await loadLoggableTask(req, entry.taskId.toString());
     const before = {
       workDate: toDateOnly(entry.workDate),
@@ -252,9 +296,32 @@ export function timeRouter(registry: RouteRegistry) {
     entry.hours = hours;
     if (input.type) entry.type = input.type;
     if (input.notes !== undefined) entry.notes = input.notes || null;
+    if (input.activityTypeId) {
+      entry.activityTypeId = await assertLookup(
+        input.activityTypeId,
+        'ACTIVITY_TYPE',
+        'activityTypeId',
+        entry.activityTypeId,
+      );
+    }
+    if (input.module !== undefined) {
+      // DEF-010: a Module save, blank included, also drops the legacy moduleId link.
+      entry.module = input.module ?? null;
+      entry.moduleId = null;
+    }
+    if (input.locationId !== undefined) {
+      entry.locationId = input.locationId
+        ? await assertLookup(input.locationId, 'LOCATION', 'locationId', entry.locationId)
+        : null;
+    }
+    if (input.billable !== undefined) entry.billable = input.billable;
+    const oldDate = before.workDate;
     await entry.save();
+    await touchDay(entry.userId, entry.workDate);
+    if (oldDate !== toDateOnly(entry.workDate))
+      await touchDay(entry.userId, parseDateOnly(oldDate));
     await recomputeActualHours(entry.taskId);
-    await recomputeProject(entry.projectId);
+    await recomputeProject(entry.projectId!);
     const after = {
       workDate: toDateOnly(entry.workDate),
       hours: entry.hours,
@@ -283,8 +350,9 @@ export function timeRouter(registry: RouteRegistry) {
     if (!currentPermissions(req).time.delete) throw forbidden();
     const entry = await loadOwn(req);
     await entry.deleteOne();
-    await recomputeActualHours(entry.taskId);
-    await recomputeProject(entry.projectId);
+    await touchDay(entry.userId, entry.workDate);
+    if (entry.taskId) await recomputeActualHours(entry.taskId);
+    if (entry.projectId) await recomputeProject(entry.projectId);
     await audit({
       actorId: currentUser(req)._id,
       entityType: 'time',
@@ -292,7 +360,7 @@ export function timeRouter(registry: RouteRegistry) {
       projectId: entry.projectId,
       action: 'time_deleted',
       changes: [{ field: 'hours', old: entry.hours, new: null }],
-      meta: { taskId: entry.taskId.toString(), workDate: toDateOnly(entry.workDate) },
+      meta: { taskId: entry.taskId?.toString() ?? null, workDate: toDateOnly(entry.workDate) },
     });
     res.status(204).end();
   });
@@ -305,6 +373,7 @@ export function timeRouter(registry: RouteRegistry) {
     const all = user.systemRole === 'ADMIN' || user.systemRole === 'PROJECT_MANAGER';
     const entries = (await TimeEntryModel.find({
       projectId: project._id,
+      running: { $ne: true },
       ...(all ? {} : { userId: user._id }),
     })
       .sort({ workDate: -1, createdAt: -1 })

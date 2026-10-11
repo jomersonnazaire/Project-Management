@@ -6,8 +6,11 @@ import { useCan } from '../../auth/useCan';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { TimeEntryForm } from '../../components/TimeEntryForm';
-import { hoursLabel, shortDate } from '../../lib/format';
+import { hoursLabel, shortDate, weekRangeShort } from '../../lib/format';
+import { useIsCompact } from '../../lib/useMediaQuery';
 import { TIME_TYPE_BADGE } from '../../lib/m3ui';
+import { useConfirm } from '../../components/ConfirmModal';
+import { LockedIcon } from '../../components/LockedIcon';
 
 const shift = (date: string, days: number) =>
   toDateOnly(new Date(new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000));
@@ -19,34 +22,40 @@ export function TimePage() {
   const remove = useTimeMutation();
   // Members delete their own entries (doc 11 §6 v0.6.8); the API returns 404 for anyone else's.
   const canDelete = useCan('time', 'delete');
+  const [confirm, confirmDialog] = useConfirm();
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
+  // DR-39: on phones the week switcher sits in the page body (PageHeader, DR-40) with a short label
+  // ("‹ Oct 5–11 ›"), so the page is never wider than the screen.
+  const compact = useIsCompact();
+  const weekNav = (
+    <ButtonGroup aria-label="Week">
+      <Button
+        variant="outline-secondary"
+        aria-label="Previous week"
+        disabled={!w}
+        onClick={() => w && setWeek(shift(w.weekStart, -7))}
+      >
+        <i className="bx bx-chevron-left" aria-hidden="true" />
+      </Button>
+      <Button variant="outline-secondary" className="text-nowrap" disabled>
+        {w ? (compact ? weekRangeShort(w.weekStart) : `Week of ${shortDate(w.weekStart)}`) : '…'}
+      </Button>
+      <Button
+        variant="outline-secondary"
+        aria-label="Next week"
+        disabled={!w}
+        onClick={() => w && setWeek(shift(w.weekStart, 7))}
+      >
+        <i className="bx bx-chevron-right" aria-hidden="true" />
+      </Button>
+    </ButtonGroup>
+  );
+
   return (
     <>
-      <PageHeader title="Time logging">
-        <ButtonGroup aria-label="Week">
-          <Button
-            variant="outline-secondary"
-            aria-label="Previous week"
-            disabled={!w}
-            onClick={() => w && setWeek(shift(w.weekStart, -7))}
-          >
-            <i className="bx bx-chevron-left" aria-hidden="true" />
-          </Button>
-          <Button variant="outline-secondary" disabled>
-            Week of {w ? shortDate(w.weekStart) : '…'}
-          </Button>
-          <Button
-            variant="outline-secondary"
-            aria-label="Next week"
-            disabled={!w}
-            onClick={() => w && setWeek(shift(w.weekStart, 7))}
-          >
-            <i className="bx bx-chevron-right" aria-hidden="true" />
-          </Button>
-        </ButtonGroup>
-      </PageHeader>
+      <PageHeader title="Time logging">{weekNav}</PageHeader>
       <div className="row g-6">
         <div className="col-lg-8">
           <div className="card">
@@ -89,21 +98,23 @@ export function TimePage() {
                           <td data-label="Notes">{e.notes ?? ''}</td>
                           <td className="text-end text-nowrap">
                             {e.locked ? (
-                              <span
-                                className="small text-body-secondary"
-                                title="Locked after Monday 12:00"
-                              >
-                                🔒 Locked
-                              </span>
+                              <LockedIcon />
                             ) : (
                               canDelete && (
                                 <Button
                                   size="sm"
                                   variant="link"
                                   className="p-0 text-danger"
-                                  aria-label={`Delete ${hoursLabel(e.hours)}h on ${e.task.name}`}
-                                  onClick={() => {
-                                    if (window.confirm('Delete this time entry?')) {
+                                  aria-label={`Delete ${hoursLabel(e.hours)} on ${e.task.name}`}
+                                  onClick={async () => {
+                                    if (
+                                      await confirm({
+                                        title: 'Delete this time entry?',
+                                        body: `${hoursLabel(e.hours)} on ${e.task.name}, ${shortDate(e.workDate, true)}. This can't be undone.`,
+                                        confirmLabel: 'Delete entry',
+                                        danger: true,
+                                      })
+                                    ) {
                                       remove.mutate({ id: e.id, method: 'DELETE' });
                                     }
                                   }}
@@ -125,7 +136,7 @@ export function TimePage() {
                           <strong>{hoursLabel(w.total)}</strong>
                         </td>
                         <td colSpan={3} className="small text-body-secondary">
-                          of {w.capacity}h available ({pct}% utilization)
+                          of {hoursLabel(w.capacity)} available ({pct}% utilization)
                         </td>
                       </tr>
                     </tfoot>
@@ -133,8 +144,9 @@ export function TimePage() {
                 </div>
               )}
               <p className="small text-body-secondary mt-3 mb-0">
-                Last week's entries lock on Monday at 12:00 Philippine time. Ask your project
-                manager if a locked entry needs changing.
+                {data.data?.lockDescription ??
+                  "Last week's entries lock every Monday at 12:00 PM Philippine time."}{' '}
+                Ask an Admin to reopen the day if a locked entry needs changing.
               </p>
             </div>
           </div>
@@ -148,6 +160,7 @@ export function TimePage() {
           </div>
         </div>
       </div>
+      {confirmDialog}
     </>
   );
 }

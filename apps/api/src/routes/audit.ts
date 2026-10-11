@@ -1,8 +1,9 @@
-import type { AuditEntryDto } from '@xc8/shared';
+import { SYSTEM_ACTOR, type AuditEntryDto } from '@xc8/shared';
 import { z } from 'zod';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import { paginate } from '../lib/pagination.js';
 import { parseQuery } from '../lib/validate.js';
+import { currentUser } from '../middleware/auth.js';
 import { ActivityLogModel, UserModel } from '../models/index.js';
 
 const auditQuerySchema = z.strictObject({
@@ -32,17 +33,23 @@ export function auditRouter(registry: RouteRegistry) {
       .select('name')
       .lean();
     const names = new Map(actors.map((u) => [u._id.toString(), u.name]));
+    // NFR-29: IP and user agent are for Admins only (Viewers may hold audit View).
+    const admin = currentUser(req).systemRole === 'ADMIN';
+    const isSystem = (meta: unknown) => (meta as { actor?: unknown } | null)?.actor === 'system';
     const body: AuditEntryDto[] = items.map((i) => ({
       id: i._id.toString(),
       at: i.at.toISOString(),
       actor: i.actorId
         ? { id: i.actorId.toString(), name: names.get(i.actorId.toString()) ?? 'Unknown user' }
-        : null,
+        : isSystem(i.meta)
+          ? { ...SYSTEM_ACTOR }
+          : null,
       entityType: i.entityType,
       entityId: i.entityId.toString(),
       action: i.action,
       changes: (i.changes ?? []).map((c) => ({ field: c.field ?? '', old: c.old, new: c.new })),
       meta: (i.meta as Record<string, unknown> | null) ?? null,
+      ...(admin ? { ip: i.ip ?? null, userAgent: i.userAgent ?? null } : {}),
     }));
     res.json({ items: body, page: q.page, pageSize: q.pageSize, total });
   });
