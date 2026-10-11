@@ -88,9 +88,15 @@ class AppUser {
     required this.name,
     required this.email,
     this.role = '',
+    this.systemRole = 'PROJECT_MANAGER',
   });
   final String id, name, email, role;
+
+  /// ADMIN, PROJECT_MANAGER, MEMBER or VIEWER.
+  final String systemRole;
+  bool get isAdmin => systemRole == 'ADMIN';
   factory AppUser.fromJson(Map<String, dynamic> j) => AppUser(
+    systemRole: j['systemRole'] as String? ?? 'MEMBER',
     id: j['id'] as String,
     name: j['name'] as String? ?? '',
     email: j['email'] as String? ?? '',
@@ -116,7 +122,11 @@ class Project {
     this.startDate,
     this.description,
     this.code,
+    this.can,
   });
+
+  /// Server `can` flags (edit, planTasks, activity…); null in demo data.
+  final Map<String, bool>? can;
   final String? projectTypeId,
       projectTypeName,
       clientId,
@@ -151,6 +161,12 @@ class Project {
     startDate: _date(j['startDate']),
     description: j['description'] as String?,
     code: j['code'] as String?,
+    can: j['can'] is Map
+        ? {
+            for (final e in (j['can'] as Map).entries)
+              '${e.key}': e.value == true,
+          }
+        : null,
   );
 }
 

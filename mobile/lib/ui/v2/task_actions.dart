@@ -875,27 +875,29 @@ class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
       key: const Key('taskHistoryList'),
       padding: const EdgeInsets.all(Space.m),
       children: [
-        TextField(
-          key: const Key('followUpField'),
-          controller: _note,
-          maxLength: 2000,
-          minLines: 2,
-          maxLines: 4,
-          decoration: InputDecoration(
-            labelText: 'Follow-up note',
-            hintText: 'What did you chase, and with whom?',
-            filled: true,
-            errorText: _error,
+        if (canW(ref, 'tasks', 'edit') && x?.canEdit != false) ...[
+          TextField(
+            key: const Key('followUpField'),
+            controller: _note,
+            maxLength: 2000,
+            minLines: 2,
+            maxLines: 4,
+            decoration: InputDecoration(
+              labelText: 'Follow-up note',
+              hintText: 'What did you chase, and with whom?',
+              filled: true,
+              errorText: _error,
+            ),
           ),
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton(
-            key: const Key('addFollowUp'),
-            onPressed: _add,
-            child: const Text('Add follow-up'),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton(
+              key: const Key('addFollowUp'),
+              onPressed: _add,
+              child: const Text('Add follow-up'),
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: Space.m),
         if ((x?.followUps ?? const []).isEmpty)
           const Padding(

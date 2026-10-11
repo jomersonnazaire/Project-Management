@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models.dart';
 import '../../data/p3.dart';
 import '../../state/p3_providers.dart';
+import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
 
@@ -447,15 +448,16 @@ class ClientDetailScreen extends ConsumerWidget {
                         ),
                       ),
                     const SizedBox(height: Space.s),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        key: const Key('addClientContact'),
-                        icon: const Icon(Icons.person_add_alt),
-                        label: const Text('Add contact'),
-                        onPressed: () => _addContact(context, ref),
+                    if (canW(ref, 'contacts', 'create'))
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          key: const Key('addClientContact'),
+                          icon: const Icon(Icons.person_add_alt),
+                          label: const Text('Add contact'),
+                          onPressed: () => _addContact(context, ref),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

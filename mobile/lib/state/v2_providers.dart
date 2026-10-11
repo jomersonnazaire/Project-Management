@@ -1,5 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/access.dart';
+import '../data/models.dart' show Project;
+export '../data/access.dart' show PermissionGrid;
+
 import '../config.dart';
 import '../data/mock_v2.dart';
 import '../data/ph_time.dart';
@@ -72,27 +76,51 @@ final projectAdminRepositoryProvider = Provider<ProjectAdminRepository>(
   ),
 );
 
-/// GET /auth/me/permissions → {record: {action: bool}}. Demo: everything allowed.
-final permissionsProvider = FutureProvider<Map<String, Map<String, bool>>>((
-  ref,
-) async {
-  if (AppConfig.demoMode) return const {};
-  final b = await ref.watch(apiClientProvider).get('/auth/me/permissions');
-  final p = (b['permissions'] as Map?) ?? const {};
-  return {
-    for (final e in p.entries)
-      '${e.key}': {
-        for (final a in ((e.value as Map?) ?? const {}).entries)
-          '${a.key}': a.value == true || a.value is String,
-      },
-  };
+/// GET /auth/me/permissions → {record: {action: bool}}, parsed strictly. Demo: the m8-polish
+/// default rules for the demo user's role.
+final permissionsProvider = FutureProvider<PermissionGrid>((ref) async {
+  final u = await ref.watch(authProvider.future);
+  if (u == null) return const {};
+  if (AppConfig.demoMode) return defaultPermissions(u.systemRole);
+  return parsePermissions(
+    await ref.watch(apiClientProvider).get('/auth/me/permissions'),
+  );
 });
 
-/// useCan(record, action): true in demo mode or while permissions load.
-bool can(Ref ref, String record, String action) {
-  final p = ref.watch(permissionsProvider).value;
-  if (p == null || p.isEmpty) return true;
-  return p[record]?[action] ?? false;
+/// useCan(record, action). False while permissions load, so write controls never flash on.
+bool can(Ref ref, String record, String action) =>
+    hasPermission(ref.watch(permissionsProvider).value, record, action);
+
+/// Same as [can] for widgets.
+bool canW(WidgetRef ref, String record, String action) =>
+    hasPermission(ref.watch(permissionsProvider).value, record, action);
+
+/// project.can.edit (web ProjectDetailPage). Demo: projects.edit and (Admin or the project's PM).
+bool canEditProject(WidgetRef ref, Project p) {
+  if (p.can != null) return p.can!['edit'] == true;
+  final u = ref.watch(authProvider).value;
+  return canW(ref, 'projects', 'edit') &&
+      u != null &&
+      (u.isAdmin || p.managerId == u.id);
+}
+
+/// project.can.planTasks: add tasks. Demo: tasks.create and (Admin or the project's PM).
+bool canPlanTasks(WidgetRef ref, Project p) {
+  if (p.can != null) return p.can!['planTasks'] == true;
+  final u = ref.watch(authProvider).value;
+  return canW(ref, 'tasks', 'create') &&
+      u != null &&
+      (u.isAdmin || p.managerId == u.id);
+}
+
+/// project.can.activity: Admins and PMs, or View on audit (doc 11 §12).
+bool canProjectActivity(WidgetRef ref, Project p) {
+  if (p.can != null) return p.can!['activity'] == true;
+  final u = ref.watch(authProvider).value;
+  return u != null &&
+      (u.isAdmin ||
+          u.systemRole == 'PROJECT_MANAGER' ||
+          canW(ref, 'audit', 'view'));
 }
 
 /// The date shown on the Day timesheet (shared by the tab and My tasks › Day timesheet).

@@ -82,6 +82,7 @@ const reportNames = {
   'issues': 'Issues',
   'timesheets': 'Timesheets',
 };
+const demoInviteTokens = {'demo', 'demo-invite', 'demo-reset'};
 const passwordPolicy = '8+ characters, a number and a symbol';
 
 /// Client check that mirrors the server password policy.
@@ -130,7 +131,7 @@ abstract interface class P3Repository {
   // Dashboard & reports
   Future<Json> dashboard();
   Future<List<Json>> myProjects();
-  Future<List<Json>> workload();
+  Future<List<Json>> workload({String? teamId});
   Future<Json> report(String name);
   Future<List<Json>> waitingOnClient();
   Future<List<Json>> myDocumentRequests();
@@ -250,8 +251,8 @@ class ApiP3Repository implements P3Repository {
   Future<List<Json>> myProjects() async =>
       jsonList((await api.get('/dashboard/my-projects'))['items']);
   @override
-  Future<List<Json>> workload() async =>
-      jsonList((await api.get('/workload'))['items']);
+  Future<List<Json>> workload({String? teamId}) async =>
+      jsonList((await api.get('/workload', _q({'teamId': teamId})))['items']);
   @override
   Future<Json> report(String name) => api.get('/reports/$name');
   @override
@@ -1034,7 +1035,12 @@ class MockP3Repository implements P3Repository {
   ];
 
   @override
-  Future<List<Json>> workload() async => [
+  Future<List<Json>> workload({String? teamId}) async => [
+    for (final r in _workload)
+      if (teamId == null || jsonList(r['teams']).any((t) => t['id'] == teamId))
+        r,
+  ];
+  static final _workload = <Json>[
     {
       'person': {'id': 'u1', 'name': 'Jonathan Esmalla'},
       'jobRole': 'Project manager',
@@ -1052,7 +1058,7 @@ class MockP3Repository implements P3Repository {
       'person': {'id': 'u2', 'name': 'Queen Reyes'},
       'jobRole': 'Consultant',
       'teams': [
-        {'id': 'tm1', 'name': 'Delivery'},
+        {'id': 'tm2', 'name': 'Support'},
       ],
       'capacityHours': 40,
       'assignedHours': 28,
@@ -1230,14 +1236,19 @@ class MockP3Repository implements P3Repository {
 
   @override
   Future<Json> verifyInvite(String token) async {
-    if (token == 'expired') {
+    // Demo: only demo invite tokens are valid; anything else is "Link not valid".
+    if (!demoInviteTokens.contains(token)) {
       throw ApiException(
         'This link is no longer valid.',
         status: 400,
         code: 'INVITE_INVALID',
       );
     }
-    return {'name': 'Jonathan', 'email': 'jonathan@xceler8.com'};
+    return {
+      'name': 'Jonathan',
+      'email': 'jonathan@xceler8.com',
+      'purpose': token == 'demo-reset' ? 'RESET' : 'INVITE',
+    };
   }
 }
 

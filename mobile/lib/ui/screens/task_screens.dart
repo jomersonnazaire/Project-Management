@@ -6,7 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config.dart';
 
 import '../../data/models.dart';
+import '../../state/p2_providers.dart';
 import '../../state/providers.dart';
+import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../v2/entry_sheet.dart';
 import '../v2/task_actions.dart';
@@ -14,7 +16,7 @@ import '../v3/issues.dart';
 import '../widgets/common.dart';
 import '../widgets/status_flow.dart';
 
-class TaskDetailScreen extends ConsumerWidget {
+class TaskDetailScreen extends ConsumerStatefulWidget {
   const TaskDetailScreen({
     super.key,
     required this.taskId,
@@ -26,8 +28,28 @@ class TaskDetailScreen extends ConsumerWidget {
   final int initialTab;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TaskDetailScreen> createState() => _TaskDetailScreenState();
+}
+
+class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
+  /// Design answer: the app bar shows the project; the task name joins it once the body
+  /// heading has scrolled away.
+  bool _pastHeading = false;
+  String get taskId => widget.taskId;
+  int get initialTab => widget.initialTab;
+
+  @override
+  Widget build(BuildContext context) {
     final task = ref.watch(taskProvider(taskId));
+    final project = task.hasValue
+        ? ref.watch(projectProvider(task.requireValue.projectId)).value
+        : null;
+    final projectLabel = task.hasValue
+        ? [
+            project?.code,
+            project?.name ?? task.requireValue.projectName,
+          ].whereType<String>().where((x) => x.isNotEmpty).join(' · ')
+        : '';
     return DefaultTabController(
       length: 3,
       initialIndex: initialTab,
@@ -36,7 +58,8 @@ class TaskDetailScreen extends ConsumerWidget {
         appBar: AppBar(
           title: task.hasValue
               ? Text(
-                  task.requireValue.name,
+                  _pastHeading ? task.requireValue.name : projectLabel,
+                  key: const Key('taskAppBarTitle'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 )
@@ -57,14 +80,17 @@ class TaskDetailScreen extends ConsumerWidget {
                 : '/home',
           ),
           actions: [
-            IconButton(
-              key: const Key('taskEdit'),
-              tooltip: 'Edit task',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: task.hasValue
-                  ? () => context.push('/tasks/$taskId/edit')
-                  : null,
-            ),
+            if (task.hasValue &&
+                canW(ref, 'tasks', 'edit') &&
+                ref.watch(taskExtrasProvider(taskId)).value?.canEdit != false)
+              IconButton(
+                key: const Key('taskEdit'),
+                tooltip: 'Edit task',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: task.hasValue
+                    ? () => context.push('/tasks/$taskId/edit')
+                    : null,
+              ),
             Builder(
               builder: (context) => PopupMenuButton<String>(
                 key: const Key('taskOverflow'),
@@ -104,12 +130,20 @@ class TaskDetailScreen extends ConsumerWidget {
         body: AsyncView(
           value: task,
           onRetry: () => ref.invalidate(taskProvider(taskId)),
-          data: (t) => TabBarView(
-            children: [
-              _Body(t),
-              TaskHistoryTab(task: t),
-              LinkedIssuesTab(task: t),
-            ],
+          data: (t) => NotificationListener<ScrollUpdateNotification>(
+            onNotification: (n) {
+              if (n.metrics.axis != Axis.vertical) return false;
+              final past = n.metrics.pixels > 72;
+              if (past != _pastHeading) setState(() => _pastHeading = past);
+              return false;
+            },
+            child: TabBarView(
+              children: [
+                _Body(t),
+                TaskHistoryTab(task: t),
+                LinkedIssuesTab(task: t),
+              ],
+            ),
           ),
         ),
         bottomNavigationBar: task.hasValue
@@ -155,7 +189,8 @@ class _ActionBar extends ConsumerWidget {
               flex: 3,
               child: FilledButton(
                 key: const Key('taskChangeStatus'),
-                onPressed: allowedTargets(task).isEmpty
+                onPressed:
+                    allowedTargets(task).isEmpty || !canW(ref, 'tasks', 'edit')
                     ? null
                     : () async {
                         final to = await showStatusPicker(context, task);
@@ -202,6 +237,8 @@ class _Body extends StatelessWidget {
                 t.name,
                 key: const Key('taskTitle'),
                 style: text.headlineMedium,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: Space.s),
               Wrap(

@@ -130,8 +130,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            if (ref.watch(permissionsProvider).value?['reports']?['view'] !=
-                false)
+            if (canW(ref, 'reports', 'view'))
               const SliverToBoxAdapter(child: PortfolioSection()),
             const SliverToBoxAdapter(child: SectionHeader('My projects')),
             SliverToBoxAdapter(
@@ -407,16 +406,17 @@ class _IssuesListState extends ConsumerState<IssuesList> {
                         onSelected: (_) => setState(() => _filter = f),
                       ),
                     ),
-                  ActionChip(
-                    key: const Key('raiseIssue'),
-                    avatar: const Icon(Icons.add, size: 18),
-                    label: const Text('Raise issue'),
-                    onPressed: () => context.push(
-                      widget.projectId == null
-                          ? '/issues/new'
-                          : '/projects/${widget.projectId}/issues/new',
+                  if (canW(ref, 'issues', 'create'))
+                    ActionChip(
+                      key: const Key('raiseIssue'),
+                      avatar: const Icon(Icons.add, size: 18),
+                      label: const Text('Raise issue'),
+                      onPressed: () => context.push(
+                        widget.projectId == null
+                            ? '/issues/new'
+                            : '/projects/${widget.projectId}/issues/new',
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -544,25 +544,26 @@ class MoreScreen extends ConsumerWidget {
                     title: const Text('Timesheet review'),
                     onTap: () => context.push('/timesheet-review'),
                   ),
-                ListTile(
-                  key: const Key('moreIssues'),
-                  leading: const Icon(Icons.bug_report_outlined),
-                  title: const Text('Issues'),
-                  subtitle: Text(
-                    '${ref.watch(issuesProvider(null)).value?.where((i) => i.isOpen).length ?? '…'} open',
-                    key: const Key('moreIssuesCount'),
+                if (canW(ref, 'issues', 'view'))
+                  ListTile(
+                    key: const Key('moreIssues'),
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Issues'),
+                    subtitle: Text(
+                      '${ref.watch(issuesProvider(null)).value?.where((i) => i.isOpen).length ?? '…'} open',
+                      key: const Key('moreIssuesCount'),
+                    ),
+                    onTap: () => context.push('/issues'),
                   ),
-                  onTap: () => context.push('/issues'),
-                ),
-                ListTile(
-                  key: const Key('moreClients'),
-                  leading: const Icon(Icons.business_outlined),
-                  title: const Text('Clients'),
-                  subtitle: const Text('Contacts & projects'),
-                  onTap: () => context.push('/clients'),
-                ),
-                if (ref.watch(permissionsProvider).value?['reports']?['view'] !=
-                    false)
+                if (canW(ref, 'clients', 'view'))
+                  ListTile(
+                    key: const Key('moreClients'),
+                    leading: const Icon(Icons.business_outlined),
+                    title: const Text('Clients'),
+                    subtitle: const Text('Contacts & projects'),
+                    onTap: () => context.push('/clients'),
+                  ),
+                if (canW(ref, 'reports', 'view'))
                   ListTile(
                     key: const Key('moreInsights'),
                     leading: const Icon(Icons.insights_outlined),

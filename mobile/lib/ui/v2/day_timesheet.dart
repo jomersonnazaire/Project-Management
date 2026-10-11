@@ -269,11 +269,7 @@ class DayView extends ConsumerWidget {
                                   }
                                 },
                               ),
-                            if (day.own &&
-                                ref
-                                        .watch(permissionsProvider)
-                                        .value?['leave']?['create'] !=
-                                    false)
+                            if (day.own && canW(ref, 'leave', 'create'))
                               OutlinedButton.icon(
                                 key: const Key('addLeave'),
                                 icon: const Icon(Icons.add, size: 18),
@@ -740,12 +736,14 @@ class _HoursListViewState extends ConsumerState<HoursListView> {
     final canNext = !_week.add(const Duration(days: 7)).isAfter(today);
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('hoursLogTime'),
-        onPressed: () => context.push('/log'),
-        icon: const Icon(Icons.add),
-        label: const Text('Log time'),
-      ),
+      floatingActionButton: canW(ref, 'time', 'create')
+          ? FloatingActionButton.extended(
+              key: const Key('hoursLogTime'),
+              onPressed: () => context.push('/log'),
+              icon: const Icon(Icons.add),
+              label: const Text('Log time'),
+            )
+          : null,
       body: Column(
         children: [
           Row(
@@ -827,14 +825,15 @@ class _HoursListViewState extends ConsumerState<HoursListView> {
                                           formatHHMM(e.minutes),
                                           style: t.titleSmall,
                                         ),
-                                        IconButton(
-                                          key: Key('deleteHours_${e.id}'),
-                                          tooltip: 'Delete time entry',
-                                          icon: const Icon(
-                                            Icons.delete_outline,
+                                        if (canW(ref, 'time', 'delete'))
+                                          IconButton(
+                                            key: Key('deleteHours_${e.id}'),
+                                            tooltip: 'Delete time entry',
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                            ),
+                                            onPressed: () => _delete(e),
                                           ),
-                                          onPressed: () => _delete(e),
-                                        ),
                                       ],
                                     ),
                             ),

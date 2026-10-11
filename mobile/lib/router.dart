@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'ui/widgets/permission_gate.dart';
+
 import 'state/providers.dart';
 import 'ui/screens/auth_screens.dart';
 import 'ui/screens/home_screens.dart';
@@ -63,8 +65,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/insights',
-        builder: (_, s) =>
-            InsightsScreen(initialTab: s.uri.queryParameters['tab']),
+        builder: (_, s) => InsightsScreen(
+          key: ValueKey('insights_${s.uri.queryParameters['tab']}'),
+          initialTab: s.uri.queryParameters['tab'],
+        ),
       ),
       GoRoute(
         path: '/reports/:name',
@@ -73,7 +77,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           name: s.pathParameters['name']!,
         ),
       ),
-      GoRoute(path: '/issues/new', builder: (_, _) => const RaiseIssueScreen()),
+      GoRoute(
+        path: '/issues/new',
+        builder: (_, _) => const PermissionGate(
+          record: 'issues',
+          action: 'create',
+          child: RaiseIssueScreen(),
+        ),
+      ),
       GoRoute(
         path: '/issues/:id',
         builder: (_, s) => IssueDetailScreen(
@@ -92,9 +103,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/projects/:id/issues/new',
-        builder: (_, s) => RaiseIssueScreen(
-          projectId: s.pathParameters['id'],
-          taskId: s.uri.queryParameters['task'],
+        builder: (_, s) => PermissionGate(
+          record: 'issues',
+          action: 'create',
+          child: RaiseIssueScreen(
+            projectId: s.pathParameters['id'],
+            taskId: s.uri.queryParameters['task'],
+          ),
         ),
       ),
       GoRoute(
@@ -128,24 +143,40 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/projects/:id/tasks/new',
-        builder: (_, s) => CreateTaskScreen(projectId: s.pathParameters['id']!),
+        builder: (_, s) => PermissionGate(
+          record: 'tasks',
+          action: 'create',
+          child: CreateTaskScreen(projectId: s.pathParameters['id']!),
+        ),
       ),
       GoRoute(
         path: '/projects/new',
-        builder: (_, _) => const ProjectFormScreen(),
+        builder: (_, _) => const PermissionGate(
+          record: 'projects',
+          action: 'create',
+          child: ProjectFormScreen(),
+        ),
       ),
       GoRoute(
         path: '/projects/:id/edit',
-        builder: (_, s) => ProjectFormScreen(
-          key: ValueKey('projectForm_${s.pathParameters['id']}'),
-          projectId: s.pathParameters['id']!,
+        builder: (_, s) => PermissionGate(
+          record: 'projects',
+          action: 'edit',
+          child: ProjectFormScreen(
+            key: ValueKey('projectForm_${s.pathParameters['id']}'),
+            projectId: s.pathParameters['id']!,
+          ),
         ),
       ),
       GoRoute(
         path: '/log',
-        builder: (_, s) => LogTimeScreen(
-          taskId: s.uri.queryParameters['task'],
-          projectId: s.uri.queryParameters['project'],
+        builder: (_, s) => PermissionGate(
+          record: 'time',
+          action: 'create',
+          child: LogTimeScreen(
+            taskId: s.uri.queryParameters['task'],
+            projectId: s.uri.queryParameters['project'],
+          ),
         ),
       ),
       GoRoute(

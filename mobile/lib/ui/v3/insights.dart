@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/p3.dart';
 import '../../state/p3_providers.dart';
+import '../../state/providers.dart';
+import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'issues.dart';
@@ -338,38 +340,59 @@ class _PortfolioSectionState extends ConsumerState<PortfolioSection> {
   );
 }
 
-/// More › Team & workload · Reports: My projects | Team & workload | Reports.
-class InsightsScreen extends StatelessWidget {
+/// More › Insights: My projects (not for Members: /dashboard/my-projects is 403) |
+/// Team & workload (workload.view) | Reports (reports.view).
+class InsightsScreen extends ConsumerWidget {
   const InsightsScreen({super.key, this.initialTab});
   final String? initialTab;
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-    length: 3,
-    initialIndex: switch (initialTab) {
-      'workload' => 1,
-      'reports' => 2,
-      _ => 0,
-    },
-    child: Scaffold(
-      key: const Key('insightsScreen'),
-      appBar: AppBar(
-        leading: const BackOrUpButton(fallback: '/more'),
-        title: const Text('Team & workload · Reports'),
-        bottom: const TabBar(
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: [
-            Tab(key: Key('insightsTab_projects'), text: 'My projects'),
-            Tab(key: Key('insightsTab_workload'), text: 'Team & workload'),
-            Tab(key: Key('insightsTab_reports'), text: 'Reports'),
-          ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final role = ref.watch(authProvider).value?.systemRole;
+    final tabs = <(String, String, Widget)>[
+      if (role != 'MEMBER' && canW(ref, 'reports', 'view'))
+        ('projects', 'My projects', const MyProjectsView()),
+      if (canW(ref, 'workload', 'view'))
+        ('workload', 'Team & workload', const WorkloadView()),
+      if (canW(ref, 'reports', 'view'))
+        ('reports', 'Reports', const ReportsView()),
+    ];
+    if (tabs.isEmpty) {
+      return Scaffold(
+        key: const Key('insightsScreen'),
+        appBar: AppBar(
+          leading: const BackOrUpButton(fallback: '/more'),
+          title: const Text('Insights'),
         ),
+        body: const Center(child: Text('Nothing to show for your role.')),
+      );
+    }
+    final i = tabs.indexWhere((t) => t.$1 == initialTab);
+    return DefaultTabController(
+      key: ValueKey('insights-${tabs.length}-$initialTab'),
+      length: tabs.length,
+      initialIndex: i < 0 ? 0 : i,
+      child: Scaffold(
+        key: const Key('insightsScreen'),
+        appBar: AppBar(
+          leading: const BackOrUpButton(fallback: '/more'),
+          title: Text(
+            tabs.map((t) => t.$2).join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              for (final t in tabs)
+                Tab(key: Key('insightsTab_${t.$1}'), text: t.$2),
+            ],
+          ),
+        ),
+        body: TabBarView(children: [for (final t in tabs) t.$3]),
       ),
-      body: const TabBarView(
-        children: [MyProjectsView(), WorkloadView(), ReportsView()],
-      ),
-    ),
-  );
+    );
+  }
 }
 
 class MyProjectsView extends ConsumerStatefulWidget {
@@ -505,12 +528,18 @@ class _MyProjectCard extends StatelessWidget {
   }
 }
 
-class WorkloadView extends ConsumerWidget {
+class WorkloadView extends ConsumerStatefulWidget {
   const WorkloadView({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) => AsyncView(
-    value: ref.watch(workloadProvider),
-    onRetry: () => ref.invalidate(workloadProvider),
+  ConsumerState<WorkloadView> createState() => _WorkloadViewState();
+}
+
+class _WorkloadViewState extends ConsumerState<WorkloadView> {
+  String? _team;
+  @override
+  Widget build(BuildContext context) => AsyncView(
+    value: ref.watch(workloadProvider(_team)),
+    onRetry: () => ref.invalidate(workloadProvider(_team)),
     data: (rows) {
       final t = Theme.of(context).textTheme;
       if (rows.isEmpty) {
@@ -522,7 +551,34 @@ class WorkloadView extends ConsumerWidget {
         key: const Key('workloadList'),
         padding: const EdgeInsets.all(Space.m),
         children: [
-          Text('This week', style: t.titleSmall),
+          Row(
+            children: [
+              Expanded(child: Text('This week', style: t.titleSmall)),
+              PopupMenuButton<String>(
+                key: const Key('workloadTeamFilter'),
+                tooltip: 'Team',
+                onSelected: (v) => setState(() => _team = v.isEmpty ? null : v),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: '', child: Text('All teams')),
+                  for (final tm
+                      in (ref.watch(workloadTeamsProvider).value ??
+                          const <Json>[]))
+                    PopupMenuItem(
+                      value: '${tm['id']}',
+                      child: Text('${tm['name']}'),
+                    ),
+                ],
+                child: Chip(
+                  avatar: const Icon(Icons.arrow_drop_down),
+                  label: Text(
+                    _team == null
+                        ? 'All teams'
+                        : '${(ref.watch(workloadTeamsProvider).value ?? const <Json>[]).where((x) => x['id'] == _team).firstOrNull?['name'] ?? 'Team'}',
+                  ),
+                ),
+              ),
+            ],
+          ),
           for (final r in rows)
             Card(
               key: Key('workload_${refId(r['person'])}'),

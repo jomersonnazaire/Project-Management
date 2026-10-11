@@ -1,3 +1,4 @@
+import '../../state/v2_providers.dart';
 import '../v2/project_form.dart';
 import '../v2/project_p2.dart';
 
@@ -27,12 +28,14 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     return Scaffold(
       key: const Key('projectsScreen'),
       appBar: AppBar(title: const Text('Projects')),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('newProjectFab'),
-        onPressed: () => context.push('/projects/new'),
-        icon: const Icon(Icons.add),
-        label: const Text('New project'),
-      ),
+      floatingActionButton: canW(ref, 'projects', 'create')
+          ? FloatingActionButton.extended(
+              key: const Key('newProjectFab'),
+              onPressed: () => context.push('/projects/new'),
+              icon: const Icon(Icons.add),
+              label: const Text('New project'),
+            )
+          : null,
       body: Column(
         children: [
           Padding(
@@ -181,25 +184,8 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
       _ProjectDetailScreenState();
 }
 
-class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
-    with SingleTickerProviderStateMixin {
+class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   late ProjectTab _tab = widget.initialTab;
-  late final TabController _tc =
-      TabController(
-        length: ProjectTab.values.length,
-        initialIndex: widget.initialTab.index,
-        vsync: this,
-      )..addListener(() {
-        if (_tc.index != _tab.index) {
-          setState(() => _tab = ProjectTab.values[_tc.index]);
-        }
-      });
-
-  @override
-  void dispose() {
-    _tc.dispose();
-    super.dispose();
-  }
 
   @override
   void didUpdateWidget(ProjectDetailScreen old) {
@@ -208,7 +194,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
     if (widget.initialTab != old.initialTab ||
         widget.navNonce != old.navNonce) {
       _tab = widget.initialTab;
-      _tc.index = _tab.index;
     }
   }
 
@@ -221,15 +206,20 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
       appBar: AppBar(
         title: Text(project.value?.name ?? ''),
         actions: [
-          IconButton(
-            key: const Key('editProject'),
-            tooltip: 'Edit project',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () => context.push('/projects/${widget.projectId}/edit'),
-          ),
+          if (project.hasValue && canEditProject(ref, project.requireValue))
+            IconButton(
+              key: const Key('editProject'),
+              tooltip: 'Edit project',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () =>
+                  context.push('/projects/${widget.projectId}/edit'),
+            ),
         ],
       ),
-      floatingActionButton: _tab == ProjectTab.checklist
+      floatingActionButton:
+          _tab == ProjectTab.checklist &&
+              project.hasValue &&
+              canPlanTasks(ref, project.requireValue)
           ? FloatingActionButton(
               key: const Key('newTaskFab'),
               tooltip: 'New task',
@@ -290,23 +280,32 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
-            TabBar(
-              key: const Key('projectTabs'),
-              controller: _tc,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              tabs: const [
-                Tab(key: Key('checklistTab'), text: 'Checklist'),
-                Tab(key: Key('boardTab'), text: 'Board'),
-                Tab(key: Key('issuesTab'), text: 'Issues'),
-                Tab(key: Key('timeTab'), text: 'Time'),
-                Tab(key: Key('activityTab'), text: 'Activity'),
-                Tab(key: Key('moreTab'), text: 'More'),
-              ],
+            Builder(
+              builder: (context) {
+                final tabs = _visibleTabs(p);
+                final tab = tabs.contains(_tab) ? _tab : ProjectTab.checklist;
+                return DefaultTabController(
+                  key: ValueKey('${tabs.length}-${tab.name}'),
+                  length: tabs.length,
+                  initialIndex: tabs.indexOf(tab),
+                  child: TabBar(
+                    key: const Key('projectTabs'),
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    onTap: (i) => setState(() => _tab = tabs[i]),
+                    tabs: [
+                      for (final t in tabs)
+                        Tab(key: Key('${t.name}Tab'), text: _tabLabels[t]),
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: Space.s),
             Expanded(
-              child: switch (_tab) {
+              child: switch (_visibleTabs(p).contains(_tab)
+                  ? _tab
+                  : ProjectTab.checklist) {
                 ProjectTab.checklist => ChecklistView(projectId: p.id),
                 ProjectTab.board => KanbanBoard(projectId: p.id),
                 ProjectTab.issues => IssuesList(projectId: p.id),
@@ -320,6 +319,27 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
       ),
     );
   }
+}
+
+const _tabLabels = {
+  ProjectTab.checklist: 'Checklist',
+  ProjectTab.board: 'Board',
+  ProjectTab.issues: 'Issues',
+  ProjectTab.time: 'Time',
+  ProjectTab.activity: 'Activity',
+  ProjectTab.more: 'More',
+};
+
+extension on _ProjectDetailScreenState {
+  /// Web ProjectDetailPage: Issues needs issues.view, Time time.view, Activity project.can.activity.
+  List<ProjectTab> _visibleTabs(Project p) => [
+    ProjectTab.checklist,
+    ProjectTab.board,
+    if (canW(ref, 'issues', 'view')) ProjectTab.issues,
+    if (canW(ref, 'time', 'view')) ProjectTab.time,
+    if (canProjectActivity(ref, p)) ProjectTab.activity,
+    ProjectTab.more,
+  ];
 }
 
 class ChecklistView extends ConsumerWidget {
@@ -351,12 +371,14 @@ class ChecklistView extends ConsumerWidget {
                     key: Key('checklistTask_${t.id}'),
                     leading: Checkbox(
                       value: t.status == TaskStatus.done,
-                      onChanged: (v) {
-                        final to = v == true
-                            ? TaskStatus.done
-                            : TaskStatus.inProgress;
-                        requestStatusChange(context, ref, t, to);
-                      },
+                      onChanged: !canW(ref, 'tasks', 'edit')
+                          ? null
+                          : (v) {
+                              final to = v == true
+                                  ? TaskStatus.done
+                                  : TaskStatus.inProgress;
+                              requestStatusChange(context, ref, t, to);
+                            },
                     ),
                     title: Text(t.name),
                     subtitle: Text(
@@ -476,7 +498,9 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
                                   for (final task in col)
                                     _BoardCard(
                                       task: task,
-                                      onLongPress: () => _move(task),
+                                      onLongPress: canW(ref, 'tasks', 'edit')
+                                          ? () => _move(task)
+                                          : null,
                                     ),
                                 ],
                               ),
@@ -557,7 +581,7 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
 class _BoardCard extends StatelessWidget {
   const _BoardCard({required this.task, required this.onLongPress});
   final Task task;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: Space.s + 4),

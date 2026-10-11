@@ -367,17 +367,31 @@ class MockStore {
 }
 
 class MockAuthRepository implements AuthRepository {
-  MockAuthRepository({this.signedIn = false});
+  MockAuthRepository({
+    this.signedIn = false,
+    this.systemRole = 'PROJECT_MANAGER',
+  });
   bool signedIn;
+
+  /// Demo role. Sign in as admin@…, member@… or viewer@… to try the other roles.
+  String systemRole;
   static const user = AppUser(
     id: 'u1',
     name: 'Jonathan Esmalla',
     email: 'jonathan@xceler8.com',
     role: 'Project Manager · Consultant',
   );
+  AppUser get _me => AppUser(
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role:
+        '${const {'ADMIN': 'Admin', 'PROJECT_MANAGER': 'Project Manager', 'MEMBER': 'Member', 'VIEWER': 'Viewer'}[systemRole]} · Consultant',
+    systemRole: systemRole,
+  );
 
   @override
-  Future<AppUser?> currentUser() async => signedIn ? user : null;
+  Future<AppUser?> currentUser() async => signedIn ? _me : null;
 
   @override
   Future<AppUser> login(String email, String password) async {
@@ -398,8 +412,16 @@ class MockAuthRepository implements AuthRepository {
         code: 'INVALID_CREDENTIALS',
       );
     }
+    final e = email.trim().toLowerCase();
+    systemRole = e.startsWith('admin')
+        ? 'ADMIN'
+        : e.startsWith('member')
+        ? 'MEMBER'
+        : e.startsWith('viewer')
+        ? 'VIEWER'
+        : 'PROJECT_MANAGER';
     signedIn = true;
-    return user;
+    return _me;
   }
 
   @override

@@ -91,20 +91,21 @@ class LinkedIssuesTab extends ConsumerWidget {
             ),
           ),
         for (final i in items) IssueRow(i),
-        Padding(
-          padding: const EdgeInsets.all(Space.m),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const Key('raiseIssueFromTask'),
-              icon: const Icon(Icons.add),
-              label: const Text('Raise issue'),
-              onPressed: () => context.push(
-                '/projects/${task.projectId}/issues/new?task=${task.id}',
+        if (canW(ref, 'issues', 'create'))
+          Padding(
+            padding: const EdgeInsets.all(Space.m),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const Key('raiseIssueFromTask'),
+                icon: const Icon(Icons.add),
+                label: const Text('Raise issue'),
+                onPressed: () => context.push(
+                  '/projects/${task.projectId}/issues/new?task=${task.id}',
+                ),
               ),
             ),
           ),
-        ),
       ],
     ),
   );

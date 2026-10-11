@@ -32,22 +32,24 @@ class ProjectInfoView extends ConsumerWidget {
       key: const Key('projectInfo'),
       padding: const EdgeInsets.only(bottom: Space.xxl),
       children: [
-        ListTile(
-          key: const Key('projectDocumentsLink'),
-          leading: const Icon(Icons.folder_outlined),
-          title: const Text('Documents'),
-          subtitle: const Text('Folders, requests and files'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push('/projects/${p.id}/documents'),
-        ),
-        ListTile(
-          key: const Key('projectConversationLink'),
-          leading: const Icon(Icons.forum_outlined),
-          title: const Text('Conversation'),
-          subtitle: const Text('Notes, calls, meetings and decisions'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push('/projects/${p.id}/conversation'),
-        ),
+        if (canW(ref, 'documents', 'view'))
+          ListTile(
+            key: const Key('projectDocumentsLink'),
+            leading: const Icon(Icons.folder_outlined),
+            title: const Text('Documents'),
+            subtitle: const Text('Folders, requests and files'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/projects/${p.id}/documents'),
+          ),
+        if (canW(ref, 'conversations', 'view'))
+          ListTile(
+            key: const Key('projectConversationLink'),
+            leading: const Icon(Icons.forum_outlined),
+            title: const Text('Conversation'),
+            subtitle: const Text('Notes, calls, meetings and decisions'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/projects/${p.id}/conversation'),
+          ),
         const Divider(),
         ListTile(
           leading: const Icon(Icons.business),

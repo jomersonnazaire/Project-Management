@@ -74,9 +74,21 @@ final portfolioProvider = FutureProvider<Json>(
 final myProjectsReportProvider = FutureProvider<List<Json>>(
   (ref) => _many(_r(ref).myProjects()),
 );
-final workloadProvider = FutureProvider<List<Json>>(
-  (ref) => _many(_r(ref).workload()),
+final workloadProvider = FutureProvider.family<List<Json>, String?>(
+  (ref, teamId) => _many(_r(ref).workload(teamId: teamId)),
 );
+
+/// Teams for the "All teams" filter (from the workload rows; /teams is Admin-only).
+final workloadTeamsProvider = FutureProvider<List<Json>>((ref) async {
+  final rows = await ref.watch(workloadProvider(null).future);
+  final m = <String, Json>{};
+  for (final r in rows) {
+    for (final t in jsonList(r['teams'])) {
+      m['${t['id']}'] = t;
+    }
+  }
+  return m.values.toList();
+});
 final reportProvider = FutureProvider.family<Json, String>(
   (ref, name) => _one(_r(ref).report(name)),
 );

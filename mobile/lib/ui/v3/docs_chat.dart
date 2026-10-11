@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models.dart';
 import '../../data/p3.dart';
 import '../../state/p3_providers.dart';
+import '../../state/v2_providers.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -119,8 +120,9 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         title: Text(folderName as String? ?? 'Documents'),
       ),
       floatingActionButton:
-          _folder != null ||
-              (_status == null && (folders.value?.isNotEmpty ?? false))
+          canW(ref, 'documents', 'create') &&
+              (_folder != null ||
+                  (_status == null && (folders.value?.isNotEmpty ?? false)))
           ? FloatingActionButton.extended(
               key: const Key('documentUpload'),
               onPressed: _busy ? null : () => _upload(),
@@ -257,7 +259,9 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         label: docStatusLabel(d),
         colors: _docColors(context, d),
       ),
-      onTap: () => requested ? _respond(d) : _download(d),
+      onTap: () => requested
+          ? (canW(ref, 'documents', 'create') ? _respond(d) : null)
+          : _download(d),
     );
   }
 
@@ -489,56 +493,68 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               },
             ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Space.s,
-                Space.s,
-                Space.s,
-                Space.s,
+          if (!canW(ref, 'conversations', 'create'))
+            const SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.all(Space.m),
+                child: Text(
+                  'You can read this conversation but not post.',
+                  key: Key('conversationReadOnly'),
+                ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(
-                    key: const Key('messageTag'),
-                    tooltip: 'Tag a task or contact',
-                    icon: Badge(
-                      isLabelVisible: tags.isNotEmpty,
-                      label: Text('${tags.length}'),
-                      child: const Icon(Icons.sell_outlined),
+            )
+          else
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Space.s,
+                  Space.s,
+                  Space.s,
+                  Space.s,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      key: const Key('messageTag'),
+                      tooltip: 'Tag a task or contact',
+                      icon: Badge(
+                        isLabelVisible: tags.isNotEmpty,
+                        label: Text('${tags.length}'),
+                        child: const Icon(Icons.sell_outlined),
+                      ),
+                      onPressed: _tag,
                     ),
-                    onPressed: _tag,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('messageField'),
-                      controller: _text,
-                      minLines: 1,
-                      maxLines: 4,
-                      maxLength: 4000,
-                      decoration: InputDecoration(
-                        hintText: 'Write a message for the project team…',
-                        filled: true,
-                        counterText: '',
-                        errorText: _error,
-                        helperText: tags.isEmpty
-                            ? null
-                            : 'Tagged: ${tags.join(', ')}',
+                    Expanded(
+                      child: TextField(
+                        key: const Key('messageField'),
+                        controller: _text,
+                        minLines: 1,
+                        maxLines: 4,
+                        maxLength: 4000,
+                        decoration: InputDecoration(
+                          hintText: 'Write a message for the project team…',
+                          filled: true,
+                          counterText: '',
+                          errorText: _error,
+                          helperText: tags.isEmpty
+                              ? null
+                              : 'Tagged: ${tags.join(', ')}',
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton.filledTonal(
-                    key: const Key('messageSend'),
-                    tooltip: 'Post',
-                    icon: const Icon(Icons.send),
-                    onPressed: _post,
-                  ),
-                ],
+                    IconButton.filledTonal(
+                      key: const Key('messageSend'),
+                      tooltip: 'Post',
+                      icon: const Icon(Icons.send),
+                      onPressed: _post,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
