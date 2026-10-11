@@ -315,7 +315,19 @@ export function trackerRouter(registry: RouteRegistry) {
       if (input.switchFrom !== current._id.toString()) throw await timerRunning(current);
       await stopEntry(current._id, now);
     }
-    await assertNoOverlap(user._id, now, new Date(now.getTime() + 60_000));
+    // A concurrent start can insert its running entry between the check above and this one;
+    // report that as TIMER_RUNNING (409), not as an overlap (422).
+    await assertNoOverlap(user._id, now, new Date(now.getTime() + 60_000)).catch(
+      async (e: unknown) => {
+        if (e instanceof HttpError && e.code === 'TIME_OVERLAP') {
+          const running = (await TimeEntryModel.findOne({ userId: user._id, running: true })
+            .select('_id kind title taskId')
+            .lean()) as Pick<EntryDoc, '_id' | 'kind' | 'title' | 'taskId'> | null;
+          if (running) throw await timerRunning(running);
+        }
+        throw e;
+      },
+    );
     // TC-Q05: no new timer on a day that already has 24 hours.
     await assertDailyCap(user._id, date, 1);
     const entry = await TimeEntryModel.create({
