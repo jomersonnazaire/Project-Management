@@ -33,6 +33,18 @@ const EnvSchema = z.object({
     .min(1)
     .max(24 * 30)
     .default(12),
+  /**
+   * Mobile app sessions (POST /auth/mobile/login, bearer token): sliding idle window that
+   * every request and POST /auth/mobile/refresh extend. Mobile exception to FR-AUTH-03.
+   */
+  MOBILE_SESSION_IDLE_HOURS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 30)
+    .default(72),
+  /** Optional hard cap for mobile sessions in days; 0 (default) = no cap. */
+  MOBILE_SESSION_MAX_DAYS: z.coerce.number().int().min(0).max(3650).default(0),
   LOCKOUT_THRESHOLD: z.coerce.number().int().min(1).default(5),
   LOCKOUT_MINUTES: z.coerce.number().int().min(1).default(15),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),

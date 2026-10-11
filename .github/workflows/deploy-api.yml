@@ -5,76 +5,100 @@ on:
     branches: [main]
     paths:
       - 'apps/api/**'
-      - 'packages/shared/**'
+      - 'packages/**'
       - 'package-lock.json'
       - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
 
 permissions:
+  id-token: write
   contents: read
 
 concurrency:
-  group: deploy-api
+  group: deploy-api-production
   cancel-in-progress: false
 
 env:
   AZURE_WEBAPP_NAME: xc8-projectmgmt-api-tc3w
+  AZURE_RESOURCE_GROUP: rg-xceler8-projectmgmt
+  HEALTH_URL: https://xc8-projectmgmt-api-tc3w.azurewebsites.net/api/v1/health
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment:
       name: production
       url: https://xc8-projectmgmt-api-tc3w.azurewebsites.net/api/v1/health
     steps:
-      - name: Check for publish profile
-        id: secret
-        env:
-          PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        run: |
-          if [ -z "$PUBLISH_PROFILE" ]; then
-            echo "::notice title=Deploy skipped::AZURE_WEBAPP_PUBLISH_PROFILE is not set, so the API was not deployed."
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.secret.outputs.present == 'true'
 
       - uses: actions/setup-node@v4
-        if: steps.secret.outputs.present == 'true'
         with:
           node-version: 22
           cache: npm
 
-      - name: Build API
-        if: steps.secret.outputs.present == 'true'
-        run: |
-          npm ci
-          npm run build --workspace @xc8/api
+      - name: Install dependencies
+        run: npm ci
 
+      - name: Test API
+        run: npm run test --workspace @xc8/api
+
+      - name: Build API
+        run: npm run build --workspace @xc8/api
+
+      # Same package as the manual deploys: prepare-deploy.mjs writes dist/ + a pinned
+      # package.json, then production deps are installed on Linux (native argon2 matches)
+      # with plain node_modules, matching the manual deploys (App Service has
+      # SCM_DO_BUILD_DURING_DEPLOYMENT=false and startup command `npm start`).
       - name: Assemble deploy package
-        if: steps.secret.outputs.present == 'true'
         run: |
-          node apps/api/scripts/prepare-deploy.mjs "$RUNNER_TEMP/api-deploy"
-          cd "$RUNNER_TEMP/api-deploy"
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/api-deploy"
+          node apps/api/scripts/prepare-deploy.mjs "$STAGE"
+          cd "$STAGE"
           npm install --omit=dev --no-audit --no-fund
 
+          # Same layout as the manual zips that have been deployed successfully:
+          # plain node_modules, no Oryx manifest. Stamp every file with the commit
+          # time in UTC so the container never sees future timestamps.
+          MTIME="$(TZ=UTC git -C "$GITHUB_WORKSPACE" log -1 --format=%cd --date=format-local:'%Y-%m-%d %H:%M:%S')"
+
+          TZ=UTC find . -exec touch -d "$MTIME UTC" {} +
+          zip -X -q -r "$RUNNER_TEMP/api.zip" .
+          ls -la "$STAGE"
+          unzip -l "$RUNNER_TEMP/api.zip" | tail -n 20
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy to Azure Web App
-        if: steps.secret.outputs.present == 'true'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ${{ runner.temp }}/api-deploy
+          resource-group-name: ${{ env.AZURE_RESOURCE_GROUP }}
+          package: ${{ runner.temp }}/api.zip
 
-      - name: Smoke test
-        if: steps.secret.outputs.present == 'true'
+      - name: Health check (status ok, db up)
         run: |
-          for i in $(seq 1 12); do
-            if curl -fsS "https://${AZURE_WEBAPP_NAME}.azurewebsites.net/api/v1/health"; then exit 0; fi
+          set -uo pipefail
+          deadline=$(( $(date +%s) + 300 ))
+          attempt=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            attempt=$((attempt + 1))
+            body="$(curl -sS --max-time 20 "$HEALTH_URL" || true)"
+            status="$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)"
+            db="$(printf '%s' "$body" | jq -r '.db // empty' 2>/dev/null || true)"
+            echo "Attempt $attempt: status=${status:-?} db=${db:-?}"
+            if [ "$status" = "ok" ] && [ "$db" = "up" ]; then
+              echo "Healthy: $body"
+              exit 0
+            fi
             sleep 10
           done
-          echo "::warning::Health check did not succeed within 2 minutes."
+          echo "::error::Health check failed after ~5 minutes. Last response: ${body:-<none>}"
+          exit 1

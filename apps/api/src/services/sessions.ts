@@ -19,6 +19,57 @@ export function cookieOptions(config: AppConfig): CookieOptions {
   };
 }
 
+const FAR_FUTURE = new Date('9999-12-31T00:00:00Z');
+
+/** Idle window of a session in ms. */
+export function idleMs(config: AppConfig, kind: string | null | undefined): number {
+  return kind === 'mobile'
+    ? config.MOBILE_SESSION_IDLE_HOURS * 3_600_000
+    : config.SESSION_IDLE_MINUTES * 60_000;
+}
+
+/**
+ * True when the request comes from a web browser. Browsers always attach `Origin` to
+ * cross-origin and non-GET requests and `Sec-Fetch-*` metadata to every request; page
+ * scripts can't remove these (forbidden headers). A cookie header means a browser too.
+ */
+export function looksLikeBrowser(req: Request): boolean {
+  const h = req.headers;
+  return Boolean(
+    h.origin ||
+    h.cookie ||
+    h['sec-fetch-mode'] ||
+    h['sec-fetch-site'] ||
+    h['sec-fetch-dest'] ||
+    h.referer,
+  );
+}
+
+/** Mobile session: the token goes back in the body (never a cookie); only its hash is stored. */
+export async function createMobileSession(
+  config: AppConfig,
+  userId: Types.ObjectId,
+  req: Request,
+  ip: string,
+): Promise<{ token: string; expiresAt: Date }> {
+  const token = newToken();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + idleMs(config, 'mobile'));
+  await SessionModel.create({
+    tokenHash: sha256(token),
+    userId,
+    kind: 'mobile',
+    lastSeenAt: now,
+    expiresAt,
+    absoluteExpiresAt: config.MOBILE_SESSION_MAX_DAYS
+      ? new Date(now.getTime() + config.MOBILE_SESSION_MAX_DAYS * 86_400_000)
+      : FAR_FUTURE,
+    ip,
+    userAgent: (req.headers['user-agent'] ?? '').slice(0, 300) || null,
+  });
+  return { token, expiresAt };
+}
+
 export async function createSession(
   config: AppConfig,
   userId: Types.ObjectId,
