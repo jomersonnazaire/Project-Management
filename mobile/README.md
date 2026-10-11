@@ -64,8 +64,13 @@ Log time rules: entries go in 0.25h steps, at most 24h per entry and **24h per d
 | `/tasks?tab=today\|day\|due\|assigned\|accountable\|review\|completed` | My tasks (7 tabs). `day` embeds the same Day timesheet widget/state as `/day` |
 | `/dar`, `/dar/saved`, `/dar/saved/:id` | Daily Accomplishment Report: generate/preview/save, saved list, saved detail (read-only, no export) |
 | `/leave?tab=mine\|team` | Leave: balances + my leave (cancel, half-day merge), team on leave, Record leave sheet |
-| `/tasks/:id/edit`, `/tasks/:id/history` | Edit task (PATCH), task history |
-| `/projects/:id/time`, `/projects/:id/activity` | Project time and activity (from the project's More tab) |
+| `/tasks/:id/edit`, `/tasks/:id/history` | Edit task (PATCH); task detail opened on its History tab |
+| `/projects/:id?tab=checklist\|board\|issues\|time\|activity\|more` | Project detail, scrollable M3 TabBar |
+| `/projects/:id/time`, `/projects/:id/activity` | Stand-alone Time / Activity (deep links) |
+| `/projects/:id/documents`, `/projects/:id/conversation` | Documents, Conversation (from the project's More tab) |
+| `/issues/:id`, `/issues/new`, `/projects/:id/issues/new?task=` | Issue detail, Raise issue |
+| `/insights?tab=projects\|workload\|reports`, `/reports/:name` | My projects, Team & workload, Reports (view only) |
+| `/profile`, `/change-password`, `/clients`, `/clients/:id` | Profile (read-only), Change password, Clients |
 | `/timesheet-review` | Review a direct report's day (read-only + Reopen) |
 | `/projects/new`, `/projects/:id/edit` | New / edit project with Project type |
 | `/projects/:id?tab=checklist\|board\|issues\|more` | Project detail; `tab` is honoured even if the project is already open |
@@ -172,5 +177,17 @@ Sample IDs: projects `p1`–`p4`; tasks `t1`–`t8` (`t3` In progress, `t4` Bloc
 - **Task actions (36–40)**: approval card with Approve / Request changes (`POST /tasks/:id/approve|reject`, comment required for reject, shown as "Changes requested:"); evidence (files only, PDF/Word/Excel ≤ 25 MB, "Checking the file…", legacy links labelled); follow-ups; Edit task screen (pencil); History and Delete in the overflow (delete only when the API says `deletable`, otherwise its `deleteBlockedReason`).
 - **Project (31–35)**: header 2nd line = "Type · Go-live · PM" (maxLines 2); More tab with project type, handover, team members, active contacts add/remove, Time and Activity screens; New/Edit project gained Team members and (edit) Status.
 - Endpoint deviations from the handoff (m8-polish wins): evidence upload is `POST /tasks/:id/evidence/uploads` → PUT bytes to `uploadUrl` → `POST /uploads/:id/complete` (no `/projects/:id/evidence/uploads`; `POST /tasks/:id/evidence` now always refuses); there is no `/projects/:id/handover` — handover is `PATCH /projects/:id {managerId}` (audited as `project_handover`); team members are `memberIds` on the same PATCH; leave cancel takes no body; the no-supervisor banner comes from `/leave/balances`.
-- Not on mobile (P3 / web): Documents and Conversation project tabs (link text "Available on the web app"); evidence delete; follow-up contact tagging; task dependencies/subtasks.
 - Demo: t7 is For review (approve/reject), t4 has evidence + a follow-up and can't be deleted, t8 can be deleted. Leave demo data is separate from the Day timesheet's leave rows.
+
+
+## v2 — P2 QA fixes and P3: everything else
+
+- P2 QA: removed the "Team members are managed on the web app" note; project edit route is keyed by id (re-inits when the id changes); demo p3/p4 have code, manager, start date; task detail has **Details / History / Linked issues** tabs (History = follow-up note + one timeline of follow-ups and audit events); project detail uses a scrollable M3 `TabBar` (Checklist, Board, Issues, Time, Activity, More; More holds Documents, Conversation and the P2 details); evidence **Remove** with the web rule (`can.edit`, files stay while For review / Completed, server `EVIDENCE_LOCKED`) and the web confirm "Remove {name} from this task?" / Remove.
+- **Issues (45–46)**: detail with chips, owner / reported by / due (from severity) / category, linked tasks, Comments & history, Add a comment, primary transition + "Other status changes" (labels from `transitionLabel`; resolution/reason asked when the shared rules need it), "Link a task" (PATCH `taskIds`), Change due date asks "Why is the due date changing?". Raise issue with the spec errors. Linked issues tab uses `GET /issues?taskId=`.
+- **Documents (47)**: folders with "Restricted folder", Requested/Submitted/Signed filters, Overdue, upload (`POST /projects/:id/documents/uploads` → PUT → `/uploads/:id/complete`), fulfil a request (`fulfilsDocumentId`), download via `/download` URL. Folder access settings stay on web.
+- **Conversation (48)**: `GET/POST /projects/:id/messages`, type (Note/Call/Meeting/Decision), tag a task or contact, "Who sees this" (web copy), "Write a message first.".
+- **Notifications (49)**: personal notices use the API `message`; `link` is mapped (`/my-tasks?tab=day&date=` → Day timesheet on that date, `/leave…`, `/my-tasks`), issue notices open the issue.
+- **Home (50, I7)**: portfolio from `GET /dashboard` (KPIs, active projects with health, upcoming milestones, waiting on client tasks + document requests, open by severity, avg. days to resolve) with All clients / All health filters, and "Documents requested from you" (`/document-requests/mine`).
+- **Insights (51–53)**: My projects (`GET /dashboard/my-projects`, "Most days late", "N days late", Follow up), Team & workload (`GET /workload`, Over capacity, No capacity set), Reports viewer for the five m8-polish reports, footer "View only. Exports and advanced filters are on the web app."
+- **Account (54–57, 00d)**: More menu per design 54; Profile (supervisor and Report CC "Set by Admin"); Change password (policy "8+ characters, a number and a symbol"); Clients list/detail (Details, Contacts, Projects) + Add contact; set-password calls `/auth/invite/verify` first and shows "Link not valid".
+- Deviations (m8-polish wins): conversation is `/projects/:id/messages` (no `/conversations/:id`); My projects is `/dashboard/my-projects` (not `/reports/my-projects`); "Pending client items" is a Project status column, not its own report; `/dashboard` takes no filters, so the Home filters work on the client.
