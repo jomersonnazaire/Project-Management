@@ -63,6 +63,9 @@ Log time rules: entries go in 0.25h steps, at most 24h per entry and **24h per d
 | `/home`, `/projects`, `/tasks?tab=<key>`, `/day`, `/more` | The 5 NavigationBar tabs: Home · Projects · My tasks · Day timesheet · More (StatefulShellRoute). The running timer bar sits above the bar on every tab. |
 | `/tasks?tab=today\|day\|due\|assigned\|accountable\|review\|completed` | My tasks (7 tabs). `day` embeds the same Day timesheet widget/state as `/day` |
 | `/dar`, `/dar/saved`, `/dar/saved/:id` | Daily Accomplishment Report: generate/preview/save, saved list, saved detail (read-only, no export) |
+| `/leave?tab=mine\|team` | Leave: balances + my leave (cancel, half-day merge), team on leave, Record leave sheet |
+| `/tasks/:id/edit`, `/tasks/:id/history` | Edit task (PATCH), task history |
+| `/projects/:id/time`, `/projects/:id/activity` | Project time and activity (from the project's More tab) |
 | `/timesheet-review` | Review a direct report's day (read-only + Reopen) |
 | `/projects/new`, `/projects/:id/edit` | New / edit project with Project type |
 | `/projects/:id?tab=checklist\|board\|issues\|more` | Project detail; `tab` is honoured even if the project is already open |
@@ -161,3 +164,13 @@ flutter test --update-goldens    # regenerate test/goldens/*.png
 - **Other:** `notificationsButton`, `markAllRead`, `moreIssues`, `moreIssuesCount`, `appearanceToggle`, `adminTools`, `signOut`
 
 Sample IDs: projects `p1`–`p4`; tasks `t1`–`t8` (`t3` In progress, `t4` Blocked, `t6` In progress, `t7` For review).
+
+
+## v2 — P2: Leave, task actions, project create/edit/detail
+
+- **Leave (41–44)**: More › Leave (`/leave`). Record leave sheet (Key `recordLeaveSubmit`; also from Day timesheet "+ Add leave" with the day prefilled), half days disabled for full-day types, To = From on half days, client checks plus server messages (over balance, overlap, no working days). Balances with year ‹ ›, "Calendar year Jan–Dec", "Negative"/"Unpaid" chips; my leave with "Full day (AM + PM)" merging; cancel (whole or "Cancel morning (AM)" / "Cancel afternoon (PM)"); past leave hint; "Supervisor needed" banner (from `GET /leave/balances` `supervisor: null`); Team on leave (`GET /leave/team`).
+- **Task actions (36–40)**: approval card with Approve / Request changes (`POST /tasks/:id/approve|reject`, comment required for reject, shown as "Changes requested:"); evidence (files only, PDF/Word/Excel ≤ 25 MB, "Checking the file…", legacy links labelled); follow-ups; Edit task screen (pencil); History and Delete in the overflow (delete only when the API says `deletable`, otherwise its `deleteBlockedReason`).
+- **Project (31–35)**: header 2nd line = "Type · Go-live · PM" (maxLines 2); More tab with project type, handover, team members, active contacts add/remove, Time and Activity screens; New/Edit project gained Team members and (edit) Status.
+- Endpoint deviations from the handoff (m8-polish wins): evidence upload is `POST /tasks/:id/evidence/uploads` → PUT bytes to `uploadUrl` → `POST /uploads/:id/complete` (no `/projects/:id/evidence/uploads`; `POST /tasks/:id/evidence` now always refuses); there is no `/projects/:id/handover` — handover is `PATCH /projects/:id {managerId}` (audited as `project_handover`); team members are `memberIds` on the same PATCH; leave cancel takes no body; the no-supervisor banner comes from `/leave/balances`.
+- Not on mobile (P3 / web): Documents and Conversation project tabs (link text "Available on the web app"); evidence delete; follow-up contact tagging; task dependencies/subtasks.
+- Demo: t7 is For review (approve/reject), t4 has evidence + a follow-up and can't be deleted, t8 can be deleted. Leave demo data is separate from the Day timesheet's leave rows.

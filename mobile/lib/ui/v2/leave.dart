@@ -340,8 +340,10 @@ class _MyLeave extends ConsumerWidget {
           AsyncView(
             value: bal,
             onRetry: () => ref.invalidate(leaveBalancesProvider(year)),
-            data: (b) =>
-                Column(children: [for (final x in b.items) _BalanceCard(x)]),
+            data: (b) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [for (final x in b.items) _BalanceCard(x)],
+            ),
           ),
           const SizedBox(height: Space.l),
           Text('My leave', style: t.titleMedium),
@@ -359,6 +361,7 @@ class _MyLeave extends ConsumerWidget {
                     ),
                   )
                 : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       for (final l in items) _LeaveCard(l, today: today),
                     ],

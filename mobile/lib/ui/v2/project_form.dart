@@ -455,7 +455,12 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                       onTap: () => _pickDate(true),
                       child: InputDecorator(
                         decoration: InputDecoration(
-                          labelText: 'Baseline start *',
+                          label: const Text(
+                            'Baseline start *',
+                            maxLines: 2,
+                            softWrap: true,
+                            overflow: TextOverflow.visible,
+                          ),
                           errorText: _errors['startDate'],
                           errorMaxLines: 2,
                         ),
@@ -467,7 +472,12 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                       onTap: () => _pickDate(false),
                       child: InputDecorator(
                         decoration: InputDecoration(
-                          labelText: 'Baseline end *',
+                          label: const Text(
+                            'Baseline end *',
+                            maxLines: 2,
+                            softWrap: true,
+                            overflow: TextOverflow.visible,
+                          ),
                           errorText: _errors['plannedEndDate'],
                           errorMaxLines: 2,
                         ),

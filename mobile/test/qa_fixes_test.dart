@@ -144,6 +144,15 @@ void main() {
       '/projects/new',
       '/tasks?tab=day',
       '/timesheet-review',
+      '/leave',
+      '/leave?tab=team',
+      '/tasks/t7',
+      '/tasks/t4/edit',
+      '/tasks/t4/history',
+      '/projects/p1?tab=more',
+      '/projects/p1/time',
+      '/projects/p1/activity',
+      '/projects/p1/edit',
     ]) {
       c.read(routerProvider).go(loc);
       await tester.pumpAndSettle();
