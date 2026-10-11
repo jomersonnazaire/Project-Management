@@ -615,6 +615,9 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
       _load(task.requireValue, extras.requireValue);
     }
     final canPlan = extras.value?.canPlan ?? false;
+    // m8-polish PATCH /tasks/:id needs task.can.plan for every field, so non-planners see the
+    // whole task read-only and nothing is sent.
+    final ro = !canPlan;
     final pid = task.value?.projectId;
     final people = pid == null
         ? const <NamedRef>[]
@@ -632,7 +635,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
       bool planned,
     ) => InkWell(
       key: Key(key),
-      onTap: () => _pick(planned),
+      onTap: ro ? null : () => _pick(planned),
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
@@ -652,11 +655,12 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
         ),
         title: const Text('Edit task'),
         actions: [
-          TextButton(
-            key: const Key('taskSave'),
-            onPressed: _busy || !_loaded ? null : _save,
-            child: const Text('Save'),
-          ),
+          if (!ro)
+            TextButton(
+              key: const Key('taskSave'),
+              onPressed: _busy || !_loaded ? null : _save,
+              child: const Text('Save'),
+            ),
         ],
       ),
       body: !_loaded
@@ -665,6 +669,18 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
               key: const Key('editTaskList'),
               padding: const EdgeInsets.all(Space.m),
               children: [
+                if (ro) ...[
+                  Card(
+                    key: const Key('editTaskReadOnly'),
+                    child: const Padding(
+                      padding: EdgeInsets.all(Space.m),
+                      child: Text(
+                        'Only the project manager can change the plan (dates, estimates, owners, dependencies).',
+                      ),
+                    ),
+                  ),
+                  gap(),
+                ],
                 if (_errors['_'] != null) ...[
                   Text(
                     _errors['_']!,
@@ -676,6 +692,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 ],
                 TextField(
                   key: const Key('editTaskName'),
+                  readOnly: ro,
                   controller: _name,
                   maxLength: 200,
                   decoration: InputDecoration(
@@ -685,6 +702,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 ),
                 TextField(
                   key: const Key('editTaskPhase'),
+                  readOnly: ro,
                   controller: _phase,
                   maxLength: 120,
                   decoration: InputDecoration(
@@ -694,6 +712,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 ),
                 DropdownMenu<Priority>(
                   key: const Key('editTaskPriority'),
+                  enabled: !ro,
                   expandedInsets: EdgeInsets.zero,
                   label: const Text('Priority'),
                   initialSelection: _priority,
@@ -714,12 +733,15 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                       ButtonSegment(value: p, label: FitLabel(p.label)),
                   ],
                   selected: {_party},
-                  onSelectionChanged: (v) => setState(() => _party = v.first),
+                  onSelectionChanged: ro
+                      ? null
+                      : (v) => setState(() => _party = v.first),
                 ),
                 if (_party == Party.client) ...[
                   gap(),
                   DropdownMenu<String>(
                     key: ValueKey('editTaskContact_${contacts.length}'),
+                    enabled: !ro,
                     expandedInsets: EdgeInsets.zero,
                     label: const Text('Client contact'),
                     initialSelection: _contact,
@@ -733,6 +755,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 gap(),
                 DropdownMenu<String>(
                   key: ValueKey('editTaskOwner_${people.length}'),
+                  enabled: !ro,
                   expandedInsets: EdgeInsets.zero,
                   label: const Text('Owner'),
                   initialSelection: _owner,
@@ -756,11 +779,13 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                         key: Key('assignee_${p.id}'),
                         label: Text(p.name),
                         selected: _assignees.contains(p.id),
-                        onSelected: (v) => setState(
-                          () => v
-                              ? _assignees.add(p.id)
-                              : _assignees.remove(p.id),
-                        ),
+                        onSelected: ro
+                            ? null
+                            : (v) => setState(
+                                () => v
+                                    ? _assignees.add(p.id)
+                                    : _assignees.remove(p.id),
+                              ),
                       ),
                   ],
                 ),
@@ -789,6 +814,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 gap(),
                 TextField(
                   key: const Key('editTaskEst'),
+                  readOnly: ro,
                   controller: _est,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -801,6 +827,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 gap(),
                 TextField(
                   key: const Key('editTaskDeliverable'),
+                  readOnly: ro,
                   controller: _deliverable,
                   maxLength: 500,
                   decoration: InputDecoration(
@@ -813,13 +840,14 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Requires approval'),
                   value: _approval,
-                  onChanged: (v) => setState(() => _approval = v),
+                  onChanged: ro ? null : (v) => setState(() => _approval = v),
                 ),
                 if (_approval && people.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: Space.m),
                     child: DropdownMenu<String?>(
                       key: const Key('editTaskReviewer'),
+                      enabled: !ro,
                       expandedInsets: EdgeInsets.zero,
                       label: const Text('Reviewer'),
                       initialSelection: _reviewer,
@@ -839,7 +867,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Mandatory'),
                   value: _mandatory,
-                  onChanged: (v) => setState(() => _mandatory = v),
+                  onChanged: ro ? null : (v) => setState(() => _mandatory = v),
                 ),
               ],
             ),

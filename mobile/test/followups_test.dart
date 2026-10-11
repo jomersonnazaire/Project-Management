@@ -106,4 +106,21 @@ void main() {
       expect(has('newTaskFab'), isFalse);
     },
   );
+
+  testWidgets(
+    'non-planner editing own task: plan fields read-only, nothing sent',
+    (t) async {
+      final c = await pumpApp(t, role: 'MEMBER', location: '/tasks/t2/edit');
+      expect(find.byKey(const Key('editTaskReadOnly')), findsOneWidget);
+      expect(find.byKey(const Key('taskSave')), findsNothing);
+      await seek(t, find.byKey(const Key('editTaskEst')), 'editTaskList');
+    final est = t.widget<TextField>(find.byKey(const Key('editTaskEst')));
+      expect(est.readOnly, isTrue);
+      final v = storeOf(c).tasks.firstWhere((x) => x.id == 't2').version;
+      await t.tap(find.byKey(const Key('editTaskPlanned')), warnIfMissed: false);
+      await t.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsNothing);
+      expect(storeOf(c).tasks.firstWhere((x) => x.id == 't2').version, v);
+    },
+  );
 }
