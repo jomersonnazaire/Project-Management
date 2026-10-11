@@ -6,6 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config.dart';
 import '../../data/models.dart';
 import '../../data/p3.dart';
+import '../../data/ph_time.dart';
+import '../../state/p3_providers.dart';
+import '../v3/insights.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../state/v2_providers.dart';
@@ -39,6 +42,8 @@ class HomeScreen extends ConsumerWidget {
           ref.invalidate(projectsProvider);
           ref.invalidate(dashboardProvider);
           ref.invalidate(notificationsProvider);
+          ref.invalidate(portfolioProvider);
+          ref.invalidate(waitingOnClientProvider);
         },
         child: CustomScrollView(
           slivers: [
@@ -125,6 +130,9 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            if (ref.watch(permissionsProvider).value?['reports']?['view'] !=
+                false)
+              const SliverToBoxAdapter(child: PortfolioSection()),
             const SliverToBoxAdapter(child: SectionHeader('My projects')),
             SliverToBoxAdapter(
               child: AsyncView(
@@ -323,9 +331,10 @@ class NotificationsScreen extends ConsumerWidget {
                   SectionHeader(g.key),
                   for (final n in g.value)
                     ListTile(
-                      onTap: n.taskId == null
+                      key: Key('notification_${n.id}'),
+                      onTap: notificationTarget(n) == null
                           ? null
-                          : () => context.push('/tasks/${n.taskId}'),
+                          : () => openNotification(context, ref, n),
                       leading: InitialsAvatar(n.title),
                       title: Text(
                         n.title,
@@ -502,6 +511,8 @@ class MoreScreen extends ConsumerWidget {
               ),
               subtitle: Text(user?.role ?? ''),
               trailing: const Icon(Icons.chevron_right),
+              key: const Key('moreProfile'),
+              onTap: () => context.push('/profile'),
             ),
           ),
           const SizedBox(height: Space.m),
@@ -544,11 +555,20 @@ class MoreScreen extends ConsumerWidget {
                   onTap: () => context.push('/issues'),
                 ),
                 ListTile(
+                  key: const Key('moreClients'),
                   leading: const Icon(Icons.business_outlined),
                   title: const Text('Clients'),
-                  subtitle: const Text('Contacts & projects (web)'),
-                  onTap: () => _openWeb(context, '/clients'),
+                  subtitle: const Text('Contacts & projects'),
+                  onTap: () => context.push('/clients'),
                 ),
+                if (ref.watch(permissionsProvider).value?['reports']?['view'] !=
+                    false)
+                  ListTile(
+                    key: const Key('moreInsights'),
+                    leading: const Icon(Icons.insights_outlined),
+                    title: const Text('Team & workload · Reports'),
+                    onTap: () => context.push('/insights'),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.notifications_outlined),
                   title: const Text('Notifications'),
@@ -592,15 +612,16 @@ class MoreScreen extends ConsumerWidget {
                 ),
                 ListTile(
                   leading: const Icon(Icons.lock_outline),
+                  key: const Key('moreChangePassword'),
                   title: const Text('Change password'),
-                  onTap: () => _openWeb(context, '/profile'),
+                  onTap: () => context.push('/change-password'),
                 ),
                 ListTile(
                   key: const Key('adminTools'),
                   leading: const Icon(Icons.open_in_new),
                   title: const Text('Admin tools'),
                   subtitle: const Text(
-                    'Users, teams, access rules · opens web',
+                    'Users, Teams, Settings, Project types, Leave types, Access rules, Audit log, Templates · opens web',
                   ),
                   onTap: () => _openWeb(context, '/admin'),
                 ),
@@ -667,4 +688,37 @@ class _KpiGrid extends StatelessWidget {
         ),
     ],
   );
+}
+
+/// Where a notification opens in the app. Web links from the API are mapped to mobile routes.
+String? notificationTarget(AppNotification n) {
+  if (n.taskId != null) return '/tasks/${n.taskId}';
+  if (n.issueId != null) return '/issues/${n.issueId}';
+  final l = n.link;
+  if (l == null) return null;
+  final u = Uri.parse(l);
+  return switch (u.path) {
+    '/my-tasks' when u.queryParameters['tab'] == 'day' => '/day',
+    '/my-tasks' => '/tasks',
+    '/leave' => l,
+    '/timesheets/review' => '/timesheet-review',
+    _ => null,
+  };
+}
+
+void openNotification(BuildContext context, WidgetRef ref, AppNotification n) {
+  final target = notificationTarget(n);
+  if (target == null) return;
+  final date = n.link == null
+      ? null
+      : Uri.parse(n.link!).queryParameters['date'];
+  if (target == '/day') {
+    if (date != null) {
+      ref.read(selectedDayProvider.notifier).set(parseYmd(date));
+    }
+    ref.read(dayModeProvider.notifier).set(DayMode.day);
+    context.go('/day');
+    return;
+  }
+  context.push(target);
 }

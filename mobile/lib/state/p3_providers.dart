@@ -1,3 +1,8 @@
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../data/p2.dart' show PickedFile;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config.dart';
@@ -73,3 +78,19 @@ final profileProvider = FutureProvider<Json>((ref) async {
   final u = await ref.watch(authProvider.future);
   return _r(ref).profile(u?.id ?? 'me');
 });
+
+/// Picks any document file (Documents › Upload). Overridden in tests.
+final documentPickerProvider = Provider<Future<PickedFile?> Function()>(
+  (ref) => () async {
+    final f = await FilePicker.pickFile();
+    if (f == null) return null;
+    final bytes = await f.readAsBytes();
+    return PickedFile(f.name, bytes.length, bytes);
+  },
+);
+
+/// Opens a URL (downloads, web links). Overridden in tests.
+final urlOpenerProvider = Provider<Future<bool> Function(Uri)>(
+  (ref) =>
+      (u) => launchUrl(u, mode: LaunchMode.externalApplication),
+);

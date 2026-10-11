@@ -11,6 +11,9 @@ import 'ui/v2/dar.dart';
 import 'ui/v2/leave.dart';
 import 'ui/v2/project_p2.dart';
 import 'ui/v2/task_actions.dart';
+import 'ui/v3/account.dart';
+import 'ui/v3/docs_chat.dart';
+import 'ui/v3/insights.dart';
 import 'ui/v3/issues.dart';
 import 'ui/v2/day_timesheet.dart';
 import 'ui/v2/my_tasks_v2.dart';
@@ -45,6 +48,31 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) =>
             SetPasswordScreen(token: s.uri.queryParameters['token'] ?? ''),
       ),
+      GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
+      GoRoute(
+        path: '/change-password',
+        builder: (_, _) => const ChangePasswordScreen(),
+      ),
+      GoRoute(path: '/clients', builder: (_, _) => const ClientsScreen()),
+      GoRoute(
+        path: '/clients/:id',
+        builder: (_, s) => ClientDetailScreen(
+          key: ValueKey('client_${s.pathParameters['id']}'),
+          clientId: s.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/insights',
+        builder: (_, s) =>
+            InsightsScreen(initialTab: s.uri.queryParameters['tab']),
+      ),
+      GoRoute(
+        path: '/reports/:name',
+        builder: (_, s) => ReportScreen(
+          key: ValueKey('report_${s.pathParameters['name']}'),
+          name: s.pathParameters['name']!,
+        ),
+      ),
       GoRoute(path: '/issues/new', builder: (_, _) => const RaiseIssueScreen()),
       GoRoute(
         path: '/issues/:id',
@@ -52,6 +80,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           key: ValueKey('issue_${s.pathParameters['id']}'),
           issueId: s.pathParameters['id']!,
         ),
+      ),
+      GoRoute(
+        path: '/projects/:id/documents',
+        builder: (_, s) => DocumentsScreen(projectId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/projects/:id/conversation',
+        builder: (_, s) =>
+            ConversationScreen(projectId: s.pathParameters['id']!),
       ),
       GoRoute(
         path: '/projects/:id/issues/new',

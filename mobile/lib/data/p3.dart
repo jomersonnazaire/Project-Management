@@ -634,12 +634,13 @@ class MockP3Repository implements P3Repository {
       if (b['severity'] == null) 'severity': 'Choose a severity.',
       if (b['stage'] == null) 'stage': 'Choose a stage.',
     };
-    if (errors.isNotEmpty)
+    if (errors.isNotEmpty) {
       throw ApiException(
         'Check the highlighted fields.',
         status: 400,
         fields: errors,
       );
+    }
     final p = store.projects.firstWhere((x) => x.id == projectId);
     final opts = await issueOptions(projectId);
     final id = 'i${s.n++}';
@@ -706,13 +707,16 @@ class MockP3Repository implements P3Repository {
   Future<void> issueStatus(String id, Json b) async {
     final i = await issue(id);
     final from = '${i['status']}', to = '${b['status']}';
-    if (!(issueTransitions[from] ?? const []).contains(to))
+    if (!(issueTransitions[from] ?? const []).contains(to)) {
       throw ApiException("This status change isn't allowed.", status: 422);
-    if (to == 'RESOLVED' && '${b['resolution'] ?? ''}'.trim().isEmpty)
+    }
+    if (to == 'RESOLVED' && '${b['resolution'] ?? ''}'.trim().isEmpty) {
       throw _field('resolution', 'Describe the resolution.');
+    }
     if (transitionNeedsReason(from, to) &&
-        '${b['reason'] ?? ''}'.trim().isEmpty)
+        '${b['reason'] ?? ''}'.trim().isEmpty) {
       throw _field('reason', 'Give a reason.');
+    }
     i['status'] = to;
     final k = store.issues.indexWhere((x) => x.id == id);
     if (k >= 0) {
@@ -840,8 +844,9 @@ class MockP3Repository implements P3Repository {
       [...s.messages].reversed.toList();
   @override
   Future<void> postMessage(String projectId, Json b) async {
-    if ('${b['text'] ?? ''}'.trim().isEmpty)
+    if ('${b['text'] ?? ''}'.trim().isEmpty) {
       throw _field('text', 'Write a message first.');
+    }
     final opts = await issueOptions(projectId);
     s.messages.add({
       'id': 'm${s.n++}',
@@ -873,12 +878,14 @@ class MockP3Repository implements P3Repository {
       s.projects.where((p) => p['clientId'] == id).toList();
   @override
   Future<void> addContact(String clientId, Json b) async {
-    if ('${b['name'] ?? ''}'.trim().isEmpty)
+    if ('${b['name'] ?? ''}'.trim().isEmpty) {
       throw _field('name', 'Name is required.');
+    }
     final email = '${b['email'] ?? ''}'.trim();
     if (email.isNotEmpty &&
-        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email))
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
       throw _field('email', 'Enter a valid email.');
+    }
     s.contacts.putIfAbsent(clientId, () => []).add({
       'id': 'k${s.n++}',
       'name': '${b['name']}'.trim(),
@@ -1193,23 +1200,26 @@ class MockP3Repository implements P3Repository {
   String _password = 'pass1!word';
   @override
   Future<void> changePassword(String current, String next) async {
-    if (current != _password && current != 'pass1')
+    if (current != _password && current != 'pass1') {
       throw _field('currentPassword', 'Your current password is incorrect.');
+    }
     final p = passwordProblem(next);
     if (p != null) throw _field('newPassword', p);
-    if (next == current)
+    if (next == current) {
       throw _field('newPassword', 'Choose a password you haven’t used before.');
+    }
     _password = next;
   }
 
   @override
   Future<Json> verifyInvite(String token) async {
-    if (token == 'expired')
+    if (token == 'expired') {
       throw ApiException(
         'This link is no longer valid.',
         status: 400,
         code: 'INVITE_INVALID',
       );
+    }
     return {'name': 'Jonathan', 'email': 'jonathan@xceler8.com'};
   }
 }

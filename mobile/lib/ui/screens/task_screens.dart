@@ -73,8 +73,9 @@ class TaskDetailScreen extends ConsumerWidget {
                   if (v == 'refresh' && task.hasValue) {
                     refreshTask(ref, task.requireValue);
                   }
-                  if (v == 'history')
+                  if (v == 'history') {
                     DefaultTabController.of(context).animateTo(1);
+                  }
                   if (v == 'delete' && task.hasValue) {
                     deleteTask(context, ref, task.requireValue);
                   }

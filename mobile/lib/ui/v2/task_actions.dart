@@ -90,10 +90,11 @@ class _TaskActionsSectionState extends ConsumerState<TaskActionsSection> {
       ref.invalidate(taskExtrasProvider(t.id));
       ref.invalidate(taskHistoryProvider(t.id));
     } catch (err) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _uploadError = err is ApiException ? err.message : '$err',
         );
+      }
     }
   }
 

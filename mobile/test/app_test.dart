@@ -156,6 +156,8 @@ void main() {
   testWidgets('admin tools and appearance toggle are on More', (tester) async {
     await pumpApp(tester, location: '/more');
     expect(find.byKey(const Key('adminTools')), findsOneWidget);
+    await tester.ensureVisible(find.text('Dark'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
     await tester.pumpAndSettle();
     final ctx = tester.element(find.byKey(const Key('moreScreen')));

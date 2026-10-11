@@ -680,8 +680,9 @@ class _RaiseIssueScreenState extends ConsumerState<RaiseIssueScreen> {
     final opts = _project == null
         ? null
         : ref.watch(issueOptionsProvider(_project!)).value;
-    if (opts != null && _stage == null && opts['defaultStage'] != null)
+    if (opts != null && _stage == null && opts['defaultStage'] != null) {
       _stage = '${opts['defaultStage']}';
+    }
     return Scaffold(
       key: const Key('raiseIssueScreen'),
       appBar: AppBar(

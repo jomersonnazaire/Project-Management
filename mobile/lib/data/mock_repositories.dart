@@ -257,6 +257,30 @@ class MockStore {
     ]);
     notifications.addAll([
       AppNotification(
+        id: 'n5',
+        title: 'Queen Reyes reopened your timesheet for Thu, Oct 8: "Add the client call." Make your changes and submit it again before the weekly lock.',
+        subtitle: '',
+        read: false,
+        at: DateTime(2026, 10, 11, 10),
+        link: '/my-tasks?tab=day&date=2026-10-08',
+      ),
+      AppNotification(
+        id: 'n6',
+        title: 'Mark Kim recorded Vacation leave for Oct 19 – Oct 20.',
+        subtitle: '',
+        read: true,
+        at: DateTime(2026, 10, 10, 9),
+        link: '/leave?tab=team',
+      ),
+      AppNotification(
+        id: 'n7',
+        title: 'Queen R. raised a Critical issue',
+        subtitle: 'ACME-12 Login loop on Safari · Acme Corp',
+        read: true,
+        at: DateTime(2026, 10, 9, 10),
+        issueId: 'i1',
+      ),
+      AppNotification(
         id: 'n1',
         title: 'Queen R. requested your approval',
         subtitle: 'UAT sign-off · Acme Corp',

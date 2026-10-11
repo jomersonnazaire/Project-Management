@@ -340,11 +340,16 @@ class AppNotification {
     required this.read,
     required this.at,
     this.taskId,
+    this.issueId,
+    this.link,
   });
   final String id, title, subtitle;
   final bool read;
   final DateTime at;
-  final String? taskId;
+  final String? taskId, issueId;
+
+  /// Personal notices (day reopened, leave, auto-stopped timer) carry the web path they open.
+  final String? link;
 
   static const _verbs = {
     'ASSIGNED': 'You were assigned a task',
@@ -363,6 +368,17 @@ class AppNotification {
     final target =
         _name(j['task']) ??
         (j['issue'] is Map ? j['issue']['title'] as String? : null);
+    final message = j['message'] as String?;
+    if (message != null && message.isNotEmpty) {
+      return AppNotification(
+        id: j['id'] as String,
+        title: message,
+        subtitle: _name(j['project']) ?? '',
+        read: j['read'] as bool? ?? false,
+        at: _date(j['at']) ?? DateTime.now(),
+        link: j['link'] as String?,
+      );
+    }
     return AppNotification(
       id: j['id'] as String,
       title: title.isEmpty
@@ -372,6 +388,8 @@ class AppNotification {
       read: j['read'] as bool? ?? false,
       at: _date(j['at']) ?? DateTime.now(),
       taskId: j['task'] is Map ? j['task']['id'] as String? : null,
+      issueId: j['issue'] is Map ? j['issue']['id'] as String? : null,
+      link: j['link'] as String?,
     );
   }
 }

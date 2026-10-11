@@ -190,8 +190,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
         initialIndex: widget.initialTab.index,
         vsync: this,
       )..addListener(() {
-        if (_tc.index != _tab.index)
+        if (_tc.index != _tab.index) {
           setState(() => _tab = ProjectTab.values[_tc.index]);
+        }
       });
 
   @override

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../data/models.dart' show ApiException;
+import '../../state/p3_providers.dart';
+
 import 'package:go_router/go_router.dart';
 
 import '../../data/models.dart';
@@ -200,6 +204,9 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   final _pw = TextEditingController();
   final _confirm = TextEditingController();
   bool _busy = false;
+  late final Future<Map<String, dynamic>> _info = widget.token.isEmpty
+      ? Future.error(Exception())
+      : ref.read(p3RepositoryProvider).verifyInvite(widget.token);
 
   @override
   void dispose() {
@@ -236,63 +243,117 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final s = Theme.of(context).colorScheme;
-    return Scaffold(
-      key: const Key('setPasswordScreen'),
-      appBar: AppBar(title: const Text('Set your password')),
-      body: ListView(
-        padding: const EdgeInsets.all(Space.l),
-        children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: BrandLogo(height: 40),
-          ),
-          const SizedBox(height: Space.l),
-          Text(
-            'Welcome to OpsTrack. Choose a password to finish setting up.',
-            style: TextStyle(color: s.onSurfaceVariant),
-          ),
-          const SizedBox(height: Space.l),
-          TextField(
-            key: const Key('newPassword'),
-            controller: _pw,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'New password'),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: Space.s),
-          Wrap(
-            spacing: Space.m,
-            children: [
-              for (final (label, ok) in passwordRules(_pw.text))
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      ok ? Icons.check : Icons.close,
-                      size: 16,
-                      color: ok ? Colors.green.shade700 : s.outline,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(label, style: Theme.of(context).textTheme.bodySmall),
-                  ],
+    return FutureBuilder(
+      future: _info,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasError) {
+          final e = snap.error;
+          return Scaffold(
+            key: const Key('linkNotValidScreen'),
+            body: ListView(
+              padding: const EdgeInsets.all(Space.l),
+              children: [
+                const SizedBox(height: Space.xl),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: BrandLogo(height: 40),
                 ),
+                const SizedBox(height: Space.l),
+                Text(
+                  'Link not valid',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: Space.s),
+                Text(
+                  e is ApiException
+                      ? e.message
+                      : 'This link has expired. Ask an Admin for a new one.',
+                ),
+                const SizedBox(height: Space.l),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    key: const Key('backToSignIn'),
+                    onPressed: () => context.go('/login'),
+                    child: const Text('Back to sign in'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        final reset = snap.data?['purpose'] == 'RESET';
+        return Scaffold(
+          key: const Key('setPasswordScreen'),
+          appBar: AppBar(
+            title: Text(reset ? 'Choose a new password' : 'Set your password'),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.all(Space.l),
+            children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: BrandLogo(height: 40),
+              ),
+              const SizedBox(height: Space.l),
+              Text(
+                'Welcome to OpsTrack. Choose a password to finish setting up.',
+                style: TextStyle(color: s.onSurfaceVariant),
+              ),
+              const SizedBox(height: Space.l),
+              TextField(
+                key: const Key('newPassword'),
+                controller: _pw,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: Space.s),
+              Wrap(
+                spacing: Space.m,
+                children: [
+                  for (final (label, ok) in passwordRules(_pw.text))
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          ok ? Icons.check : Icons.close,
+                          size: 16,
+                          color: ok ? Colors.green.shade700 : s.outline,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          label,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: Space.m),
+              TextField(
+                key: const Key('confirmPassword'),
+                controller: _confirm,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm password',
+                ),
+              ),
+              const SizedBox(height: Space.l),
+              FilledButton(
+                key: const Key('setPasswordSubmit'),
+                onPressed: _busy ? null : _submit,
+                child: const Text('Set password & continue'),
+              ),
             ],
           ),
-          const SizedBox(height: Space.m),
-          TextField(
-            key: const Key('confirmPassword'),
-            controller: _confirm,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Confirm password'),
-          ),
-          const SizedBox(height: Space.l),
-          FilledButton(
-            key: const Key('setPasswordSubmit'),
-            onPressed: _busy ? null : _submit,
-            child: const Text('Set password & continue'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
