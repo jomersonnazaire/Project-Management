@@ -114,7 +114,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/tasks/:id/edit',
-        builder: (_, s) => EditTaskScreen(taskId: s.pathParameters['id']!),
+        builder: (_, s) => PermissionGate(
+          record: 'tasks',
+          action: 'edit',
+          child: EditTaskScreen(taskId: s.pathParameters['id']!),
+        ),
       ),
       GoRoute(
         path: '/tasks/:id/history',

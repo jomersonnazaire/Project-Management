@@ -12,6 +12,7 @@ import '../../state/providers.dart';
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/permission_gate.dart';
 import 'dependencies.dart';
 
 void refreshTask(WidgetRef ref, Task t) {
@@ -495,6 +496,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
   String? _owner, _contact;
   Set<String> _assignees = {};
   List<String> _deps = [];
+  String? _reviewer;
   DateTime? _planned, _due;
   bool _approval = false, _mandatory = false, _loaded = false, _busy = false;
   Map<String, String> _errors = {};
@@ -522,6 +524,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
     _contact = x.clientContactId;
     _assignees = {...x.assigneeIds};
     _deps = [...t.dependsOn];
+    _reviewer = x.reviewerId;
     _planned = t.plannedStart;
     _due = t.dueDate;
     _approval = t.requiresApproval;
@@ -546,6 +549,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
     if (e.isNotEmpty) return;
     setState(() => _busy = true);
     final t = _task!;
+    final extras = ref.read(taskExtrasProvider(t.id)).value;
     try {
       await ref
           .read(taskActionsRepositoryProvider)
@@ -566,7 +570,9 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
               requiresApproval: _approval,
               mandatory: _mandatory,
               clientContactId: _party == Party.client ? _contact : null,
-              dependsOn: _deps,
+              dependsOn: (extras?.canPlan ?? false) ? _deps : null,
+              setReviewer: true,
+              reviewerId: _approval ? _reviewer : null,
             ),
           );
       refreshTask(ref, t);
@@ -601,9 +607,14 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
   Widget build(BuildContext context) {
     final task = ref.watch(taskProvider(widget.taskId));
     final extras = ref.watch(taskExtrasProvider(widget.taskId));
+    if (extras.hasValue && !extras.requireValue.canEdit) {
+      // task.can.edit is false (e.g. Viewer, or not mine and not the planner).
+      return const NoAccessScreen();
+    }
     if (task.hasValue && extras.hasValue) {
       _load(task.requireValue, extras.requireValue);
     }
+    final canPlan = extras.value?.canPlan ?? false;
     final pid = task.value?.projectId;
     final people = pid == null
         ? const <NamedRef>[]
@@ -754,16 +765,17 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                   ],
                 ),
                 gap(),
-                DependenciesField(
-                  projectId: _task!.projectId,
-                  taskId: _task!.id,
-                  selected: _deps,
-                  errorText: _errors['dependsOn'],
-                  onChanged: (v) => setState(() {
-                    _deps = v;
-                    _errors = {..._errors}..remove('dependsOn');
-                  }),
-                ),
+                if (canPlan)
+                  DependenciesField(
+                    projectId: _task!.projectId,
+                    taskId: _task!.id,
+                    selected: _deps,
+                    errorText: _errors['dependsOn'],
+                    onChanged: (v) => setState(() {
+                      _deps = v;
+                      _errors = {..._errors}..remove('dependsOn');
+                    }),
+                  ),
                 gap(),
                 date(
                   'editTaskPlanned',
@@ -803,6 +815,25 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                   value: _approval,
                   onChanged: (v) => setState(() => _approval = v),
                 ),
+                if (_approval && people.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.m),
+                    child: DropdownMenu<String?>(
+                      key: const Key('editTaskReviewer'),
+                      expandedInsets: EdgeInsets.zero,
+                      label: const Text('Reviewer'),
+                      initialSelection: _reviewer,
+                      onSelected: (v) => setState(() => _reviewer = v),
+                      dropdownMenuEntries: [
+                        const DropdownMenuEntry(
+                          value: null,
+                          label: 'Project manager',
+                        ),
+                        for (final p in people)
+                          DropdownMenuEntry(value: p.id, label: p.name),
+                      ],
+                    ),
+                  ),
                 SwitchListTile(
                   key: const Key('editTaskMandatory'),
                   contentPadding: EdgeInsets.zero,

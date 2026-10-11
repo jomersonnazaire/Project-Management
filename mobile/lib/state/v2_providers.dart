@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/access.dart';
-import '../data/models.dart' show Project;
+import '../data/models.dart' show Project, ProjectStatus;
 export '../data/access.dart' show PermissionGrid;
 
 import '../config.dart';
@@ -101,16 +101,18 @@ bool canEditProject(WidgetRef ref, Project p) {
   final u = ref.watch(authProvider).value;
   return canW(ref, 'projects', 'edit') &&
       u != null &&
-      (u.isAdmin || p.managerId == u.id);
+      (u.isAdmin || (u.systemRole == 'PROJECT_MANAGER' && p.managerId == u.id));
 }
 
-/// project.can.planTasks: add tasks. Demo: tasks.create and (Admin or the project's PM).
+/// project.can.planTasks. Demo mirrors the server: open, tasks.edit and isPlanner (Admin or PM).
 bool canPlanTasks(WidgetRef ref, Project p) {
   if (p.can != null) return p.can!['planTasks'] == true;
   final u = ref.watch(authProvider).value;
-  return canW(ref, 'tasks', 'create') &&
+  return !p.archived &&
+      p.status != ProjectStatus.completed &&
+      canW(ref, 'tasks', 'edit') &&
       u != null &&
-      (u.isAdmin || p.managerId == u.id);
+      (u.isAdmin || (u.systemRole == 'PROJECT_MANAGER' && p.managerId == u.id));
 }
 
 /// project.can.activity: Admins and PMs, or View on audit (doc 11 §12).

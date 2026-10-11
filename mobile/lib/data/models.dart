@@ -123,7 +123,9 @@ class Project {
     this.description,
     this.code,
     this.can,
+    this.archived = false,
   });
+  final bool archived;
 
   /// Server `can` flags (edit, planTasks, activity…); null in demo data.
   final Map<String, bool>? can;
@@ -161,6 +163,7 @@ class Project {
     startDate: _date(j['startDate']),
     description: j['description'] as String?,
     code: j['code'] as String?,
+    archived: j['archived'] == true,
     can: j['can'] is Map
         ? {
             for (final e in (j['can'] as Map).entries)

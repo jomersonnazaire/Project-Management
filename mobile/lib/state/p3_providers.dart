@@ -56,6 +56,15 @@ final documentsProvider =
 final messagesProvider = FutureProvider.family<List<Json>, String>(
   (ref, id) => _many(_r(ref).messages(id)),
 );
+
+/// Server `can.post` from the messages response (read after the list loads).
+final messagesCanPostProvider = FutureProvider.family<bool?, String>((
+  ref,
+  id,
+) async {
+  await ref.watch(messagesProvider(id).future);
+  return _r(ref).messagesCanPost(id);
+});
 final clientsProvider = FutureProvider<List<Json>>(
   (ref) => _many(_r(ref).clients()),
 );

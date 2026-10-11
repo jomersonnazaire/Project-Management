@@ -280,7 +280,9 @@ class TaskExtras {
     this.assigneeIds = const [],
     this.deliverable,
     this.clientContactId,
+    this.reviewerId,
   });
+  final String? reviewerId;
   final String? approvalComment,
       approvalBy,
       deleteBlockedReason,
@@ -319,8 +321,34 @@ class TaskExtras {
       ],
       deliverable: j['deliverable'] as String?,
       clientContactId: (j['clientContact'] as Map?)?['id'] as String?,
+      reviewerId: (j['reviewer'] as Map?)?['id'] as String?,
     );
   }
+
+  /// Same extras with other `can` flags (demo: server taskCan rules for the signed-in role).
+  TaskExtras withCan({
+    required bool edit,
+    required bool plan,
+    required bool status,
+    String? reviewer,
+    bool setReviewer = false,
+  }) => TaskExtras(
+    approvalComment: approvalComment,
+    approvalBy: approvalBy,
+    evidence: evidence,
+    followUps: followUps,
+    canEdit: edit,
+    canPlan: plan,
+    canStatus: status,
+    canApprove: canApprove,
+    deletable: deletable,
+    deleteBlockedReason: deleteBlockedReason,
+    ownerId: ownerId,
+    assigneeIds: assigneeIds,
+    deliverable: deliverable,
+    clientContactId: clientContactId,
+    reviewerId: setReviewer ? reviewer : reviewerId,
+  );
 }
 
 class HistoryItem {
@@ -378,8 +406,14 @@ class TaskEdit {
     this.mandatory,
     this.clientContactId,
     this.dependsOn,
+    this.reviewerId,
+    this.setReviewer = false,
   });
   final List<String>? dependsOn;
+
+  /// PATCH sends reviewerId (null clears it) only when [setReviewer].
+  final String? reviewerId;
+  final bool setReviewer;
   final int version;
   final String? name, phase, ownerId, deliverable, clientContactId;
   final Priority? priority;
@@ -406,6 +440,7 @@ class TaskEdit {
     'mandatory': ?mandatory,
     'clientContactId': clientContactId,
     'dependsOn': ?dependsOn,
+    if (setReviewer) 'reviewerId': reviewerId,
   };
 }
 
@@ -1245,7 +1280,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
       dependsOn: d.dependsOn ?? t.dependsOn,
       requiresApproval: d.requiresApproval ?? t.requiresApproval,
       mandatory: d.mandatory ?? t.mandatory,
-      reviewerName: t.reviewerName,
+      reviewerName: d.setReviewer ? people[d.reviewerId] : t.reviewerName,
       approvalState: t.approvalState,
       version: t.version + 1,
       overdue: t.overdue,
@@ -1262,6 +1297,8 @@ class MockTaskActionsRepository implements TaskActionsRepository {
       ownerId: d.ownerId ?? e.ownerId,
       assigneeIds: d.assigneeIds ?? e.assigneeIds,
       deliverable: d.deliverable,
+      clientContactId: d.clientContactId,
+      reviewerId: d.setReviewer ? d.reviewerId : e.reviewerId,
     );
     _log(
       taskId,

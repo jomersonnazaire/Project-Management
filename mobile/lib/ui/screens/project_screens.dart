@@ -873,22 +873,20 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
               onChanged: (v) => setState(() => _approval = v),
             ),
             ..._reviewerField(),
-            DependenciesField(
-              projectId: widget.projectId,
-              taskId: null,
-              selected: _deps,
-              onChanged: (v) => setState(() => _deps = v),
-            ),
+            if (ref.watch(projectProvider(widget.projectId)).value case final p?
+                when canPlanTasks(ref, p))
+              DependenciesField(
+                projectId: widget.projectId,
+                taskId: null,
+                selected: _deps,
+                onChanged: (v) => setState(() => _deps = v),
+              ),
             const SizedBox(height: Space.m),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Mandatory'),
               value: _mandatory,
               onChanged: (v) => setState(() => _mandatory = v),
-            ),
-            const Text(
-              'Owner, assignees, reviewer and dependencies can be set on the web for now.',
-              style: TextStyle(fontSize: 12),
             ),
           ],
         ),

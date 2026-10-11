@@ -22,6 +22,15 @@ class PermissionGate extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (canW(ref, record, action)) return child;
+    return const NoAccessScreen();
+  }
+}
+
+/// "You don't have access" page for deep links a role can't use.
+class NoAccessScreen extends StatelessWidget {
+  const NoAccessScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       key: const Key('noAccessScreen'),
       appBar: AppBar(leading: const BackOrUpButton(fallback: '/')),

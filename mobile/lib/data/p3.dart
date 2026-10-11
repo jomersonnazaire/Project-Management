@@ -121,6 +121,9 @@ abstract interface class P3Repository {
     String? fulfils,
   });
   Future<List<Json>> messages(String projectId);
+
+  /// `can.post` returned with GET /projects/:id/messages (null when absent).
+  Future<bool?> messagesCanPost(String projectId);
   Future<void> postMessage(String projectId, Json body);
   // Clients
   Future<List<Json>> clients();
@@ -223,8 +226,16 @@ class ApiP3Repository implements P3Repository {
   }
 
   @override
-  Future<List<Json>> messages(String projectId) async =>
-      jsonList((await api.get('/projects/$projectId/messages'))['items']);
+  Future<List<Json>> messages(String projectId) async {
+    final b = await api.get('/projects/$projectId/messages');
+    final can = b['can'];
+    _canPost[projectId] = can is Map ? can['post'] == true : null;
+    return jsonList(b['items']);
+  }
+
+  final _canPost = <String, bool?>{};
+  @override
+  Future<bool?> messagesCanPost(String projectId) async => _canPost[projectId];
   @override
   Future<void> postMessage(String projectId, Json body) =>
       api.post('/projects/$projectId/messages', body);
@@ -849,6 +860,10 @@ class MockP3Repository implements P3Repository {
   @override
   Future<List<Json>> messages(String projectId) async =>
       [...s.messages].reversed.toList();
+
+  /// Demo: no server flag, so the app-side rule decides.
+  @override
+  Future<bool?> messagesCanPost(String projectId) async => null;
   @override
   Future<void> postMessage(String projectId, Json b) async {
     if ('${b['text'] ?? ''}'.trim().isEmpty) {

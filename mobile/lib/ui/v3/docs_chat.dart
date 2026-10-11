@@ -361,7 +361,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     if (_forbidden || !canW(ref, 'conversations', 'create')) return false;
     final p = ref.watch(projectProvider(widget.projectId)).value;
     final me = ref.watch(authProvider).value;
-    if (p == null || me == null) return false;
+    if (p == null || me == null || p.archived) return false;
+    if (ref.watch(messagesCanPostProvider(widget.projectId)).value == false) {
+      return false;
+    }
     if (canEditProject(ref, p) || p.managerId == me.id) return true;
     final members = ref
         .watch(projectExtrasProvider(widget.projectId))

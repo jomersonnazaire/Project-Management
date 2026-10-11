@@ -1,6 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/models.dart';
+import '../data/access.dart';
+
 import '../config.dart';
 import '../data/p2.dart';
 import 'providers.dart';
@@ -68,9 +71,28 @@ void invalidateLeave(WidgetRef ref) {
   invalidateTracker(ref);
 }
 
-final taskExtrasProvider = FutureProvider.family<TaskExtras, String>(
-  (ref, id) => ref.watch(taskActionsRepositoryProvider).extras(id),
-);
+final taskExtrasProvider = FutureProvider.family<TaskExtras, String>((
+  ref,
+  id,
+) async {
+  final x = await ref.watch(taskActionsRepositoryProvider).extras(id);
+  if (!AppConfig.demoMode) return x;
+  // Demo stand-in for the server's taskCan (routes/tasks.ts): plan = open && tasks.edit &&
+  // isPlanner (Admin or the project's PM); edit/status = open && tasks.edit && (plan || mine).
+  final t = await ref.watch(taskProvider(id).future);
+  final p = await ref.watch(projectProvider(t.projectId).future);
+  final u = await ref.watch(authProvider.future);
+  final perms = await ref.watch(permissionsProvider.future);
+  final open = !p.archived && p.status != ProjectStatus.completed;
+  final edit = open && hasPermission(perms, 'tasks', 'edit');
+  final plan =
+      edit &&
+      u != null &&
+      (u.isAdmin || (u.systemRole == 'PROJECT_MANAGER' && p.managerId == u.id));
+  final mine = u != null && (x.ownerId == u.id || x.assigneeIds.contains(u.id));
+  final status = edit && (plan || mine);
+  return x.withCan(edit: status, plan: plan, status: status);
+});
 final taskHistoryProvider = FutureProvider.family<List<HistoryItem>, String>(
   (ref, id) => ref.watch(taskActionsRepositoryProvider).history(id),
 );
