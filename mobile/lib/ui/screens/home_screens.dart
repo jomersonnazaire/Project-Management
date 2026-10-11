@@ -393,31 +393,33 @@ class _IssuesListState extends ConsumerState<IssuesList> {
           children: [
             SizedBox(
               height: 52,
-              child: ListView(
+              child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(Space.s),
-                children: [
-                  for (final f in ['Open', 'Mine', 'High', 'Closed'])
-                    Padding(
-                      padding: const EdgeInsets.only(right: Space.s),
-                      child: FilterChip(
-                        label: Text(f == 'Open' ? 'Open $open' : f),
-                        selected: _filter == f,
-                        onSelected: (_) => setState(() => _filter = f),
+                child: Row(
+                  children: [
+                    for (final f in ['Open', 'Mine', 'High', 'Closed'])
+                      Padding(
+                        padding: const EdgeInsets.only(right: Space.s),
+                        child: FilterChip(
+                          label: Text(f == 'Open' ? 'Open $open' : f),
+                          selected: _filter == f,
+                          onSelected: (_) => setState(() => _filter = f),
+                        ),
                       ),
-                    ),
-                  if (canW(ref, 'issues', 'create'))
-                    ActionChip(
-                      key: const Key('raiseIssue'),
-                      avatar: const Icon(Icons.add, size: 18),
-                      label: const Text('Raise issue'),
-                      onPressed: () => context.push(
-                        widget.projectId == null
-                            ? '/issues/new'
-                            : '/projects/${widget.projectId}/issues/new',
+                    if (canW(ref, 'issues', 'create'))
+                      ActionChip(
+                        key: const Key('raiseIssue'),
+                        avatar: const Icon(Icons.add, size: 18),
+                        label: const Text('Raise issue'),
+                        onPressed: () => context.push(
+                          widget.projectId == null
+                              ? '/issues/new'
+                              : '/projects/${widget.projectId}/issues/new',
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
             Expanded(

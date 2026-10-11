@@ -83,8 +83,8 @@ final workloadTeamsProvider = FutureProvider<List<Json>>((ref) async {
   final rows = await ref.watch(workloadProvider(null).future);
   final m = <String, Json>{};
   for (final r in rows) {
-    for (final t in jsonList(r['teams'])) {
-      m['${t['id']}'] = t;
+    for (final t in (r['teams'] as List?) ?? const []) {
+      if (t is Map) m['${t['id']}'] = {'id': t['id'], 'name': t['name']};
     }
   }
   return m.values.toList();

@@ -1,5 +1,6 @@
 import '../../state/v2_providers.dart';
 import '../v2/project_form.dart';
+import '../../state/p2_providers.dart';
 import '../v2/project_p2.dart';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models.dart';
+import '../../data/v2_repositories.dart' show NamedRef;
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -645,6 +647,8 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
   Party _party = Party.internal;
   DateTime? _start, _due;
   bool _approval = false, _mandatory = false, _busy = false;
+  String? _owner, _reviewer;
+  final _assignees = <String>{};
 
   @override
   void dispose() {
@@ -652,6 +656,68 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
     _phase.dispose();
     _est.dispose();
     super.dispose();
+  }
+
+  /// Project team (GET /projects/:id members) for owner, assignees and reviewer.
+  List<NamedRef> _people() =>
+      ref.watch(projectExtrasProvider(widget.projectId)).value?.members ??
+      const [];
+
+  List<Widget> _peopleFields(BuildContext context) {
+    final people = _people();
+    if (people.isEmpty) return const [];
+    return [
+      DropdownMenu<String?>(
+        key: const Key('taskOwner'),
+        expandedInsets: EdgeInsets.zero,
+        label: const Text('Owner'),
+        initialSelection: _owner,
+        onSelected: (v) => setState(() => _owner = v),
+        dropdownMenuEntries: [
+          const DropdownMenuEntry(value: null, label: 'Me'),
+          for (final m in people) DropdownMenuEntry(value: m.id, label: m.name),
+        ],
+      ),
+      const SizedBox(height: Space.m),
+      Text('Assignees', style: Theme.of(context).textTheme.titleSmall),
+      Wrap(
+        spacing: Space.s,
+        children: [
+          for (final m in people)
+            FilterChip(
+              key: Key('taskAssignee_${m.id}'),
+              label: Text(m.name),
+              selected: _assignees.contains(m.id),
+              onSelected: (v) => setState(
+                () => v ? _assignees.add(m.id) : _assignees.remove(m.id),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: Space.m),
+    ];
+  }
+
+  List<Widget> _reviewerField() {
+    final people = _people();
+    if (!_approval || people.isEmpty) return const [];
+    return [
+      Padding(
+        padding: const EdgeInsets.only(bottom: Space.m),
+        child: DropdownMenu<String?>(
+          key: const Key('taskReviewer'),
+          expandedInsets: EdgeInsets.zero,
+          label: const Text('Reviewer'),
+          initialSelection: _reviewer,
+          onSelected: (v) => setState(() => _reviewer = v),
+          dropdownMenuEntries: [
+            const DropdownMenuEntry(value: null, label: 'Project manager'),
+            for (final m in people)
+              DropdownMenuEntry(value: m.id, label: m.name),
+          ],
+        ),
+      ),
+    ];
   }
 
   Future<void> _pick(bool start) async {
@@ -686,6 +752,13 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
               estHours: double.tryParse(_est.text),
               requiresApproval: _approval,
               mandatory: _mandatory,
+              ownerId: _owner,
+              ownerName: _people()
+                  .where((m) => m.id == _owner)
+                  .firstOrNull
+                  ?.name,
+              reviewerId: _approval ? _reviewer : null,
+              assigneeIds: _assignees.toList(),
             ),
           );
       ref.invalidate(projectTasksProvider(widget.projectId));
@@ -720,6 +793,7 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
       body: Form(
         key: _form,
         child: ListView(
+          key: const Key('createTaskList'),
           padding: const EdgeInsets.all(Space.m),
           children: [
             TextFormField(
@@ -788,12 +862,14 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
               ],
             ),
             const SizedBox(height: Space.m),
+            ..._peopleFields(context),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Requires approval'),
               value: _approval,
               onChanged: (v) => setState(() => _approval = v),
             ),
+            ..._reviewerField(),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Mandatory'),

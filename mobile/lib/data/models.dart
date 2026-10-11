@@ -293,9 +293,14 @@ class NewTask {
     this.estHours,
     this.requiresApproval = false,
     this.mandatory = false,
+    this.ownerId,
+    this.ownerName,
+    this.reviewerId,
+    this.assigneeIds = const [],
   });
   final String name;
-  final String? phase;
+  final String? phase, ownerId, ownerName, reviewerId;
+  final List<String> assigneeIds;
   final Priority priority;
   final Party party;
   final DateTime? plannedStart, dueDate;

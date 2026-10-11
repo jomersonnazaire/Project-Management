@@ -478,7 +478,7 @@ class MockProjectRepository implements ProjectRepository {
       estHours: n.estHours,
       requiresApproval: n.requiresApproval,
       mandatory: n.mandatory,
-      ownerName: MockAuthRepository.user.name,
+      ownerName: n.ownerName ?? MockAuthRepository.user.name,
     );
     store.tasks.add(t);
     return t;

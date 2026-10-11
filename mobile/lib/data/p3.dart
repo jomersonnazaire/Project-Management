@@ -1037,7 +1037,10 @@ class MockP3Repository implements P3Repository {
   @override
   Future<List<Json>> workload({String? teamId}) async => [
     for (final r in _workload)
-      if (teamId == null || jsonList(r['teams']).any((t) => t['id'] == teamId))
+      if (teamId == null ||
+          ((r['teams'] as List?) ?? const []).any(
+            (t) => t is Map && t['id'] == teamId,
+          ))
         r,
   ];
   static final _workload = <Json>[

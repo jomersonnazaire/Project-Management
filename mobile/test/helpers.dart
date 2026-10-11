@@ -18,6 +18,7 @@ Future<ProviderContainer> pumpApp(
   String? location,
   ThemeMode themeMode = ThemeMode.light,
   List overrides = const [],
+  String role = 'PROJECT_MANAGER',
 }) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
@@ -28,7 +29,7 @@ Future<ProviderContainer> pumpApp(
     overrides: [
       mockStoreProvider.overrideWithValue(store),
       authRepositoryProvider.overrideWithValue(
-        MockAuthRepository(signedIn: signedIn),
+        MockAuthRepository(signedIn: signedIn, systemRole: role),
       ),
       clockProvider.overrideWithValue(() => DateTime(2026, 10, 11, 14)),
       nowProvider.overrideWithValue(() => testNow),

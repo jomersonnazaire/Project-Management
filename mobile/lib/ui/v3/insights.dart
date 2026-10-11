@@ -537,7 +537,12 @@ class WorkloadView extends ConsumerStatefulWidget {
 class _WorkloadViewState extends ConsumerState<WorkloadView> {
   String? _team;
   @override
-  Widget build(BuildContext context) => AsyncView(
+  Widget build(BuildContext context) {
+    final teams = ref.watch(workloadTeamsProvider).value ?? const <Json>[];
+    return _build(context, teams);
+  }
+
+  Widget _build(BuildContext context, List<Json> teams) => AsyncView(
     value: ref.watch(workloadProvider(_team)),
     onRetry: () => ref.invalidate(workloadProvider(_team)),
     data: (rows) {
@@ -551,9 +556,12 @@ class _WorkloadViewState extends ConsumerState<WorkloadView> {
         key: const Key('workloadList'),
         padding: const EdgeInsets.all(Space.m),
         children: [
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: Space.s,
+
             children: [
-              Expanded(child: Text('This week', style: t.titleSmall)),
+              Text('This week', style: t.titleSmall),
               PopupMenuButton<String>(
                 key: const Key('workloadTeamFilter'),
                 tooltip: 'Team',
@@ -573,7 +581,7 @@ class _WorkloadViewState extends ConsumerState<WorkloadView> {
                   label: Text(
                     _team == null
                         ? 'All teams'
-                        : '${(ref.watch(workloadTeamsProvider).value ?? const <Json>[]).where((x) => x['id'] == _team).firstOrNull?['name'] ?? 'Team'}',
+                        : '${teams.where((x) => x['id'] == _team).firstOrNull?['name'] ?? 'Team'}',
                   ),
                 ),
               ),
@@ -597,13 +605,15 @@ class _WorkloadViewState extends ConsumerState<WorkloadView> {
                             style: t.bodyMedium,
                           ),
                         ),
-                        if (r['overAssigned'] == true)
-                          StatusChip(
-                            label: 'Over capacity',
-                            colors: context.statusColors.blocked,
-                          ),
                       ],
                     ),
+                    if (r['overAssigned'] == true) ...[
+                      const SizedBox(height: Space.s),
+                      StatusChip(
+                        label: 'Over capacity',
+                        colors: context.statusColors.blocked,
+                      ),
+                    ],
                     const SizedBox(height: Space.s),
                     if ((r['capacityHours'] as num? ?? 0) == 0)
                       Text(

@@ -90,6 +90,9 @@ class ApiProjectRepository implements ProjectRepository {
       'estHours': t.estHours,
       'requiresApproval': t.requiresApproval,
       'mandatory': t.mandatory,
+      if (t.ownerId != null) 'ownerId': t.ownerId,
+      'assigneeIds': t.assigneeIds,
+      if (t.reviewerId != null) 'reviewerId': t.reviewerId,
     });
     return Task.fromJson(body['task'] as Map<String, dynamic>);
   }

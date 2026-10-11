@@ -191,3 +191,12 @@ Sample IDs: projects `p1`–`p4`; tasks `t1`–`t8` (`t3` In progress, `t4` Bloc
 - **Insights (51–53)**: My projects (`GET /dashboard/my-projects`, "Most days late", "N days late", Follow up), Team & workload (`GET /workload`, Over capacity, No capacity set), Reports viewer for the five m8-polish reports, footer "View only. Exports and advanced filters are on the web app."
 - **Account (54–57, 00d)**: More menu per design 54; Profile (supervisor and Report CC "Set by Admin"); Change password (policy "8+ characters, a number and a symbol"); Clients list/detail (Details, Contacts, Projects) + Add contact; set-password calls `/auth/invite/verify` first and shows "Link not valid".
 - Deviations (m8-polish wins): conversation is `/projects/:id/messages` (no `/conversations/:id`); My projects is `/dashboard/my-projects` (not `/reports/my-projects`); "Pending client items" is a Project status column, not its own report; `/dashboard` takes no filters, so the Home filters work on the client.
+
+## P3 QA fixes: permission gating
+
+- `GET /auth/me/permissions` is parsed strictly (only JSON `true` grants; `lib/data/access.dart`). `can()`/`canW()` mirror the web `useCan` (`hasPermission`) and return **false while permissions load**.
+- Project-scoped actions use the server `project.can` flags (`edit`, `planTasks`, `activity`) like the web ProjectDetailPage; demo data falls back to the role rule plus "Admin or the project's PM".
+- Demo roles follow m8-polish `DEFAULT_SPEC`: sign in as `admin@…`, `member@…` or `viewer@…` (anything else is Project Manager).
+- Deep links to create/edit screens a role cannot use show a "no access" page (`PermissionGate`).
+- Demo invite tokens: `demo`, `demo-invite`, `demo-reset`; any other token shows "Link not valid".
+- Tests: `test/roles_test.dart` (gating matrix per Admin/PM/Member/Viewer, strict parse, loading state, S4 fixes).
