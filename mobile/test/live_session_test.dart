@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:xc8_pm/app.dart';
 import 'package:xc8_pm/config.dart';
 import 'package:xc8_pm/data/api_client.dart';
+import 'package:xc8_pm/data/api_repositories.dart';
 import 'package:xc8_pm/data/models.dart';
 import 'package:xc8_pm/router.dart';
 import 'package:xc8_pm/ui/v3/insights.dart' show dueText;
@@ -43,6 +44,7 @@ class FakeApi {
   bool up = true;
   bool loggedIn = true;
   int status500 = 0;
+  bool mobileApi = true;
   final pathStatus = <String, int>{};
   final calls = <String>[];
   final headers = <Map<String, String>>[];
@@ -72,6 +74,63 @@ class FakeApi {
           },
         }),
         forced,
+        headers: h,
+      );
+    }
+    if (p.startsWith('/auth/mobile/') && !mobileApi) {
+      return http.Response(
+        '{"error":{"code":"NOT_FOUND","message":"Not found."}}',
+        404,
+        headers: h,
+      );
+    }
+    final auth = req.headers['Authorization'];
+    if (auth != null && req.headers['Cookie'] != null) {
+      return http.Response(
+        '{"error":{"code":"UNAUTHENTICATED"}}',
+        401,
+        headers: h,
+      );
+    }
+    if (p == '/auth/mobile/login') {
+      final b = jsonDecode(req.body) as Map;
+      if (b['password'] != 'right') {
+        return http.Response(
+          '{"error":{"code":"INVALID_CREDENTIALS","message":"Email or password is incorrect."}}',
+          401,
+          headers: h,
+        );
+      }
+      loggedIn = true;
+      return http.Response(
+        jsonEncode({
+          'user': _user,
+          'token': 'devtok-abcdefghijklmnopqrstuvwxyz',
+          'expiresAt': serverTime
+              .add(const Duration(days: 3))
+              .toIso8601String(),
+        }),
+        200,
+        headers: h,
+      );
+    }
+    if (p == '/auth/mobile/refresh' && loggedIn) {
+      if (auth == null) {
+        return http.Response(
+          '{"error":{"code":"MOBILE_ONLY"}}',
+          403,
+          headers: h,
+        );
+      }
+      return http.Response(
+        jsonEncode({
+          'user': _user,
+          'permissions': {},
+          'expiresAt': serverTime
+              .add(const Duration(days: 3))
+              .toIso8601String(),
+        }),
+        200,
         headers: h,
       );
     }
@@ -146,41 +205,69 @@ void main() {
   DateTime device() => serverTime.subtract(const Duration(minutes: 10));
 
   group('ApiClient', () {
-    test('mobile header, cookie persisted, sliding 3-day window', () async {
+    test('mobile sign-in: body token as bearer, stored securely, no X-Client, no cookie', () async {
       final f = FakeApi();
       final store = MemorySessionStore();
-      var now = device();
       final api = ApiClient(
         base,
         client: f.client,
         store: store,
-        deviceClock: () => now,
+        deviceClock: device,
       );
-      await api.post('/auth/login', {'email': 'a', 'password': 'right'});
-      expect(f.headers.last['X-Client'], 'mobile');
+      final u = await ApiAuthRepository(api).login('a@x', 'right');
+      expect(u.name, 'Jomerson Nazaire');
+      expect(f.calls.last, 'POST /auth/mobile/login');
+      expect(f.headers.last.containsKey('X-Client'), isFalse);
+      expect(store.value!.cookies[ApiClient.bearerKey], startsWith('devtok-'));
+      await api.get('/auth/me');
+      expect(f.headers.last['Authorization'], startsWith('Bearer devtok-'));
+      expect(f.headers.last.containsKey('Cookie'), isFalse);
+    });
+
+    test(
+      'restart refreshes the session; offline time never signs out locally',
+      () async {
+        final f = FakeApi();
+        final store = MemorySessionStore();
+        await ApiAuthRepository(
+          ApiClient(base, client: f.client, store: store, deviceClock: device),
+        ).login('a@x', 'right');
+        // 10 days later (e.g. offline the whole time): still restored; the server decides.
+        DateTime later() => device().add(const Duration(days: 10));
+        final api = ApiClient(
+          base,
+          client: f.client,
+          store: store,
+          deviceClock: later,
+        );
+        final repo = ApiAuthRepository(api);
+        expect((await repo.currentUser())?.id, 'u1');
+        expect(f.calls.last, 'POST /auth/mobile/refresh');
+        // Server says expired → sign-in.
+        f.loggedIn = false;
+        expect(await repo.currentUser(), isNull);
+        expect(store.value, isNull);
+      },
+    );
+
+    test('older API without /auth/mobile/*: falls back to the standard cookie session', () async {
+      final f = FakeApi()..mobileApi = false;
+      final store = MemorySessionStore();
+      final api = ApiClient(
+        base,
+        client: f.client,
+        store: store,
+        deviceClock: device,
+      );
+      await ApiAuthRepository(api).login('a@x', 'right');
+      expect(f.calls.sublist(f.calls.length - 2), [
+        'POST /auth/mobile/login',
+        'POST /auth/login',
+      ]);
       expect(store.value!.cookies['xc8_sid'], 'tok123');
-      // 2 days later: still valid, and a call slides the window.
-      now = now.add(const Duration(days: 2));
-      final api2 = ApiClient(
-        base,
-        client: f.client,
-        store: store,
-        deviceClock: () => now,
-      );
-      expect(await api2.restoreSession(), isTrue);
-      await api2.get('/auth/me');
-      expect(f.headers.last['Cookie'], 'xc8_sid=tok123');
-      expect(store.value!.lastActive, now.toUtc());
-      // 3 days + 1 minute of inactivity: back to sign-in.
-      now = now.add(const Duration(days: 3, minutes: 1));
-      final api3 = ApiClient(
-        base,
-        client: f.client,
-        store: store,
-        deviceClock: () => now,
-      );
-      expect(await api3.restoreSession(), isFalse);
-      expect(store.value, isNull);
+      expect(api.bearer, isNull);
+      expect((await ApiAuthRepository(api).currentUser())?.id, 'u1');
+      expect(f.calls.last, 'GET /auth/me');
     });
 
     test('401 signs out; offline and 5xx keep the session', () async {

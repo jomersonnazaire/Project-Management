@@ -69,6 +69,3 @@ class MemorySessionStore implements SessionStore {
   @override
   Future<void> clear() async => value = null;
 }
-
-/// The sliding inactivity window (matches the API's MOBILE_SESSION_IDLE_HOURS default).
-const sessionIdle = Duration(days: 3);

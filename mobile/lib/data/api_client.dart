@@ -53,25 +53,31 @@ class ApiClient {
     }
   }
 
-  /// Restores a stored session; false when none or idle for more than [sessionIdle].
+  /// Mobile device token from POST /auth/mobile/login (sent as a bearer, never a cookie).
+  String? bearer;
+
+  /// Restores a stored session. Never expires it locally (offline time doesn't sign
+  /// you out); the server decides on the next refresh.
   Future<bool> restoreSession() async {
     final s = await store?.read();
     if (s == null) return false;
-    if (_device().toUtc().difference(s.lastActive.toUtc()) > sessionIdle) {
-      await store?.clear();
-      return false;
-    }
+    final c = Map.of(s.cookies);
+    bearer = c.remove(bearerKey);
     _cookies
       ..clear()
-      ..addAll(s.cookies);
-    return true;
+      ..addAll(c);
+    return bearer != null || _cookies.isNotEmpty;
   }
 
-  /// Records activity (app open/resume, each successful call) for the sliding window.
+  /// Persists the session with the last-active time.
   Future<void> touch() async {
-    if (store == null || (_cookies.isEmpty && !browserManagesCookies)) return;
-    await store!.write(StoredSession(Map.of(_cookies), _device().toUtc()));
+    if (store == null || (bearer == null && _cookies.isEmpty)) return;
+    await store!.write(
+      StoredSession({..._cookies, bearerKey: ?bearer}, _device().toUtc()),
+    );
   }
+
+  static const bearerKey = '__bearer';
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = baseUrl.endsWith('/')
@@ -84,9 +90,9 @@ class ApiClient {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     'X-Requested-With': 'xc8-web',
-    // Asks the API for a mobile session (sliding 3-day idle window).
-    'X-Client': 'mobile',
-    if (!browserManagesCookies && _cookies.isNotEmpty)
+    if (bearer != null) 'Authorization': 'Bearer $bearer',
+    // Never mix a cookie with the bearer: the API treats a Cookie header as a browser.
+    if (bearer == null && !browserManagesCookies && _cookies.isNotEmpty)
       'Cookie': _cookies.entries.map((e) => '${e.key}=${e.value}').join('; '),
   };
 
@@ -144,6 +150,7 @@ class ApiClient {
     onReachability?.call(true);
     if (res.statusCode == 401) {
       _cookies.clear();
+      bearer = null;
       await store?.clear();
       onUnauthorized?.call();
     } else if (res.statusCode < 400) {
@@ -195,6 +202,7 @@ class ApiClient {
 
   Future<void> clearSession() async {
     _cookies.clear();
+    bearer = null;
     await store?.clear();
   }
 }

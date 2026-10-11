@@ -75,6 +75,9 @@ describe('Route policy table', () => {
     expect(table).toEqual([
       'GET /health public',
       'POST /auth/login public',
+      'POST /auth/mobile/login public',
+      'POST /auth/mobile/refresh authenticated',
+      'POST /auth/mobile/logout public',
       'POST /auth/logout public',
       'GET /auth/me authenticated',
       'GET /auth/me/permissions authenticated',

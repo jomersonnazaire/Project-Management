@@ -71,6 +71,7 @@ export function createApp(
       origin: (origin, cb) => cb(null, !origin || isAllowedOrigin(origin)),
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+      // No Authorization: browsers can't send mobile bearer tokens cross-origin.
       allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id'],
       exposedHeaders: ['X-Request-Id', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
       maxAge: 600,

@@ -20,7 +20,10 @@ class ApiAuthRepository implements AuthRepository {
     // Native: only call the API when a non-expired session was restored from secure storage.
     if (!await api.restoreSession() && !browserManagesCookies) return null;
     try {
-      final body = await api.get('/auth/me');
+      // Mobile token: refresh extends the 3-day sliding window (feature/mobile-sessions-api).
+      final body = api.bearer != null
+          ? await api.post('/auth/mobile/refresh')
+          : await api.get('/auth/me');
       return AppUser.fromJson(body['user'] as Map<String, dynamic>);
     } on ApiException catch (e) {
       if (e.status == 401) return null;
@@ -30,17 +33,30 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<AppUser> login(String email, String password) async {
-    final body = await api.post('/auth/login', {
-      'email': email,
-      'password': password,
-    });
+    final creds = {'email': email, 'password': password};
+    // Native apps use the mobile sign-in (device token in the body). Browsers can't (the API
+    // refuses it when Origin/Sec-Fetch-* are present), so the web build keeps the cookie.
+    if (!browserManagesCookies) {
+      try {
+        final body = await api.post('/auth/mobile/login', creds);
+        api.bearer = body['token'] as String;
+        await api.touch();
+        return AppUser.fromJson(body['user'] as Map<String, dynamic>);
+      } on ApiException catch (e) {
+        // Older API without the mobile endpoint: standard cookie session.
+        if (e.status != 404) rethrow;
+      }
+    }
+    final body = await api.post('/auth/login', creds);
     return AppUser.fromJson(body['user'] as Map<String, dynamic>);
   }
 
   @override
   Future<void> logout() async {
     try {
-      await api.post('/auth/logout');
+      await api.post(
+        api.bearer != null ? '/auth/mobile/logout' : '/auth/logout',
+      );
     } on ApiException {
       // Offline or already ended: still forget the session on this device.
     } finally {

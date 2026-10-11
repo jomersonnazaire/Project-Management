@@ -73,6 +73,9 @@ void main() {
       test(
         'session: mobile cookie stored, /auth/me, permissions, server clock',
         () async {
+          results['session mode'] = api.bearer != null
+              ? 'mobile token (/auth/mobile/*)'
+              : 'cookie (API without /auth/mobile/*)';
           final cur = await ApiAuthRepository(api).currentUser();
           expect(cur?.id, me!.id);
           final p = await api.get('/auth/me/permissions');
