@@ -27,12 +27,28 @@ class ProjectInfoView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final x = ref.watch(projectExtrasProvider(p.id));
-    final t = Theme.of(context).textTheme;
     final canEdit = x.value?.canEdit ?? false;
     return ListView(
       key: const Key('projectInfo'),
       padding: const EdgeInsets.only(bottom: Space.xxl),
       children: [
+        ListTile(
+          key: const Key('projectDocumentsLink'),
+          leading: const Icon(Icons.folder_outlined),
+          title: const Text('Documents'),
+          subtitle: const Text('Folders, requests and files'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.push('/projects/${p.id}/documents'),
+        ),
+        ListTile(
+          key: const Key('projectConversationLink'),
+          leading: const Icon(Icons.forum_outlined),
+          title: const Text('Conversation'),
+          subtitle: const Text('Notes, calls, meetings and decisions'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.push('/projects/${p.id}/conversation'),
+        ),
+        const Divider(),
         ListTile(
           leading: const Icon(Icons.business),
           title: const Text('Client'),
@@ -113,28 +129,6 @@ class ProjectInfoView extends ConsumerWidget {
                   )
                 : null,
           ),
-        const Divider(),
-        ListTile(
-          key: const Key('projectTimeLink'),
-          leading: const Icon(Icons.schedule),
-          title: const Text('Time'),
-          subtitle: const Text('Hours logged on this project'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push('/projects/${p.id}/time'),
-        ),
-        ListTile(
-          key: const Key('projectActivityLink'),
-          leading: const Icon(Icons.history),
-          title: const Text('Activity'),
-          subtitle: const Text('Changes to the project and its tasks'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push('/projects/${p.id}/activity'),
-        ),
-        ListTile(
-          leading: const Icon(Icons.open_in_new),
-          title: const Text('Documents and conversation'),
-          subtitle: Text('Available on the web app', style: t.bodySmall),
-        ),
       ],
     );
   }
@@ -309,96 +303,111 @@ class _HandoverSheetState extends State<_HandoverSheet> {
 }
 
 /// Time (GET /projects/:id/time).
-class ProjectTimeScreen extends ConsumerWidget {
+class ProjectTimeScreen extends StatelessWidget {
   const ProjectTimeScreen({super.key, required this.projectId});
+  final String projectId;
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    key: const Key('projectTimeScreen'),
+    appBar: AppBar(
+      leading: BackOrUpButton(fallback: '/projects/$projectId?tab=time'),
+      title: const Text('Time'),
+    ),
+    body: ProjectTimeView(projectId: projectId),
+  );
+}
+
+/// Project › Time tab: GET /projects/:id/time.
+class ProjectTimeView extends ConsumerWidget {
+  const ProjectTimeView({super.key, required this.projectId});
   final String projectId;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context).textTheme;
-    return Scaffold(
-      key: const Key('projectTimeScreen'),
-      appBar: AppBar(
-        leading: BackOrUpButton(fallback: '/projects/$projectId?tab=more'),
-        title: const Text('Time'),
-      ),
-      body: AsyncView(
-        value: ref.watch(projectTimeProvider(projectId)),
-        onRetry: () => ref.invalidate(projectTimeProvider(projectId)),
-        data: (pt) => ListView(
-          key: const Key('projectTimeList'),
-          padding: const EdgeInsets.all(Space.m),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(Space.m),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${formatHHMM(pt.total * 60)} total',
-                      key: const Key('projectTimeTotal'),
-                      style: t.titleLarge,
-                    ),
-                    const SizedBox(height: Space.s),
-                    Wrap(
-                      spacing: Space.m,
-                      runSpacing: 4,
-                      children: [
-                        for (final e in pt.byType.entries)
-                          Text(
-                            '${_typeLabels[e.key] ?? e.key} ${formatHHMM(e.value * 60)}',
-                            style: t.bodySmall,
-                          ),
-                      ],
-                    ),
-                    if (!pt.allPeople)
-                      Text('Showing your own time', style: t.bodySmall),
-                  ],
-                ),
+    return AsyncView(
+      value: ref.watch(projectTimeProvider(projectId)),
+      onRetry: () => ref.invalidate(projectTimeProvider(projectId)),
+      data: (pt) => ListView(
+        key: const Key('projectTimeList'),
+        padding: const EdgeInsets.all(Space.m),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(Space.m),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${formatHHMM(pt.total * 60)} total',
+                    key: const Key('projectTimeTotal'),
+                    style: t.titleLarge,
+                  ),
+                  const SizedBox(height: Space.s),
+                  Wrap(
+                    spacing: Space.m,
+                    runSpacing: 4,
+                    children: [
+                      for (final e in pt.byType.entries)
+                        Text(
+                          '${_typeLabels[e.key] ?? e.key} ${formatHHMM(e.value * 60)}',
+                          style: t.bodySmall,
+                        ),
+                    ],
+                  ),
+                  if (!pt.allPeople)
+                    Text('Showing your own time', style: t.bodySmall),
+                ],
               ),
             ),
-            if (pt.items.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(Space.l),
-                child: Text('No time logged yet.', textAlign: TextAlign.center),
+          ),
+          if (pt.items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(Space.l),
+              child: Text('No time logged yet.', textAlign: TextAlign.center),
+            ),
+          for (final r in pt.items)
+            ListTile(
+              key: Key('projectTime_${r.id}'),
+              contentPadding: EdgeInsets.zero,
+              leading: InitialsAvatar(r.person),
+              title: Text(r.task),
+              subtitle: Text(
+                '${r.person} · ${longDayShort(r.date)} · ${_typeLabels[r.type] ?? r.type}',
               ),
-            for (final r in pt.items)
-              ListTile(
-                key: Key('projectTime_${r.id}'),
-                contentPadding: EdgeInsets.zero,
-                leading: InitialsAvatar(r.person),
-                title: Text(r.task),
-                subtitle: Text(
-                  '${r.person} · ${longDayShort(r.date)} · ${_typeLabels[r.type] ?? r.type}',
-                ),
-                trailing: Text(formatHHMM(r.hours * 60), style: t.titleSmall),
-              ),
-          ],
-        ),
+              trailing: Text(formatHHMM(r.hours * 60), style: t.titleSmall),
+            ),
+        ],
       ),
     );
   }
 }
 
 /// Activity (GET /projects/:id/activity).
-class ProjectActivityScreen extends ConsumerWidget {
+class ProjectActivityScreen extends StatelessWidget {
   const ProjectActivityScreen({super.key, required this.projectId});
   final String projectId;
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+  Widget build(BuildContext context) => Scaffold(
     key: const Key('projectActivityScreen'),
     appBar: AppBar(
-      leading: BackOrUpButton(fallback: '/projects/$projectId?tab=more'),
+      leading: BackOrUpButton(fallback: '/projects/$projectId?tab=activity'),
       title: const Text('Activity'),
     ),
-    body: AsyncView(
-      value: ref.watch(projectActivityProvider(projectId)),
-      onRetry: () => ref.invalidate(projectActivityProvider(projectId)),
-      data: (items) => HistoryList(
-        items: items,
-        listKey: 'projectActivityList',
-        empty: 'No activity yet.',
-      ),
+    body: ProjectActivityView(projectId: projectId),
+  );
+}
+
+class ProjectActivityView extends ConsumerWidget {
+  const ProjectActivityView({super.key, required this.projectId});
+  final String projectId;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => AsyncView(
+    value: ref.watch(projectActivityProvider(projectId)),
+    onRetry: () => ref.invalidate(projectActivityProvider(projectId)),
+    data: (items) => HistoryList(
+      items: items,
+      listKey: 'projectActivityList',
+      empty: 'No activity yet.',
     ),
   );
 }

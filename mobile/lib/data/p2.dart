@@ -1144,6 +1144,21 @@ class MockTaskActionsRepository implements TaskActionsRepository {
   @override
   Future<void> deleteEvidence(String taskId, String evidenceId) async {
     final e = _get(taskId);
+    final st = store.tasks.firstWhere((t) => t.id == taskId).status;
+    final ev = e.evidence.firstWhere((x) => x.id == evidenceId);
+    if (ev.type == 'FILE' &&
+        (st == TaskStatus.forReview || st == TaskStatus.done)) {
+      throw ApiException(
+        'This task is in review or completed. Reopen it before removing its evidence.',
+        status: 409,
+        code: 'EVIDENCE_LOCKED',
+      );
+    }
+    _log(
+      taskId,
+      'task_evidence_removed',
+      changes: [(field: 'evidence', old: ev.name, now: null)],
+    );
     _x[taskId] = _with(
       e,
       evidence: e.evidence.where((x) => x.id != evidenceId).toList(),

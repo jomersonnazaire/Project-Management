@@ -10,73 +10,111 @@ import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../v2/entry_sheet.dart';
 import '../v2/task_actions.dart';
+import '../v3/issues.dart';
 import '../widgets/common.dart';
 import '../widgets/status_flow.dart';
 
 class TaskDetailScreen extends ConsumerWidget {
-  const TaskDetailScreen({super.key, required this.taskId});
+  const TaskDetailScreen({
+    super.key,
+    required this.taskId,
+    this.initialTab = 0,
+  });
   final String taskId;
+
+  /// 0 Details, 1 History (follow-ups + timeline), 2 Linked issues (design 36/39).
+  final int initialTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final task = ref.watch(taskProvider(taskId));
-    return Scaffold(
-      key: const Key('taskDetailScreen'),
-      appBar: AppBar(
-        leading: BackOrUpButton(
-          fallback: task.hasValue
-              ? '/projects/${task.requireValue.projectId}'
-              : '/home',
-        ),
-        actions: [
-          IconButton(
-            key: const Key('taskEdit'),
-            tooltip: 'Edit task',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: task.hasValue
-                ? () => context.push('/tasks/$taskId/edit')
-                : null,
-          ),
-          PopupMenuButton<String>(
-            key: const Key('taskOverflow'),
-            tooltip: 'More options',
-            onSelected: (v) {
-              if (v == 'refresh' && task.hasValue) {
-                refreshTask(ref, task.requireValue);
-              }
-              if (v == 'history') context.push('/tasks/$taskId/history');
-              if (v == 'delete' && task.hasValue) {
-                deleteTask(context, ref, task.requireValue);
-              }
-              if (v == 'web' && task.hasValue) {
-                _openOnWeb(context, task.requireValue);
-              }
-              if (v == 'project' && task.hasValue) {
-                context.go('/projects/${task.requireValue.projectId}');
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'refresh', child: Text('Refresh')),
-              PopupMenuItem(value: 'project', child: Text('Open project')),
-              PopupMenuItem(value: 'history', child: Text('History')),
-              PopupMenuItem(value: 'web', child: Text('Open in web app')),
-              PopupMenuItem(
-                key: Key('taskDelete'),
-                value: 'delete',
-                child: Text('Delete task'),
-              ),
+    return DefaultTabController(
+      length: 3,
+      initialIndex: initialTab,
+      child: Scaffold(
+        key: const Key('taskDetailScreen'),
+        appBar: AppBar(
+          title: task.hasValue
+              ? Text(
+                  task.requireValue.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+              : null,
+          bottom: const TabBar(
+            key: Key('taskTabs'),
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(key: Key('taskTab_details'), text: 'Details'),
+              Tab(key: Key('taskTab_history'), text: 'History'),
+              Tab(key: Key('taskTab_linked'), text: 'Linked issues'),
             ],
           ),
-        ],
+          leading: BackOrUpButton(
+            fallback: task.hasValue
+                ? '/projects/${task.requireValue.projectId}'
+                : '/home',
+          ),
+          actions: [
+            IconButton(
+              key: const Key('taskEdit'),
+              tooltip: 'Edit task',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: task.hasValue
+                  ? () => context.push('/tasks/$taskId/edit')
+                  : null,
+            ),
+            Builder(
+              builder: (context) => PopupMenuButton<String>(
+                key: const Key('taskOverflow'),
+                tooltip: 'More options',
+                onSelected: (v) {
+                  if (v == 'refresh' && task.hasValue) {
+                    refreshTask(ref, task.requireValue);
+                  }
+                  if (v == 'history')
+                    DefaultTabController.of(context).animateTo(1);
+                  if (v == 'delete' && task.hasValue) {
+                    deleteTask(context, ref, task.requireValue);
+                  }
+                  if (v == 'web' && task.hasValue) {
+                    _openOnWeb(context, task.requireValue);
+                  }
+                  if (v == 'project' && task.hasValue) {
+                    context.go('/projects/${task.requireValue.projectId}');
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+                  PopupMenuItem(value: 'project', child: Text('Open project')),
+                  PopupMenuItem(value: 'history', child: Text('History')),
+                  PopupMenuItem(value: 'web', child: Text('Open in web app')),
+                  PopupMenuItem(
+                    key: Key('taskDelete'),
+                    value: 'delete',
+                    child: Text('Delete task'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        body: AsyncView(
+          value: task,
+          onRetry: () => ref.invalidate(taskProvider(taskId)),
+          data: (t) => TabBarView(
+            children: [
+              _Body(t),
+              TaskHistoryTab(task: t),
+              LinkedIssuesTab(task: t),
+            ],
+          ),
+        ),
+        bottomNavigationBar: task.hasValue
+            ? _ActionBar(task: task.requireValue)
+            : null,
       ),
-      body: AsyncView(
-        value: task,
-        onRetry: () => ref.invalidate(taskProvider(taskId)),
-        data: (t) => _Body(t),
-      ),
-      bottomNavigationBar: task.hasValue
-          ? _ActionBar(task: task.requireValue)
-          : null,
     );
   }
 }
@@ -145,6 +183,7 @@ class _Body extends StatelessWidget {
         ? 'no estimate'
         : '${fmtHours(t.estHours!)}h est.';
     return CustomScrollView(
+      key: const Key('taskDetailsList'),
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.all(Space.m),

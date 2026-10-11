@@ -63,6 +63,9 @@ class MockStore {
         projectTypeName: 'Legacy rollout',
         projectTypeActive: false,
         clientId: 'c3',
+        managerId: 'u3',
+        startDate: DateTime(2026, 7, 6),
+        code: 'INI-CRM',
       ),
       Project(
         id: 'p4',
@@ -73,6 +76,10 @@ class MockStore {
         goLive: DateTime(2027, 1, 10),
         managerName: 'Jonathan E.',
         taskCount: 0,
+        clientId: 'c4',
+        managerId: 'u1',
+        startDate: DateTime(2026, 10, 5),
+        code: 'UMB-ONB',
       ),
     ]);
     Task t(

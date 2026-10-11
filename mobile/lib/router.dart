@@ -11,6 +11,7 @@ import 'ui/v2/dar.dart';
 import 'ui/v2/leave.dart';
 import 'ui/v2/project_p2.dart';
 import 'ui/v2/task_actions.dart';
+import 'ui/v3/issues.dart';
 import 'ui/v2/day_timesheet.dart';
 import 'ui/v2/my_tasks_v2.dart';
 import 'ui/v2/project_form.dart';
@@ -44,13 +45,32 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) =>
             SetPasswordScreen(token: s.uri.queryParameters['token'] ?? ''),
       ),
+      GoRoute(path: '/issues/new', builder: (_, _) => const RaiseIssueScreen()),
+      GoRoute(
+        path: '/issues/:id',
+        builder: (_, s) => IssueDetailScreen(
+          key: ValueKey('issue_${s.pathParameters['id']}'),
+          issueId: s.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/projects/:id/issues/new',
+        builder: (_, s) => RaiseIssueScreen(
+          projectId: s.pathParameters['id'],
+          taskId: s.uri.queryParameters['task'],
+        ),
+      ),
       GoRoute(
         path: '/tasks/:id/edit',
         builder: (_, s) => EditTaskScreen(taskId: s.pathParameters['id']!),
       ),
       GoRoute(
         path: '/tasks/:id/history',
-        builder: (_, s) => TaskHistoryScreen(taskId: s.pathParameters['id']!),
+        builder: (_, s) => TaskDetailScreen(
+          key: ValueKey('taskHistory_${s.pathParameters['id']}'),
+          taskId: s.pathParameters['id']!,
+          initialTab: 1,
+        ),
       ),
       GoRoute(
         path: '/projects/:id/time',
@@ -64,7 +84,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/tasks/:id',
-        builder: (_, s) => TaskDetailScreen(taskId: s.pathParameters['id']!),
+        builder: (_, s) => TaskDetailScreen(
+          key: ValueKey('task_${s.pathParameters['id']}'),
+          taskId: s.pathParameters['id']!,
+        ),
       ),
       GoRoute(
         path: '/projects/:id/tasks/new',
@@ -76,8 +99,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/projects/:id/edit',
-        builder: (_, s) =>
-            ProjectFormScreen(projectId: s.pathParameters['id']!),
+        builder: (_, s) => ProjectFormScreen(
+          key: ValueKey('projectForm_${s.pathParameters['id']}'),
+          projectId: s.pathParameters['id']!,
+        ),
       ),
       GoRoute(
         path: '/log',

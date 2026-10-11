@@ -39,14 +39,7 @@ class TaskActionsSection extends ConsumerStatefulWidget {
 
 class _TaskActionsSectionState extends ConsumerState<TaskActionsSection> {
   bool _uploading = false;
-  final _note = TextEditingController();
-  String? _noteError, _uploadError;
-
-  @override
-  void dispose() {
-    _note.dispose();
-    super.dispose();
-  }
+  String? _uploadError;
 
   Task get t => widget.task;
 
@@ -60,6 +53,47 @@ class _TaskActionsSectionState extends ConsumerState<TaskActionsSection> {
       }
     } catch (e) {
       if (mounted) showError(context, e);
+    }
+  }
+
+  /// Web parity (EvidenceSection `removable`): can.edit, and files stay while For review/Completed.
+  bool _removable(TaskExtras x, Evidence e) =>
+      x.canEdit &&
+      !(e.type == 'FILE' &&
+          (t.status == TaskStatus.forReview || t.status == TaskStatus.done));
+
+  Future<void> _remove(Evidence e) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove ${e.name} from this task?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirmRemoveEvidence'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              minimumSize: const Size(0, 40),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(taskActionsRepositoryProvider).deleteEvidence(t.id, e.id);
+      ref.invalidate(taskExtrasProvider(t.id));
+      ref.invalidate(taskHistoryProvider(t.id));
+    } catch (err) {
+      if (mounted)
+        setState(
+          () => _uploadError = err is ApiException ? err.message : '$err',
+        );
     }
   }
 
@@ -84,23 +118,6 @@ class _TaskActionsSectionState extends ConsumerState<TaskActionsSection> {
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
-    }
-  }
-
-  Future<void> _addFollowUp() async {
-    if (_note.text.trim().isEmpty) {
-      setState(() => _noteError = 'Note is required.');
-      return;
-    }
-    try {
-      await ref
-          .read(taskActionsRepositoryProvider)
-          .addFollowUp(t.id, _note.text);
-      _note.clear();
-      setState(() => _noteError = null);
-      ref.invalidate(taskExtrasProvider(t.id));
-    } on ApiException catch (e) {
-      setState(() => _noteError = e.fields['note'] ?? e.message);
     }
   }
 
@@ -204,6 +221,14 @@ class _TaskActionsSectionState extends ConsumerState<TaskActionsSection> {
             children: [
               for (final e in x?.evidence ?? const <Evidence>[])
                 ListTile(
+                  trailing: _removable(x!, e)
+                      ? IconButton(
+                          key: Key('removeEvidence_${e.id}'),
+                          tooltip: 'Remove ${e.name}',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _remove(e),
+                        )
+                      : null,
                   key: Key('evidence_${e.id}'),
                   leading: Icon(
                     e.legacyLink ? Icons.link : Icons.description_outlined,
@@ -250,60 +275,6 @@ class _TaskActionsSectionState extends ConsumerState<TaskActionsSection> {
                   ),
                 ),
             ],
-          ),
-        ),
-        const SizedBox(height: Space.m),
-        Text('Follow-ups', style: text.titleSmall),
-        const SizedBox(height: Space.s),
-        Card(
-          key: const Key('followUpsCard'),
-          child: Padding(
-            padding: const EdgeInsets.all(Space.m),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if ((x?.followUps ?? const []).isEmpty)
-                  const Text('No follow-ups yet.', key: Key('noFollowUps')),
-                for (final f in x?.followUps ?? const <FollowUp>[])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Space.s),
-                    child: Column(
-                      key: Key('followUp_${f.id}'),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(f.note),
-                        Text(
-                          [
-                            ?f.author,
-                            if (f.contact != null) 'to ${f.contact}',
-                            _when(f.at),
-                          ].join(' · '),
-                          style: text.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                TextField(
-                  key: const Key('followUpField'),
-                  controller: _note,
-                  maxLength: 2000,
-                  minLines: 1,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    labelText: 'Add a follow-up',
-                    errorText: _noteError,
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.tonal(
-                    key: const Key('addFollowUp'),
-                    onPressed: _addFollowUp,
-                    child: const Text('Add follow-up'),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ],
@@ -449,25 +420,6 @@ Future<void> deleteTask(BuildContext context, WidgetRef ref, Task t) async {
   } catch (e) {
     if (context.mounted) showError(context, e);
   }
-}
-
-/// History (39): GET /tasks/:id/history.
-class TaskHistoryScreen extends ConsumerWidget {
-  const TaskHistoryScreen({super.key, required this.taskId});
-  final String taskId;
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
-    key: const Key('taskHistoryScreen'),
-    appBar: AppBar(
-      leading: BackOrUpButton(fallback: '/tasks/$taskId'),
-      title: const Text('History'),
-    ),
-    body: AsyncView(
-      value: ref.watch(taskHistoryProvider(taskId)),
-      onRetry: () => ref.invalidate(taskHistoryProvider(taskId)),
-      data: (items) => HistoryList(items: items, listKey: 'taskHistoryList'),
-    ),
-  );
 }
 
 class HistoryList extends StatelessWidget {
@@ -835,6 +787,136 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// History tab (design 39): follow-up note + a timeline of follow-ups and audit events.
+class TaskHistoryTab extends ConsumerStatefulWidget {
+  const TaskHistoryTab({super.key, required this.task});
+  final Task task;
+  @override
+  ConsumerState<TaskHistoryTab> createState() => _TaskHistoryTabState();
+}
+
+class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
+  final _note = TextEditingController();
+  String? _error;
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add() async {
+    if (_note.text.trim().isEmpty) {
+      setState(() => _error = 'Note is required.');
+      return;
+    }
+    try {
+      await ref
+          .read(taskActionsRepositoryProvider)
+          .addFollowUp(widget.task.id, _note.text);
+      _note.clear();
+      setState(() => _error = null);
+      ref.invalidate(taskExtrasProvider(widget.task.id));
+    } on ApiException catch (e) {
+      setState(() => _error = e.fields['note'] ?? e.message);
+    }
+  }
+
+  static IconData _icon(String action) => switch (action) {
+    'follow_up' => Icons.forum_outlined,
+    'task_created' => Icons.add_task,
+    'task_status_changed' ||
+    'task_approved' ||
+    'task_rejected' => Icons.swap_horiz,
+    'task_blocked' => Icons.block,
+    'task_assigned' || 'task_updated' => Icons.edit_note,
+    _ when action.contains('evidence') => Icons.attach_file,
+    _ => Icons.history,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final id = widget.task.id;
+    final x = ref.watch(taskExtrasProvider(id)).value;
+    final h = ref.watch(taskHistoryProvider(id)).value ?? const <HistoryItem>[];
+    final items = <({DateTime at, String title, String sub, String action})>[
+      for (final f in x?.followUps ?? const <FollowUp>[])
+        (
+          at: f.at,
+          title: 'Follow-up: ${f.note}',
+          sub: [
+            ?f.author,
+            if (f.contact != null) 'to ${f.contact}',
+            _when(f.at),
+          ].join(' · '),
+          action: 'follow_up',
+        ),
+      for (final e in h)
+        (
+          at: e.at,
+          title: [
+            e.label,
+            for (final c in e.changes)
+              if (c.field == 'status') '→ ${c.now}',
+          ].join(' '),
+          sub: [
+            e.actor ?? 'System',
+            _when(e.at),
+            if (e.reason != null && e.reason!.isNotEmpty) e.reason!,
+          ].join(' · '),
+          action: e.action,
+        ),
+    ]..sort((a, b) => b.at.compareTo(a.at));
+    return ListView(
+      key: const Key('taskHistoryList'),
+      padding: const EdgeInsets.all(Space.m),
+      children: [
+        TextField(
+          key: const Key('followUpField'),
+          controller: _note,
+          maxLength: 2000,
+          minLines: 2,
+          maxLines: 4,
+          decoration: InputDecoration(
+            labelText: 'Follow-up note',
+            hintText: 'What did you chase, and with whom?',
+            filled: true,
+            errorText: _error,
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(
+            key: const Key('addFollowUp'),
+            onPressed: _add,
+            child: const Text('Add follow-up'),
+          ),
+        ),
+        const SizedBox(height: Space.m),
+        if ((x?.followUps ?? const []).isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: Space.s),
+            child: Text('No follow-ups yet.', key: Key('noFollowUps')),
+          ),
+        Card(
+          key: const Key('taskTimeline'),
+          child: Column(
+            children: [
+              for (final (i, e) in items.indexed) ...[
+                if (i > 0) const Divider(indent: 56, height: 1),
+                ListTile(
+                  leading: Icon(_icon(e.action)),
+                  title: Text(e.title),
+                  subtitle: Text(e.sub),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

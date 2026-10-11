@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config.dart';
 import '../../data/models.dart';
+import '../../data/p3.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../../state/v2_providers.dart';
@@ -397,6 +398,16 @@ class _IssuesListState extends ConsumerState<IssuesList> {
                         onSelected: (_) => setState(() => _filter = f),
                       ),
                     ),
+                  ActionChip(
+                    key: const Key('raiseIssue'),
+                    avatar: const Icon(Icons.add, size: 18),
+                    label: const Text('Raise issue'),
+                    onPressed: () => context.push(
+                      widget.projectId == null
+                          ? '/issues/new'
+                          : '/projects/${widget.projectId}/issues/new',
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -419,6 +430,8 @@ class _IssuesListState extends ConsumerState<IssuesList> {
                               ),
                               Expanded(
                                 child: ListTile(
+                                  key: Key('issue_${i.id}'),
+                                  onTap: () => context.push('/issues/${i.id}'),
                                   title: Text(i.title),
                                   subtitle: Text(
                                     [
@@ -428,7 +441,7 @@ class _IssuesListState extends ConsumerState<IssuesList> {
                                     ].whereType<String>().join(' · '),
                                   ),
                                   trailing: Text(
-                                    i.status.replaceAll('_', ' ').toLowerCase(),
+                                    issueStatusLabels[i.status] ?? i.status,
                                   ),
                                 ),
                               ),

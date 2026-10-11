@@ -521,11 +521,6 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   maxLines: 3,
                   decoration: const InputDecoration(labelText: 'Description'),
                 ),
-                const SizedBox(height: Space.s),
-                Text(
-                  'Team members are managed on the web app for now.',
-                  style: t.bodySmall,
-                ),
               ],
             ),
     );

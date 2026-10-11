@@ -254,7 +254,7 @@ void main() {
   group('Task actions (36–40)', () {
     testWidgets('approve a For review task', (t) async {
       final c = await pumpApp(t, location: '/tasks/t7');
-      await seek(t, find.byKey(const Key('approveTask')), 'taskDetailScreen');
+      await seek(t, find.byKey(const Key('approveTask')), 'taskDetailsList');
       await tapKey(t, 'approveTask');
       expect(
         storeOf(c).tasks.firstWhere((x) => x.id == 't7').status,
@@ -305,7 +305,7 @@ void main() {
         await seek(
           t,
           find.byKey(const Key('uploadEvidence')),
-          'taskDetailScreen',
+          'taskDetailsList',
         );
         expect(
           find.text('Link (legacy) · added before file uploads'),
@@ -328,7 +328,8 @@ void main() {
 
     testWidgets('follow-ups: empty state, required note, add', (t) async {
       await pumpApp(t, location: '/tasks/t3');
-      await seek(t, find.byKey(const Key('addFollowUp')), 'taskDetailScreen');
+      await t.tap(find.byKey(const Key('taskTab_history')));
+      await t.pumpAndSettle();
       expect(find.text('No follow-ups yet.'), findsOneWidget);
       await tapKey(t, 'addFollowUp');
       expect(find.text('Note is required.'), findsOneWidget);
@@ -337,7 +338,60 @@ void main() {
         'Chased Acme for the roles list.',
       );
       await tapKey(t, 'addFollowUp');
-      expect(find.text('Chased Acme for the roles list.'), findsOneWidget);
+      expect(
+        find.text('Follow-up: Chased Acme for the roles list.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'history tab: tabs, timeline merges follow-ups and events; /history deep link',
+      (t) async {
+        await pumpApp(t, location: '/tasks/t4/history');
+        expect(find.byKey(const Key('taskHistoryList')), findsOneWidget);
+        expect(find.text('Details'), findsOneWidget);
+        expect(find.text('Linked issues'), findsOneWidget);
+        expect(
+          find.text('Follow-up: Asked Acme IT for the SSO metadata.'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('taskTimeline')), findsOneWidget);
+        await t.tap(find.byKey(const Key('taskTab_linked')));
+        await t.pumpAndSettle();
+        expect(find.byKey(const Key('issueRow_i1')), findsOneWidget);
+        await t.tap(find.byKey(const Key('issueRow_i1')));
+        await t.pumpAndSettle();
+        expect(find.byKey(const Key('issueDetailScreen')), findsOneWidget);
+      },
+    );
+
+    testWidgets('evidence delete: web confirm copy, locked while For review', (
+      t,
+    ) async {
+      await pumpApp(t, location: '/tasks/t4');
+      await seek(
+        t,
+        find.byKey(const Key('removeEvidence_e1')),
+        'taskDetailsList',
+      );
+      await t.tap(find.byKey(const Key('removeEvidence_e1')));
+      await t.pumpAndSettle();
+      expect(
+        find.text('Remove Roles matrix.xlsx from this task?'),
+        findsOneWidget,
+      );
+      await tapKey(t, 'confirmRemoveEvidence');
+      expect(find.byKey(const Key('evidence_e1')), findsNothing);
+      // t7 is For review: files can't be removed (FR-EVD-07), so no button.
+      await pumpApp(t, location: '/tasks/t7');
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey &&
+              '${(w.key as ValueKey).value}'.startsWith('removeEvidence_'),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets(
@@ -362,7 +416,7 @@ void main() {
         expect(task.assignees, contains('Mark Kim'));
         c.read(routerProvider).go('/tasks/t3/history');
         await t.pumpAndSettle();
-        expect(find.text('Updated'), findsOneWidget);
+        expect(find.textContaining('Updated'), findsWidgets);
         expect(find.text('Created'), findsOneWidget);
       },
     );

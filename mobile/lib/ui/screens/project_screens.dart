@@ -162,7 +162,7 @@ class _ProjectCard extends StatelessWidget {
   }
 }
 
-enum ProjectTab { checklist, board, issues, more }
+enum ProjectTab { checklist, board, issues, time, activity, more }
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   const ProjectDetailScreen({
@@ -181,8 +181,24 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
       _ProjectDetailScreenState();
 }
 
-class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
+class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
+    with SingleTickerProviderStateMixin {
   late ProjectTab _tab = widget.initialTab;
+  late final TabController _tc =
+      TabController(
+        length: ProjectTab.values.length,
+        initialIndex: widget.initialTab.index,
+        vsync: this,
+      )..addListener(() {
+        if (_tc.index != _tab.index)
+          setState(() => _tab = ProjectTab.values[_tc.index]);
+      });
+
+  @override
+  void dispose() {
+    _tc.dispose();
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(ProjectDetailScreen old) {
@@ -191,6 +207,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     if (widget.initialTab != old.initialTab ||
         widget.navNonce != old.navNonce) {
       _tab = widget.initialTab;
+      _tc.index = _tab.index;
     }
   }
 
@@ -272,32 +289,19 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Space.m),
-              child: SegmentedButton<ProjectTab>(
-                key: const Key('projectTabs'),
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: ProjectTab.checklist,
-                    label: FitLabel('Checklist'),
-                  ),
-                  ButtonSegment(
-                    value: ProjectTab.board,
-                    label: FitLabel('Board', key: Key('boardTab')),
-                  ),
-                  ButtonSegment(
-                    value: ProjectTab.issues,
-                    label: FitLabel('Issues'),
-                  ),
-                  ButtonSegment(
-                    value: ProjectTab.more,
-                    label: FitLabel('More'),
-                  ),
-                ],
-                selected: {_tab},
-                onSelectionChanged: (v) => setState(() => _tab = v.first),
-              ),
+            TabBar(
+              key: const Key('projectTabs'),
+              controller: _tc,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              tabs: const [
+                Tab(key: Key('checklistTab'), text: 'Checklist'),
+                Tab(key: Key('boardTab'), text: 'Board'),
+                Tab(key: Key('issuesTab'), text: 'Issues'),
+                Tab(key: Key('timeTab'), text: 'Time'),
+                Tab(key: Key('activityTab'), text: 'Activity'),
+                Tab(key: Key('moreTab'), text: 'More'),
+              ],
             ),
             const SizedBox(height: Space.s),
             Expanded(
@@ -305,6 +309,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                 ProjectTab.checklist => ChecklistView(projectId: p.id),
                 ProjectTab.board => KanbanBoard(projectId: p.id),
                 ProjectTab.issues => IssuesList(projectId: p.id),
+                ProjectTab.time => ProjectTimeView(projectId: p.id),
+                ProjectTab.activity => ProjectActivityView(projectId: p.id),
                 ProjectTab.more => ProjectInfoView(p),
               },
             ),
