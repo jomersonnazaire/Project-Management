@@ -31,6 +31,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { forbidden } from '../lib/errors.js';
 import { parseQuery } from '../lib/validate.js';
 import { audit } from '../services/audit.js';
+import { projectTypeRefs } from '../services/projectTypes.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
 import { TaskModel, TeamModel, TimeEntryModel, UserModel } from '../models/index.js';
 import {
@@ -377,6 +378,7 @@ export function reportsRouter(registry: RouteRegistry) {
     const projects = narrow(await scopedProjects(currentUser(req)), q);
     const tByP = byProject(await tasksOf(projects.map((p) => p._id)));
     const refs = await refMaps({ clients: projects.map((p) => p.clientId) });
+    const types = await projectTypeRefs(projects.map((p) => p.projectTypeId));
     const items = projects
       .map((p): ProjectStatusRowDto => {
         const tasks = tByP.get(p._id.toString()) ?? [];
@@ -386,6 +388,9 @@ export function reportsRouter(registry: RouteRegistry) {
           id: p._id.toString(),
           name: p.name,
           client: refs.client(p.clientId),
+          projectType: p.projectTypeId
+            ? (types.get(p.projectTypeId.toString())?.name ?? null)
+            : null,
           status: p.status,
           progress: c.progressPct,
           health: c.health,

@@ -13,6 +13,7 @@ import { ensureLaunchTemplate } from './services/launchTemplate.js';
 import { migrateModuleText } from './services/moduleText.js';
 import { migrateProjectCodes } from './services/projectCodes.js';
 import { ensureDefaultLookups, sweepAutoStop } from './services/tracker.js';
+import { ensureDefaultProjectTypes } from './services/projectTypes.js';
 import { ensureDefaultLeaveTypes } from './services/leave.js';
 
 const config = loadConfig();
@@ -33,6 +34,8 @@ await ensureLaunchTemplate(logger);
 await migrateProjectCodes(logger);
 // M5/M7: seed the Activity types and Locations lists, and the leave types, once.
 await ensureDefaultLookups(logger);
+// Doc 14 FR-PTY-01: seed the nine project types once (after the Activity types they point at).
+await ensureDefaultProjectTypes(logger);
 // FR-ACT-21: Module is free text; copy old Modules-list names into it (idempotent).
 await migrateModuleText(logger);
 await ensureDefaultLeaveTypes(logger);

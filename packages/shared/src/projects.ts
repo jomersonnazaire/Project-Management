@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ProjectTypeRefDto } from './projectTypes.js';
 import { JOB_ROLES, type SystemRole } from './roles.js';
 
 /**
@@ -541,6 +542,10 @@ export function findCycle(nodes: { id: string; dependsOn: readonly string[] }[])
 
 // ---------- Request schemas (strict: unknown fields are rejected, NFR-04) ----------
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
+/** FR-PTY-02: required on create, and on the next edit of a project that has none (FR-PTY-03). */
+const projectTypeId = z
+  .string({ error: 'Choose a project type.' })
+  .regex(/^[a-f0-9]{24}$/i, 'Choose a project type.');
 const requiredText = (label: string, max = 200) =>
   z.string().trim().min(1, `${label} is required.`).max(max);
 // Optional text also accepts null, which the web sends to clear a field and the DTOs return.
@@ -626,6 +631,7 @@ export const createProjectSchema = z
     clientId: objectId,
     managerId: objectId,
     type: z.enum(TEMPLATE_TYPES).optional(),
+    projectTypeId,
     startDate: dateOnlySchema('Baseline start'),
     plannedEndDate: dateOnlySchema('Baseline end'),
     description: optionalText(4000),
@@ -647,6 +653,7 @@ export const updateProjectSchema = z
     code: projectCodeSchema.optional(),
     description: optionalText(4000),
     type: z.enum(TEMPLATE_TYPES).nullable().optional(),
+    projectTypeId: projectTypeId.optional(),
     managerId: objectId.optional(),
     memberIds: z.array(objectId).max(200).optional(),
     clientId: objectId.optional(),
@@ -671,6 +678,8 @@ export const projectListQuerySchema = z.strictObject({
   q: z.string().trim().max(100).optional(),
   status: z.string().max(20).optional(),
   clientId: objectId.optional(),
+  /** FR-PTY-07: filter by project type; "none" = Not set. */
+  projectTypeId: z.union([objectId, z.literal('none')]).optional(),
   mine: z.enum(['true', 'false']).optional(),
 });
 
@@ -871,6 +880,8 @@ export interface ProjectListItemDto {
   archived: boolean;
   templateName: string | null;
   templateVersion: number | null;
+  /** FR-PTY-02/03: null = "Not set" (projects created before project types). */
+  projectType: ProjectTypeRefDto | null;
   taskCount: number;
   /** Tasks without an estimate (EC-58). */
   unestimatedTaskCount: number;

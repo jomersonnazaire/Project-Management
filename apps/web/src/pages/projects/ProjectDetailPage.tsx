@@ -1,4 +1,5 @@
 import {
+  PROJECT_TYPE_NOT_SET,
   ISSUE_COMPLETED_BANNER,
   TEMPLATE_TYPE_LABELS,
   hasPermission,
@@ -134,9 +135,17 @@ export function ProjectDetailPage() {
             <Button onClick={() => setEditing(true)}>Edit project</Button>
           )}
         </PageHeader>
-        <Link to="/projects" className="d-inline-block mb-4">
-          ‹ All projects
-        </Link>
+        <div className="d-flex flex-wrap align-items-baseline gap-3 mb-4">
+          <Link to="/projects">‹ All projects</Link>
+          {/* Doc 14 FR-PTY-02/03 (mockup v0.9.2 header meta): current name, or "Not set". */}
+          <span className="small text-body-secondary" data-testid="project-type-meta">
+            {p.clientName} · Project type:{' '}
+            <b className="text-body">{p.projectType?.name ?? PROJECT_TYPE_NOT_SET}</b>
+            {p.projectType && !p.projectType.active && (
+              <span className="badge badge-inactive ms-1">Inactive</span>
+            )}
+          </span>
+        </div>
         {warnings.map((w) => (
           <Alert key={w} variant="warning">
             {w}
@@ -190,7 +199,7 @@ export function ProjectDetailPage() {
                 {p.templateName ? `${p.templateName} · v${p.templateVersion}` : '–'}
               </div>
               <div className="col-sm-6 col-lg-3">
-                <div className="small text-body-secondary">Type</div>
+                <div className="small text-body-secondary">Template type</div>
                 {p.type ? TEMPLATE_TYPE_LABELS[p.type] : '–'}
               </div>
               <div className="col-sm-6 col-lg-3">

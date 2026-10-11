@@ -13,6 +13,8 @@ const projectSchema = new Schema(
     managerId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     memberIds: { type: [Schema.Types.ObjectId], ref: 'User', default: [], index: true },
     type: { type: String, enum: [...TEMPLATE_TYPES, null], default: null },
+    /** FR-PTY-02: the project type (by ID); null = "Not set" (created before project types). */
+    projectTypeId: { type: Schema.Types.ObjectId, ref: 'ProjectType', default: null, index: true },
     description: { type: String, default: null },
     status: { type: String, enum: PROJECT_STATUSES, default: 'PLANNING', index: true },
     archived: { type: Boolean, default: false },

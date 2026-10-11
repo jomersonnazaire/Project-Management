@@ -1,5 +1,6 @@
 import {
   END_AFTER_START,
+  PROJECT_TYPE_REQUIRED,
   TEMPLATE_TYPE_LABELS,
   issuePrefix,
   plural,
@@ -17,6 +18,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { HandoverModal } from '../../components/HandoverModal';
 import { PageHeader } from '../../components/PageHeader';
+import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
 
 const MANAGER_ROLES = new Set(['ADMIN', 'PROJECT_MANAGER']);
 
@@ -34,6 +36,7 @@ export function NewProjectPage() {
   const [codeInput, setCode] = useState<string | null>(null);
   const [clientId, setClientId] = useState(params.get('clientId') ?? '');
   const [templateId, setTemplateId] = useState(params.get('templateId') ?? '');
+  const [projectTypeId, setProjectTypeId] = useState('');
   const [managerId, setManagerId] = useState(
     user && MANAGER_ROLES.has(user.systemRole) ? user.id : '',
   );
@@ -66,6 +69,7 @@ export function NewProjectPage() {
     else if (!codeCheck.success) next.code = codeCheck.error.issues[0]?.message ?? 'Invalid code.';
     if (!clientId) next.clientId = 'Choose a client.';
     if (!templateId) next.templateId = 'Choose a template.';
+    if (!projectTypeId) next.projectTypeId = PROJECT_TYPE_REQUIRED;
     if (!managerId) next.managerId = 'Choose a project manager.';
     if (!startDate) next.startDate = 'Baseline start is required.';
     if (!plannedEndDate) next.plannedEndDate = 'Baseline end is required.';
@@ -89,6 +93,7 @@ export function NewProjectPage() {
         clientId,
         templateId,
         templateVersion: template?.version,
+        projectTypeId,
         managerId,
         memberIds: memberIds.filter((m) => m !== managerId),
         startDate,
@@ -209,6 +214,19 @@ export function NewProjectPage() {
                   </Form.Text>
                 )}
               </Form.Group>
+              <ProjectTypeSelect
+                id="prj-type"
+                value={projectTypeId}
+                onChange={(v) => {
+                  setProjectTypeId(v);
+                  setErrors((prev) => {
+                    const rest = { ...prev };
+                    delete rest.projectTypeId;
+                    return rest;
+                  });
+                }}
+                error={fieldError('projectTypeId')}
+              />
               <Form.Group className="col-md-6" controlId="prj-start">
                 <Form.Label>Baseline start</Form.Label>
                 <Form.Control

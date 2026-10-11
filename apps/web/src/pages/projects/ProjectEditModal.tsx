@@ -1,5 +1,6 @@
 import {
   PROJECT_CODE_LOCKED,
+  PROJECT_TYPE_REQUIRED,
   projectCodeSchema,
   PROJECT_STATUS_LABELS,
   PROJECT_STATUSES,
@@ -16,6 +17,7 @@ import { useClients } from '../../api/hooks';
 import { usePeople, useUpdateProject } from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { HandoverModal } from '../../components/HandoverModal';
+import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
 
 /**
  * Edit a project (FR-PRJ-11..13): details, team, status, baseline dates (with a reason) and the
@@ -40,6 +42,7 @@ export function ProjectEditModal({
   const [managerId, setManagerId] = useState(project.managerId ?? '');
   const [memberIds, setMemberIds] = useState(project.members.map((m) => m.id));
   const [clientId, setClientId] = useState(project.clientId);
+  const [projectTypeId, setProjectTypeId] = useState(project.projectType?.id ?? '');
   const [startDate, setStartDate] = useState(project.startDate ?? '');
   const [plannedEndDate, setPlannedEndDate] = useState(project.plannedEndDate ?? '');
   const [reason, setReason] = useState('');
@@ -69,6 +72,8 @@ export function ProjectEditModal({
       const check = projectCodeSchema.safeParse(code);
       if (!check.success) next.code = check.error.issues[0]?.message ?? 'Invalid code.';
     }
+    // FR-PTY-02/03: required; a project created before project types picks one now.
+    if (!projectTypeId) next.projectTypeId = PROJECT_TYPE_REQUIRED;
     if (plannedEndDate <= startDate) next.plannedEndDate = END_AFTER_START;
     if (datesChanged && !reason.trim()) next.reason = 'Give a reason for changing the baseline.';
     setErrors(next);
@@ -79,6 +84,7 @@ export function ProjectEditModal({
     if ((description.trim() || null) !== project.description)
       body.description = description.trim() || null;
     if (status !== project.status) body.status = status;
+    if (projectTypeId !== (project.projectType?.id ?? '')) body.projectTypeId = projectTypeId;
     if (managerId !== project.managerId) body.managerId = managerId;
     const members = memberIds.filter((m) => m !== managerId);
     if (members.join() !== project.members.map((m) => m.id).join()) body.memberIds = members;
@@ -213,6 +219,13 @@ export function ProjectEditModal({
                 )}
               </Form.Select>
             </Form.Group>
+            <ProjectTypeSelect
+              id="edit-prj-type"
+              value={projectTypeId}
+              current={project.projectType}
+              onChange={setProjectTypeId}
+              error={err('projectTypeId')}
+            />
             <Form.Group className="col-md-6" controlId="edit-prj-start">
               <Form.Label>Baseline start</Form.Label>
               <Form.Control

@@ -290,9 +290,9 @@ Notes: Time in creates a Day timesheet row (FR-ACT-02/10) and the row Time out b
 | Implementation | Configuration |
 | Integration | Integration |
 | Configuration | Configuration |
-| Development | Development (blank if no such Activity type exists) |
+| Development | Development |
 | Support | Support |
 | Upgrade | Configuration |
-| Migration | blank (until Admins add a "Data migration" Activity type) |
+| Migration | Data migration (exists in the live list, Queen) |
 | Training | Training |
 | Consulting | Client meeting |

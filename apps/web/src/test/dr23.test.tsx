@@ -52,6 +52,8 @@ describe('DR-23 project code', () => {
     });
     renderAt(`/projects/new?clientId=${ACME.id}`, <App />);
     await userEvent.selectOptions(await screen.findByLabelText('Template'), 't1');
+    await screen.findByRole('option', { name: 'Implementation' });
+    await userEvent.selectOptions(screen.getByLabelText('Project type *'), 'pt1');
     const code = screen.getByLabelText('Project code');
     expect(code).toHaveValue(issuePrefix(ACME.name, 'SAP_B1'));
     await userEvent.clear(code);

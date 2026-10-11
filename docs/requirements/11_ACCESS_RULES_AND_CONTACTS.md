@@ -157,9 +157,9 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 
 | Role | Reports View | Reports Export | Team & workload View |
 |---|---|---|---|
-| Admin | as today | as today | as today |
-| PM | as today | as today | as today |
-| Member | as today | as today | as today |
-| Viewer | as today | as today | as today |
+| Admin | ✓ (locked) | ✓ (locked) | ✓ (locked) |
+| PM | ✓ | ✓ | ✓ |
+| Member | ✓ | ✓ | ✓ |
+| Viewer | ✓ | ✓ | ✓ |
 
-*(Deven to replace "as today" with the values from the current role checks.)*
+*(From the code, Deven 2026-10-10.)* Fixed scope still applies on top: Admin, PM and Viewer see all active projects; Members see only their own projects, their own time and their own workload row; Viewers can't open the Timesheets tab. Export is its own audited route.
