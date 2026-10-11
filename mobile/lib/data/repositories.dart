@@ -12,7 +12,11 @@ abstract interface class AuthRepository {
 }
 
 abstract interface class ProjectRepository {
-  Future<List<Project>> list({String? query, ProjectStatus? status});
+  Future<List<Project>> list({
+    String? query,
+    ProjectStatus? status,
+    String? projectTypeId,
+  });
   Future<Project> get(String id);
   Future<List<Task>> tasks(String projectId);
   Future<Task> createTask(String projectId, NewTask task);
@@ -29,7 +33,12 @@ abstract interface class TaskRepository {
 abstract interface class TimeRepository {
   Future<TimeWeek> week(DateTime anyDayInWeek);
   Future<List<LoggableProject>> options();
-  Future<void> log({required String taskId, required DateTime date, required double hours, String? notes});
+  Future<void> log({
+    required String taskId,
+    required DateTime date,
+    required double hours,
+    String? notes,
+  });
 }
 
 abstract interface class NotificationRepository {

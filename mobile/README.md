@@ -1,6 +1,6 @@
-# Xceler8 PM — Flutter mobile app
+# OpsTrack — Flutter mobile app
 
-Phone client for the Xceler8 Implementation Tracker API (`apps/api`, Express + MongoDB, REST `/api/v1`).
+*OpsTrack · by Jomerson & Grok.* Phone client for the OpsTrack API (`apps/api`, Express + MongoDB, REST `/api/v1`).
 Built from the `pm-mobile-design` handoff: Material 3, indigo seed `#3F51B5` (primary pinned to #3F51B5 in light mode), a `StatusColors` ThemeExtension, and a 390×844 baseline. Includes dark mode.
 
 ## Setup
@@ -60,14 +60,50 @@ Log time rules: entries go in 0.25h steps, at most 24h per entry and **24h per d
 | Route | Screen |
 |---|---|
 | `/splash`, `/login`, `/setup-password?token=` | Session check, sign-in, invite password setup |
-| `/home`, `/projects`, `/tasks`, `/log`, `/more` | The 5 NavigationBar tabs (StatefulShellRoute) |
+| `/home`, `/projects`, `/tasks?tab=<key>`, `/day`, `/more` | The 5 NavigationBar tabs: Home · Projects · My tasks · Day timesheet · More (StatefulShellRoute). The running timer bar sits above the bar on every tab. |
+| `/tasks?tab=today\|day\|due\|assigned\|accountable\|review\|completed` | My tasks (7 tabs). `day` embeds the same Day timesheet widget/state as `/day` |
+| `/dar`, `/dar/saved`, `/dar/saved/:id` | Daily Accomplishment Report: generate/preview/save, saved list, saved detail (read-only, no export) |
+| `/timesheet-review` | Review a direct report's day (read-only + Reopen) |
+| `/projects/new`, `/projects/:id/edit` | New / edit project with Project type |
 | `/projects/:id?tab=checklist\|board\|issues\|more` | Project detail; `tab` is honoured even if the project is already open |
 | `/projects/:id/tasks/new` | Create task |
 | `/tasks/:id` | Task detail (fixed Log time / Change status bar) |
-| `/log?task=<id>&project=<id>` | Log time with the task preselected |
+| `/log?task=<id>&project=<id>` | Hours-only form (Day timesheet › Hours list › Log time), task preselected |
 | `/notifications`, `/issues` | Pushed screens |
 
 Every pushed screen shows a back arrow. When opened cold by a deep link (nothing to pop), it goes up instead: task → its project, create task → project, notifications → Home, issues → More.
+
+## v2 (m8-polish) — P1: My tasks, Day timesheet, entry sheet, DAR, project type
+
+Endpoints, verified against `apps/api/src/routes/{tracker,dar,projectTypes,projects,time}.ts` on `m8-polish`:
+
+| Feature | Endpoints |
+|---|---|
+| My tasks | `GET /tasks/mine?view=today\|due\|assigned\|accountable\|review\|completed&q=` |
+| Running bar | `GET /tracker/running` (every 30 s + on resume, local 1 s tick), `POST /tracker/stop {entryId}` |
+| Day timesheet | `GET /tracker/day?date&userId` → `{day}`; `GET /lookups` → `{activityTypes, locations}`; `GET /tracker/people` |
+| Time in / Quick activity | `POST /tracker/start` (409 `TIMER_RUNNING` → Switch prompt → retry with `switchFrom`; 409 `HALF_DAY_LEAVE` → confirm → `confirmLeave: true`; 400 `LOCATION_NEEDED` → `dayLocationId`) |
+| Add / edit / delete entry | `POST /tracker/entries {date,timeIn,timeOut,…}`, `PATCH /tracker/entries/:id`, `DELETE /tracker/entries/:id` |
+| Activity preselect | `GET /project-types/preselect?taskId=` → "From project type: {type}. You can change it." |
+| Location / submit / reopen | `PUT /tracker/days/:date/location`, `POST /tracker/days/:date/submit`, `POST /tracker/days/:date/reopen {userId, reason}` |
+| Hours list | `GET /time?week=` (the API takes a week, not from/to), `DELETE /time/:id`; add via the existing `/log` form (`POST /time`) |
+| DAR | `GET /dar?from&to` → `{report}`, `GET /dar/saved?from&to`, `POST /dar/saved {from,to}`, `GET /dar/saved/:id` |
+| Project type | `GET /project-types`, `GET /projects?projectTypeId=<id>\|none`, `POST /projects`, `PATCH /projects/:id` (`reason` when the baseline changes) |
+| Permissions | `GET /auth/me/permissions` (`permissionsProvider`; demo mode allows everything) |
+
+Field errors from `error.details[] {path, message}` are shown under their fields (`ApiException.fields`); other errors show in the sheet or a SnackBar. 404 shows "Not found".
+Times are Philippine time (UTC+8); durations are HH:MM (`formatHHMM`), times are 12-hour.
+
+Decisions applied: no export/share anywhere (PDF/Excel stay on the web), no DAR person filter, no blocked-reason quick-pick chips, theme stays indigo #3F51B5 (logo purple #5355E0 only on the splash gradient).
+
+Branding: `assets/brand/` (from `docs/design/logo/opstrack/final/`), `flutter_svg` for logo/icon, `flutter_launcher_icons` (icon-512.png, adaptive white background) and `flutter_native_splash` (#5355E0 + white logo). App label OpsTrack on Android, iOS, web and `MaterialApp.title`.
+Regenerate with `dart run flutter_launcher_icons` and `dart run flutter_native_splash:create`.
+
+New keys (handoff): `myTasksTab_<key>`, `quickActivityButton`, `timeIn_<taskId>`, `runningChip_<taskId>`, `taskSearch`, `dayTimesheet`, `daySegment`, `hoursListSegment`, `prevDay`, `nextDay`, `pickDate`, `changeLocation`, `dayStatusBadge`, `addEntry`, `addLeave`, `submitDay`, `reopenDay`, `entry_<id>`, `rowTimeOut_<id>`, `editEntry_<id>`, `lockedIcon_<id>`, `leaveRow_<id>`, `hoursRendered`, `runningTimerBar`, `runningTimerStop`, `entrySheet`, `entryTarget`, `entryTitle`, `entryWhen`, `entryTimeIn`, `entryTimeOut`, `entryDayLocation`, `entryActivityType`, `activityHint`, `entryLocation`, `entryBillable`, `entryModule`, `entrySave`, `entryDelete`, `switchPrompt`, `switchTimer`, `locationSave`, `confirmSubmit`, `reopenReason`, `confirmReopen`, `reviewPerson`, `darPreview`, `darSave`, `projectTypeFilter`, `projectTypeField`.
+
+Demo data (Sun Oct 11, 2026 14:00 PH): today not submitted; Oct 10 empty; Oct 9 submitted; Oct 8 reopened (with an auto-stopped entry); Oct 7 half-day leave; Oct 6 full-day leave; Oct 2 past the weekly lock, not submitted. Queen Reyes and Mark Kim report to you (Timesheet review).
+
+Not in this run (P2/P3): Leave (the "+ Add leave" button shows a "coming next" message), task approval/evidence/follow-ups/history, project detail tabs and type chip on the detail header, team members picker on the project form, and the rest of P3.
 
 ## Architecture
 - Riverpod 3 (`lib/state/providers.dart`) and go_router (`lib/router.dart`).

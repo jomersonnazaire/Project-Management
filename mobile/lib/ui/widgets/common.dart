@@ -5,13 +5,28 @@ import 'package:go_router/go_router.dart';
 import '../../data/models.dart';
 import '../../theme/app_theme.dart';
 
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 /// Indexed by DateTime.weekday - 1 (Monday first).
 const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-String fmtDate(DateTime? d) => d == null ? '—' : '${_months[d.month - 1]} ${d.day}';
-String fmtShort(DateTime? d) =>
-    d == null ? '—' : '${_months[d.month - 1]} ${d.day.toString().padLeft(2, '0')}';
+String fmtDate(DateTime? d) =>
+    d == null ? '—' : '${_months[d.month - 1]} ${d.day}';
+String fmtShort(DateTime? d) => d == null
+    ? '—'
+    : '${_months[d.month - 1]} ${d.day.toString().padLeft(2, '0')}';
 String fmtHours(double h) => h == h.roundToDouble() ? '${h.toInt()}' : '$h';
 
 extension StatusColorsX on BuildContext {
@@ -22,24 +37,30 @@ class TaskStatusChip extends StatelessWidget {
   const TaskStatusChip(this.status, {super.key});
   final TaskStatus status;
   @override
-  Widget build(BuildContext context) =>
-      StatusChip(label: status.label, colors: context.statusColors.forStatus(status));
+  Widget build(BuildContext context) => StatusChip(
+    label: status.label,
+    colors: context.statusColors.forStatus(status),
+  );
 }
 
 class PriorityChip extends StatelessWidget {
   const PriorityChip(this.priority, {super.key});
   final Priority priority;
   @override
-  Widget build(BuildContext context) =>
-      StatusChip(label: priority.label, colors: context.statusColors.forPriority(priority));
+  Widget build(BuildContext context) => StatusChip(
+    label: priority.label,
+    colors: context.statusColors.forPriority(priority),
+  );
 }
 
 class ProjectStatusChip extends StatelessWidget {
   const ProjectStatusChip(this.status, {super.key});
   final ProjectStatus status;
   @override
-  Widget build(BuildContext context) =>
-      StatusChip(label: status.label, colors: context.statusColors.forProject(status));
+  Widget build(BuildContext context) => StatusChip(
+    label: status.label,
+    colors: context.statusColors.forProject(status),
+  );
 }
 
 class InitialsAvatar extends StatelessWidget {
@@ -54,7 +75,11 @@ class InitialsAvatar extends StatelessWidget {
       backgroundColor: s.secondaryContainer,
       child: Text(
         initials(name),
-        style: TextStyle(fontSize: radius * .7, fontWeight: FontWeight.w600, color: s.onSecondaryContainer),
+        style: TextStyle(
+          fontSize: radius * .7,
+          fontWeight: FontWeight.w600,
+          color: s.onSecondaryContainer,
+        ),
       ),
     );
   }
@@ -62,7 +87,12 @@ class InitialsAvatar extends StatelessWidget {
 
 /// Loading / error / data wrapper for FutureProviders.
 class AsyncView<T> extends StatelessWidget {
-  const AsyncView({super.key, required this.value, required this.data, this.onRetry});
+  const AsyncView({
+    super.key,
+    required this.value,
+    required this.data,
+    this.onRetry,
+  });
   final AsyncValue<T> value;
   final Widget Function(T) data;
   final VoidCallback? onRetry;
@@ -79,7 +109,8 @@ class AsyncView<T> extends StatelessWidget {
             Icon(Icons.cloud_off, color: Theme.of(context).colorScheme.error),
             const SizedBox(height: Space.s),
             Text('$e', textAlign: TextAlign.center),
-            if (onRetry != null) TextButton(onPressed: onRetry, child: const Text('Retry')),
+            if (onRetry != null)
+              TextButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),
@@ -96,7 +127,9 @@ class SectionHeader extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(Space.m, Space.m, Space.s, Space.s),
     child: Row(
       children: [
-        Expanded(child: Text(title, style: Theme.of(context).textTheme.titleSmall)),
+        Expanded(
+          child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+        ),
         ?trailing,
       ],
     ),
@@ -120,7 +153,11 @@ void popOrGo(BuildContext context, String fallback) {
 /// AppBar leading that always offers a way back: the normal back button when the
 /// route can pop, otherwise an up arrow to [fallback].
 class BackOrUpButton extends StatelessWidget {
-  const BackOrUpButton({super.key, required this.fallback, this.icon = Icons.arrow_back});
+  const BackOrUpButton({
+    super.key,
+    required this.fallback,
+    this.icon = Icons.arrow_back,
+  });
   final String fallback;
   final IconData icon;
   @override
@@ -137,6 +174,8 @@ class FitLabel extends StatelessWidget {
   const FitLabel(this.text, {super.key});
   final String text;
   @override
-  Widget build(BuildContext context) =>
-      FittedBox(fit: BoxFit.scaleDown, child: Text(text, maxLines: 1, softWrap: false));
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Text(text, maxLines: 1, softWrap: false),
+  );
 }

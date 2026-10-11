@@ -5,19 +5,22 @@ import 'package:http/http.dart' as http;
 import 'http_factory.dart';
 import 'models.dart';
 
-/// Thin JSON client for the Xceler8 API (/api/v1).
+/// Thin JSON client for the OpsTrack API (/api/v1).
 ///
 /// Auth is a session cookie set by POST /auth/login. State-changing requests must
 /// carry `X-Requested-With: xc8-web` (CSRF guard in apps/api/src/middleware/security.ts).
 class ApiClient {
-  ApiClient(this.baseUrl, {http.Client? client}) : _http = client ?? createHttpClient();
+  ApiClient(this.baseUrl, {http.Client? client})
+    : _http = client ?? createHttpClient();
 
   final String baseUrl;
   final http.Client _http;
   final Map<String, String> _cookies = {};
 
   Uri _uri(String path, [Map<String, String>? query]) {
-    final base = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    final base = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
     return Uri.parse('$base$path').replace(queryParameters: query);
   }
 
@@ -32,8 +35,20 @@ class ApiClient {
   Future<Map<String, dynamic>> get(String path, [Map<String, String>? query]) =>
       _send(_http.get(_uri(path, query), headers: _headers));
 
-  Future<Map<String, dynamic>> post(String path, [Object? body]) =>
-      _send(_http.post(_uri(path), headers: _headers, body: jsonEncode(body ?? {})));
+  Future<Map<String, dynamic>> post(String path, [Object? body]) => _send(
+    _http.post(_uri(path), headers: _headers, body: jsonEncode(body ?? {})),
+  );
+
+  Future<Map<String, dynamic>> put(String path, [Object? body]) => _send(
+    _http.put(_uri(path), headers: _headers, body: jsonEncode(body ?? {})),
+  );
+
+  Future<Map<String, dynamic>> patch(String path, [Object? body]) => _send(
+    _http.patch(_uri(path), headers: _headers, body: jsonEncode(body ?? {})),
+  );
+
+  Future<Map<String, dynamic>> delete(String path) =>
+      _send(_http.delete(_uri(path), headers: _headers));
 
   Future<Map<String, dynamic>> _send(Future<http.Response> req) async {
     final http.Response res;
@@ -47,9 +62,26 @@ class ApiClient {
     final map = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
     if (res.statusCode >= 400) {
       final err = map['error'];
-      final msg = err is Map ? err['message'] as String? : map['message'] as String?;
+      final msg = err is Map
+          ? err['message'] as String?
+          : map['message'] as String?;
       final code = err is Map ? err['code'] as String? : map['code'] as String?;
-      throw ApiException(msg ?? 'Request failed (${res.statusCode}).', status: res.statusCode, code: code);
+      final details = err is Map ? err['details'] : null;
+      final fields = <String, String>{
+        if (details is List)
+          for (final d in details)
+            if (d is Map && d['path'] != null)
+              '${d['path']}': '${d['message'] ?? ''}',
+      };
+      throw ApiException(
+        res.statusCode == 404
+            ? 'Not found'
+            : (msg ?? 'Request failed (${res.statusCode}).'),
+        status: res.statusCode,
+        code: code,
+        fields: fields,
+        details: details,
+      );
     }
     return map;
   }

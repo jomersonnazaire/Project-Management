@@ -1,4 +1,4 @@
-// Xceler8 PM — Material 3 theme from the pm-mobile-design handoff (flutter_theme.dart),
+// OpsTrack — Material 3 theme from the pm-mobile-design handoff (flutter_theme.dart),
 // adapted to the app's domain enums.
 import 'package:flutter/material.dart';
 
@@ -12,8 +12,10 @@ class StatusPair {
   final Color container;
   final Color onContainer;
   const StatusPair(this.container, this.onContainer);
-  static StatusPair lerp(StatusPair a, StatusPair b, double t) =>
-      StatusPair(Color.lerp(a.container, b.container, t)!, Color.lerp(a.onContainer, b.onContainer, t)!);
+  static StatusPair lerp(StatusPair a, StatusPair b, double t) => StatusPair(
+    Color.lerp(a.container, b.container, t)!,
+    Color.lerp(a.onContainer, b.onContainer, t)!,
+  );
 }
 
 @immutable
@@ -112,25 +114,67 @@ abstract final class AppTheme {
     // keeping tonalSpot's soft containers. Dark mode keeps the generated light-indigo primary.
     final base = ColorScheme.fromSeed(seedColor: _seed, brightness: b);
     final scheme = b == Brightness.light
-        ? base.copyWith(primary: _seed, onPrimary: Colors.white, surfaceTint: _seed)
+        ? base.copyWith(
+            primary: _seed,
+            onPrimary: Colors.white,
+            surfaceTint: _seed,
+          )
         : base;
     const text = TextTheme(
-      displaySmall: TextStyle(fontSize: 36, fontWeight: FontWeight.w400, height: 1.22),
-      headlineMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w400, height: 1.29),
-      titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w400, height: 1.27),
-      titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, height: 1.5, letterSpacing: .15),
-      bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, height: 1.5),
-      bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w400, height: 1.43),
-      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: .1),
-      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: .5),
+      displaySmall: TextStyle(
+        fontSize: 36,
+        fontWeight: FontWeight.w400,
+        height: 1.22,
+      ),
+      headlineMedium: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.w400,
+        height: 1.29,
+      ),
+      titleLarge: TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w400,
+        height: 1.27,
+      ),
+      titleMedium: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        height: 1.5,
+        letterSpacing: .15,
+      ),
+      bodyLarge: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        height: 1.5,
+      ),
+      bodyMedium: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        height: 1.43,
+      ),
+      labelLarge: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        letterSpacing: .1,
+      ),
+      labelMedium: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        letterSpacing: .5,
+      ),
     );
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       fontFamily: 'Roboto',
-      textTheme: text.apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
+      textTheme: text.apply(
+        bodyColor: scheme.onSurface,
+        displayColor: scheme.onSurface,
+      ),
       scaffoldBackgroundColor: scheme.surface,
-      extensions: [b == Brightness.light ? StatusColors.light : StatusColors.dark],
+      extensions: [
+        b == Brightness.light ? StatusColors.light : StatusColors.dark,
+      ],
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
         scrolledUnderElevation: 3,
@@ -148,7 +192,9 @@ abstract final class AppTheme {
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      chipTheme: ChipThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: scheme.primaryContainer,
         foregroundColor: scheme.onPrimaryContainer,
@@ -160,13 +206,20 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
       ),
-      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: scheme.surfaceContainerHighest),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest,
+      ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: scheme.surfaceContainerLow,
         showDragHandle: true,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
       ),
-      listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16)),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16),
+      ),
       dividerTheme: DividerThemeData(color: scheme.outlineVariant, space: 1),
     );
   }
@@ -180,7 +233,14 @@ class StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(color: colors.container, borderRadius: BorderRadius.circular(8)),
-    child: Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colors.onContainer)),
+    decoration: BoxDecoration(
+      color: colors.container,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelMedium
+          ?.copyWith(color: colors.onContainer),
+    ),
   );
 }

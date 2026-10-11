@@ -7,14 +7,21 @@ import '../../theme/app_theme.dart';
 import 'common.dart';
 
 /// Quick picks on the blocked-reason sheet (design proposal; not in the repo).
-const blockerQuickPicks = ['Waiting on client', 'Dependency', 'Access', 'Unclear requirements'];
+const blockerQuickPicks = [
+  'Waiting on client',
+  'Dependency',
+  'Access',
+  'Unclear requirements',
+];
 
 /// Blocked-reason sheet: a reason is required (API blockerReason). Returns the reason or null.
-Future<String?> showBlockReasonSheet(BuildContext context, Task task) => showModalBottomSheet<String>(
-  context: context,
-  isScrollControlled: true,
-  builder: (_) => BlockReasonSheet(task: task),
-);
+Future<String?> showBlockReasonSheet(BuildContext context, Task task) =>
+    showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      builder: (_) => BlockReasonSheet(task: task),
+    );
 
 class BlockReasonSheet extends StatefulWidget {
   const BlockReasonSheet({super.key, required this.task});
@@ -48,7 +55,12 @@ class _BlockReasonSheetState extends State<BlockReasonSheet> {
     final t = Theme.of(context).textTheme;
     return Padding(
       key: const Key('blockSheet'),
-      padding: EdgeInsets.fromLTRB(Space.l, 0, Space.l, Space.l + MediaQuery.viewInsetsOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(
+        Space.l,
+        0,
+        Space.l,
+        Space.l + MediaQuery.viewInsetsOf(context).bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,10 +78,17 @@ class _BlockReasonSheetState extends State<BlockReasonSheet> {
             maxLines: 3,
             maxLength: 1000,
             autofocus: true,
-            decoration: InputDecoration(labelText: 'Blocker reason *', errorText: _error),
-            onChanged: (_) => _error == null ? null : setState(() => _error = null),
+            decoration: InputDecoration(
+              labelText: 'Blocker reason *',
+              errorText: _error,
+            ),
+            onChanged: (_) =>
+                _error == null ? null : setState(() => _error = null),
           ),
-          Text('Quick picks', style: t.labelMedium?.copyWith(color: s.onSurfaceVariant)),
+          Text(
+            'Quick picks',
+            style: t.labelMedium?.copyWith(color: s.onSurfaceVariant),
+          ),
           const SizedBox(height: Space.xs),
           Wrap(
             spacing: Space.s,
@@ -78,7 +97,9 @@ class _BlockReasonSheetState extends State<BlockReasonSheet> {
                 ActionChip(
                   label: Text(q),
                   onPressed: () => setState(() {
-                    _ctrl.text = _ctrl.text.trim().isEmpty ? q : '${_ctrl.text.trim()} — $q';
+                    _ctrl.text = _ctrl.text.trim().isEmpty
+                        ? q
+                        : '${_ctrl.text.trim()} — $q';
                     _error = null;
                   }),
                 ),
@@ -88,7 +109,10 @@ class _BlockReasonSheetState extends State<BlockReasonSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
               const SizedBox(width: Space.s),
               FilledButton(
                 key: const Key('confirmBlockButton'),
@@ -110,9 +134,17 @@ class _BlockReasonSheetState extends State<BlockReasonSheet> {
 
 /// Runs a status change, asking for a reason first when blocking.
 /// Returns the updated task, or null if cancelled or failed.
-Future<Task?> requestStatusChange(BuildContext context, WidgetRef ref, Task task, TaskStatus to) async {
+Future<Task?> requestStatusChange(
+  BuildContext context,
+  WidgetRef ref,
+  Task task,
+  TaskStatus to,
+) async {
   if (!allowedTargets(task).contains(to)) {
-    showError(context, "A task can't move from ${task.status.label} to ${to.label}.");
+    showError(
+      context,
+      "A task can't move from ${task.status.label} to ${to.label}.",
+    );
     return null;
   }
   String? reason;
@@ -121,12 +153,16 @@ Future<Task?> requestStatusChange(BuildContext context, WidgetRef ref, Task task
     if (reason == null) return null;
   }
   try {
-    final updated = await ref.read(taskRepositoryProvider).changeStatus(task, to, reason: reason);
+    final updated = await ref
+        .read(taskRepositoryProvider)
+        .changeStatus(task, to, reason: reason);
     invalidateTask(ref, task);
     if (context.mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Moved to ${updated.status.label}')));
+        ..showSnackBar(
+          SnackBar(content: Text('Moved to ${updated.status.label}')),
+        );
     }
     return updated;
   } catch (e) {
@@ -136,10 +172,15 @@ Future<Task?> requestStatusChange(BuildContext context, WidgetRef ref, Task task
 }
 
 /// Status picker used by "Change status" and long-press on board cards.
-Future<TaskStatus?> showStatusPicker(BuildContext context, Task task, {String title = 'Change status'}) {
+Future<TaskStatus?> showStatusPicker(
+  BuildContext context,
+  Task task, {
+  String title = 'Change status',
+}) {
   final allowed = allowedTargets(task);
   return showModalBottomSheet<TaskStatus>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     builder: (ctx) => SafeArea(
       child: SingleChildScrollView(
@@ -157,10 +198,16 @@ Future<TaskStatus?> showStatusPicker(BuildContext context, Task task, {String ti
                 ListTile(
                   key: Key('statusOption_${s.name}'),
                   enabled: allowed.contains(s),
-                  leading: Icon(Icons.circle, size: 14, color: ctx.statusColors.forStatus(s).onContainer),
+                  leading: Icon(
+                    Icons.circle,
+                    size: 14,
+                    color: ctx.statusColors.forStatus(s).onContainer,
+                  ),
                   title: Text(s.label),
                   subtitle: allowed.contains(s)
-                      ? (s == TaskStatus.blocked ? const Text('Requires a reason') : null)
+                      ? (s == TaskStatus.blocked
+                            ? const Text('Requires a reason')
+                            : null)
                       : Text(
                           s == TaskStatus.forReview
                               ? 'Set by approval (Done on tasks that need approval)'

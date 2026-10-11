@@ -5,62 +5,39 @@ import 'package:go_router/go_router.dart';
 import '../../data/models.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
-
-class _Logo extends StatelessWidget {
-  const _Logo({this.size = 56, this.inverse = false});
-  final double size;
-  final bool inverse;
-  @override
-  Widget build(BuildContext context) {
-    final s = Theme.of(context).colorScheme;
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: inverse ? s.onPrimary : s.primary,
-        borderRadius: BorderRadius.circular(size / 4),
-      ),
-      child: Text(
-        'X8',
-        style: TextStyle(
-          color: inverse ? s.primary : s.onPrimary,
-          fontWeight: FontWeight.w700,
-          fontSize: size * .36,
-        ),
-      ),
-    );
-  }
-}
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
   @override
-  Widget build(BuildContext context) {
-    final s = Theme.of(context).colorScheme;
-    return Scaffold(
-      key: const Key('splashScreen'),
-      backgroundColor: s.primary,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _Logo(size: 72, inverse: true),
-            const SizedBox(height: Space.l),
-            Text(
-              'Xceler8 PM',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: s.onPrimary),
-            ),
-            const SizedBox(height: Space.xs),
-            Text('Implementation Tracker', style: TextStyle(color: s.onPrimary.withValues(alpha: .8))),
-            const SizedBox(height: Space.xxl),
-            CircularProgressIndicator(color: s.onPrimary),
-          ],
+  Widget build(BuildContext context) => Scaffold(
+    key: const Key('splashScreen'),
+    body: Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Brand.purple, Brand.purpleLight],
         ),
       ),
-    );
-  }
+      alignment: Alignment.center,
+      child: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          BrandLogo(height: 72, white: true),
+          SizedBox(height: Space.xxl),
+          SizedBox.square(
+            dimension: 28,
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 3,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -90,7 +67,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(authProvider.notifier).login(_email.text.trim(), _password.text);
+      await ref
+          .read(authProvider.notifier)
+          .login(_email.text.trim(), _password.text);
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.status == 429) {
@@ -116,13 +95,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             padding: const EdgeInsets.all(Space.l),
             children: [
               const SizedBox(height: Space.l),
-              const Align(alignment: Alignment.centerLeft, child: _Logo(size: 48)),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: BrandLogo(height: 44),
+              ),
               const SizedBox(height: Space.l),
-              Text('Welcome back', style: t.headlineMedium),
-              const SizedBox(height: Space.s),
               Text(
-                'Sign in to keep your implementations on track.',
-                style: t.bodyMedium?.copyWith(color: s.onSurfaceVariant),
+                'Sign in to OpsTrack',
+                key: const Key('loginHeading'),
+                style: t.headlineMedium,
               ),
               const SizedBox(height: Space.l),
               TextFormField(
@@ -131,7 +112,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const [AutofillHints.email],
                 decoration: const InputDecoration(labelText: 'Work email'),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Email is required.' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Email is required.'
+                    : null,
               ),
               const SizedBox(height: Space.m),
               TextFormField(
@@ -144,11 +127,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   labelText: 'Password',
                   suffixIcon: IconButton(
                     tooltip: _obscure ? 'Show password' : 'Hide password',
-                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                    icon: Icon(
+                      _obscure ? Icons.visibility_off : Icons.visibility,
+                    ),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
-                validator: (v) => (v == null || v.isEmpty) ? 'Password is required.' : null,
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Password is required.' : null,
               ),
               if (_error != null)
                 Padding(
@@ -162,7 +148,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () => showError(context, 'Ask your administrator to send a reset link.'),
+                  onPressed: () => showError(
+                    context,
+                    'Ask your administrator to send a reset link.',
+                  ),
                   child: const Text('Forgot password?'),
                 ),
               ),
@@ -170,13 +159,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               FilledButton(
                 key: const Key('loginSubmit'),
                 onPressed: _busy ? null : _submit,
-                child: _busy
-                    ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Sign in'),
+                child: Text(_busy ? 'Signing in…' : 'Sign in'),
               ),
               const SizedBox(height: Space.l),
               Text(
                 'New here? Open the invite link from your admin.',
+                textAlign: TextAlign.center,
+                style: t.bodySmall?.copyWith(color: s.onSurfaceVariant),
+              ),
+              const SizedBox(height: Space.xl),
+              Text(
+                Brand.footer,
+                key: const Key('brandFooter'),
                 textAlign: TextAlign.center,
                 style: t.bodySmall?.copyWith(color: s.onSurfaceVariant),
               ),
@@ -215,11 +209,19 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   }
 
   Future<void> _submit() async {
-    final ok = passwordRules(_pw.text).every((r) => r.$2) && _pw.text == _confirm.text;
-    if (!ok) return showError(context, 'Check the password rules and that both passwords match.');
+    final ok =
+        passwordRules(_pw.text).every((r) => r.$2) && _pw.text == _confirm.text;
+    if (!ok) {
+      return showError(
+        context,
+        'Check the password rules and that both passwords match.',
+      );
+    }
     setState(() => _busy = true);
     try {
-      await ref.read(authRepositoryProvider).setupPassword(widget.token, _pw.text);
+      await ref
+          .read(authRepositoryProvider)
+          .setupPassword(widget.token, _pw.text);
       if (mounted) {
         showError(context, 'Password set. Please sign in.');
         context.go('/login');
@@ -240,8 +242,13 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
       body: ListView(
         padding: const EdgeInsets.all(Space.l),
         children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: BrandLogo(height: 40),
+          ),
+          const SizedBox(height: Space.l),
           Text(
-            'Welcome! Your admin invited you to Xceler8 PM. Choose a password to finish setting up.',
+            'Welcome to OpsTrack. Choose a password to finish setting up.',
             style: TextStyle(color: s.onSurfaceVariant),
           ),
           const SizedBox(height: Space.l),

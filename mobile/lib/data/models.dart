@@ -12,7 +12,8 @@ enum TaskStatus {
   final String api;
   final String label;
 
-  static TaskStatus fromApi(String? v) => values.firstWhere((s) => s.api == v, orElse: () => TaskStatus.todo);
+  static TaskStatus fromApi(String? v) =>
+      values.firstWhere((s) => s.api == v, orElse: () => TaskStatus.todo);
 
   /// Kanban columns, in board order.
   static const board = [todo, inProgress, blocked, forReview, done];
@@ -27,7 +28,8 @@ enum Priority {
   const Priority(this.api, this.label);
   final String api;
   final String label;
-  static Priority fromApi(String? v) => values.firstWhere((s) => s.api == v, orElse: () => Priority.medium);
+  static Priority fromApi(String? v) =>
+      values.firstWhere((s) => s.api == v, orElse: () => Priority.medium);
 }
 
 enum Party {
@@ -70,14 +72,23 @@ String? _name(Object? v) => v is Map ? v['name'] as String? : null;
 double _num(Object? v) => v is num ? v.toDouble() : 0;
 
 String initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((p) => p.isNotEmpty)
+      .toList();
   if (parts.isEmpty) return '?';
   if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
   return (parts.first[0] + parts.last[0]).toUpperCase();
 }
 
 class AppUser {
-  const AppUser({required this.id, required this.name, required this.email, this.role = ''});
+  const AppUser({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.role = '',
+  });
   final String id, name, email, role;
   factory AppUser.fromJson(Map<String, dynamic> j) => AppUser(
     id: j['id'] as String,
@@ -97,7 +108,23 @@ class Project {
     this.goLive,
     this.managerName,
     this.taskCount = 0,
+    this.projectTypeId,
+    this.projectTypeName,
+    this.projectTypeActive = true,
+    this.clientId,
+    this.managerId,
+    this.startDate,
+    this.description,
+    this.code,
   });
+  final String? projectTypeId,
+      projectTypeName,
+      clientId,
+      managerId,
+      description,
+      code;
+  final bool projectTypeActive;
+  final DateTime? startDate;
   final String id, name, clientName;
   final ProjectStatus status;
 
@@ -116,6 +143,14 @@ class Project {
     goLive: _date(j['plannedEndDate']),
     managerName: j['managerName'] as String?,
     taskCount: (j['taskCount'] as num?)?.toInt() ?? 0,
+    projectTypeId: (j['projectType'] as Map?)?['id'] as String?,
+    projectTypeName: (j['projectType'] as Map?)?['name'] as String?,
+    projectTypeActive: (j['projectType'] as Map?)?['active'] != false,
+    clientId: j['clientId'] as String?,
+    managerId: j['managerId'] as String?,
+    startDate: _date(j['startDate']),
+    description: j['description'] as String?,
+    code: j['code'] as String?,
   );
 }
 
@@ -198,16 +233,21 @@ class Task {
     final project = j['project'];
     return Task(
       id: j['id'] as String,
-      projectId: (j['projectId'] ?? (project is Map ? project['id'] : '')) as String,
+      projectId:
+          (j['projectId'] ?? (project is Map ? project['id'] : '')) as String,
       projectName: _name(project) ?? projectName,
       name: j['name'] as String? ?? '',
       phase: j['phase'] as String?,
       status: TaskStatus.fromApi(j['status'] as String?),
-      previousStatus: j['previousStatus'] == null ? null : TaskStatus.fromApi(j['previousStatus'] as String),
+      previousStatus: j['previousStatus'] == null
+          ? null
+          : TaskStatus.fromApi(j['previousStatus'] as String),
       priority: Priority.fromApi(j['priority'] as String?),
       party: Party.fromApi(j['party'] as String?),
       ownerName: _name(j['owner']),
-      assignees: [for (final a in (j['assignees'] as List? ?? const [])) _name(a) ?? ''],
+      assignees: [
+        for (final a in (j['assignees'] as List? ?? const [])) _name(a) ?? '',
+      ],
       plannedStart: _date(j['plannedStart']),
       dueDate: _date(j['dueDate']),
       estHours: (j['estHours'] as num?)?.toDouble(),
@@ -217,7 +257,9 @@ class Task {
       requiresApproval: j['requiresApproval'] as bool? ?? false,
       mandatory: j['mandatory'] as bool? ?? false,
       reviewerName: _name(j['reviewer']),
-      approvalState: approval is Map ? approval['state'] as String? ?? 'NONE' : 'NONE',
+      approvalState: approval is Map
+          ? approval['state'] as String? ?? 'NONE'
+          : 'NONE',
       version: (j['version'] as num?)?.toInt() ?? 0,
       overdue: j['overdue'] as bool? ?? false,
     );
@@ -269,14 +311,23 @@ class TimeEntry {
 }
 
 class TimeWeek {
-  const TimeWeek({required this.weekStart, required this.entries, required this.total, this.capacity = 40});
+  const TimeWeek({
+    required this.weekStart,
+    required this.entries,
+    required this.total,
+    this.capacity = 40,
+  });
   final DateTime weekStart;
   final List<TimeEntry> entries;
   final double total, capacity;
 }
 
 class LoggableProject {
-  const LoggableProject({required this.id, required this.name, required this.tasks});
+  const LoggableProject({
+    required this.id,
+    required this.name,
+    required this.tasks,
+  });
   final String id, name;
   final List<({String id, String name})> tasks;
 }
@@ -309,10 +360,14 @@ class AppNotification {
     final actor = _name(j['actor']);
     final verb = _verbs[type] ?? type.replaceAll('_', ' ').toLowerCase();
     final title = type == 'ASSIGNED' || actor == null ? verb : '$actor $verb';
-    final target = _name(j['task']) ?? (j['issue'] is Map ? j['issue']['title'] as String? : null);
+    final target =
+        _name(j['task']) ??
+        (j['issue'] is Map ? j['issue']['title'] as String? : null);
     return AppNotification(
       id: j['id'] as String,
-      title: title.isEmpty ? 'Update' : title[0].toUpperCase() + title.substring(1),
+      title: title.isEmpty
+          ? 'Update'
+          : title[0].toUpperCase() + title.substring(1),
       subtitle: [target, _name(j['project'])].whereType<String>().join(' · '),
       read: j['read'] as bool? ?? false,
       at: _date(j['at']) ?? DateTime.now(),
@@ -347,10 +402,24 @@ class Issue {
 }
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.status, this.code});
+  ApiException(
+    this.message, {
+    this.status,
+    this.code,
+    this.fields = const {},
+    this.details,
+  });
   final String message;
   final int? status;
   final String? code;
+
+  /// 400/422 field errors (`error.details[] {path, message}`), keyed by path.
+  final Map<String, String> fields;
+
+  /// Raw `error.details` (e.g. TIMER_RUNNING `{running: {id, name}}`).
+  final Object? details;
+
+  bool get isNetworkOrServer => status == null || status! >= 500;
   @override
   String toString() => message;
 }

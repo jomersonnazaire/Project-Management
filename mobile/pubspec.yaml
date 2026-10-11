@@ -1,5 +1,5 @@
 name: xc8_pm
-description: "A new Flutter project."
+description: "OpsTrack mobile (by Jomerson & Grok)"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -38,6 +38,7 @@ dependencies:
   go_router: ^18.0.2
   http: ^1.6.0
   url_launcher: ^6.3.3
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -49,6 +50,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -60,6 +63,8 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/brand/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -91,3 +96,24 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: assets/brand/icon-512.png
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/brand/icon-512.png
+  web:
+    generate: true
+    image_path: assets/brand/icon-512.png
+    background_color: "#FFFFFF"
+    theme_color: "#3F51B5"
+
+flutter_native_splash:
+  color: "#5355E0"
+  image: assets/brand/splash-logo-white.png
+  android_12:
+    color: "#5355E0"
+    image: assets/brand/splash-logo-white.png
+  web: true

@@ -6,7 +6,8 @@ String dateOnly(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 List<Map<String, dynamic>> _items(Map<String, dynamic> body) => [
-  for (final i in (body['items'] as List? ?? const [])) i as Map<String, dynamic>,
+  for (final i in (body['items'] as List? ?? const []))
+    i as Map<String, dynamic>,
 ];
 
 class ApiAuthRepository implements AuthRepository {
@@ -26,7 +27,10 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<AppUser> login(String email, String password) async {
-    final body = await api.post('/auth/login', {'email': email, 'password': password});
+    final body = await api.post('/auth/login', {
+      'email': email,
+      'password': password,
+    });
     return AppUser.fromJson(body['user'] as Map<String, dynamic>);
   }
 
@@ -49,22 +53,30 @@ class ApiProjectRepository implements ProjectRepository {
   final ApiClient api;
 
   @override
-  Future<List<Project>> list({String? query, ProjectStatus? status}) async {
+  Future<List<Project>> list({
+    String? query,
+    ProjectStatus? status,
+    String? projectTypeId,
+  }) async {
     final body = await api.get('/projects', {
       if (query != null && query.isNotEmpty) 'q': query,
       if (status != null && status != ProjectStatus.other) 'status': status.api,
       'pageSize': '100',
+      'projectTypeId': ?projectTypeId,
     });
     return _items(body).map(Project.fromJson).toList();
   }
 
   @override
-  Future<Project> get(String id) async =>
-      Project.fromJson((await api.get('/projects/$id'))['project'] as Map<String, dynamic>);
+  Future<Project> get(String id) async => Project.fromJson(
+    (await api.get('/projects/$id'))['project'] as Map<String, dynamic>,
+  );
 
   @override
   Future<List<Task>> tasks(String projectId) async =>
-      _items(await api.get('/projects/$projectId/tasks')).map(Task.fromJson).toList();
+      _items(await api.get('/projects/$projectId/tasks'))
+          .map(Task.fromJson)
+          .toList();
 
   @override
   Future<Task> createTask(String projectId, NewTask t) async {
@@ -88,11 +100,13 @@ class ApiTaskRepository implements TaskRepository {
   final ApiClient api;
 
   @override
-  Future<List<Task>> mine() async => _items(await api.get('/tasks/mine')).map(Task.fromJson).toList();
+  Future<List<Task>> mine() async =>
+      _items(await api.get('/tasks/mine')).map(Task.fromJson).toList();
 
   @override
-  Future<Task> get(String id) async =>
-      Task.fromJson((await api.get('/tasks/$id'))['task'] as Map<String, dynamic>);
+  Future<Task> get(String id) async => Task.fromJson(
+    (await api.get('/tasks/$id'))['task'] as Map<String, dynamic>,
+  );
 
   @override
   Future<Task> changeStatus(Task task, TaskStatus to, {String? reason}) async {
@@ -104,7 +118,8 @@ class ApiTaskRepository implements TaskRepository {
         : await api.post('/tasks/${task.id}/status', {
             'status': to.api,
             'version': task.version,
-            if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+            if (reason != null && reason.trim().isNotEmpty)
+              'reason': reason.trim(),
           });
     final dto = body['task'];
     return dto is Map<String, dynamic> ? Task.fromJson(dto) : get(task.id);
@@ -133,19 +148,24 @@ class ApiTimeRepository implements TimeRepository {
         id: (p['project'] as Map)['id'] as String,
         name: (p['project'] as Map)['name'] as String,
         tasks: [
-          for (final t in p['tasks'] as List) (id: (t as Map)['id'] as String, name: t['name'] as String),
+          for (final t in p['tasks'] as List)
+            (id: (t as Map)['id'] as String, name: t['name'] as String),
         ],
       ),
   ];
 
   @override
-  Future<void> log({required String taskId, required DateTime date, required double hours, String? notes}) =>
-      api.post('/time', {
-        'taskId': taskId,
-        'workDate': dateOnly(date),
-        'hours': hours,
-        if (notes != null && notes.isNotEmpty) 'notes': notes,
-      });
+  Future<void> log({
+    required String taskId,
+    required DateTime date,
+    required double hours,
+    String? notes,
+  }) => api.post('/time', {
+    'taskId': taskId,
+    'workDate': dateOnly(date),
+    'hours': hours,
+    if (notes != null && notes.isNotEmpty) 'notes': notes,
+  });
 }
 
 class ApiNotificationRepository implements NotificationRepository {
@@ -154,7 +174,9 @@ class ApiNotificationRepository implements NotificationRepository {
 
   @override
   Future<List<AppNotification>> list() async =>
-      _items(await api.get('/notifications')).map(AppNotification.fromJson).toList();
+      _items(await api.get('/notifications'))
+          .map(AppNotification.fromJson)
+          .toList();
 
   @override
   Future<void> markAllRead() => api.post('/notifications/read-all');
@@ -165,8 +187,9 @@ class ApiIssueRepository implements IssueRepository {
   final ApiClient api;
 
   @override
-  Future<List<Issue>> list({String? projectId}) async =>
-      _items(projectId == null ? await api.get('/issues') : await api.get('/projects/$projectId/issues'))
-          .map(Issue.fromJson)
-          .toList();
+  Future<List<Issue>> list({String? projectId}) async => _items(
+    projectId == null
+        ? await api.get('/issues')
+        : await api.get('/projects/$projectId/issues'),
+  ).map(Issue.fromJson).toList();
 }

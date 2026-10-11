@@ -8,6 +8,7 @@ import '../../config.dart';
 import '../../data/models.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
+import '../v2/entry_sheet.dart';
 import '../widgets/common.dart';
 import '../widgets/status_flow.dart';
 
@@ -22,22 +23,30 @@ class TaskDetailScreen extends ConsumerWidget {
       key: const Key('taskDetailScreen'),
       appBar: AppBar(
         leading: BackOrUpButton(
-          fallback: task.hasValue ? '/projects/${task.requireValue.projectId}' : '/home',
+          fallback: task.hasValue
+              ? '/projects/${task.requireValue.projectId}'
+              : '/home',
         ),
         actions: [
           IconButton(
             key: const Key('taskEdit'),
             tooltip: 'Edit task',
             icon: const Icon(Icons.edit_outlined),
-            onPressed: task.hasValue ? () => _openOnWeb(context, task.requireValue) : null,
+            onPressed: task.hasValue
+                ? () => _openOnWeb(context, task.requireValue)
+                : null,
           ),
           PopupMenuButton<String>(
             key: const Key('taskOverflow'),
             tooltip: 'More options',
             onSelected: (v) {
               if (v == 'refresh') ref.invalidate(taskProvider(taskId));
-              if (v == 'web' && task.hasValue) _openOnWeb(context, task.requireValue);
-              if (v == 'project' && task.hasValue) context.go('/projects/${task.requireValue.projectId}');
+              if (v == 'web' && task.hasValue) {
+                _openOnWeb(context, task.requireValue);
+              }
+              if (v == 'project' && task.hasValue) {
+                context.go('/projects/${task.requireValue.projectId}');
+              }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'refresh', child: Text('Refresh')),
@@ -52,7 +61,9 @@ class TaskDetailScreen extends ConsumerWidget {
         onRetry: () => ref.invalidate(taskProvider(taskId)),
         data: (t) => _Body(t),
       ),
-      bottomNavigationBar: task.hasValue ? _ActionBar(task: task.requireValue) : null,
+      bottomNavigationBar: task.hasValue
+          ? _ActionBar(task: task.requireValue)
+          : null,
     );
   }
 }
@@ -81,10 +92,10 @@ class _ActionBar extends ConsumerWidget {
             Expanded(
               flex: 2,
               child: OutlinedButton.icon(
-                key: const Key('taskLogTime'),
-                icon: const Icon(Icons.timer_outlined),
-                label: const FitLabel('Log time'),
-                onPressed: () => context.go('/log?task=${task.id}&project=${task.projectId}'),
+                key: const Key('taskTimeIn'),
+                icon: const Icon(Icons.play_arrow_outlined),
+                label: const FitLabel('Time in'),
+                onPressed: () => timeInOnTask(context, ref, task.id),
               ),
             ),
             const SizedBox(width: Space.m - 4),
@@ -96,7 +107,9 @@ class _ActionBar extends ConsumerWidget {
                     ? null
                     : () async {
                         final to = await showStatusPicker(context, task);
-                        if (to != null && context.mounted) await requestStatusChange(context, ref, task, to);
+                        if (to != null && context.mounted) {
+                          await requestStatusChange(context, ref, task, to);
+                        }
                       },
                 child: const FitLabel('Change status'),
               ),
@@ -115,7 +128,9 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final sc = context.statusColors;
     final text = Theme.of(context).textTheme;
-    final est = t.estHours == null ? 'no estimate' : '${fmtHours(t.estHours!)}h est.';
+    final est = t.estHours == null
+        ? 'no estimate'
+        : '${fmtHours(t.estHours!)}h est.';
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -123,11 +138,18 @@ class _Body extends StatelessWidget {
           sliver: SliverList.list(
             children: [
               Text(
-                [t.projectName, t.phase].whereType<String>().where((e) => e.isNotEmpty).join(' · '),
+                [
+                  t.projectName,
+                  t.phase,
+                ].whereType<String>().where((e) => e.isNotEmpty).join(' · '),
                 style: text.bodySmall,
               ),
               const SizedBox(height: Space.s),
-              Text(t.name, key: const Key('taskTitle'), style: text.headlineMedium),
+              Text(
+                t.name,
+                key: const Key('taskTitle'),
+                style: text.headlineMedium,
+              ),
               const SizedBox(height: Space.s),
               Wrap(
                 spacing: Space.s,
@@ -147,7 +169,10 @@ class _Body extends StatelessWidget {
                     leading: Icon(Icons.block, color: sc.blocked.onContainer),
                     title: Text(
                       'Blocked',
-                      style: TextStyle(color: sc.blocked.onContainer, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: sc.blocked.onContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     subtitle: Text(
                       t.blockerReason ?? 'No reason given',
@@ -167,21 +192,29 @@ class _Body extends StatelessWidget {
                     ),
                     const Divider(indent: 72),
                     ListTile(
-                      leading: InitialsAvatar(t.assignees.isEmpty ? '?' : t.assignees.first),
+                      leading: InitialsAvatar(
+                        t.assignees.isEmpty ? '?' : t.assignees.first,
+                      ),
                       title: const Text('Assignees'),
-                      subtitle: Text(t.assignees.isEmpty ? 'None' : t.assignees.join(', ')),
+                      subtitle: Text(
+                        t.assignees.isEmpty ? 'None' : t.assignees.join(', '),
+                      ),
                     ),
                     const Divider(indent: 72),
                     ListTile(
                       leading: const Icon(Icons.event_outlined),
                       title: const Text('Dates'),
-                      subtitle: Text('${fmtShort(t.plannedStart)} → ${fmtShort(t.dueDate)}'),
+                      subtitle: Text(
+                        '${fmtShort(t.plannedStart)} → ${fmtShort(t.dueDate)}',
+                      ),
                     ),
                     const Divider(indent: 72),
                     ListTile(
                       leading: const Icon(Icons.schedule),
                       title: const Text('Effort'),
-                      subtitle: Text('${fmtHours(t.actualHours)}h logged of $est'),
+                      subtitle: Text(
+                        '${fmtHours(t.actualHours)}h logged of $est',
+                      ),
                     ),
                     if (t.dependsOn.isNotEmpty) ...[
                       const Divider(indent: 72),
@@ -201,7 +234,9 @@ class _Body extends StatelessWidget {
                 Card(
                   child: ListTile(
                     leading: InitialsAvatar(t.reviewerName ?? 'PM'),
-                    title: Text('${t.reviewerName ?? 'Project manager'} · reviewer'),
+                    title: Text(
+                      '${t.reviewerName ?? 'Project manager'} · reviewer',
+                    ),
                     subtitle: const Text('Required before Done'),
                     trailing: StatusChip(
                       label: switch (t.approvalState) {
@@ -209,7 +244,9 @@ class _Body extends StatelessWidget {
                         'REJECTED' => 'Rejected',
                         _ => 'Pending',
                       },
-                      colors: t.approvalState == 'APPROVED' ? sc.done : sc.forReview,
+                      colors: t.approvalState == 'APPROVED'
+                          ? sc.done
+                          : sc.forReview,
                     ),
                   ),
                 ),
@@ -271,9 +308,11 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
     return DateTime(n.year, n.month, n.day);
   }
 
-  bool get _canGoNext => !_weekStart.add(const Duration(days: 7)).isAfter(_today);
+  bool get _canGoNext =>
+      !_weekStart.add(const Duration(days: 7)).isAfter(_today);
 
-  void _selectDay(DateTime d) => setState(() => _day = d.isAfter(_today) ? _today : d);
+  void _selectDay(DateTime d) =>
+      setState(() => _day = d.isAfter(_today) ? _today : d);
 
   Future<void> _pickDate() async {
     final d = await showDatePicker(
@@ -291,7 +330,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
     if (h == null || h <= 0 || h > 24 || (h * 4) != (h * 4).roundToDouble()) {
       return showError(context, 'Enter hours in steps of 0.25 (max 24).');
     }
-    if (_day.isAfter(_today)) return showError(context, "You can't log time on a future date.");
+    if (_day.isAfter(_today)) {
+      return showError(context, "You can't log time on a future date.");
+    }
     final logged =
         ref
             .read(timeWeekProvider(_weekStart))
@@ -311,14 +352,20 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
     try {
       await ref
           .read(timeRepositoryProvider)
-          .log(taskId: _taskId!, date: _day, hours: h, notes: _note.text.trim());
+          .log(
+            taskId: _taskId!,
+            date: _day,
+            hours: h,
+            notes: _note.text.trim(),
+          );
       _hours.clear();
       _note.clear();
       ref.invalidate(timeWeekProvider);
       ref.invalidate(dashboardProvider);
       ref.invalidate(taskProvider(_taskId!));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Logged ${fmtHours(h)}h')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Logged ${fmtHours(h)}h')));
       }
     } catch (e) {
       if (mounted) showError(context, e);
@@ -332,13 +379,15 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
     final s = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final week = ref.watch(timeWeekProvider(_weekStart));
-    final options = ref.watch(timeOptionsProvider).value ?? const <LoggableProject>[];
+    final options =
+        ref.watch(timeOptionsProvider).value ?? const <LoggableProject>[];
     final project = options.where((p) => p.id == _projectId).firstOrNull;
     final weekEnd = _weekStart.add(const Duration(days: 6));
 
     return Scaffold(
       key: const Key('logTimeScreen'),
       appBar: AppBar(
+        leading: const BackOrUpButton(fallback: '/day'),
         title: const Text('Log time'),
         actions: [
           IconButton(
@@ -358,7 +407,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
                 key: const Key('prevWeek'),
                 tooltip: 'Previous week',
                 icon: const Icon(Icons.chevron_left),
-                onPressed: () => setState(() => _day = _day.subtract(const Duration(days: 7))),
+                onPressed: () => setState(
+                  () => _day = _day.subtract(const Duration(days: 7)),
+                ),
               ),
               Expanded(
                 child: Text(
@@ -371,7 +422,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
                 key: const Key('nextWeek'),
                 tooltip: 'Next week',
                 icon: const Icon(Icons.chevron_right),
-                onPressed: _canGoNext ? () => _selectDay(_day.add(const Duration(days: 7))) : null,
+                onPressed: _canGoNext
+                    ? () => _selectDay(_day.add(const Duration(days: 7)))
+                    : null,
               ),
             ],
           ),
@@ -396,7 +449,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
                         onTap: future ? null : () => _selectDay(d),
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 2),
-                          padding: const EdgeInsets.symmetric(vertical: Space.s),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: Space.s,
+                          ),
                           decoration: BoxDecoration(
                             color: sel ? s.primary : s.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(12),
@@ -411,15 +466,21 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
                             children: [
                               Text(
                                 weekdays[i],
-                                style: t.labelSmall?.copyWith(color: sel ? s.onPrimary : null),
+                                style: t.labelSmall?.copyWith(
+                                  color: sel ? s.onPrimary : null,
+                                ),
                               ),
                               Text(
                                 '${d.day}',
-                                style: t.titleMedium?.copyWith(color: sel ? s.onPrimary : null),
+                                style: t.titleMedium?.copyWith(
+                                  color: sel ? s.onPrimary : null,
+                                ),
                               ),
                               Text(
                                 hrs == 0 ? '–' : fmtHours(hrs),
-                                style: t.labelSmall?.copyWith(color: sel ? s.onPrimary : s.onSurfaceVariant),
+                                style: t.labelSmall?.copyWith(
+                                  color: sel ? s.onPrimary : s.onSurfaceVariant,
+                                ),
                               ),
                             ],
                           ),
@@ -433,12 +494,21 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
           const SizedBox(height: Space.m),
           DropdownMenu<String>(
             key: Key('projectDropdown_$_projectId'),
-            trailingIcon: const Icon(Icons.arrow_drop_down, semanticLabel: 'Show projects'),
-            selectedTrailingIcon: const Icon(Icons.arrow_drop_up, semanticLabel: 'Hide projects'),
+            trailingIcon: const Icon(
+              Icons.arrow_drop_down,
+              semanticLabel: 'Show projects',
+            ),
+            selectedTrailingIcon: const Icon(
+              Icons.arrow_drop_up,
+              semanticLabel: 'Hide projects',
+            ),
             expandedInsets: EdgeInsets.zero,
             label: const Text('Project'),
             initialSelection: _projectId,
-            dropdownMenuEntries: [for (final p in options) DropdownMenuEntry(value: p.id, label: p.name)],
+            dropdownMenuEntries: [
+              for (final p in options)
+                DropdownMenuEntry(value: p.id, label: p.name),
+            ],
             onSelected: (v) => setState(() {
               _projectId = v;
               _taskId = null;
@@ -447,14 +517,21 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
           const SizedBox(height: Space.m),
           DropdownMenu<String>(
             key: ValueKey('taskDropdown_${_projectId}_$_taskId'),
-            trailingIcon: const Icon(Icons.arrow_drop_down, semanticLabel: 'Show tasks'),
-            selectedTrailingIcon: const Icon(Icons.arrow_drop_up, semanticLabel: 'Hide tasks'),
+            trailingIcon: const Icon(
+              Icons.arrow_drop_down,
+              semanticLabel: 'Show tasks',
+            ),
+            selectedTrailingIcon: const Icon(
+              Icons.arrow_drop_up,
+              semanticLabel: 'Hide tasks',
+            ),
             expandedInsets: EdgeInsets.zero,
             label: const Text('Task'),
             enabled: project != null,
             initialSelection: _taskId,
             dropdownMenuEntries: [
-              for (final x in project?.tasks ?? const <({String id, String name})>[])
+              for (final x
+                  in project?.tasks ?? const <({String id, String name})>[])
                 DropdownMenuEntry(value: x.id, label: x.name),
             ],
             onSelected: (v) => setState(() => _taskId = v),
@@ -466,7 +543,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
                 child: TextField(
                   key: const Key('hoursField'),
                   controller: _hours,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(labelText: 'Hours'),
                 ),
               ),
@@ -474,7 +553,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
               Expanded(
                 child: InputDecorator(
                   decoration: const InputDecoration(labelText: 'Date'),
-                  child: Text('${weekdays[_day.weekday - 1]}, ${fmtDate(_day)}'),
+                  child: Text(
+                    '${weekdays[_day.weekday - 1]}, ${fmtDate(_day)}',
+                  ),
                 ),
               ),
             ],
@@ -498,17 +579,29 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
             data: (w) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('This week · ${fmtHours(w.total)}h', key: const Key('weekTotal'), style: t.titleSmall),
+                Text(
+                  'This week · ${fmtHours(w.total)}h',
+                  key: const Key('weekTotal'),
+                  style: t.titleSmall,
+                ),
                 const SizedBox(height: Space.s),
                 Card(
                   child: Column(
                     children: [
-                      if (w.entries.isEmpty) const ListTile(title: Text('No time logged this week.')),
+                      if (w.entries.isEmpty)
+                        const ListTile(
+                          title: Text('No time logged this week.'),
+                        ),
                       for (final e in w.entries)
                         ListTile(
                           title: Text(e.taskName),
-                          subtitle: Text('${e.projectName} · ${weekdays[e.workDate.weekday - 1]}'),
-                          trailing: Text('${fmtHours(e.hours)}h', style: t.titleSmall),
+                          subtitle: Text(
+                            '${e.projectName} · ${weekdays[e.workDate.weekday - 1]}',
+                          ),
+                          trailing: Text(
+                            '${fmtHours(e.hours)}h',
+                            style: t.titleSmall,
+                          ),
                         ),
                     ],
                   ),

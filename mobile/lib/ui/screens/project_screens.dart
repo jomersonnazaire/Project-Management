@@ -1,3 +1,5 @@
+import '../v2/project_form.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +28,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
       appBar: AppBar(title: const Text('Projects')),
       floatingActionButton: FloatingActionButton.extended(
         key: const Key('newProjectFab'),
-        onPressed: () => showError(context, 'Create projects from a template on the web app.'),
+        onPressed: () => context.push('/projects/new'),
         icon: const Icon(Icons.add),
         label: const Text('New project'),
       ),
@@ -48,6 +50,10 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: Space.m),
               children: [
+                const Padding(
+                  padding: EdgeInsets.only(right: Space.s),
+                  child: ProjectTypeFilterChip(),
+                ),
                 for (final s in [
                   null,
                   ProjectStatus.active,
@@ -60,7 +66,8 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                     child: FilterChip(
                       label: Text(s?.label ?? 'All'),
                       selected: filter == s,
-                      onSelected: (_) => ref.read(projectFilterProvider.notifier).set(s),
+                      onSelected: (_) =>
+                          ref.read(projectFilterProvider.notifier).set(s),
                     ),
                   ),
               ],
@@ -71,10 +78,22 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
               value: ref.watch(projectsProvider),
               onRetry: () => ref.invalidate(projectsProvider),
               data: (list) {
-                final shown = list.where((p) => p.name.toLowerCase().contains(_query.toLowerCase())).toList();
-                if (shown.isEmpty) return const Center(child: Text('No projects match.'));
+                final shown = list
+                    .where(
+                      (p) =>
+                          p.name.toLowerCase().contains(_query.toLowerCase()),
+                    )
+                    .toList();
+                if (shown.isEmpty) {
+                  return const Center(child: Text('No projects match.'));
+                }
                 return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, 96),
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.m,
+                    Space.s,
+                    Space.m,
+                    96,
+                  ),
                   itemCount: shown.length,
                   separatorBuilder: (_, _) => const SizedBox(height: Space.s),
                   itemBuilder: (_, i) => _ProjectCard(shown[i]),
@@ -110,14 +129,28 @@ class _ProjectCard extends StatelessWidget {
                   ProjectStatusChip(p.status),
                 ],
               ),
-              Text('${p.clientName} · Go-live ${fmtDate(p.goLive)}', style: t.bodySmall),
-              const SizedBox(height: Space.m),
-              LinearProgressIndicator(value: p.progress / 100, borderRadius: BorderRadius.circular(4)),
+              Text(
+                '${p.clientName} · Go-live ${fmtDate(p.goLive)}',
+                style: t.bodySmall,
+              ),
+              const SizedBox(height: Space.xs),
+              ProjectTypeChip(project: p),
+              const SizedBox(height: Space.s),
+              LinearProgressIndicator(
+                value: p.progress / 100,
+                borderRadius: BorderRadius.circular(4),
+              ),
               const SizedBox(height: Space.s),
               Row(
                 children: [
-                  Expanded(child: Text('${p.progress.round()}% complete', style: t.bodySmall)),
-                  if (p.managerName != null) InitialsAvatar(p.managerName!, radius: 14),
+                  Expanded(
+                    child: Text(
+                      '${p.progress.round()}% complete',
+                      style: t.bodySmall,
+                    ),
+                  ),
+                  if (p.managerName != null)
+                    InitialsAvatar(p.managerName!, radius: 14),
                 ],
               ),
             ],
@@ -143,7 +176,8 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
   final String projectId;
   final ProjectTab initialTab;
   @override
-  ConsumerState<ProjectDetailScreen> createState() => _ProjectDetailScreenState();
+  ConsumerState<ProjectDetailScreen> createState() =>
+      _ProjectDetailScreenState();
 }
 
 class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
@@ -153,7 +187,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   void didUpdateWidget(ProjectDetailScreen old) {
     super.didUpdateWidget(old);
     // The shell keeps this page alive; follow ?tab= changes from later navigation.
-    if (widget.initialTab != old.initialTab || widget.navNonce != old.navNonce) _tab = widget.initialTab;
+    if (widget.initialTab != old.initialTab ||
+        widget.navNonce != old.navNonce) {
+      _tab = widget.initialTab;
+    }
   }
 
   @override
@@ -162,12 +199,23 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     final t = Theme.of(context).textTheme;
     return Scaffold(
       key: const Key('projectDetailScreen'),
-      appBar: AppBar(title: Text(project.value?.name ?? '')),
+      appBar: AppBar(
+        title: Text(project.value?.name ?? ''),
+        actions: [
+          IconButton(
+            key: const Key('editProject'),
+            tooltip: 'Edit project',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => context.push('/projects/${widget.projectId}/edit'),
+          ),
+        ],
+      ),
       floatingActionButton: _tab == ProjectTab.checklist
           ? FloatingActionButton(
               key: const Key('newTaskFab'),
               tooltip: 'New task',
-              onPressed: () => context.push('/projects/${widget.projectId}/tasks/new'),
+              onPressed: () =>
+                  context.push('/projects/${widget.projectId}/tasks/new'),
               child: const Icon(Icons.add),
             )
           : null,
@@ -196,8 +244,16 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(Space.m, Space.s, Space.m, Space.s),
-              child: LinearProgressIndicator(value: p.progress / 100, borderRadius: BorderRadius.circular(4)),
+              padding: const EdgeInsets.fromLTRB(
+                Space.m,
+                Space.s,
+                Space.m,
+                Space.s,
+              ),
+              child: LinearProgressIndicator(
+                value: p.progress / 100,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.m),
@@ -205,13 +261,22 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                 key: const Key('projectTabs'),
                 showSelectedIcon: false,
                 segments: const [
-                  ButtonSegment(value: ProjectTab.checklist, label: FitLabel('Checklist')),
+                  ButtonSegment(
+                    value: ProjectTab.checklist,
+                    label: FitLabel('Checklist'),
+                  ),
                   ButtonSegment(
                     value: ProjectTab.board,
                     label: FitLabel('Board', key: Key('boardTab')),
                   ),
-                  ButtonSegment(value: ProjectTab.issues, label: FitLabel('Issues')),
-                  ButtonSegment(value: ProjectTab.more, label: FitLabel('More')),
+                  ButtonSegment(
+                    value: ProjectTab.issues,
+                    label: FitLabel('Issues'),
+                  ),
+                  ButtonSegment(
+                    value: ProjectTab.more,
+                    label: FitLabel('More'),
+                  ),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (v) => setState(() => _tab = v.first),
@@ -288,7 +353,9 @@ class ChecklistView extends ConsumerWidget {
             ExpansionTile(
               initiallyExpanded: i < 2,
               title: Text(e.key),
-              trailing: Text('${e.value.where((t) => t.status == TaskStatus.done).length}/${e.value.length}'),
+              trailing: Text(
+                '${e.value.where((t) => t.status == TaskStatus.done).length}/${e.value.length}',
+              ),
               children: [
                 for (final t in e.value)
                   ListTile(
@@ -296,7 +363,9 @@ class ChecklistView extends ConsumerWidget {
                     leading: Checkbox(
                       value: t.status == TaskStatus.done,
                       onChanged: (v) {
-                        final to = v == true ? TaskStatus.done : TaskStatus.inProgress;
+                        final to = v == true
+                            ? TaskStatus.done
+                            : TaskStatus.inProgress;
                         requestStatusChange(context, ref, t, to);
                       },
                     ),
@@ -326,7 +395,10 @@ class KanbanBoard extends ConsumerStatefulWidget {
 }
 
 class _KanbanBoardState extends ConsumerState<KanbanBoard> {
-  late final _pages = PageController(viewportFraction: .85, initialPage: widget.initialPage);
+  late final _pages = PageController(
+    viewportFraction: .85,
+    initialPage: widget.initialPage,
+  );
   late int _page = widget.initialPage;
 
   @override
@@ -342,7 +414,11 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
     if (updated != null && mounted) {
       final idx = TaskStatus.board.indexOf(updated.status);
       if (idx >= 0) {
-        _pages.animateToPage(idx, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        _pages.animateToPage(
+          idx,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     }
   }
@@ -366,7 +442,10 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
                 final col = tasks.where((x) => x.status == status).toList();
                 return Container(
                   key: Key('kanbanColumn_${status.name}'),
-                  margin: const EdgeInsets.symmetric(horizontal: Space.xs + 2, vertical: Space.s),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: Space.xs + 2,
+                    vertical: Space.s,
+                  ),
                   decoration: BoxDecoration(
                     color: s.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(16),
@@ -397,12 +476,19 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
                       ),
                       Expanded(
                         child: col.isEmpty
-                            ? Center(child: Text('No tasks', style: t.bodySmall))
+                            ? Center(
+                                child: Text('No tasks', style: t.bodySmall),
+                              )
                             : ListView(
-                                padding: const EdgeInsets.symmetric(horizontal: Space.m - 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: Space.m - 4,
+                                ),
                                 children: [
                                   for (final task in col)
-                                    _BoardCard(task: task, onLongPress: () => _move(task)),
+                                    _BoardCard(
+                                      task: task,
+                                      onLongPress: () => _move(task),
+                                    ),
                                 ],
                               ),
                       ),
@@ -410,10 +496,17 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
                         padding: const EdgeInsets.all(Space.m),
                         child: Row(
                           children: [
-                            Icon(Icons.swipe, size: 20, color: s.onSurfaceVariant),
+                            Icon(
+                              Icons.swipe,
+                              size: 20,
+                              color: s.onSurfaceVariant,
+                            ),
                             const SizedBox(width: Space.s),
                             Expanded(
-                              child: Text('Swipe or long-press a card to move it', style: t.bodySmall),
+                              child: Text(
+                                'Swipe or long-press a card to move it',
+                                style: t.bodySmall,
+                              ),
                             ),
                           ],
                         ),
@@ -441,7 +534,12 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
             ],
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(Space.s, Space.xs, Space.s, Space.s),
+            padding: const EdgeInsets.fromLTRB(
+              Space.s,
+              Space.xs,
+              Space.s,
+              Space.s,
+            ),
             child: Text.rich(
               TextSpan(
                 children: [
@@ -449,7 +547,11 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
                     if (i > 0) const TextSpan(text: ' · '),
                     TextSpan(
                       text: TaskStatus.board[i].label,
-                      style: TextStyle(fontWeight: i == _page ? FontWeight.w700 : FontWeight.w400),
+                      style: TextStyle(
+                        fontWeight: i == _page
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
                     ),
                   ],
                 ],
@@ -494,11 +596,15 @@ class _BoardCard extends StatelessWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         PriorityChip(task.priority),
-                        Text(fmtDate(task.dueDate), style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          fmtDate(task.dueDate),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       ],
                     ),
                   ),
-                  if (task.assignees.isNotEmpty) InitialsAvatar(task.assignees.first, radius: 13),
+                  if (task.assignees.isNotEmpty)
+                    InitialsAvatar(task.assignees.first, radius: 13),
                 ],
               ),
             ],
@@ -570,7 +676,9 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
             ),
           );
       ref.invalidate(projectTasksProvider(widget.projectId));
-      if (mounted) popOrGo(context, '/projects/${widget.projectId}?tab=checklist');
+      if (mounted) {
+        popOrGo(context, '/projects/${widget.projectId}?tab=checklist');
+      }
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -583,10 +691,17 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
     return Scaffold(
       key: const Key('createTaskScreen'),
       appBar: AppBar(
-        leading: BackOrUpButton(fallback: '/projects/${widget.projectId}', icon: Icons.close),
+        leading: BackOrUpButton(
+          fallback: '/projects/${widget.projectId}',
+          icon: Icons.close,
+        ),
         title: const Text('New task'),
         actions: [
-          TextButton(key: const Key('saveTask'), onPressed: _busy ? null : _save, child: const Text('Save')),
+          TextButton(
+            key: const Key('saveTask'),
+            onPressed: _busy ? null : _save,
+            child: const Text('Save'),
+          ),
         ],
       ),
       body: Form(
@@ -598,7 +713,9 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
               key: const Key('taskNameField'),
               controller: _name,
               decoration: const InputDecoration(labelText: 'Task name *'),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Task name is required.' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Task name is required.'
+                  : null,
             ),
             const SizedBox(height: Space.m),
             TextFormField(
@@ -610,7 +727,10 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
             const SizedBox(height: Space.xs),
             SegmentedButton<Priority>(
               showSelectedIcon: false,
-              segments: [for (final p in Priority.values) ButtonSegment(value: p, label: Text(p.label))],
+              segments: [
+                for (final p in Priority.values)
+                  ButtonSegment(value: p, label: Text(p.label)),
+              ],
               selected: {_priority},
               onSelectionChanged: (v) => setState(() => _priority = v.first),
             ),
@@ -618,7 +738,10 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
             const Text('Party'),
             const SizedBox(height: Space.xs),
             SegmentedButton<Party>(
-              segments: [for (final p in Party.values) ButtonSegment(value: p, label: Text(p.label))],
+              segments: [
+                for (final p in Party.values)
+                  ButtonSegment(value: p, label: Text(p.label)),
+              ],
               selected: {_party},
               onSelectionChanged: (v) => setState(() => _party = v.first),
             ),
@@ -633,14 +756,19 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
                 ),
                 const SizedBox(width: Space.s),
                 Expanded(
-                  child: OutlinedButton(onPressed: () => _pick(false), child: Text('Due ${fmtShort(_due)}')),
+                  child: OutlinedButton(
+                    onPressed: () => _pick(false),
+                    child: Text('Due ${fmtShort(_due)}'),
+                  ),
                 ),
                 const SizedBox(width: Space.s),
                 SizedBox(
                   width: 80,
                   child: TextField(
                     controller: _est,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(labelText: 'Est. h'),
                   ),
                 ),

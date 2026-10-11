@@ -6,7 +6,9 @@ import 'helpers.dart';
 
 void main() {
   group('login', () {
-    testWidgets('validates, shows API error, then signs in to Home', (tester) async {
+    testWidgets('validates, shows API error, then signs in to Home', (
+      tester,
+    ) async {
       await pumpApp(tester, signedIn: false);
       expect(find.byKey(const Key('loginScreen')), findsOneWidget);
 
@@ -14,7 +16,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Email is required.'), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('loginEmail')), 'jonathan@xceler8.com');
+      await tester.enterText(
+        find.byKey(const Key('loginEmail')),
+        'jonathan@xceler8.com',
+      );
       await tester.enterText(find.byKey(const Key('loginPassword')), 'x');
       await tester.tap(find.byKey(const Key('loginSubmit')));
       await tester.pumpAndSettle();
@@ -25,7 +30,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(SnackBar), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('loginPassword')), 'Secret#123');
+      await tester.enterText(
+        find.byKey(const Key('loginPassword')),
+        'Secret#123',
+      );
       await tester.tap(find.byKey(const Key('loginSubmit')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('homeScreen')), findsOneWidget);
@@ -38,8 +46,8 @@ void main() {
     expect(find.byKey(const Key('bottomNav')), findsOneWidget);
     const tabs = {
       'nav_projects': 'projectsScreen',
-      'nav_tasks': 'tasksScreen',
-      'nav_log': 'logTimeScreen',
+      'nav_tasks': 'myTasksScreen',
+      'nav_day': 'dayTimesheetScreen',
       'nav_more': 'moreScreen',
       'nav_home': 'homeScreen',
     };
@@ -67,7 +75,10 @@ void main() {
     expect(find.text('A reason is required to block a task.'), findsOneWidget);
     expect((await tasksOf(c).get('t3')).status, TaskStatus.inProgress);
 
-    await tester.enterText(find.byKey(const Key('blockReasonField')), 'Waiting on client VPN access');
+    await tester.enterText(
+      find.byKey(const Key('blockReasonField')),
+      'Waiting on client VPN access',
+    );
     await tester.tap(find.byKey(const Key('confirmBlockButton')));
     await tester.pumpAndSettle();
 
@@ -78,7 +89,9 @@ void main() {
     expect(find.text('Waiting on client VPN access'), findsOneWidget);
   });
 
-  testWidgets('kanban: long-press moves a card to another column', (tester) async {
+  testWidgets('kanban: long-press moves a card to another column', (
+    tester,
+  ) async {
     final c = await pumpApp(tester, location: '/projects/p1?tab=board');
     expect(find.byKey(const Key('kanbanColumn_inProgress')), findsOneWidget);
     expect(find.byKey(const Key('boardCard_t6')), findsOneWidget);
@@ -95,40 +108,50 @@ void main() {
     expect(find.byKey(const Key('boardCard_t6')), findsOneWidget);
   });
 
-  testWidgets('kanban: moving to Blocked asks for a reason; cancel keeps status', (tester) async {
-    final c = await pumpApp(tester, location: '/projects/p1?tab=board');
-    await tester.longPress(find.byKey(const Key('boardCard_t3')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('statusOption_blocked')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('blockSheet')), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect((await tasksOf(c).get('t3')).status, TaskStatus.inProgress);
-  });
+  testWidgets(
+    'kanban: moving to Blocked asks for a reason; cancel keeps status',
+    (tester) async {
+      final c = await pumpApp(tester, location: '/projects/p1?tab=board');
+      await tester.longPress(find.byKey(const Key('boardCard_t3')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('statusOption_blocked')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('blockSheet')), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect((await tasksOf(c).get('t3')).status, TaskStatus.inProgress);
+    },
+  );
 
-  testWidgets('log time from task detail adds an entry', (tester) async {
-    final c = await pumpApp(tester, location: '/tasks/t3');
-    await tester.tap(find.byKey(const Key('taskLogTime')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('logTimeScreen')), findsOneWidget);
-    expect(find.text('This week · 31.5h'), findsOneWidget);
+  testWidgets(
+    'hours form (Day timesheet › Hours list › Log time) adds an entry',
+    (tester) async {
+      final c = await pumpApp(tester, location: '/log?task=t3&project=p1');
+      expect(find.byKey(const Key('logTimeScreen')), findsOneWidget);
+      expect(find.text('This week · 31.5h'), findsOneWidget);
 
-    await tester.enterText(find.byKey(const Key('hoursField')), '0.3');
-    await tester.tap(find.byKey(const Key('saveEntry')));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter hours in steps of 0.25 (max 24).'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('hoursField')), '0.3');
+      await tester.tap(find.byKey(const Key('saveEntry')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Enter hours in steps of 0.25 (max 24).'),
+        findsOneWidget,
+      );
 
-    await tester.enterText(find.byKey(const Key('hoursField')), '2.5');
-    await tester.enterText(find.byKey(const Key('noteField')), 'IdP config call');
-    await tester.ensureVisible(find.byKey(const Key('saveEntry')));
-    await tester.tap(find.byKey(const Key('saveEntry')));
-    await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('hoursField')), '2.5');
+      await tester.enterText(
+        find.byKey(const Key('noteField')),
+        'IdP config call',
+      );
+      await tester.ensureVisible(find.byKey(const Key('saveEntry')));
+      await tester.tap(find.byKey(const Key('saveEntry')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('This week · 34h'), findsOneWidget);
-    expect(storeOf(c).entries.last.hours, 2.5);
-    expect((await tasksOf(c).get('t3')).actualHours, 5.5);
-  });
+      expect(find.text('This week · 34h'), findsOneWidget);
+      expect(storeOf(c).entries.last.hours, 2.5);
+      expect((await tasksOf(c).get('t3')).actualHours, 5.5);
+    },
+  );
 
   testWidgets('admin tools and appearance toggle are on More', (tester) async {
     await pumpApp(tester, location: '/more');

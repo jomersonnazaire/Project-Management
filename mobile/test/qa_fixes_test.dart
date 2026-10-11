@@ -4,12 +4,16 @@ import 'package:xc8_pm/router.dart';
 
 import 'helpers.dart';
 
-
 void main() {
   group('QA #1 create task via deep link', () {
-    testWidgets('Save lands on the project instead of throwing', (tester) async {
+    testWidgets('Save lands on the project instead of throwing', (
+      tester,
+    ) async {
       final c = await pumpApp(tester, location: '/projects/p1/tasks/new');
-      await tester.enterText(find.byKey(const Key('taskNameField')), 'Deep link task');
+      await tester.enterText(
+        find.byKey(const Key('taskNameField')),
+        'Deep link task',
+      );
       await tester.tap(find.byKey(const Key('saveTask')));
       await tester.pumpAndSettle();
       expect(find.textContaining('GoError'), findsNothing);
@@ -59,13 +63,16 @@ void main() {
       expect(find.byKey(const Key('checklist')), findsOneWidget);
     });
 
-    testWidgets('/log?task= preselects a new task when Log time is already open', (tester) async {
-      final c = await pumpApp(tester, location: '/log?task=t3&project=p1');
-      expect(find.byKey(const Key('taskDropdown_p1_t3')), findsOneWidget);
-      c.read(routerProvider).go('/log?task=t6&project=p1');
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('taskDropdown_p1_t6')), findsOneWidget);
-    });
+    testWidgets(
+      '/log?task= preselects a new task when Log time is already open',
+      (tester) async {
+        final c = await pumpApp(tester, location: '/log?task=t3&project=p1');
+        expect(find.byKey(const Key('taskDropdown_p1_t3')), findsOneWidget);
+        c.read(routerProvider).go('/log?task=t6&project=p1');
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('taskDropdown_p1_t6')), findsOneWidget);
+      },
+    );
   });
 
   group('QA #8 log time limits', () {
@@ -75,12 +82,17 @@ void main() {
       expect(next.onPressed, isNull);
       await tester.tap(find.byKey(const Key('prevWeek')));
       await tester.pumpAndSettle();
-      expect(tester.widget<IconButton>(find.byKey(const Key('nextWeek'))).onPressed, isNotNull);
+      expect(
+        tester.widget<IconButton>(find.byKey(const Key('nextWeek'))).onPressed,
+        isNotNull,
+      );
     });
 
     testWidgets('day total over 24h is rejected', (tester) async {
       final c = await pumpApp(tester, location: '/log?task=t3&project=p1');
-      await tester.tap(find.byKey(const Key('day_0'))); // Mon Oct 5: already 16.5h
+      await tester.tap(
+        find.byKey(const Key('day_0')),
+      ); // Mon Oct 5: already 16.5h
       await tester.pumpAndSettle();
       final before = storeOf(c).entries.length;
       await tester.enterText(find.byKey(const Key('hoursField')), '8');
@@ -96,18 +108,23 @@ void main() {
       expect(storeOf(c).entries.length, before + 1);
     });
 
-    testWidgets('week controls and calendar have labels; More shows open issues count', (tester) async {
-      final c = await pumpApp(tester, location: '/log');
-      expect(find.byTooltip('Previous week'), findsOneWidget);
-      expect(find.byTooltip('Next week'), findsOneWidget);
-      expect(find.byTooltip('Pick a date'), findsOneWidget);
-      c.read(routerProvider).go('/more');
-      await tester.pumpAndSettle();
-      expect(find.text('4 open'), findsOneWidget);
-    });
+    testWidgets(
+      'week controls and calendar have labels; More shows open issues count',
+      (tester) async {
+        final c = await pumpApp(tester, location: '/log');
+        expect(find.byTooltip('Previous week'), findsOneWidget);
+        expect(find.byTooltip('Next week'), findsOneWidget);
+        expect(find.byTooltip('Pick a date'), findsOneWidget);
+        c.read(routerProvider).go('/more');
+        await tester.pumpAndSettle();
+        expect(find.text('4 open'), findsOneWidget);
+      },
+    );
   });
 
-  testWidgets('QA #5 2x text scale: no overflow on Home, Task detail, Board', (tester) async {
+  testWidgets('QA #5 2x text scale: no overflow on Home, Task detail, Board', (
+    tester,
+  ) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final c = await pumpApp(tester);
@@ -121,6 +138,12 @@ void main() {
       '/tasks',
       '/more',
       '/notifications',
+      '/day',
+      '/dar',
+      '/dar/saved',
+      '/projects/new',
+      '/tasks?tab=day',
+      '/timesheet-review',
     ]) {
       c.read(routerProvider).go(loc);
       await tester.pumpAndSettle();

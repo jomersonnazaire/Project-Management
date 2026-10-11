@@ -7,6 +7,8 @@ import '../../config.dart';
 import '../../data/models.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
+import '../../state/v2_providers.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -17,9 +19,13 @@ class HomeScreen extends ConsumerWidget {
     final user = ref.watch(authProvider).value;
     final dash = ref.watch(dashboardProvider);
     final projects = ref.watch(projectsProvider);
-    final unread = ref.watch(notificationsProvider).value?.where((n) => !n.read).length ?? 0;
+    final unread =
+        ref.watch(notificationsProvider).value?.where((n) => !n.read).length ??
+        0;
     final hour = ref.watch(clockProvider)().hour;
-    final greet = hour < 12 ? 'Good morning' : (hour < 18 ? 'Good afternoon' : 'Good evening');
+    final greet = hour < 12
+        ? 'Good morning'
+        : (hour < 18 ? 'Good afternoon' : 'Good evening');
     final first = (user?.name ?? '').split(' ').first;
     final s = Theme.of(context).colorScheme;
     final sc = context.statusColors;
@@ -37,6 +43,10 @@ class HomeScreen extends ConsumerWidget {
           slivers: [
             SliverAppBar(
               pinned: true,
+              leading: const Padding(
+                padding: EdgeInsets.all(14),
+                child: BrandIcon(),
+              ),
               title: Text(first.isEmpty ? greet : '$greet, $first'),
               actions: [
                 IconButton(
@@ -62,8 +72,18 @@ class HomeScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(horizontal: Space.m),
                       child: _KpiGrid(
                         children: [
-                          _Kpi('Open tasks', '${d.open}', s.primaryContainer, s.onPrimaryContainer),
-                          _Kpi('Blocked', '${d.blocked}', sc.blocked.container, sc.blocked.onContainer),
+                          _Kpi(
+                            'Open tasks',
+                            '${d.open}',
+                            s.primaryContainer,
+                            s.onPrimaryContainer,
+                          ),
+                          _Kpi(
+                            'Blocked',
+                            '${d.blocked}',
+                            sc.blocked.container,
+                            sc.blocked.onContainer,
+                          ),
                           _Kpi(
                             'Due this week',
                             '${d.dueThisWeek}',
@@ -91,7 +111,10 @@ class HomeScreen extends ConsumerWidget {
                       child: Card(
                         child: Column(
                           children: [
-                            if (d.dueSoon.isEmpty) const ListTile(title: Text('Nothing due this week 🎉')),
+                            if (d.dueSoon.isEmpty)
+                              const ListTile(
+                                title: Text('Nothing due this week 🎉'),
+                              ),
                             for (final t in d.dueSoon) TaskTile(t),
                           ],
                         ),
@@ -106,11 +129,18 @@ class HomeScreen extends ConsumerWidget {
               child: AsyncView(
                 value: projects,
                 data: (list) => Padding(
-                  padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.l),
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.m,
+                    0,
+                    Space.m,
+                    Space.l,
+                  ),
                   child: Card(
                     child: Column(
                       children: [
-                        for (final p in list.where((p) => p.status == ProjectStatus.active))
+                        for (final p in list.where(
+                          (p) => p.status == ProjectStatus.active,
+                        ))
                           ListTile(
                             onTap: () => context.go('/projects/${p.id}'),
                             title: Text(p.name),
@@ -151,8 +181,16 @@ class _Kpi extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg)),
-            Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: fg)),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium
+                  ?.copyWith(color: fg),
+            ),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(color: fg),
+            ),
           ],
         ),
       ),
@@ -221,13 +259,18 @@ class _MyTasksScreenState extends ConsumerState<MyTasksScreen> {
               value: tasks,
               onRetry: () => ref.invalidate(myTasksProvider),
               data: (list) {
-                final shown = list.where((t) => _filter == null || t.status == _filter).toList();
-                if (shown.isEmpty) return const Center(child: Text('No tasks here.'));
+                final shown = list
+                    .where((t) => _filter == null || t.status == _filter)
+                    .toList();
+                if (shown.isEmpty) {
+                  return const Center(child: Text('No tasks here.'));
+                }
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(myTasksProvider),
                   child: ListView.separated(
                     itemCount: shown.length,
-                    separatorBuilder: (_, _) => const Divider(indent: Space.m, endIndent: Space.m),
+                    separatorBuilder: (_, _) =>
+                        const Divider(indent: Space.m, endIndent: Space.m),
                     itemBuilder: (_, i) => TaskTile(shown[i]),
                   ),
                 );
@@ -265,7 +308,9 @@ class NotificationsScreen extends ConsumerWidget {
         value: ref.watch(notificationsProvider),
         data: (list) {
           bool isToday(AppNotification n) =>
-              n.at.year == today.year && n.at.month == today.month && n.at.day == today.day;
+              n.at.year == today.year &&
+              n.at.month == today.month &&
+              n.at.day == today.day;
           final groups = {
             'Today': list.where(isToday).toList(),
             'Earlier': list.where((n) => !isToday(n)).toList(),
@@ -277,16 +322,27 @@ class NotificationsScreen extends ConsumerWidget {
                   SectionHeader(g.key),
                   for (final n in g.value)
                     ListTile(
-                      onTap: n.taskId == null ? null : () => context.push('/tasks/${n.taskId}'),
+                      onTap: n.taskId == null
+                          ? null
+                          : () => context.push('/tasks/${n.taskId}'),
                       leading: InitialsAvatar(n.title),
                       title: Text(
                         n.title,
-                        style: TextStyle(fontWeight: n.read ? FontWeight.w400 : FontWeight.w600),
+                        style: TextStyle(
+                          fontWeight: n.read
+                              ? FontWeight.w400
+                              : FontWeight.w600,
+                        ),
                       ),
                       subtitle: Text(n.subtitle),
                       trailing: n.read
                           ? null
-                          : CircleAvatar(radius: 4, backgroundColor: Theme.of(context).colorScheme.primary),
+                          : CircleAvatar(
+                              radius: 4,
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary,
+                            ),
                     ),
                 ],
             ],
@@ -318,7 +374,10 @@ class _IssuesListState extends ConsumerState<IssuesList> {
             'Open' => i.isOpen,
             'Closed' => !i.isOpen,
             'Mine' => i.ownerName != null && i.isOpen,
-            _ => i.isOpen && (i.severity == Priority.high || i.severity == Priority.critical),
+            _ =>
+              i.isOpen &&
+                  (i.severity == Priority.high ||
+                      i.severity == Priority.critical),
           },
         );
         return Column(
@@ -354,14 +413,23 @@ class _IssuesListState extends ConsumerState<IssuesList> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Container(width: 4, color: sc.forPriority(i.severity).onContainer),
+                              Container(
+                                width: 4,
+                                color: sc.forPriority(i.severity).onContainer,
+                              ),
                               Expanded(
                                 child: ListTile(
                                   title: Text(i.title),
                                   subtitle: Text(
-                                    [i.projectName, i.key, i.ownerName].whereType<String>().join(' · '),
+                                    [
+                                      i.projectName,
+                                      i.key,
+                                      i.ownerName,
+                                    ].whereType<String>().join(' · '),
                                   ),
-                                  trailing: Text(i.status.replaceAll('_', ' ').toLowerCase()),
+                                  trailing: Text(
+                                    i.status.replaceAll('_', ' ').toLowerCase(),
+                                  ),
                                 ),
                               ),
                             ],
@@ -398,11 +466,16 @@ class MoreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).value;
     final mode = ref.watch(themeModeProvider);
-    final unread = ref.watch(notificationsProvider).value?.where((n) => !n.read).length ?? 0;
+    final unread =
+        ref.watch(notificationsProvider).value?.where((n) => !n.read).length ??
+        0;
     final s = Theme.of(context).colorScheme;
     return Scaffold(
       key: const Key('moreScreen'),
-      appBar: AppBar(title: const Text('More')),
+      appBar: AppBar(
+        leading: const Padding(padding: EdgeInsets.all(14), child: BrandIcon()),
+        title: const Text('More'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(Space.m),
         children: [
@@ -410,7 +483,10 @@ class MoreScreen extends ConsumerWidget {
             color: s.secondaryContainer,
             child: ListTile(
               leading: InitialsAvatar(user?.name ?? '?', radius: 22),
-              title: Text(user?.name ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(
+                user?.name ?? '',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               subtitle: Text(user?.role ?? ''),
               trailing: const Icon(Icons.chevron_right),
             ),
@@ -419,6 +495,25 @@ class MoreScreen extends ConsumerWidget {
           Card(
             child: Column(
               children: [
+                ListTile(
+                  key: const Key('moreDar'),
+                  leading: const Icon(Icons.summarize_outlined),
+                  title: const Text('Daily Accomplishment Report'),
+                  onTap: () => context.push('/dar'),
+                ),
+                ListTile(
+                  key: const Key('moreSavedReports'),
+                  leading: const Icon(Icons.bookmarks_outlined),
+                  title: const Text('My saved reports'),
+                  onTap: () => context.push('/dar/saved'),
+                ),
+                if ((ref.watch(trackerPeopleProvider).value?.length ?? 0) > 1)
+                  ListTile(
+                    key: const Key('moreTimesheetReview'),
+                    leading: const Icon(Icons.fact_check_outlined),
+                    title: const Text('Timesheet review'),
+                    onTap: () => context.push('/timesheet-review'),
+                  ),
                 ListTile(
                   key: const Key('moreIssues'),
                   leading: const Icon(Icons.bug_report_outlined),
@@ -457,12 +552,22 @@ class MoreScreen extends ConsumerWidget {
                       key: const Key('appearanceToggle'),
                       showSelectedIcon: false,
                       segments: const [
-                        ButtonSegment(value: ThemeMode.system, label: Text('System')),
-                        ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-                        ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+                        ButtonSegment(
+                          value: ThemeMode.system,
+                          label: Text('System'),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.light,
+                          label: Text('Light'),
+                        ),
+                        ButtonSegment(
+                          value: ThemeMode.dark,
+                          label: Text('Dark'),
+                        ),
                       ],
                       selected: {mode},
-                      onSelectionChanged: (v) => ref.read(themeModeProvider.notifier).set(v.first),
+                      onSelectionChanged: (v) =>
+                          ref.read(themeModeProvider.notifier).set(v.first),
                     ),
                   ),
                 ),
@@ -475,7 +580,9 @@ class MoreScreen extends ConsumerWidget {
                   key: const Key('adminTools'),
                   leading: const Icon(Icons.open_in_new),
                   title: const Text('Admin tools'),
-                  subtitle: const Text('Users, teams, access rules · opens web'),
+                  subtitle: const Text(
+                    'Users, teams, access rules · opens web',
+                  ),
                   onTap: () => _openWeb(context, '/admin'),
                 ),
               ],
@@ -488,6 +595,14 @@ class MoreScreen extends ConsumerWidget {
             onPressed: () => ref.read(authProvider.notifier).logout(),
             child: const Text('Sign out'),
           ),
+          const SizedBox(height: Space.l),
+          Text(
+            Brand.footer,
+            key: const Key('brandFooter'),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: s.onSurfaceVariant),
+          ),
         ],
       ),
     );
@@ -498,7 +613,9 @@ class MoreScreen extends ConsumerWidget {
       Uri.parse('${AppConfig.webAppUrl}$path'),
       mode: LaunchMode.externalApplication,
     );
-    if (!ok && context.mounted) showError(context, 'Could not open the web app.');
+    if (!ok && context.mounted) {
+      showError(context, 'Could not open the web app.');
+    }
   }
 }
 
@@ -511,14 +628,20 @@ class _KpiGrid extends StatelessWidget {
     children: [
       for (var i = 0; i < children.length; i += 2)
         Padding(
-          padding: EdgeInsets.only(bottom: i + 2 < children.length ? Space.s : 0),
+          padding: EdgeInsets.only(
+            bottom: i + 2 < children.length ? Space.s : 0,
+          ),
           child: IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(child: children[i]),
                 const SizedBox(width: Space.s),
-                Expanded(child: i + 1 < children.length ? children[i + 1] : const SizedBox()),
+                Expanded(
+                  child: i + 1 < children.length
+                      ? children[i + 1]
+                      : const SizedBox(),
+                ),
               ],
             ),
           ),

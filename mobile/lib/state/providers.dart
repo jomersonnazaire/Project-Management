@@ -1,3 +1,5 @@
+import 'v2_providers.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,33 +12,57 @@ import '../data/repositories.dart';
 
 /// Override in tests / demo. Defaults: API when API_BASE_URL is set, otherwise mock data.
 final mockStoreProvider = Provider<MockStore>((ref) => MockStore());
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient(AppConfig.apiBaseUrl));
+final apiClientProvider = Provider<ApiClient>(
+  (ref) => ApiClient(AppConfig.apiBaseUrl),
+);
 
 T _pick<T>(Ref ref, T Function(ApiClient) api, T Function(MockStore) mock) =>
-    AppConfig.demoMode ? mock(ref.watch(mockStoreProvider)) : api(ref.watch(apiClientProvider));
+    AppConfig.demoMode
+    ? mock(ref.watch(mockStoreProvider))
+    : api(ref.watch(apiClientProvider));
 
 final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => _pick<AuthRepository>(ref, ApiAuthRepository.new, (_) => MockAuthRepository()),
+  (ref) => _pick<AuthRepository>(
+    ref,
+    ApiAuthRepository.new,
+    (_) => MockAuthRepository(),
+  ),
 );
 final projectRepositoryProvider = Provider<ProjectRepository>(
-  (ref) => _pick<ProjectRepository>(ref, ApiProjectRepository.new, MockProjectRepository.new),
+  (ref) => _pick<ProjectRepository>(
+    ref,
+    ApiProjectRepository.new,
+    MockProjectRepository.new,
+  ),
 );
 final taskRepositoryProvider = Provider<TaskRepository>(
-  (ref) => _pick<TaskRepository>(ref, ApiTaskRepository.new, MockTaskRepository.new),
+  (ref) =>
+      _pick<TaskRepository>(ref, ApiTaskRepository.new, MockTaskRepository.new),
 );
 final timeRepositoryProvider = Provider<TimeRepository>(
-  (ref) => _pick<TimeRepository>(ref, ApiTimeRepository.new, MockTimeRepository.new),
+  (ref) =>
+      _pick<TimeRepository>(ref, ApiTimeRepository.new, MockTimeRepository.new),
 );
 final notificationRepositoryProvider = Provider<NotificationRepository>(
-  (ref) => _pick<NotificationRepository>(ref, ApiNotificationRepository.new, MockNotificationRepository.new),
+  (ref) => _pick<NotificationRepository>(
+    ref,
+    ApiNotificationRepository.new,
+    MockNotificationRepository.new,
+  ),
 );
 final issueRepositoryProvider = Provider<IssueRepository>(
-  (ref) => _pick<IssueRepository>(ref, ApiIssueRepository.new, MockIssueRepository.new),
+  (ref) => _pick<IssueRepository>(
+    ref,
+    ApiIssueRepository.new,
+    MockIssueRepository.new,
+  ),
 );
 
 /// "Today" — overridable so tests and goldens are deterministic.
 final clockProvider = Provider<DateTime Function()>(
-  (ref) => AppConfig.demoMode ? () => MockStore.today.add(const Duration(hours: 14)) : DateTime.now,
+  (ref) => AppConfig.demoMode
+      ? () => MockStore.today.add(const Duration(hours: 14))
+      : DateTime.now,
 );
 
 class AuthController extends AsyncNotifier<AppUser?> {
@@ -54,7 +80,9 @@ class AuthController extends AsyncNotifier<AppUser?> {
   }
 }
 
-final authProvider = AsyncNotifierProvider<AuthController, AppUser?>(AuthController.new);
+final authProvider = AsyncNotifierProvider<AuthController, AppUser?>(
+  AuthController.new,
+);
 
 /// In-app appearance setting (proposal: kept in memory, not persisted).
 class ThemeModeController extends Notifier<ThemeMode> {
@@ -63,7 +91,9 @@ class ThemeModeController extends Notifier<ThemeMode> {
   void set(ThemeMode m) => state = m;
 }
 
-final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(ThemeModeController.new);
+final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
+  ThemeModeController.new,
+);
 
 class ProjectFilter extends Notifier<ProjectStatus?> {
   @override
@@ -71,10 +101,17 @@ class ProjectFilter extends Notifier<ProjectStatus?> {
   void set(ProjectStatus? s) => state = s;
 }
 
-final projectFilterProvider = NotifierProvider<ProjectFilter, ProjectStatus?>(ProjectFilter.new);
+final projectFilterProvider = NotifierProvider<ProjectFilter, ProjectStatus?>(
+  ProjectFilter.new,
+);
 
 final projectsProvider = FutureProvider<List<Project>>(
-  (ref) => ref.watch(projectRepositoryProvider).list(status: ref.watch(projectFilterProvider)),
+  (ref) => ref
+      .watch(projectRepositoryProvider)
+      .list(
+        status: ref.watch(projectFilterProvider),
+        projectTypeId: ref.watch(projectTypeFilterProvider),
+      ),
 );
 final projectProvider = FutureProvider.family<Project, String>(
   (ref, id) => ref.watch(projectRepositoryProvider).get(id),
@@ -82,7 +119,9 @@ final projectProvider = FutureProvider.family<Project, String>(
 final projectTasksProvider = FutureProvider.family<List<Task>, String>(
   (ref, id) => ref.watch(projectRepositoryProvider).tasks(id),
 );
-final myTasksProvider = FutureProvider<List<Task>>((ref) => ref.watch(taskRepositoryProvider).mine());
+final myTasksProvider = FutureProvider<List<Task>>(
+  (ref) => ref.watch(taskRepositoryProvider).mine(),
+);
 final taskProvider = FutureProvider.family<Task, String>(
   (ref, id) => ref.watch(taskRepositoryProvider).get(id),
 );
@@ -90,7 +129,8 @@ final notificationsProvider = FutureProvider<List<AppNotification>>(
   (ref) => ref.watch(notificationRepositoryProvider).list(),
 );
 final issuesProvider = FutureProvider.family<List<Issue>, String?>(
-  (ref, projectId) => ref.watch(issueRepositoryProvider).list(projectId: projectId),
+  (ref, projectId) =>
+      ref.watch(issueRepositoryProvider).list(projectId: projectId),
 );
 final timeWeekProvider = FutureProvider.family<TimeWeek, DateTime>(
   (ref, day) => ref.watch(timeRepositoryProvider).week(day),
@@ -117,11 +157,20 @@ class DashboardData {
 final dashboardProvider = FutureProvider<DashboardData>((ref) async {
   final now = ref.watch(clockProvider)();
   final tasks = await ref.watch(myTasksProvider.future);
-  final week = await ref.watch(timeWeekProvider(DateTime(now.year, now.month, now.day)).future);
+  final week = await ref.watch(
+    timeWeekProvider(DateTime(now.year, now.month, now.day)).future,
+  );
   final horizon = now.add(const Duration(days: 7));
-  final open = tasks.where((t) => t.status != TaskStatus.done && t.status != TaskStatus.cancelled).toList();
-  final due = open.where((t) => t.dueDate != null && t.dueDate!.isBefore(horizon)).toList()
-    ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
+  final open = tasks
+      .where(
+        (t) => t.status != TaskStatus.done && t.status != TaskStatus.cancelled,
+      )
+      .toList();
+  final due =
+      open
+          .where((t) => t.dueDate != null && t.dueDate!.isBefore(horizon))
+          .toList()
+        ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
   return DashboardData(
     open: open.length,
     blocked: open.where((t) => t.status == TaskStatus.blocked).length,

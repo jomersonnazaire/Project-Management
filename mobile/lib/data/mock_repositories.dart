@@ -27,6 +27,12 @@ class MockStore {
         goLive: d(10, 30),
         managerName: 'Jonathan E.',
         taskCount: 7,
+        projectTypeId: 'pt1',
+        projectTypeName: 'Implementation',
+        clientId: 'c1',
+        managerId: 'u1',
+        startDate: DateTime(2026, 8, 3),
+        code: 'ACME-01',
       ),
       Project(
         id: 'p2',
@@ -37,6 +43,12 @@ class MockStore {
         goLive: d(11, 18),
         managerName: 'Queen R.',
         taskCount: 1,
+        projectTypeId: 'pt7',
+        projectTypeName: 'Migration',
+        clientId: 'c2',
+        managerId: 'u2',
+        startDate: DateTime(2026, 9, 1),
+        code: 'GLX-01',
       ),
       Project(
         id: 'p3',
@@ -47,6 +59,10 @@ class MockStore {
         goLive: d(12, 2),
         managerName: 'Mark K.',
         taskCount: 0,
+        projectTypeId: 'pt10',
+        projectTypeName: 'Legacy rollout',
+        projectTypeActive: false,
+        clientId: 'c3',
       ),
       Project(
         id: 'p4',
@@ -196,8 +212,20 @@ class MockStore {
         workDate: d(10, 9),
         hours: 4,
       ),
-      TimeEntry(id: 'e2', projectName: 'Acme Corp', taskName: 'UAT sign-off', workDate: d(10, 8), hours: 2),
-      TimeEntry(id: 'e3', projectName: 'Acme Corp', taskName: 'Configure SSO', workDate: d(10, 7), hours: 6),
+      TimeEntry(
+        id: 'e2',
+        projectName: 'Acme Corp',
+        taskName: 'UAT sign-off',
+        workDate: d(10, 8),
+        hours: 2,
+      ),
+      TimeEntry(
+        id: 'e3',
+        projectName: 'Acme Corp',
+        taskName: 'Configure SSO',
+        workDate: d(10, 7),
+        hours: 6,
+      ),
       TimeEntry(
         id: 'e4',
         projectName: 'Acme Corp',
@@ -322,7 +350,9 @@ class MockAuthRepository implements AuthRepository {
 
   @override
   Future<AppUser> login(String email, String password) async {
-    if (email.trim().isEmpty || password.isEmpty) throw ApiException('Enter your email and password.');
+    if (email.trim().isEmpty || password.isEmpty) {
+      throw ApiException('Enter your email and password.');
+    }
     if (password == 'locked') {
       throw ApiException(
         'Too many sign-in attempts. Please wait 15 minutes and try again.',
@@ -331,7 +361,11 @@ class MockAuthRepository implements AuthRepository {
       );
     }
     if (password.length < 4) {
-      throw ApiException('Email or password is incorrect.', status: 401, code: 'INVALID_CREDENTIALS');
+      throw ApiException(
+        'Email or password is incorrect.',
+        status: 401,
+        code: 'INVALID_CREDENTIALS',
+      );
     }
     signedIn = true;
     return user;
@@ -349,13 +383,28 @@ class MockProjectRepository implements ProjectRepository {
   final MockStore store;
 
   @override
-  Future<List<Project>> list({String? query, ProjectStatus? status}) async => store.projects
+  Future<List<Project>> list({
+    String? query,
+    ProjectStatus? status,
+    String? projectTypeId,
+  }) async => store.projects
+      .where(
+        (p) =>
+            projectTypeId == null ||
+            (projectTypeId == 'none'
+                ? p.projectTypeId == null
+                : p.projectTypeId == projectTypeId),
+      )
       .where((p) => status == null || p.status == status)
-      .where((p) => query == null || p.name.toLowerCase().contains(query.toLowerCase()))
+      .where(
+        (p) =>
+            query == null || p.name.toLowerCase().contains(query.toLowerCase()),
+      )
       .toList();
 
   @override
-  Future<Project> get(String id) async => store.projects.firstWhere((p) => p.id == id);
+  Future<Project> get(String id) async =>
+      store.projects.firstWhere((p) => p.id == id);
 
   @override
   Future<List<Task>> tasks(String projectId) async =>
@@ -389,11 +438,21 @@ class MockTaskRepository implements TaskRepository {
 
   @override
   Future<List<Task>> mine() async =>
-      store.tasks.where((t) => t.status != TaskStatus.done && t.status != TaskStatus.cancelled).toList()
-        ..sort((a, b) => (a.dueDate ?? DateTime(9999)).compareTo(b.dueDate ?? DateTime(9999)));
+      store.tasks
+          .where(
+            (t) =>
+                t.status != TaskStatus.done && t.status != TaskStatus.cancelled,
+          )
+          .toList()
+        ..sort(
+          (a, b) => (a.dueDate ?? DateTime(9999)).compareTo(
+            b.dueDate ?? DateTime(9999),
+          ),
+        );
 
   @override
-  Future<Task> get(String id) async => store.tasks.firstWhere((t) => t.id == id);
+  Future<Task> get(String id) async =>
+      store.tasks.firstWhere((t) => t.id == id);
 
   @override
   Future<Task> changeStatus(Task task, TaskStatus to, {String? reason}) async {
@@ -406,7 +465,9 @@ class MockTaskRepository implements TaskRepository {
         code: 'INVALID_TRANSITION',
       );
     }
-    final actual = to == TaskStatus.done && task.requiresApproval ? TaskStatus.forReview : to;
+    final actual = to == TaskStatus.done && task.requiresApproval
+        ? TaskStatus.forReview
+        : to;
     final updated = task.copyWith(
       status: actual,
       previousStatus: actual == TaskStatus.blocked ? task.status : null,
@@ -425,16 +486,27 @@ class MockTimeRepository implements TimeRepository {
 
   static DateTime weekStartOf(DateTime d) {
     final day = DateTime(d.year, d.month, d.day);
-    return day.subtract(Duration(days: day.weekday - 1)); // Monday, like weekStartOf in the API
+    return day.subtract(
+      Duration(days: day.weekday - 1),
+    ); // Monday, like weekStartOf in the API
   }
 
   @override
   Future<TimeWeek> week(DateTime anyDay) async {
     final start = weekStartOf(anyDay);
     final end = start.add(const Duration(days: 7));
-    final list = store.entries.where((e) => !e.workDate.isBefore(start) && e.workDate.isBefore(end)).toList()
-      ..sort((a, b) => b.workDate.compareTo(a.workDate));
-    return TimeWeek(weekStart: start, entries: list, total: list.fold(0, (s, e) => s + e.hours));
+    final list =
+        store.entries
+            .where(
+              (e) => !e.workDate.isBefore(start) && e.workDate.isBefore(end),
+            )
+            .toList()
+          ..sort((a, b) => b.workDate.compareTo(a.workDate));
+    return TimeWeek(
+      weekStart: start,
+      entries: list,
+      total: list.fold(0, (s, e) => s + e.hours),
+    );
   }
 
   @override
@@ -444,7 +516,10 @@ class MockTimeRepository implements TimeRepository {
         LoggableProject(
           id: p.id,
           name: p.name,
-          tasks: [for (final t in store.tasks.where((t) => t.projectId == p.id)) (id: t.id, name: t.name)],
+          tasks: [
+            for (final t in store.tasks.where((t) => t.projectId == p.id))
+              (id: t.id, name: t.name),
+          ],
         ),
   ];
 
@@ -455,7 +530,9 @@ class MockTimeRepository implements TimeRepository {
     required double hours,
     String? notes,
   }) async {
-    if (hours <= 0 || hours > 24) throw ApiException('Enter between 0.25 and 24 hours.');
+    if (hours <= 0 || hours > 24) {
+      throw ApiException('Enter between 0.25 and 24 hours.');
+    }
     final t = store.tasks.firstWhere((t) => t.id == taskId);
     store.entries.add(
       TimeEntry(
