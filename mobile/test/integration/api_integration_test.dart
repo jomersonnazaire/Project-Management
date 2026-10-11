@@ -4,6 +4,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:xc8_pm/data/api_client.dart';
 import 'package:xc8_pm/data/api_repositories.dart';
 import 'package:xc8_pm/data/models.dart';
@@ -23,6 +24,8 @@ void main() {
       if (a.contains('|'))
         (a.substring(0, a.indexOf('|')), a.substring(a.indexOf('|') + 1)),
   ];
+  // IT_READ_ONLY=1: never send data-changing requests (live servers). Only login/logout.
+  final readOnly = Platform.environment['IT_READ_ONLY'] == '1';
   final skip = base.isEmpty || accounts.isEmpty
       ? 'set IT_API_BASE_URL and IT_ACCOUNTS'
       : null;
@@ -30,7 +33,7 @@ void main() {
   for (final (email, password) in accounts) {
     group('live API as $email', skip: skip, () {
       late ApiClient api;
-      late AppUser me;
+      AppUser? me;
       final results = <String, String>{};
 
       Future<void> check(
@@ -53,13 +56,17 @@ void main() {
       }
 
       setUpAll(() async {
-        api = ApiClient(base, store: MemorySessionStore());
+        api = ApiClient(
+          base,
+          store: MemorySessionStore(),
+          client: readOnly ? ReadOnlyClient(http.Client()) : null,
+        );
         me = await ApiAuthRepository(api).login(email, password);
       });
       tearDownAll(() async {
         // ignore: avoid_print
         print(
-          '\n== $email (${me.systemRole}) ==\n${results.entries.map((e) => '${e.key.padRight(28)} ${e.value}').join('\n')}',
+          '\n== $email (${me?.systemRole ?? 'not signed in'}) ==\n${results.entries.map((e) => '${e.key.padRight(28)} ${e.value}').join('\n')}',
         );
       });
 
@@ -67,7 +74,7 @@ void main() {
         'session: mobile cookie stored, /auth/me, permissions, server clock',
         () async {
           final cur = await ApiAuthRepository(api).currentUser();
-          expect(cur?.id, me.id);
+          expect(cur?.id, me!.id);
           final p = await api.get('/auth/me/permissions');
           expect(p['permissions'], isA<Map>());
           expect(
@@ -181,7 +188,7 @@ void main() {
           allowed: {403},
         );
         await check('clients', () => p3.clients(), allowed: {403});
-        await check('profile', () => p3.profile(me.id));
+        await check('profile', () => p3.profile(me!.id));
         final adm = ApiProjectAdminRepository(api);
         await check('project types', () => adm.projectTypes());
         await check('templates', () => adm.templates(), allowed: {403});
@@ -216,5 +223,20 @@ void main() {
         );
       });
     });
+  }
+}
+
+/// Refuses every data-changing request except sign-in/out (safety net for live servers).
+class ReadOnlyClient extends http.BaseClient {
+  ReadOnlyClient(this._inner);
+  final http.Client _inner;
+  static const allowed = {'/auth/login', '/auth/logout'};
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest r) {
+    final path = r.url.path.replaceFirst(RegExp(r'^.*/api/v1'), '');
+    if (r.method != 'GET' && r.method != 'HEAD' && !allowed.contains(path)) {
+      throw StateError('IT_READ_ONLY: blocked ${r.method} $path');
+    }
+    return _inner.send(r);
   }
 }
