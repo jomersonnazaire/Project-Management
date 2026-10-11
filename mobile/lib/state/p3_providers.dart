@@ -83,6 +83,9 @@ final reportProvider = FutureProvider.family<Json, String>(
 final waitingOnClientProvider = FutureProvider<List<Json>>(
   (ref) => _many(_r(ref).waitingOnClient()),
 );
+final myDocRequestsProvider = FutureProvider<List<Json>>(
+  (ref) => _many(_r(ref).myDocumentRequests()),
+);
 final profileProvider = FutureProvider<Json>((ref) async {
   final u = await ref.watch(authProvider.future);
   return _one(_r(ref).profile(u?.id ?? 'me'));

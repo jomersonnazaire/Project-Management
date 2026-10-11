@@ -738,3 +738,50 @@ class ReportScreen extends ConsumerWidget {
     ),
   );
 }
+
+/// Home › documents requested from me (GET /document-requests/mine). Hidden when empty.
+class MyDocRequests extends ConsumerWidget {
+  const MyDocRequests({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final items = ref.watch(myDocRequestsProvider).value ?? const <Json>[];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      key: const Key('myDocRequests'),
+      padding: const EdgeInsets.fromLTRB(Space.m, 0, Space.m, Space.m),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Documents requested from you',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          Card(
+            child: Column(
+              children: [
+                for (final d in items)
+                  ListTile(
+                    key: Key('myDocRequest_${d['id']}'),
+                    leading: const Icon(Icons.pending_actions),
+                    title: Text('${d['name']}'),
+                    subtitle: Text(
+                      [
+                        refName(d['project']),
+                        if (refName(d['requestedBy']) != null)
+                          'by ${refName(d['requestedBy'])}',
+                        'due ${shortYmd(d['dueDate'])}',
+                        if (d['overdue'] == true) 'Overdue',
+                      ].whereType<String>().join(' · '),
+                    ),
+                    onTap: () => context.push(
+                      '/projects/${refId(d['project'])}/documents',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -222,6 +222,7 @@ void main() {
   group('P3 home, insights, account (49–57)', () {
     testWidgets('home portfolio, filters, milestones, severity', (t) async {
       await pumpApp(t, location: '/home');
+      await seek(t, find.text('Role matrix sign-off'), 'homeScreen');
       await seek(t, find.byKey(const Key('portfolio')), 'homeScreen');
       expect(find.text('Upcoming milestones'), findsOneWidget);
       await seek(t, find.byKey(const Key('dashSeverity')), 'homeScreen');

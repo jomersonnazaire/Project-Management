@@ -1190,7 +1190,18 @@ class MockP3Repository implements P3Repository {
       },
   ];
   @override
-  Future<List<Json>> myDocumentRequests() async => const [];
+  Future<List<Json>> myDocumentRequests() async => [
+    {
+      'id': 'd4',
+      'name': 'Role matrix sign-off',
+      'project': {'id': 'p1', 'name': 'Acme Corp rollout'},
+      'folder': {'id': 'f2', 'name': 'Phase 2 · Configuration'},
+      'requestedBy': {'id': 'u2', 'name': 'Queen Reyes'},
+      'dueDate': '2026-10-16',
+      'daysOverdue': -5,
+      'overdue': false,
+    },
+  ];
 
   @override
   Future<Json> profile(String userId) async => {
