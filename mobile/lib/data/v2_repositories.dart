@@ -71,6 +71,7 @@ class ProjectInput {
     this.description,
     this.status,
     this.rebaselineReason,
+    this.memberIds,
   });
   final String? templateId,
       name,
@@ -81,6 +82,7 @@ class ProjectInput {
       description,
       status,
       rebaselineReason;
+  final List<String>? memberIds;
   final int? templateVersion;
   final DateTime? startDate, endDate;
 }
@@ -299,6 +301,7 @@ class ApiProjectAdminRepository implements ProjectAdminRepository {
     'clientId': ?p.clientId,
     'projectTypeId': ?p.projectTypeId,
     'managerId': ?p.managerId,
+    'memberIds': ?p.memberIds,
     if (p.startDate != null) 'startDate': ymd(p.startDate!),
     if (p.endDate != null) 'plannedEndDate': ymd(p.endDate!),
     if (p.description != null && p.description!.isNotEmpty)

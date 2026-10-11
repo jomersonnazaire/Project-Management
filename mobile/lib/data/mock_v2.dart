@@ -1,4 +1,5 @@
 import 'mock_repositories.dart';
+import 'p2.dart';
 import 'models.dart';
 import 'ph_time.dart';
 import 'tracker_models.dart';
@@ -1022,11 +1023,13 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
         code: p.code,
       ),
     );
+    if (p.memberIds != null) await MockProjectExtrasRepository(store).setMembers(id, {...p.memberIds!, ?p.managerId}.toList());
     return id;
   }
 
   @override
   Future<void> update(String id, ProjectInput p) async {
+    if (p.memberIds != null) await MockProjectExtrasRepository(store).setMembers(id, {...p.memberIds!, ?p.managerId}.toList());
     final i = store.projects.indexWhere((x) => x.id == id);
     final o = store.projects[i];
     final t = MockTrackerStore.projectTypes
@@ -1046,10 +1049,10 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
       id: o.id,
       name: p.name ?? o.name,
       clientName: o.clientName,
-      status: o.status,
+      status: p.status == null ? o.status : ProjectStatus.fromApi(p.status),
       progress: o.progress,
       goLive: p.endDate ?? o.goLive,
-      managerName: o.managerName,
+      managerName: const {'u1': 'Jonathan Esmalla', 'u2': 'Queen Reyes', 'u3': 'Mark Kim'}[p.managerId] ?? o.managerName,
       taskCount: o.taskCount,
       projectTypeId: t?.id ?? o.projectTypeId,
       projectTypeName: t?.name ?? o.projectTypeName,

@@ -227,18 +227,34 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.m),
-              child: Row(
+              child: Column(
+                key: const Key('projectHeader'),
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ProjectStatusChip(p.status),
-                  const SizedBox(width: Space.s),
-                  Expanded(
-                    child: Text(
-                      'Go-live ${fmtDate(p.goLive)} · PM ${p.managerName ?? '—'}',
-                      style: t.bodySmall,
-                      textAlign: TextAlign.end,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  Wrap(
+                    spacing: Space.s,
+                    runSpacing: 4,
+                    children: [
+                      ProjectStatusChip(p.status),
+                      if (p.projectTypeName != null && !p.projectTypeActive)
+                        StatusChip(
+                          label: 'Inactive type',
+                          colors: context.statusColors.todo,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      p.projectTypeName ?? 'Type not set',
+                      'Go-live ${fmtDate(p.goLive)}',
+                      'PM ${p.managerName ?? '—'}',
+                    ].join(' · '),
+                    key: const Key('projectHeaderLine'),
+                    style: t.bodySmall,
+                    maxLines: 2,
+                    softWrap: true,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

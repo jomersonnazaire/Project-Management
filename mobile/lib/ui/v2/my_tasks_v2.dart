@@ -170,24 +170,21 @@ class _TaskTab extends ConsumerWidget {
             ),
             children: [
               if (view == 'today') ...[
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Kpi('Overdue', '${r.overdue}', sc.blocked),
-                      _Kpi('Due this week', '${r.dueThisWeek}', sc.forReview),
-                      _Kpi(
-                        'Waiting for my review',
-                        '${r.toReview}',
-                        sc.inProgress,
-                      ),
-                      _Kpi(
-                        'Logged this week',
-                        formatHHMM(logged),
-                        StatusPair(s.primaryContainer, s.onPrimaryContainer),
-                      ),
-                    ],
-                  ),
+                _KpiRow(
+                  items: [
+                    _Kpi('Overdue', '${r.overdue}', sc.blocked),
+                    _Kpi('Due this week', '${r.dueThisWeek}', sc.forReview),
+                    _Kpi(
+                      'Waiting for my review',
+                      '${r.toReview}',
+                      sc.inProgress,
+                    ),
+                    _Kpi(
+                      'Logged this week',
+                      formatHHMM(logged),
+                      StatusPair(s.primaryContainer, s.onPrimaryContainer),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: Space.s),
                 Row(
@@ -254,6 +251,27 @@ class _TaskTab extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// 4 across normally; 2×2 at large text so labels wrap at word boundaries (QA #3).
+class _KpiRow extends StatelessWidget {
+  const _KpiRow({required this.items});
+  final List<_Kpi> items;
+  @override
+  Widget build(BuildContext context) {
+    final large = MediaQuery.textScalerOf(context).scale(10) > 13;
+    Widget row(List<_Kpi> xs) => IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: xs),
+    );
+    if (!large) return row(items);
+    return Column(
+      children: [
+        row(items.sublist(0, 2)),
+        const SizedBox(height: 4),
+        row(items.sublist(2)),
+      ],
     );
   }
 }

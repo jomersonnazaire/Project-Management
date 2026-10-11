@@ -8,6 +8,7 @@ import 'ui/screens/home_screens.dart';
 import 'ui/screens/project_screens.dart';
 import 'ui/screens/task_screens.dart';
 import 'ui/v2/dar.dart';
+import 'ui/v2/leave.dart';
 import 'ui/v2/day_timesheet.dart';
 import 'ui/v2/my_tasks_v2.dart';
 import 'ui/v2/project_form.dart';
@@ -65,7 +66,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           projectId: s.uri.queryParameters['project'],
         ),
       ),
-      GoRoute(path: '/dar', builder: (_, _) => const DarGenerateScreen()),
+      GoRoute(path: '/leave', builder: (_, s) => LeaveScreen(initialTab: s.uri.queryParameters['tab'])),
+        GoRoute(path: '/dar', builder: (_, _) => const DarGenerateScreen()),
       GoRoute(
         path: '/dar/saved',
         builder: (_, _) => const SavedReportsScreen(),

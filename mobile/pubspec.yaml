@@ -39,6 +39,7 @@ dependencies:
   http: ^1.6.0
   url_launcher: ^6.3.3
   flutter_svg: ^2.3.0
+  file_picker: ^13.1.0
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +66,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/brand/
+    - assets/brand/splash/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -112,8 +114,24 @@ flutter_launcher_icons:
 
 flutter_native_splash:
   color: "#5355E0"
-  image: assets/brand/splash-logo-white.png
+  image: assets/brand/splash/splash_logo.png            # 1152x1152, icon within the 768px safe circle
+  branding: assets/brand/splash/splash_branding.png     # 800x320 white wordmark + tagline
+  branding_mode: bottom
+  color_dark: "#1B1C4A"
+  image_dark: assets/brand/splash/splash_logo.png
+  branding_dark: assets/brand/splash/splash_branding.png
+
   android_12:
     color: "#5355E0"
-    image: assets/brand/splash-logo-white.png
+    image: assets/brand/splash/splash_logo_android12.png  # 1152x1152 (with no icon background: content inside 768px circle)
+    icon_background_color: "#5355E0"
+    branding: assets/brand/splash/splash_branding.png
+    color_dark: "#1B1C4A"
+    image_dark: assets/brand/splash/splash_logo_android12.png
+    icon_background_color_dark: "#1B1C4A"
+    branding_dark: assets/brand/splash/splash_branding.png
+
   web: true
+  ios: true
+  android: true
+  fullscreen: false

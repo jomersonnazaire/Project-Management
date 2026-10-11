@@ -401,38 +401,49 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   ),
                 ),
                 gap(),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        key: const Key('projectStartField'),
-                        onTap: () => _pickDate(true),
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: 'Baseline start *',
-                            errorText: _errors['startDate'],
-                            errorMaxLines: 2,
-                          ),
-                          child: Text(_start == null ? '' : fmtDate(_start)),
+                Builder(
+                  builder: (context) {
+                    final start = InkWell(
+                      key: const Key('projectStartField'),
+                      onTap: () => _pickDate(true),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Baseline start *',
+                          errorText: _errors['startDate'],
+                          errorMaxLines: 2,
                         ),
+                        child: Text(_start == null ? '' : fmtDate(_start)),
                       ),
-                    ),
-                    const SizedBox(width: Space.s),
-                    Expanded(
-                      child: InkWell(
-                        key: const Key('projectEndField'),
-                        onTap: () => _pickDate(false),
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: 'Baseline end *',
-                            errorText: _errors['plannedEndDate'],
-                            errorMaxLines: 2,
-                          ),
-                          child: Text(_end == null ? '' : fmtDate(_end)),
+                    );
+                    final end = InkWell(
+                      key: const Key('projectEndField'),
+                      onTap: () => _pickDate(false),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Baseline end *',
+                          errorText: _errors['plannedEndDate'],
+                          errorMaxLines: 2,
                         ),
+                        child: Text(_end == null ? '' : fmtDate(_end)),
                       ),
-                    ),
-                  ],
+                    );
+                    return MediaQuery.textScalerOf(context).scale(10) > 14
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              start,
+                              const SizedBox(height: Space.m),
+                              end,
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(child: start),
+                              const SizedBox(width: Space.s),
+                              Expanded(child: end),
+                            ],
+                          );
+                  },
                 ),
                 if (_baselineChanged) ...[
                   gap(),

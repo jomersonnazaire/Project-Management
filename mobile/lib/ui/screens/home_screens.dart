@@ -507,6 +507,12 @@ class MoreScreen extends ConsumerWidget {
                   title: const Text('My saved reports'),
                   onTap: () => context.push('/dar/saved'),
                 ),
+                ListTile(
+                  key: const Key('moreLeave'),
+                  leading: const Icon(Icons.beach_access_outlined),
+                  title: const Text('Leave'),
+                  onTap: () => context.push('/leave'),
+                ),
                 if ((ref.watch(trackerPeopleProvider).value?.length ?? 0) > 1)
                   ListTile(
                     key: const Key('moreTimesheetReview'),

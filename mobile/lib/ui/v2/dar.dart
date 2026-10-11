@@ -386,7 +386,7 @@ class DarPreviewScreen extends StatelessWidget {
                       cells: [
                         DataCell(Text(shortDate(row.date))),
                         if (row.leave) ...[
-                          const DataCell(Text('On leave')),
+                          DataCell(Text(leaveLabel(row))),
                           for (var i = 0; i < 9; i++) const DataCell(Text('')),
                         ] else ...[
                           DataCell(Text(row.timeIn)),
@@ -413,7 +413,7 @@ class DarPreviewScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(Space.m - 4),
                   child: row.leave
                       ? Text(
-                          '${shortDate(row.date)} · On leave',
+                          '${shortDate(row.date)} · ${leaveLabel(row)}',
                           style: t.titleSmall,
                         )
                       : Column(
@@ -668,7 +668,7 @@ class SavedReportDetailScreen extends ConsumerWidget {
               for (final row in r.rows)
                 Card(
                   child: ListTile(
-                    title: Text(row.leave ? 'On leave' : row.remarks),
+                    title: Text(row.leave ? leaveLabel(row) : row.remarks),
                     subtitle: Text(
                       row.leave
                           ? shortDate(row.date)
@@ -694,3 +694,6 @@ class SavedReportDetailScreen extends ConsumerWidget {
     );
   }
 }
+
+/// The server's leave label (services/dar.ts puts it in `remarks`), e.g. "Half day leave (AM)".
+String leaveLabel(DarRow row) => row.remarks.isEmpty ? 'On leave' : row.remarks;

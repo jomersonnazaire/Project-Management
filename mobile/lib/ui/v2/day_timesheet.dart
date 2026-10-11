@@ -10,6 +10,8 @@ import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'day_dialogs.dart';
+import 'leave.dart';
+import '../../state/p2_providers.dart';
 import 'entry_sheet.dart';
 
 /// Day timesheet tab: the same widget/state as My tasks › Day timesheet, with Day | Hours list inside.
@@ -276,10 +278,11 @@ class DayView extends ConsumerWidget {
                                 key: const Key('addLeave'),
                                 icon: const Icon(Icons.add, size: 18),
                                 label: const Text('Add leave'),
-                                onPressed: () => showError(
-                                  context,
-                                  'Recording leave is coming in the next update (P2). Use the web app for now.',
-                                ),
+                                onPressed: () async {
+                                  if (await showRecordLeave(context, date: day.date)) {
+                                    invalidateLeave(ref);
+                                  }
+                                },
                               ),
                             if (day.canSubmit)
                               FilledButton(
@@ -930,7 +933,14 @@ class _TimesheetReviewScreenState extends ConsumerState<TimesheetReviewScreen> {
                 child: DropdownMenu<String>(
                   key: const Key('reviewPerson'),
                   expandedInsets: EdgeInsets.zero,
-                  label: const Text('Person'),
+                  trailingIcon: const Icon(
+                    Icons.arrow_drop_down,
+                    semanticLabel: 'Open the person list',
+                  ),
+                  selectedTrailingIcon: const Icon(
+                    Icons.arrow_drop_up,
+                    semanticLabel: 'Close the person list',
+                  ),
                   hintText: 'Choose a person…',
                   initialSelection: _person,
                   dropdownMenuEntries: [
