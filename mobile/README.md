@@ -38,8 +38,10 @@ How the app talks to the API (see `lib/data/api_client.dart`):
 - **Auth is a session cookie** set by `POST /auth/login`. The splash screen restores the session with `GET /auth/me`.
   - **Web:** the browser keeps the HttpOnly cookie (`BrowserClient.withCredentials`). The API's CORS allow-list must include the Flutter web origin. Cross-site cookies need `SameSite=None; Secure`, or serve the app from the same site as the API.
   - **Android/iOS:** the session cookie is persisted in `flutter_secure_storage` (Keychain / Android Keystore) with a last-active time, so a restart stays signed in.
-- Every request sends `X-Client: mobile`. The API then gives the session a **sliding 3-day idle window** (`MOBILE_SESSION_IDLE_HOURS`, default 72; absolute cap `MOBILE_SESSION_ABSOLUTE_DAYS`, default 30). Web sessions keep their 30-minute idle timeout. Opening/resuming the app calls `GET /auth/me`, which slides the window. After 3 days without activity the app (and server) ask you to sign in again.
+- Every request sends `X-Client: mobile`. With the API change on this branch (commit 67b6d03) that header gives the session a **sliding idle window of `MOBILE_SESSION_IDLE_HOURS` (default 72 h)** and an **absolute cap of `MOBILE_SESSION_ABSOLUTE_DAYS` (default 90 days)**, as in `apps/api/src/config.ts`. Web sessions keep FR-AUTH-03 (30 min idle, 12 h max).
+  - **Policy pending:** Jonathan is still deciding on this server change. It conflicts with FR-AUTH-03, and the `X-Client` header can be spoofed. Without it, mobile sessions follow FR-AUTH-03. The app only uses its own 3-day check to drop a stored cookie early. Opening/resuming the app calls `GET /auth/me`, which slides the window. After 3 days without activity the app (and server) ask you to sign in again.
 - Every non-GET request sends `X-Requested-With: xc8-web`, which the API's CSRF guard requires.
+- Riverpod's automatic retry is off for API errors (`noAutoRetry`): one request, then the error state.
 - Errors: **401** → session cleared, back to sign-in. **403** → "You don't have access…" view (and routes gated by `/auth/me/permissions`). **422/400** → `error.details[]` mapped to form fields. **5xx, timeout (20 s), offline/DNS** → "Disconnected from the server. Please contact your System Admin." banner/screen with **Retry**; this never signs you out. Lists support pull-to-refresh.
 - **Server time only:** the client keeps `serverOffset` from the `Date` header of every response and from `now` on `/tracker/running`. Time in/out, the running timer, switch, "today" and date limits use `ApiClient.serverNow()` (via `nowProvider` / `clockProvider`), never the device clock.
 
@@ -139,15 +141,15 @@ Not in this run (P2/P3): Leave (the "+ Add leave" button shows a "coming next" m
 ## Stubs / proposals (not in the repo API)
 | Item | Status in app |
 |---|---|
-| Home KPIs (open, blocked, due this week, hours) | The dashboard endpoints are in unmerged PRs #10–#15, so the app computes these from `/tasks/mine` + `/time`. |
-| Blocker quick-pick chips | UI only; they fill in the required reason text. |
+| Demo mode | No `API_BASE_URL`: mock repositories, always-visible "Demo mode" banner, demo PM "Jomerson Nazaire". |
 | Appearance (System/Light/Dark) | In memory, not persisted. |
-| Admin, Clients, Change password, task Edit (pencil) | Open the web app (`WEB_APP_URL`). |
-| New project from template | The FAB shows a hint to use the web. |
-| Push notifications, native splash | Not implemented (in-app splash route only). |
+| Admin tools | Open the web app (`WEB_APP_URL`). |
+| Export (PDF/Excel/share) | Not on mobile (design decision). |
+| DAR person filter, blocked-reason chips | Not on mobile (design decisions). |
+| Push notifications | Not implemented (in-app notifications only). |
 | Checklist reorder (long-press) | Not implemented (the API has `/projects/:id/tasks/reorder`). |
-| Create task | Covers name, phase, priority, party, dates, estimate, approval and mandatory. Owner, assignees, reviewer and dependencies are set on the web. |
 | Kanban move | Long-press a card to open a "Move to" sheet (not drag). Moving to Blocked asks for a reason. |
+| Mobile session length | Depends on the pending API decision above. |
 
 ## Tests
 ```bash

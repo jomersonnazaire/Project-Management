@@ -26,6 +26,7 @@ Future<ProviderContainer> pumpApp(
   testNow = DateTime.utc(2026, 10, 11, 6);
   final store = MockStore();
   final container = ProviderContainer(
+    retry: noAutoRetry,
     overrides: [
       mockStoreProvider.overrideWithValue(store),
       authRepositoryProvider.overrideWithValue(

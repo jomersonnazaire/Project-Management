@@ -10,6 +10,7 @@ import 'package:xc8_pm/config.dart';
 import 'package:xc8_pm/data/api_client.dart';
 import 'package:xc8_pm/data/models.dart';
 import 'package:xc8_pm/router.dart';
+import 'package:xc8_pm/ui/v3/insights.dart' show dueText;
 import 'package:xc8_pm/data/session_store.dart';
 import 'package:xc8_pm/state/providers.dart';
 import 'package:xc8_pm/state/v2_providers.dart';
@@ -42,6 +43,7 @@ class FakeApi {
   bool up = true;
   bool loggedIn = true;
   int status500 = 0;
+  final pathStatus = <String, int>{};
   final calls = <String>[];
   final headers = <Map<String, String>>[];
   late final client = MockClient((req) async {
@@ -60,6 +62,19 @@ class FakeApi {
       );
     }
     final p = req.url.path.replaceFirst('/api/v1', '');
+    final forced = pathStatus[p];
+    if (forced != null) {
+      return http.Response(
+        jsonEncode({
+          'error': {
+            'code': forced == 403 ? 'FORBIDDEN' : 'X',
+            'message': "You don't have permission to do this.",
+          },
+        }),
+        forced,
+        headers: h,
+      );
+    }
     if (p == '/auth/login') {
       final b = jsonDecode(req.body) as Map;
       if (b['password'] != 'right') {
@@ -261,6 +276,7 @@ void main() {
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
       final c = ProviderContainer(
+        retry: noAutoRetry,
         overrides: [
           sessionStoreProvider.overrideWithValue(store),
           deviceClockProvider.overrideWithValue(device),
@@ -371,6 +387,89 @@ void main() {
     });
   });
 
+  group('error states (no auto-retry)', () {
+    setUp(() => AppConfig.debugApiBaseUrl = base);
+    tearDown(() => AppConfig.debugApiBaseUrl = null);
+
+    Future<void> open(WidgetTester t, FakeApi f, String loc) async {
+      t.view.physicalSize = const Size(390, 844);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final store = MemorySessionStore()
+        ..value = StoredSession({'xc8_sid': 'tok123'}, device());
+      final c = ProviderContainer(
+        retry: noAutoRetry,
+        overrides: [
+          sessionStoreProvider.overrideWithValue(store),
+          apiClientProvider.overrideWith((ref) {
+            final api = ApiClient(
+              base,
+              client: f.client,
+              store: store,
+              deviceClock: device,
+            );
+            api.onReachability = (ok) => Future.microtask(
+              () => ref.read(connectionProvider.notifier).set(ok),
+            );
+            return api;
+          }),
+          tickerProvider.overrideWith((ref) => Stream.value(0)),
+        ],
+      );
+      addTearDown(c.dispose);
+      await t.pumpWidget(
+        UncontrolledProviderScope(container: c, child: const XceleratePmApp()),
+      );
+      await t.pumpAndSettle();
+      c.read(routerProvider).go(loc);
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('403 shows "You don\'t have access" after a single request', (
+      t,
+    ) async {
+      final f = FakeApi()..pathStatus['/projects'] = 403;
+      await open(t, f, '/projects');
+      for (var i = 0; i < 60; i++) {
+        await t.pump(const Duration(seconds: 1));
+      }
+      expect(find.textContaining("You don't have access"), findsOneWidget);
+      expect(f.calls.where((c) => c == 'GET /projects').length, 1);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('5xx shows the error state with Retry, not a spinner', (
+      t,
+    ) async {
+      final f = FakeApi()..pathStatus['/projects'] = 503;
+      await open(t, f, '/projects');
+      await t.pump(const Duration(seconds: 30));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byKey(const Key('asyncError')), findsOneWidget);
+      expect(f.calls.where((c) => c == 'GET /projects').length, 1);
+      f.pathStatus.clear();
+      await t.tap(find.widgetWithText(TextButton, 'Retry').last);
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('asyncError')), findsNothing);
+      expect(f.calls.where((c) => c == 'GET /projects').length, 2);
+    });
+  });
+
+  test('due text matches the web (negative = not yet due)', () {
+    expect(dueText(-19), 'Due in 19 days');
+    expect(dueText(-1), 'Due in 1 day');
+    expect(dueText(0), 'Due today');
+    expect(dueText(1), '1 day overdue');
+    expect(dueText(3), '3 days overdue');
+  });
+
+  test('role line uses labels, no duplicates', () {
+    AppUser u(String s, [String? j]) =>
+        AppUser.fromJson({'id': '1', 'systemRole': s, 'jobRole': ?j});
+    expect(u('PROJECT_MANAGER', 'PROJECT_MANAGER').role, 'Project Manager');
+    expect(u('MEMBER', 'SAP consultant').role, 'Member · SAP consultant');
+  });
+
   testWidgets('demo mode shows the Demo mode banner', (t) async {
     final c = ProviderContainer();
     addTearDown(c.dispose);
@@ -382,4 +481,3 @@ void main() {
     expect(find.textContaining('Demo mode'), findsOneWidget);
   });
 }
-

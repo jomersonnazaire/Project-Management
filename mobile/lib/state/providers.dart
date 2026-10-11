@@ -254,3 +254,11 @@ void invalidateTask(WidgetRef ref, Task t) {
   ref.invalidate(myTasksProvider);
   ref.invalidate(dashboardProvider);
 }
+
+/// Riverpod 3 retries failed providers by default. API errors are not retried
+/// automatically: 4xx won't change, and 5xx/offline show the error state with Retry.
+Duration? noAutoRetry(int retryCount, Object error) {
+  if (error is ApiException) return null;
+  if (retryCount >= 3) return null;
+  return Duration(milliseconds: 200 * (1 << retryCount));
+}

@@ -562,7 +562,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                       tooltip: 'Tag a task or contact',
                       icon: Badge(
                         isLabelVisible: tags.isNotEmpty,
-                        label: Text('${tags.length}'),
+                        label: Text(
+                          '${tags.length}',
+                          textScaler: TextScaler.noScaling,
+                        ),
                         child: const Icon(Icons.sell_outlined),
                       ),
                       onPressed: _tag,

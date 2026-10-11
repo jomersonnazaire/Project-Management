@@ -641,6 +641,8 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
           labelText: label,
           errorText: _errors[field],
           errorMaxLines: 2,
+          enabled: !ro,
+          suffixIcon: ro ? const Icon(Icons.lock_outline, size: 18) : null,
         ),
         child: Text(v == null ? '' : fmtDate(v)),
       ),
@@ -693,6 +695,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 TextField(
                   key: const Key('editTaskName'),
                   readOnly: ro,
+                  enabled: !ro,
                   controller: _name,
                   maxLength: 200,
                   decoration: InputDecoration(
@@ -703,6 +706,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 TextField(
                   key: const Key('editTaskPhase'),
                   readOnly: ro,
+                  enabled: !ro,
                   controller: _phase,
                   maxLength: 120,
                   decoration: InputDecoration(
@@ -815,6 +819,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 TextField(
                   key: const Key('editTaskEst'),
                   readOnly: ro,
+                  enabled: !ro,
                   controller: _est,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -828,6 +833,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                 TextField(
                   key: const Key('editTaskDeliverable'),
                   readOnly: ro,
+                  enabled: !ro,
                   controller: _deliverable,
                   maxLength: 500,
                   decoration: InputDecoration(

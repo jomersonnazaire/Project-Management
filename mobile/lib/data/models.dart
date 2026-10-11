@@ -100,7 +100,7 @@ class AppUser {
     id: j['id'] as String,
     name: j['name'] as String? ?? '',
     email: j['email'] as String? ?? '',
-    role: [j['systemRole'], j['jobRole']].whereType<String>().join(' · '),
+    role: _roleLine(j['systemRole'] as String?, j['jobRole'] as String?),
   );
 }
 
@@ -466,4 +466,18 @@ class ApiException implements Exception {
   bool get isNetworkOrServer => status == null || status! >= 500;
   @override
   String toString() => message;
+}
+
+const _roleLabels = {
+  'ADMIN': 'Admin',
+  'PROJECT_MANAGER': 'Project Manager',
+  'MEMBER': 'Member',
+  'VIEWER': 'Viewer',
+};
+
+/// "Project Manager · SAP consultant"; never shows raw codes or the same label twice.
+String _roleLine(String? system, String? job) {
+  final a = _roleLabels[system] ?? system;
+  final b = job == null || job.isEmpty ? null : (_roleLabels[job] ?? job);
+  return [a, if (b != a) b].whereType<String>().join(' · ');
 }

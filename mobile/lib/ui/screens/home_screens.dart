@@ -62,7 +62,7 @@ class HomeScreen extends ConsumerWidget {
                   onPressed: () => context.push('/notifications'),
                   icon: Badge(
                     isLabelVisible: unread > 0,
-                    label: Text('$unread'),
+                    label: Text('$unread', textScaler: TextScaler.noScaling),
                     child: const Icon(Icons.notifications_outlined),
                   ),
                 ),

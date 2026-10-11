@@ -218,8 +218,10 @@ class _PortfolioSectionState extends ConsumerState<PortfolioSection> {
                           [
                             refName(w['project']),
                             if (w['contact'] != null) refName(w['contact']),
-                            if (w['daysOverdue'] != null)
-                              '${w['daysOverdue']} days overdue',
+                            if (w['dueDate'] != null || w['daysOverdue'] is num)
+                              w['daysOverdue'] is num
+                                  ? dueText(w['daysOverdue'] as num)
+                                  : 'No due date',
                           ].join(' · '),
                         ),
                         onTap: () => context.push('/tasks/${w['id']}'),
@@ -818,4 +820,12 @@ class MyDocRequests extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Web wording: positive = overdue, negative = not yet due.
+String dueText(num daysOverdue) {
+  final d = daysOverdue.round();
+  if (d > 0) return d == 1 ? '1 day overdue' : '$d days overdue';
+  if (d == 0) return 'Due today';
+  return 'Due in ${-d} ${d == -1 ? 'day' : 'days'}';
 }
