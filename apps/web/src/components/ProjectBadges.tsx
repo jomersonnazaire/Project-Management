@@ -1,5 +1,7 @@
 import {
+  HEALTH_LABELS,
   NO_ESTIMATE_LABEL,
+  PROJECT_STATUS_LABELS,
   TASK_STATUS_LABELS,
   TEMPLATE_STATUS_LABELS,
   TASK_STATUS_VARIANTS,
@@ -11,6 +13,33 @@ import {
   type TaskStatus,
   type TemplateStatus,
 } from '@xc8/shared';
+
+/** DR-27: project health on its own (On track / At risk / Delayed / On hold). */
+const HEALTH_VARIANTS: Record<Health, string> = {
+  ON_TRACK: 'success',
+  AT_RISK: 'warning',
+  DELAYED: 'danger',
+  ON_HOLD: 'secondary',
+};
+export function HealthBadge({ health }: { health: Health }) {
+  return (
+    <span className={`badge bg-label-${HEALTH_VARIANTS[health]}`}>{HEALTH_LABELS[health]}</span>
+  );
+}
+const STATUS_VARIANTS: Record<ProjectStatus, string> = {
+  PLANNING: 'info',
+  ACTIVE: 'primary',
+  ON_HOLD: 'secondary',
+  COMPLETED: 'success',
+  CANCELLED: 'secondary',
+};
+export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  return (
+    <span className={`badge bg-label-${STATUS_VARIANTS[status]}`}>
+      {PROJECT_STATUS_LABELS[status]}
+    </span>
+  );
+}
 
 /** Badges always carry a text label; colour is never the only signal (NFR-15). */
 export function ProjectBadge(p: {

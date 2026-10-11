@@ -6,7 +6,7 @@ import {
   type InviteResultDto,
   type SystemRole,
 } from '@xc8/shared';
-import type { FilterQuery } from 'mongoose';
+import type { FilterQuery, Types } from 'mongoose';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import type { AppConfig } from '../config.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
@@ -16,6 +16,7 @@ import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js'
 import { currentUser } from '../middleware/auth.js';
 import { TeamModel, UserModel, type User, type UserDoc } from '../models/index.js';
 import { audit } from '../services/audit.js';
+import { notifyOwnerNeeded } from '../services/issues.js';
 import { toUserDto } from '../services/dto.js';
 import { revokeUserSessions } from '../services/sessions.js';
 import { newToken, sha256 } from '../services/tokens.js';
@@ -25,6 +26,24 @@ import { newToken, sha256 } from '../services/tokens.js';
  * locked: Admin). Fixed rule on top: only Admins can grant the Admin role or change, deactivate
  * or reissue links for Admin accounts, so a grant on `users` can't be used to take over an Admin.
  */
+/** Doc 14 §5: an active internal user, not the user themself, and no loop (A→B→A). */
+export async function assertValidSupervisor(userId: Types.ObjectId, supervisorId: string) {
+  const fail = (message: string) =>
+    badRequest(message, [{ path: 'supervisorId', message }], 'VALIDATION_ERROR');
+  if (userId.equals(supervisorId)) throw fail("A user can't be their own supervisor.");
+  const sup = await UserModel.findById(supervisorId).select('name active supervisorId').lean();
+  if (!sup || !sup.active) throw fail('Choose an active user as supervisor.');
+  let next = sup.supervisorId;
+  const seen = new Set<string>([sup._id.toString()]);
+  while (next && !seen.has(next.toString())) {
+    if (next.equals(userId)) {
+      throw fail(`${sup.name} already reports to this user, so they can't be their supervisor.`);
+    }
+    seen.add(next.toString());
+    next = (await UserModel.findById(next).select('supervisorId').lean())?.supervisorId ?? null;
+  }
+}
+
 export function usersRouter(config: AppConfig, registry: RouteRegistry) {
   const router = registry.router('/users');
 
@@ -119,6 +138,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
       if (user.systemRole === 'ADMIN' && user.active) await assertNotLastAdmin(user);
     }
     if (input.teamIds) await assertTeamsExist(input.teamIds);
+    if (input.supervisorId) await assertValidSupervisor(user._id, input.supervisorId);
     const emailChanged = input.email !== undefined && input.email !== user.email;
     if (emailChanged && (await UserModel.exists({ email: input.email, _id: { $ne: user._id } }))) {
       throw emailInUse();
@@ -128,13 +148,20 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
     for (const [field, value] of Object.entries(input) as [keyof typeof input, unknown][]) {
       const old = user.get(field);
       const same =
-        field === 'teamIds'
+        field === 'teamIds' || field === 'reportCc'
           ? JSON.stringify((old as unknown[]).map(String)) === JSON.stringify(value)
-          : old === value;
+          : field === 'supervisorId'
+            ? String(old ?? null) === String(value ?? null)
+            : old === value;
       if (!same) {
         changes.push({
           field,
-          old: field === 'teamIds' ? (old as unknown[]).map(String) : old,
+          old:
+            field === 'teamIds' || field === 'reportCc'
+              ? (old as unknown[]).map(String)
+              : field === 'supervisorId'
+                ? ((old as Types.ObjectId | null)?.toString() ?? null)
+                : old,
           new: value,
         });
         user.set(field, value);
@@ -191,6 +218,8 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
         action: 'user_deactivated',
         changes: [{ field: 'active', old: true, new: false }],
       });
+      // EC-66: their open issues need a new owner; tell each project's PM.
+      await notifyOwnerNeeded({ ownerIds: [user._id], actorId: admin._id });
     }
     res.json({ user: toUserDto(user) });
   });

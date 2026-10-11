@@ -1,0 +1,487 @@
+import {
+  formatHHMM,
+  formatTime24,
+  PROJECT_TYPE_NOT_SET,
+  projectTypeDeadDefaultHint,
+  projectTypeHint,
+  switchTimerQuestion,
+  type TimerRunningDetails,
+  type TrackerEntryDto,
+} from '@xc8/shared';
+import { longDayShort } from '../../lib/format';
+import { useState, type FormEvent } from 'react';
+import { Button, Form, Modal } from 'react-bootstrap';
+import { ApiError } from '../../api/client';
+import { useTimeOptions } from '../../api/m3Hooks';
+import { useProjectTypePreselect } from '../../api/projectTypeHooks';
+import { useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
+import { useConfirm } from '../ConfirmModal';
+import { ErrorAlert } from '../Feedback';
+import { DayLocationField, EntryFields } from './EntryFields';
+import { emptyFields, fieldErrors, fieldsBody, type EntryFieldValues } from './entryFieldValues';
+
+type SaveReq = { path: string; method?: 'POST' | 'PATCH'; body: unknown };
+export type TrackerModalMode =
+  | {
+      kind: 'start';
+      task: { id: string; name: string; projectName: string };
+      date: string;
+      last?: TrackerEntryDto;
+    }
+  | { kind: 'quick'; date: string }
+  | { kind: 'add'; date: string }
+  | { kind: 'edit'; entry: TrackerEntryDto };
+
+const QUICK = '__quick__';
+
+function fromEntry(e: TrackerEntryDto): EntryFieldValues {
+  return {
+    activityTypeId: e.activityType?.id ?? '',
+    module: e.module ?? '',
+    locationId: e.locationOverridden ? (e.location?.id ?? '') : '',
+    billable: e.billable,
+    type: e.type ?? 'EXECUTION',
+    notes: e.notes ?? '',
+  };
+}
+
+/**
+ * Time in on a task, "+ Quick activity", "Add entry" and editing an entry (doc 14 FR-ACT-02, -06,
+ * -10, -15..18; mockup v0.8.7 tracker and daysheet). The server sets live timer times.
+ */
+/** API paths that belong to another form field (FR-ACT-28). */
+const FIELD_ALIASES: Record<string, string> = { taskId: 'target' };
+/** Errors the form shows under a field; anything else is for the banner. */
+const SHOWN_FIELDS = new Set([
+  'target',
+  'title',
+  'timeIn',
+  'timeOut',
+  'dayLocationId',
+  'activityTypeId',
+  'locationId',
+  'billable',
+  'module',
+  'notes',
+]);
+
+/**
+ * FR-ACT-28: the top banner is for server and network problems. A validation error whose fields
+ * all show under their inputs stays out of it; one naming a field the form doesn't show is
+ * spelled out ("module: ...") so nobody sees a bare "Some fields are invalid".
+ */
+function bannerError(error: unknown, targetShown: boolean): unknown {
+  if (!(error instanceof ApiError)) return error;
+  const f = error.fieldErrors();
+  const keys = Object.keys(f);
+  if (!keys.length) return error;
+  const hidden = keys.filter((k) => {
+    const field = FIELD_ALIASES[k] ?? k;
+    if (field === 'target' && !targetShown) return true;
+    return !SHOWN_FIELDS.has(field);
+  });
+  if (!hidden.length) return null;
+  return new ApiError(
+    error.status,
+    error.code,
+    hidden.map((k) => `${k}: ${f[k]}`).join(' '),
+    error.details,
+  );
+}
+
+export function TrackerEntryModal({
+  mode,
+  onClose,
+}: {
+  mode: TrackerModalMode;
+  onClose: () => void;
+}) {
+  const date = mode.kind === 'edit' ? mode.entry.date : mode.date;
+  const day = useTrackerDay(date);
+  const running = useRunning();
+  const options = useTimeOptions(mode.kind === 'add');
+  const save = useTrackerMutation();
+  const editing = mode.kind === 'edit' ? mode.entry : null;
+  const remove = useTrackerMutation();
+  const [confirm, confirmDialog] = useConfirm();
+  // FR-ACT-19 (DR-35): your own entry on a day that isn't submitted or locked; not while running.
+  const canDelete = Boolean(editing && !editing.running && day.data?.can.edit);
+  const deleteEntry = async () => {
+    if (!editing) return;
+    const what = editing.task?.name ?? editing.title ?? 'this entry';
+    const ok = await confirm({
+      title: 'Delete this entry?',
+      body: `${what} · ${formatHHMM(editing.minutes)} on ${longDayShort(editing.date)}. This can't be undone.`,
+      confirmLabel: 'Delete entry',
+      danger: true,
+    });
+    if (ok)
+      remove.mutate({ path: `/entries/${editing.id}`, method: 'DELETE' }, { onSuccess: onClose });
+  };
+  const [target, setTarget] = useState(
+    mode.kind === 'quick' ? QUICK : mode.kind === 'start' ? mode.task.id : '',
+  );
+  const kind: 'TASK' | 'QUICK' = editing ? editing.kind : target === QUICK ? 'QUICK' : 'TASK';
+  const [fields, setFields] = useState<EntryFieldValues>(() =>
+    editing
+      ? fromEntry(editing)
+      : mode.kind === 'start' && mode.last
+        ? // FR-PTY-04: the activity type comes from the project type, not the last entry.
+          { ...fromEntry(mode.last), activityTypeId: '', notes: '' }
+        : emptyFields(mode.kind === 'quick' ? 'QUICK' : 'TASK'),
+  );
+  // FR-PTY-04: Time in and + Add entry on a project task preselect the project type's default
+  // activity type ("From project type: X. You can change it."). Blank for quick activities, a
+  // project with no type, a type with no default, or an inactive default.
+  const presetTaskId = !editing && target && target !== QUICK ? target : null;
+  const preselect = useProjectTypePreselect(presetTaskId);
+  const pre = preselect.data && presetTaskId ? preselect.data : null;
+  const [appliedFor, setAppliedFor] = useState<string | null>(null);
+  const [activityTouched, setActivityTouched] = useState(false);
+  if (pre && presetTaskId !== appliedFor) {
+    setAppliedFor(presetTaskId);
+    if (!activityTouched) setFields((f) => ({ ...f, activityTypeId: pre.activityType?.id ?? '' }));
+  }
+  const activityHint =
+    pre?.projectType && pre.activityType && fields.activityTypeId === pre.activityType.id
+      ? projectTypeHint(pre.projectType.name)
+      : pre?.projectType && pre.inactiveDefault && !fields.activityTypeId
+        ? projectTypeDeadDefaultHint(pre.inactiveDefault, pre.projectType.name)
+        : undefined;
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [when, setWhen] = useState<'now' | 'times'>(
+    mode.kind === 'add' || mode.kind === 'edit' ? 'times' : 'now',
+  );
+  const [timeIn, setTimeIn] = useState(editing?.startAt ? formatTime24(editing.startAt) : '');
+  const [timeOut, setTimeOut] = useState(editing?.endAt ? formatTime24(editing.endAt) : '');
+  const [dayLocationId, setDayLocationId] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const needsDayLocation = !editing && day.isSuccess && !day.data.location;
+  const runningEntry = running.data?.entry;
+  const stopsRunning = !editing && when === 'now' && runningEntry;
+  const projects = options.data ?? [];
+
+  const change = (patch: Partial<EntryFieldValues>) => {
+    if ('activityTypeId' in patch) setActivityTouched(true);
+    setFields((f) => ({ ...f, ...patch }));
+    setErrors((e) => ({ ...e, ...Object.fromEntries(Object.keys(patch).map((k) => [k, ''])) }));
+  };
+
+  const pickTarget = (v: string) => {
+    setTarget(v);
+    // A new task gets its own preselect (or none); a quick activity is never preselected.
+    setActivityTouched(false);
+    setAppliedFor(null);
+    setFields((f) => ({
+      ...f,
+      activityTypeId: '',
+      billable: v !== QUICK,
+      ...(v === QUICK ? { type: 'EXECUTION' } : {}),
+    }));
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const next: Record<string, string> = { ...fieldErrors(fields, kind) };
+    if (!editing && !target) next.target = 'Choose a task or Quick activity.';
+    if (kind === 'QUICK' && !title.trim()) next.title = 'Add a title.';
+    if (when === 'times' && !(editing && !editing.timed)) {
+      if (!timeIn) next.timeIn = 'Enter the time in.';
+      if (!timeOut) next.timeOut = 'Enter the time out.';
+      else if (timeIn && timeOut <= timeIn) next.timeOut = 'Time out must be after time in.';
+    }
+    if (needsDayLocation && !dayLocationId)
+      next.dayLocationId = 'Choose where you’re working today.';
+    setErrors(next);
+    if (Object.values(next).some(Boolean)) return;
+    const body: Record<string, unknown> = { ...fieldsBody(fields, kind) };
+    if (needsDayLocation && dayLocationId) {
+      body.dayLocationId = dayLocationId;
+      delete body.locationId;
+    }
+    let req: SaveReq;
+    if (editing) {
+      delete body.dayLocationId;
+      if (kind === 'QUICK') body.title = title.trim();
+      if (editing.timed && !editing.running) Object.assign(body, { timeIn, timeOut });
+      req = { path: `/entries/${editing.id}`, method: 'PATCH', body };
+    } else {
+      Object.assign(body, kind === 'QUICK' ? { title: title.trim() } : { taskId: target });
+      if (body.locationId === null) delete body.locationId;
+      if (body.notes === null) delete body.notes;
+      req =
+        when === 'now'
+          ? { path: '/start', body }
+          : { path: '/entries', body: { ...body, date, timeIn, timeOut } };
+      // FR-ACT-26: one timer at a time. Ask before stopping the running one.
+      if (when === 'now' && runningEntry) {
+        setSwitchPrompt({
+          id: runningEntry.id,
+          name: runningEntry.task?.name ?? runningEntry.title ?? 'Quick activity',
+          req,
+        });
+        return;
+      }
+    }
+    send(req);
+  };
+
+  const [switchPrompt, setSwitchPrompt] = useState<{
+    id: string;
+    name: string;
+    req: SaveReq;
+  } | null>(null);
+  const doSwitch = () => {
+    if (!switchPrompt) return;
+    const { id, req } = switchPrompt;
+    setSwitchPrompt(null);
+    send({ ...req, body: { ...(req.body as object), switchFrom: id } });
+  };
+
+  // Half-day leave (FR-LV-06, TC-S09): a warning the user can confirm; a full day is refused.
+  const [leaveWarning, setLeaveWarning] = useState<{ message: string; req: SaveReq } | null>(null);
+  const send = (req: SaveReq) => {
+    setLeaveWarning(null);
+    save.mutate(req, {
+      onSuccess: onClose,
+      onError: (err) => {
+        if (err instanceof ApiError) {
+          if (err.code === 'TIMER_RUNNING') {
+            // Another tab or the top bar started a timer meanwhile: offer Switch for that one.
+            const running = (err.details as TimerRunningDetails | undefined)?.running;
+            if (running) {
+              setSwitchPrompt({ id: running.id, name: running.name, req });
+              return;
+            }
+          }
+          if (err.code === 'HALF_DAY_LEAVE') {
+            setLeaveWarning({
+              message: err.message,
+              req: { ...req, body: { ...(req.body as object), confirmLeave: true } },
+            });
+            return;
+          }
+          const f = err.fieldErrors();
+          if (err.code === 'TIME_OVERLAP' || err.code === 'DAILY_LIMIT') return;
+          // FR-ACT-28: each error goes under its field; aliases map API paths to form fields.
+          const mapped: Record<string, string> = {};
+          for (const [k, v] of Object.entries(f)) mapped[FIELD_ALIASES[k] ?? k] = v;
+          setErrors(mapped);
+        }
+      },
+    });
+  };
+
+  const titleText =
+    mode.kind === 'start'
+      ? 'Time in'
+      : mode.kind === 'quick'
+        ? 'Quick activity'
+        : mode.kind === 'add'
+          ? `Add entry · ${longDayShort(date)}`
+          : 'Edit entry';
+  const timed = editing ? editing.timed && !editing.running : when === 'times';
+
+  return (
+    <Modal show onHide={onClose} centered aria-labelledby="tracker-modal-title">
+      <Form onSubmit={submit} noValidate>
+        <Modal.Header closeButton>
+          <Modal.Title as="h2" className="h5" id="tracker-modal-title">
+            {titleText}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {switchPrompt ? (
+            <div
+              className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
+              role="alertdialog"
+              aria-label="Switch timer"
+            >
+              <span className="me-auto">{switchTimerQuestion(switchPrompt.name)}</span>
+              <Button size="sm" variant="primary" onClick={doSwitch}>
+                Switch
+              </Button>
+              <Button size="sm" variant="outline-secondary" onClick={() => setSwitchPrompt(null)}>
+                Cancel
+              </Button>
+            </div>
+          ) : leaveWarning ? (
+            <div
+              className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
+              role="alert"
+            >
+              <span className="me-auto">{leaveWarning.message}</span>
+              <Button size="sm" variant="warning" onClick={() => send(leaveWarning.req)}>
+                Log time anyway
+              </Button>
+            </div>
+          ) : (
+            <ErrorAlert
+              error={bannerError(save.error, mode.kind === 'add') ?? remove.error}
+              action
+            />
+          )}
+          {mode.kind === 'start' && (
+            <p className="mb-3">
+              <strong>{mode.task.name}</strong>
+              <span className="d-block small text-body-secondary">
+                {mode.task.projectName}
+                {pre && (
+                  <>
+                    {' '}
+                    · Project type: <b>{pre.projectType?.name ?? PROJECT_TYPE_NOT_SET}</b>
+                  </>
+                )}
+              </span>
+            </p>
+          )}
+          {mode.kind === 'quick' && (
+            <p className="small text-body-secondary">
+              Not linked to a project. Only you, your supervisor and Admins can see it.
+            </p>
+          )}
+          {mode.kind === 'add' && (
+            <Form.Group className="mb-3" controlId="tracker-target">
+              <Form.Label>Task or quick activity *</Form.Label>
+              <Form.Select
+                value={target}
+                isInvalid={Boolean(errors.target)}
+                onChange={(e) => pickTarget(e.target.value)}
+              >
+                <option value="">Choose…</option>
+                {projects.map((p) => (
+                  <optgroup key={p.project.id} label={p.project.name}>
+                    {p.tasks.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} · {p.project.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+                <option value={QUICK}>Quick activity…</option>
+              </Form.Select>
+              <Form.Control.Feedback type="invalid">{errors.target}</Form.Control.Feedback>
+            </Form.Group>
+          )}
+          {editing?.kind === 'TASK' && (
+            <p className="mb-3">
+              <strong>{editing.task?.name}</strong>
+              <span className="d-block small text-body-secondary">{editing.project?.name}</span>
+            </p>
+          )}
+          {kind === 'QUICK' && (
+            <Form.Group className="mb-3" controlId="tracker-title">
+              <Form.Label>Title *</Form.Label>
+              <Form.Control
+                value={title}
+                maxLength={150}
+                isInvalid={Boolean(errors.title)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setErrors((x) => ({ ...x, title: '' }));
+                }}
+              />
+              <Form.Control.Feedback type="invalid">{errors.title}</Form.Control.Feedback>
+            </Form.Group>
+          )}
+          {needsDayLocation && (
+            <DayLocationField
+              date={date}
+              idPrefix="tracker"
+              value={dayLocationId}
+              error={errors.dayLocationId}
+              onChange={(v) => {
+                setDayLocationId(v);
+                setErrors((x) => ({ ...x, dayLocationId: '' }));
+              }}
+            />
+          )}
+          <EntryFields
+            kind={kind}
+            values={fields}
+            onChange={change}
+            errors={errors}
+            dayLocation={day.data?.location?.name ?? null}
+            hideLocation={needsDayLocation}
+            keep={editing ? { activityType: editing.activityType } : undefined}
+            activityHint={activityHint}
+            idPrefix="tracker"
+          />
+          {mode.kind === 'quick' && (
+            <Form.Group className="mb-3">
+              <Form.Label as="div" id="tracker-when">
+                When
+              </Form.Label>
+              <div role="radiogroup" aria-labelledby="tracker-when">
+                <Form.Check
+                  type="radio"
+                  id="tracker-when-now"
+                  label="Start timer now"
+                  checked={when === 'now'}
+                  onChange={() => setWhen('now')}
+                />
+                <Form.Check
+                  type="radio"
+                  id="tracker-when-times"
+                  label="Enter time in and time out"
+                  checked={when === 'times'}
+                  onChange={() => setWhen('times')}
+                />
+              </div>
+            </Form.Group>
+          )}
+          {timed && (
+            <div className="row g-3 mb-3">
+              <Form.Group className="col-6" controlId="tracker-time-in">
+                <Form.Label>Time in *</Form.Label>
+                <Form.Control
+                  type="time"
+                  value={timeIn}
+                  isInvalid={Boolean(errors.timeIn)}
+                  onChange={(e) => setTimeIn(e.target.value)}
+                />
+                <Form.Control.Feedback type="invalid">{errors.timeIn}</Form.Control.Feedback>
+              </Form.Group>
+              <Form.Group className="col-6" controlId="tracker-time-out">
+                <Form.Label>Time out *</Form.Label>
+                <Form.Control
+                  type="time"
+                  value={timeOut}
+                  isInvalid={Boolean(errors.timeOut)}
+                  onChange={(e) => setTimeOut(e.target.value)}
+                />
+                <Form.Control.Feedback type="invalid">{errors.timeOut}</Form.Control.Feedback>
+              </Form.Group>
+              <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
+            </div>
+          )}
+          {stopsRunning && !switchPrompt && (
+            <p className="small text-body-secondary mb-0" role="status">
+              A timer is running on "{runningEntry.task?.name ?? runningEntry.title}". You can
+              switch to this one.
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          {canDelete && (
+            <Button
+              variant="outline-danger"
+              className="me-auto"
+              disabled={remove.isPending}
+              onClick={() => void deleteEntry()}
+            >
+              Delete entry
+            </Button>
+          )}
+          <Button variant="outline-secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={save.isPending}>
+            {editing ? 'Save' : when === 'now' ? 'Start timer' : 'Save entry'}
+          </Button>
+        </Modal.Footer>
+      </Form>
+      {confirmDialog}
+    </Modal>
+  );
+}

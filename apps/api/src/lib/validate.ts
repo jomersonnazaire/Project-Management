@@ -27,8 +27,21 @@ export function idParam(req: Request, name = 'id'): string {
   return value;
 }
 
+/**
+ * One `{ path, message }` per failing field (FR-ACT-28), so the web app can show each error under
+ * its field. An unknown key (e.g. a field an older API doesn't have) is named, not left pathless.
+ */
 export function formatIssues(error: z.ZodError) {
-  return error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
+  return error.issues.flatMap((i) => {
+    if (i.code === 'unrecognized_keys') {
+      const base = i.path.join('.');
+      return i.keys.map((k) => ({
+        path: base ? `${base}.${k}` : k,
+        message: `${k} isn't a field this server accepts.`,
+      }));
+    }
+    return [{ path: i.path.join('.'), message: i.message }];
+  });
 }
 
 export function escapeRegex(s: string) {

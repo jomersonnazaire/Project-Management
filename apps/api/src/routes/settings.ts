@@ -10,6 +10,10 @@ import {
   toDateOnly,
   updateHolidaySchema,
   workingDaysSchema,
+  describeTimeLock,
+  timeLockBoundary,
+  timeLockSchema,
+  type TimeLockDto,
   type CalendarDto,
   type HolidayDto,
   type HolidayImpactDto,
@@ -31,6 +35,7 @@ import {
 import { loadOfficialHolidays } from '../services/officialHolidays.js';
 import { audit } from '../services/audit.js';
 import { CALENDAR_KEY, workingDaysSetting } from '../services/calendar.js';
+import { TIME_LOCK_KEY, loadTimeLock } from '../services/timeLock.js';
 
 /**
  * Working-day calendar (FR-CAL-01..05): Admin › Settings › Holidays and Working days. Reading
@@ -140,6 +145,48 @@ export function settingsRouter(registry: RouteRegistry) {
     });
     const now = await workingDaysSetting();
     res.json({ workingDays: now.days, version: updated?.version ?? now.version });
+  });
+
+  // Q-09: when last week's time entries lock (Admin setting; no approval step).
+  const timeLockDto = async (): Promise<TimeLockDto> => {
+    const { policy, version } = await loadTimeLock();
+    return {
+      policy,
+      version,
+      boundary: policy.enabled ? toDateOnly(timeLockBoundary(new Date(), policy)) : null,
+      description: describeTimeLock(policy),
+    };
+  };
+  r.get('/time-lock', perm('settings', 'view'), async (_req, res) => {
+    res.json(await timeLockDto());
+  });
+  r.put('/time-lock', perm('settings', 'edit'), async (req, res) => {
+    const input = parseBody(timeLockSchema, req);
+    const before = await loadTimeLock();
+    if (before.version !== input.version) {
+      throw conflict(
+        'The time lock was changed by someone else. Refresh and try again.',
+        'VERSION_CONFLICT',
+      );
+    }
+    const policy = { enabled: input.enabled, weekday: input.weekday, hour: input.hour };
+    await SettingModel.findOneAndUpdate(
+      { key: TIME_LOCK_KEY, version: input.version },
+      { $set: { timeLock: policy, updatedBy: currentUser(req)._id }, $inc: { version: 1 } },
+      { upsert: true, new: true },
+    ).catch((e: { code?: number }) => {
+      if (e.code === 11000)
+        throw conflict('The time lock was changed by someone else.', 'VERSION_CONFLICT');
+      throw e;
+    });
+    await audit({
+      actorId: currentUser(req)._id,
+      entityType: 'settings',
+      entityId: SETTINGS_ENTITY,
+      action: 'time_lock_updated',
+      changes: [{ field: 'timeLock', old: before.policy, new: policy }],
+    });
+    res.json(await timeLockDto());
   });
 
   // FR-CAL-03 / AC-CAL-2: how many open tasks are due on a date, shown before saving a holiday.

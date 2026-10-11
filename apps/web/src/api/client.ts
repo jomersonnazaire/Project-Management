@@ -117,3 +117,42 @@ export function qs(params: Record<string, string | number | boolean | undefined 
   const s = sp.toString();
   return s ? `?${s}` : '';
 }
+
+/**
+ * Downloads a file the API builds (PDF / Excel exports). Errors come back as the usual JSON
+ * error body; the file name comes from Content-Disposition.
+ */
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { credentials: 'include' });
+  } catch {
+    throw new ApiError(
+      0,
+      'NETWORK_ERROR',
+      "Can't reach the server. Check your connection and try again.",
+    );
+  }
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as ApiErrorBody | null;
+    const apiError = new ApiError(
+      res.status,
+      data?.error?.code ?? 'HTTP_ERROR',
+      data?.error?.message ?? `Request failed (${res.status}).`,
+      data?.error?.details,
+    );
+    if (res.status === 401) unauthorizedListeners.forEach((l) => l(apiError));
+    throw apiError;
+  }
+  const blob = await res.blob();
+  const name =
+    /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

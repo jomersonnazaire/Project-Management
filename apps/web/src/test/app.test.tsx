@@ -1,8 +1,10 @@
+import { APP_NAME } from '@xc8/shared';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserDto } from '@xc8/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
+import { emptyDashboard } from './fixtures';
 import { mockApi, renderAt } from './utils';
 
 const user = (over: Partial<UserDto> = {}): UserDto => ({
@@ -13,6 +15,8 @@ const user = (over: Partial<UserDto> = {}): UserDto => ({
   jobRole: 'CONSULTANT',
   teamIds: [],
   weeklyCapacityHours: 40,
+  supervisorId: null,
+  reportCc: [],
   status: 'ACTIVE',
   active: true,
   mustChangePassword: false,
@@ -30,7 +34,9 @@ describe('Sign in', () => {
       body: { error: { code: 'UNAUTHENTICATED', message: 'Please sign in.' } },
     }));
     renderAt('/admin', <App />);
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: `Sign in to ${APP_NAME}` }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Client contacts don't have accounts/)).toBeInTheDocument();
   });
 
@@ -204,7 +210,7 @@ describe('First-time password setup', () => {
 });
 
 describe('Admin-issued links (FR-AUTH-04/05, TC-A14)', () => {
-  it('the sign-in page has no "Forgot password?" and lands on My tasks (AC-01.1)', async () => {
+  it('the sign-in page has no "Forgot password?" and lands on the Dashboard (AC-01.1, M4)', async () => {
     let signedIn = false;
     mockApi((url) => {
       if (url.endsWith('/auth/login')) {
@@ -215,20 +221,23 @@ describe('Admin-issued links (FR-AUTH-04/05, TC-A14)', () => {
         return signedIn
           ? { status: 200, body: { user: user() } }
           : { status: 401, body: { error: { code: 'UNAUTHENTICATED', message: 'x' } } };
+      if (url.endsWith('/api/v1/dashboard')) return { status: 200, body: emptyDashboard() };
       return { status: 200, body: { items: [] } };
     });
     renderAt('/login', <App />);
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: `Sign in to ${APP_NAME}` }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/^Forgot password\?$/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Forgot/ })).not.toBeInTheDocument();
     expect(
-      screen.getByText('Forgot your password? Ask an Admin for a reset link.'),
+      screen.getByText(`Forgot your password? Ask an ${APP_NAME} Admin for a reset link.`),
     ).toBeInTheDocument();
-    expect(screen.getByText("You'll land on My tasks.")).toBeInTheDocument();
+    expect(screen.getByText("You'll land on your Dashboard.")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Email'), 'member@xceler8.example');
     await userEvent.type(screen.getByLabelText('Password'), 'Secret-pass-1!');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('heading', { name: 'My tasks' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
 
   it('shows "Copy reset link" for active users, "New invite link" for invited users, nothing for deactivated', async () => {

@@ -28,6 +28,7 @@ import {
   type Template,
 } from '../models/index.js';
 import { canAddProjectMembers, canEditProjectScope, isPlanner, type ScopeUser } from './scope.js';
+import { projectTypeRefs } from './projectTypes.js';
 
 type Id = Types.ObjectId;
 export type ProjectDoc = Project & { _id: Id; createdAt?: Date; updatedAt?: Date };
@@ -80,11 +81,12 @@ export async function userRefs(ids: (Id | null | undefined)[]): Promise<Map<stri
 
 /** Rows for project lists, with client and manager names resolved in two queries. */
 export async function toProjectListItems(projects: ProjectDoc[]): Promise<ProjectListItemDto[]> {
-  const [clients, users, counts] = await Promise.all([
+  const [clients, users, types, counts] = await Promise.all([
     ClientModel.find({ _id: { $in: projects.map((p) => p.clientId) } })
       .select('name')
       .lean(),
     userRefs(projects.map((p) => p.managerId)),
+    projectTypeRefs(projects.map((p) => p.projectTypeId)),
     TaskModel.aggregate<{ _id: Id; n: number; unestimated: number }>([
       { $match: { projectId: { $in: projects.map((p) => p._id) } } },
       {
@@ -103,6 +105,7 @@ export async function toProjectListItems(projects: ProjectDoc[]): Promise<Projec
     return {
       id: p._id.toString(),
       name: p.name,
+      code: p.code ?? null,
       clientId: p.clientId.toString(),
       clientName: clientNames.get(p.clientId.toString()) ?? '',
       managerId: p.managerId ? p.managerId.toString() : null,
@@ -117,6 +120,7 @@ export async function toProjectListItems(projects: ProjectDoc[]): Promise<Projec
       archived: Boolean(p.archived),
       templateName: p.templateSnapshot?.name ?? null,
       templateVersion: p.templateSnapshot?.version ?? null,
+      projectType: p.projectTypeId ? (types.get(p.projectTypeId.toString()) ?? null) : null,
       taskCount: taskCounts.get(p._id.toString())?.n ?? 0,
       unestimatedTaskCount: taskCounts.get(p._id.toString())?.unestimated ?? 0,
     };
@@ -146,6 +150,7 @@ export async function toProjectDto(
   const editScope = canEditProjectScope(user, project);
   return {
     ...item!,
+    codeLocked: (project.issueSeq ?? 0) > 0,
     description: project.description ?? null,
     type: (project.type ?? null) as TemplateType | null,
     manager: project.managerId ? (users.get(project.managerId.toString()) ?? null) : null,

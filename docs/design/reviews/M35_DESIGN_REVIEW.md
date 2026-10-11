@@ -6,3 +6,7 @@ Matches mockup v0.7.6: My tasks tab order Today, Due, Assigned to me, I'm accoun
 - DR-20 (Low): history field names in lower case ("attachments: – → ok.pdf"). Use "Attachment added: ok.pdf".
 - DR-21 (Low): Aging subtitle still "planned date has passed, not done yet". Use "planned start has passed and not started, or past due".
 - DR-22 (Low): project header has two filled primary buttons (+ Raise issue, Edit project). Make "+ Raise issue" outline, or show it only on the Issues tab. All issues filters also wrap to three rows at 1440; put Export CSV in the page header.
+
+## Re-check PR #8 — Oct 9, 2026
+PASS. DR-18 (owner name in history), DR-19 ("Move to Waiting on client" set apart), DR-20 ("Attachment added: ok.pdf"), DR-21 (Aging subtitle) and DR-22 (Raise issue outline, Export CSV in header) all fixed.
+- DR-23 (Low, for M4): two projects for the same client both show ACME-SAP-ISS-001 on All issues, so the ID alone doesn't identify an issue. Give each project its own code prefix (e.g. from the project, not the client), or show the project code in the ID.

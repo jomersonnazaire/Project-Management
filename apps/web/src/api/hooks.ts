@@ -64,8 +64,9 @@ export function useReissueLink() {
 }
 
 // ----- Teams -----
-export function useTeams(includeArchived = false) {
+export function useTeams(includeArchived = false, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: keys.teams(includeArchived),
     queryFn: () =>
       api<{ items: TeamDto[] }>(`/teams${qs({ includeArchived: includeArchived || undefined })}`),

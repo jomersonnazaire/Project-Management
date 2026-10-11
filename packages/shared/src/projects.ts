@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ProjectTypeRefDto } from './projectTypes.js';
 import { JOB_ROLES, type SystemRole } from './roles.js';
 
 /**
@@ -470,10 +471,11 @@ export function hasEstimate<T extends { estHours?: number | null }>(
 }
 
 /** "–" for tasks without an estimate (EC-58), otherwise the hours. */
-/** Hours with their unit (DR-08): "4h", "2.5h"; a missing value is "–". */
+/** Hours as HH:MM (DR-25 supersedes DR-08's "4h"): "04:00", "02:30"; a missing value is "–". */
 export function formatHours(h: number | null | undefined): string {
   if (h === null || h === undefined) return '–';
-  return `${Number.isInteger(h) ? String(h) : h.toFixed(2).replace(/0$/, '')}h`;
+  const m = Math.max(0, Math.round(h * 60));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
 /**
@@ -540,6 +542,10 @@ export function findCycle(nodes: { id: string; dependsOn: readonly string[] }[])
 
 // ---------- Request schemas (strict: unknown fields are rejected, NFR-04) ----------
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
+/** FR-PTY-02: required on create, and on the next edit of a project that has none (FR-PTY-03). */
+const projectTypeId = z
+  .string({ error: 'Choose a project type.' })
+  .regex(/^[a-f0-9]{24}$/i, 'Choose a project type.');
 const requiredText = (label: string, max = 200) =>
   z.string().trim().min(1, `${label} is required.`).max(max);
 // Optional text also accepts null, which the web sends to clear a field and the DTOs return.
@@ -603,12 +609,29 @@ export const updateTemplateSchema = z
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), 'Nothing to update.');
 
+// ---------- DR-23: project codes (issue ID prefix) ----------
+export const PROJECT_CODE_TAKEN =
+  'This code is already used by another project. Codes must be unique.';
+export const PROJECT_CODE_LOCKED =
+  "Can't change once the project has issues, so issue IDs stay the same.";
+/** 2–20 letters, numbers and single hyphens, stored in capitals ("acme-sap" → "ACME-SAP"). */
+export const projectCodeSchema = z
+  .string()
+  .trim()
+  .min(2, 'Use at least 2 characters.')
+  .max(20, 'Use 20 characters or fewer.')
+  .regex(/^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/, 'Use letters, numbers and single hyphens.')
+  .transform((v) => v.toUpperCase());
+
 export const createProjectSchema = z
   .strictObject({
     name: requiredText('Project name', 160),
+    /** DR-23: unique ignoring case; suggested from the client and type when left out. */
+    code: projectCodeSchema.optional(),
     clientId: objectId,
     managerId: objectId,
     type: z.enum(TEMPLATE_TYPES).optional(),
+    projectTypeId,
     startDate: dateOnlySchema('Baseline start'),
     plannedEndDate: dateOnlySchema('Baseline end'),
     description: optionalText(4000),
@@ -626,8 +649,11 @@ export type CreateProjectInput = z.input<typeof createProjectSchema>;
 export const updateProjectSchema = z
   .strictObject({
     name: requiredText('Project name', 160).optional(),
+    /** DR-23: can't change once the project has issues. */
+    code: projectCodeSchema.optional(),
     description: optionalText(4000),
     type: z.enum(TEMPLATE_TYPES).nullable().optional(),
+    projectTypeId: projectTypeId.optional(),
     managerId: objectId.optional(),
     memberIds: z.array(objectId).max(200).optional(),
     clientId: objectId.optional(),
@@ -638,6 +664,8 @@ export const updateProjectSchema = z
     reason: optionalText(500),
     /** Confirms that changing the client clears the active contacts (FR-PRJ-13). */
     confirmClearContacts: z.boolean().optional(),
+    /** EC-68: confirms the client change although issues keep contacts from the old client. */
+    confirmIssueContacts: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
@@ -650,6 +678,8 @@ export const projectListQuerySchema = z.strictObject({
   q: z.string().trim().max(100).optional(),
   status: z.string().max(20).optional(),
   clientId: objectId.optional(),
+  /** FR-PTY-07: filter by project type; "none" = Not set. */
+  projectTypeId: z.union([objectId, z.literal('none')]).optional(),
   mine: z.enum(['true', 'false']).optional(),
 });
 
@@ -834,6 +864,8 @@ export interface UserRefDto extends Ref {
 export interface ProjectListItemDto {
   id: string;
   name: string;
+  /** DR-23: the issue ID prefix, e.g. "ACME-SAP". */
+  code: string | null;
   clientId: string;
   clientName: string;
   managerId: string | null;
@@ -848,6 +880,8 @@ export interface ProjectListItemDto {
   archived: boolean;
   templateName: string | null;
   templateVersion: number | null;
+  /** FR-PTY-02/03: null = "Not set" (projects created before project types). */
+  projectType: ProjectTypeRefDto | null;
   taskCount: number;
   /** Tasks without an estimate (EC-58). */
   unestimatedTaskCount: number;
@@ -863,6 +897,8 @@ export interface ActiveContactDto {
 }
 
 export interface ProjectDto extends ProjectListItemDto {
+  /** DR-23: true once the project has issues; the code is then read-only. */
+  codeLocked: boolean;
   description: string | null;
   type: TemplateType | null;
   manager: UserRefDto | null;

@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  APP_NAME,
   JOB_ROLES,
   JOB_ROLE_LABELS,
   SYSTEM_ROLES,
@@ -7,6 +8,7 @@ import {
   emailSchema,
   inviteUserSchema,
   plural,
+  reportCcSchema,
   updateUserSchema,
   type InviteResultDto,
   type TeamDto,
@@ -204,7 +206,7 @@ function InviteUserModal({ teams, onClose }: { teams: TeamDto[]; onClose: () => 
             <div className="mt-4">
               <CopyLinkField
                 id="invite-link"
-                label={`Invite link for ${created.user.name} (single use, expires in ${plural(hoursUntil(created.inviteExpiresAt), 'hour')}, share it yourself)`}
+                label={`Invite link to ${APP_NAME} for ${created.user.name} (single use, expires in ${plural(hoursUntil(created.inviteExpiresAt), 'hour')}, share it yourself)`}
                 url={created.inviteUrl}
               />
             </div>
@@ -279,6 +281,13 @@ function EditUserModal({
   onClose: () => void;
 }) {
   const update = useUpdateUser();
+  // Doc 14 §5: direct supervisor (active users only, never themself).
+  const everyone = useUsers({ status: 'ACTIVE' });
+  const [supervisorId, setSupervisorId] = useState(user.supervisorId ?? '');
+  const [supervisorError, setSupervisorError] = useState('');
+  // FR-DAR-01: Report CC emails, up to 5, set by Admins.
+  const [cc, setCc] = useState((user.reportCc ?? []).join(', '));
+  const [ccError, setCcError] = useState('');
   const {
     register,
     control,
@@ -307,6 +316,9 @@ function EditUserModal({
       setConfirm(null);
       const fields = e instanceof ApiError ? e.fieldErrors() : {};
       if (fields.email) setFieldError('email', { message: fields.email });
+      else if (fields.supervisorId) setSupervisorError(fields.supervisorId);
+      else if (Object.keys(fields).some((k) => k.startsWith('reportCc')))
+        setCcError(Object.entries(fields).find(([k]) => k.startsWith('reportCc'))![1]);
       else setError(e);
     }
   };
@@ -322,6 +334,15 @@ function EditUserModal({
         return;
       }
     }
+    const ccList = cc
+      .split(/[,;\s]+/)
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean);
+    const ccCheck = reportCcSchema.safeParse(ccList);
+    if (!ccCheck.success) {
+      setCcError(ccCheck.error.issues[0]?.message ?? 'Enter valid email addresses.');
+      return;
+    }
     const body: EditOut = {
       name: v.name,
       ...(email !== user.email ? { email } : {}),
@@ -329,6 +350,10 @@ function EditUserModal({
       teamIds: v.teamIds ?? [],
       weeklyCapacityHours: Number(v.weeklyCapacityHours),
       ...(isSelf ? {} : { systemRole: v.systemRole }),
+      ...((supervisorId || null) !== (user.supervisorId ?? null)
+        ? { supervisorId: supervisorId || null }
+        : {}),
+      ...(ccList.join(',') !== (user.reportCc ?? []).join(',') ? { reportCc: ccList } : {}),
     };
     const parsed = updateUserSchema.safeParse(body);
     if (!parsed.success) {
@@ -402,6 +427,48 @@ function EditUserModal({
               )}
             />
           </fieldset>
+          <Form.Group className="mb-3" controlId="edit-supervisor">
+            <Form.Label>Direct supervisor</Form.Label>
+            <Form.Select
+              value={supervisorId}
+              isInvalid={Boolean(supervisorError)}
+              onChange={(e) => {
+                setSupervisorId(e.target.value);
+                setSupervisorError('');
+              }}
+            >
+              <option value="">No supervisor</option>
+              {(everyone.data?.items ?? [])
+                .filter((u) => u.id !== user.id && u.active)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+            </Form.Select>
+            <Form.Control.Feedback type="invalid">{supervisorError}</Form.Control.Feedback>
+            <Form.Text>
+              Reopens their timesheet days and gets their leave notices. Without one, leave notices
+              go to all Admins.
+            </Form.Text>
+          </Form.Group>
+          <Form.Group className="mb-3" controlId="edit-report-cc">
+            <Form.Label>Report CC emails</Form.Label>
+            <Form.Control
+              value={cc}
+              isInvalid={Boolean(ccError)}
+              placeholder="name@company.com, other@company.com"
+              onChange={(e) => {
+                setCc(e.target.value);
+                setCcError('');
+              }}
+            />
+            <Form.Control.Feedback type="invalid">{ccError}</Form.Control.Feedback>
+            <Form.Text>
+              Up to 5, separated by commas. Shown on their Daily Accomplishment Report; used when
+              sending arrives with Microsoft sign-in.
+            </Form.Text>
+          </Form.Group>
           <Form.Group controlId="edit-capacity">
             <Form.Label>Weekly capacity (hours)</Form.Label>
             <Form.Control
@@ -525,6 +592,14 @@ export function UsersPanel() {
                       </td>
                       <td data-label="Status">
                         <UserStatusBadge status={u.status} />
+                        {/* FR-LV-10, EC-77: no supervisor, or a deactivated one. */}
+                        {u.active &&
+                          (!u.supervisorId ||
+                            users.data?.items.some(
+                              (s) => s.id === u.supervisorId && !s.active,
+                            )) && (
+                            <span className="badge bg-label-warning ms-1">Supervisor needed</span>
+                          )}
                       </td>
                       <td className="cell-actions text-end text-nowrap">
                         {u.active && (

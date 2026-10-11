@@ -1,4 +1,6 @@
-# Xceler8 Project Management (Implementation Tracker)
+# Xceler8 Project Management
+
+The app name, tagline and export footer live in `packages/shared/src/brand.ts` (one-line rename).
 
 Web app for managing Xceler8 implementation projects: templates, tasks, time, client follow-up and documents.
 Requirements, the QA plan and the design (mockup v0.4, theme tokens) are in [`docs/`](docs/).

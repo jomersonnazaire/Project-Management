@@ -10,6 +10,46 @@ const objectId = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
 const requiredText = (label: string, max = 200) =>
   z.string().trim().min(1, `${label} is required.`).max(max);
 const optionalText = (max = 2000) => z.string().trim().max(max).nullable().optional();
+
+// ---------- Module (doc 14 v0.9.7 FR-ACT-20): optional free text, no Admin list ----------
+export const MODULE_MAX = 100;
+/** The counter shows from this many characters (FR-ACT-20). */
+export const MODULE_COUNTER_FROM = 80;
+export const MODULE_TOO_LONG = `Keep the module under ${MODULE_MAX} characters.`;
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+/**
+ * DEF-010: lengths users see. Counts grapheme clusters, so an emoji (even a multi-code-point
+ * one such as a flag or a family) counts as 1. The web counter and the API use this same rule.
+ */
+export const graphemeLength = (s: string) => {
+  let n = 0;
+  for (const _ of graphemes.segment(s)) n++;
+  return n;
+};
+/** The first `max` user-visible characters of `s` (never splits an emoji). */
+export const graphemeSlice = (s: string, max: number) => {
+  let out = '';
+  let n = 0;
+  for (const { segment } of graphemes.segment(s)) {
+    if (n++ >= max) break;
+    out += segment;
+  }
+  return out;
+};
+/** Module length in user-visible characters, after trimming (FR-ACT-20, DEF-010). */
+export const moduleLength = (s: string) => graphemeLength(s.trim());
+
+/** Trimmed free text, max 100 characters after trimming; blank or spaces-only saves as blank (null). */
+export const moduleText = z
+  .string()
+  .trim()
+  .refine((v) => graphemeLength(v) <= MODULE_MAX, MODULE_TOO_LONG)
+  .nullable()
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v || null));
+/** How a blank module shows on screen, in the report, PDF and Excel. */
+export const moduleLabel = (m: string | null | undefined) => m?.trim() || '–';
 const dateOnly = (label: string) =>
   z
     .string()
@@ -132,6 +172,13 @@ export const timeEntrySchema = z.strictObject({
   hours,
   type: z.enum(TIME_TYPES).default('EXECUTION'),
   notes: optionalText(1000),
+  /** Doc 14 FR-ACT-15, FR-DAR-09: required on every entry, Log time included. */
+  activityTypeId: objectId,
+  module: moduleText,
+  locationId: objectId.nullable().optional(),
+  billable: z.boolean().default(true),
+  /** Confirms the half-day leave warning (FR-LV-06). */
+  confirmLeave: z.boolean().optional(),
 });
 export type TimeEntryInput = z.input<typeof timeEntrySchema>;
 export const updateTimeEntrySchema = z.strictObject({
@@ -139,6 +186,10 @@ export const updateTimeEntrySchema = z.strictObject({
   hours: hours.optional(),
   type: z.enum(TIME_TYPES).optional(),
   notes: optionalText(1000),
+  activityTypeId: objectId.optional(),
+  module: moduleText,
+  locationId: objectId.nullable().optional(),
+  billable: z.boolean().optional(),
 });
 export const timeWeekQuerySchema = z.strictObject({ week: dateOnly('week').optional() });
 
@@ -149,6 +200,14 @@ export interface TimeEntryDto {
   task: Ref;
   workDate: string;
   hours: number;
+  /** Exact minutes (timed entries) or hours × 60. */
+  minutes: number;
+  /** Logged with Time in / Time out (doc 14 FR-ACT-02); hours change on the Day timesheet. */
+  timed: boolean;
+  activityType: Ref | null;
+  /** Free text (mockup v0.8.9). */
+  module: string | null;
+  billable: boolean;
   type: TimeType;
   notes: string | null;
   locked: boolean;
@@ -161,6 +220,8 @@ export interface TimeWeekDto {
   items: TimeEntryDto[];
   total: number;
   capacity: number;
+  /** Q-09: the Admin-set lock in words, e.g. "Last week's entries lock every Monday at 12:00 PM Philippine time." */
+  lockDescription?: string;
 }
 
 export interface LoggableTaskDto {
@@ -175,15 +236,65 @@ export function weekStartOf(d: Date): Date {
 }
 
 /**
- * FR-TIME-04 / Q-09 default: last week's entries lock on Monday at 12:00 Philippine time.
- * Returns the first work date that is still open; anything earlier is read-only (except PM/Admin).
+ * Q-09 (built as an Admin setting, v0.7.2): the previous week locks every week at `weekday`
+ * (0 = Sunday … 6 = Saturday) and `hour` Philippine time. Default: Monday 12:00 PM. There is no
+ * approval step. With `enabled` off nothing locks.
  */
-export function timeLockBoundary(now = new Date()): Date {
+export interface TimeLockPolicy {
+  enabled: boolean;
+  weekday: number;
+  hour: number;
+}
+export const DEFAULT_TIME_LOCK: TimeLockPolicy = { enabled: true, weekday: 1, hour: 12 };
+export const timeLockSchema = z.object({
+  enabled: z.boolean(),
+  weekday: z.number().int().min(0).max(6),
+  hour: z.number().int().min(0).max(23),
+  version: z.number().int().min(0),
+});
+export type TimeLockInput = z.infer<typeof timeLockSchema>;
+export interface TimeLockDto {
+  policy: TimeLockPolicy;
+  version: number;
+  /** First work date still open now (YYYY-MM-DD), or null when locking is off. */
+  boundary: string | null;
+  description: string;
+}
+const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
+export function formatHour12(hour: number): string {
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h}:00 ${hour < 12 ? 'AM' : 'PM'}`;
+}
+/** "Last week locks every Monday at 12:00 PM Philippine time." */
+export function describeTimeLock(p: TimeLockPolicy): string {
+  if (!p.enabled) return 'Time entries never lock.';
+  return `Last week's entries lock every ${WEEKDAY_NAMES[p.weekday]} at ${formatHour12(p.hour)} Philippine time.`;
+}
+
+/**
+ * FR-TIME-04 / Q-09: returns the first work date that is still open; anything earlier is read-only
+ * (except PM/Admin). Weeks run Monday to Sunday. The previous week locks at this week's lock moment
+ * (weekday + hour, Philippine time). With locking off, nothing is locked (the epoch is returned).
+ */
+export function timeLockBoundary(
+  now = new Date(),
+  policy: TimeLockPolicy = DEFAULT_TIME_LOCK,
+): Date {
+  if (!policy.enabled) return new Date(0);
   const ph = new Date(now.getTime() + 8 * 3_600_000);
   const today = new Date(`${ph.toISOString().slice(0, 10)}T00:00:00.000Z`);
   const monday = weekStartOf(today);
-  const afterNoonMonday = today.getTime() > monday.getTime() || ph.getUTCHours() >= 12;
-  return afterNoonMonday ? monday : new Date(monday.getTime() - 7 * 86_400_000);
+  const lockAt =
+    monday.getTime() + ((policy.weekday + 6) % 7) * 86_400_000 + policy.hour * 3_600_000;
+  return ph.getTime() >= lockAt ? monday : new Date(monday.getTime() - 7 * 86_400_000);
 }
 
 // ---------- Uploads (FR-EVD-01..08, FR-DOC-13) ----------
@@ -573,6 +684,11 @@ export const NOTIFICATION_TYPES = [
   'ISSUE_COMMENT',
   'ISSUE_OVERDUE',
   'ISSUE_OWNER_NEEDED',
+  // Activity tracker (doc 14 §10, EC-76) and leave (Q-46)
+  'DAY_REOPENED',
+  'TIMER_STOPPED',
+  'LEAVE_RECORDED',
+  'LEAVE_CANCELLED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -588,7 +704,11 @@ export interface NotificationDto {
   task: Ref | null;
   /** Issue notifications: the issue's key and title. */
   issue: { id: string; key: string; title: string } | null;
-  project: Ref;
+  /** Null on personal notices (tracker, leave). */
+  project: Ref | null;
+  /** Personal notices: the full sentence and where it opens. */
+  message: string | null;
+  link: string | null;
   read: boolean;
   at: string;
 }
@@ -619,6 +739,10 @@ export const NOTIFICATION_VERBS: Record<NotificationType, string> = {
   ISSUE_COMMENT: 'commented on',
   ISSUE_OVERDUE: 'Overdue:',
   ISSUE_OWNER_NEEDED: 'Owner needed:',
+  DAY_REOPENED: 'reopened your timesheet',
+  TIMER_STOPPED: 'Timer stopped:',
+  LEAVE_RECORDED: 'recorded leave',
+  LEAVE_CANCELLED: 'cancelled leave',
 };
 
 // ---------- Project conversation (FR-CNV-01..08) ----------

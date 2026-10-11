@@ -1,3 +1,5 @@
+import { hoursHHMM } from '@xc8/shared';
+
 /**
  * Calendar dates (YYYY-MM-DD) are formatted in UTC so they never shift by the viewer's timezone
  * (07 §2). Example: "2026-10-12" → "Oct 12".
@@ -72,7 +74,49 @@ export function timeOfDay(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-/** 6 → "6.0", 2.25 → "2.25". */
+/** Decimal hours as HH:MM (DR-25, doc 14 §12.2): 6 → "06:00", 0.0333 → "00:02". */
 export function hoursLabel(h: number): string {
-  return Number.isInteger(h) ? h.toFixed(1) : String(h);
+  return hoursHHMM(h);
 }
+
+/** "Oct 9, 9:05 AM" in Philippine time (doc 14 A-17), whatever the browser's timezone. */
+export function phDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Manila',
+  });
+}
+
+/** "Fri, Oct 9" for a YYYY-MM-DD calendar date (DR-38). */
+export function longDayShort(value: string): string {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** "Oct 5–11", or "Sep 28–Oct 4" across months: a compact week label for phones (DR-39). */
+export function weekRangeShort(weekStart: string): string {
+  const start = new Date(`${weekStart}T00:00:00Z`);
+  const end = new Date(start.getTime() + 6 * 86_400_000);
+  const month = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
+  return `${month(start)} ${start.getUTCDate()}–${sameMonth ? '' : `${month(end)} `}${end.getUTCDate()}`;
+}
+
+/** The day-location question (FR-ACT-17, DR-41): "today" for today, past tense for an earlier day. */
+export function whereWorkingQuestion(date: string, today: string): string {
+  if (date === today) return 'Where are you working today?';
+  const day = longDayShort(date);
+  return date < today
+    ? `Where were you working on ${day}?`
+    : `Where will you be working on ${day}?`;
+}
+
+/** Leave days with a real minus sign (DR-38): the shared helper. */
+export { leaveDaysLabel as daysLabel } from '@xc8/shared';

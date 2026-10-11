@@ -1,4 +1,11 @@
-import { SYSTEM_ROLE_LABELS, hasPermission, type AccessAction, type RecordType } from '@xc8/shared';
+import {
+  APP_FOOTER,
+  BRAND_ASSETS,
+  SYSTEM_ROLE_LABELS,
+  hasPermission,
+  type AccessAction,
+  type RecordType,
+} from '@xc8/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -6,6 +13,7 @@ import { useAuth } from '../auth/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
 import { NotificationBell } from '../components/NotificationBell';
 import { TopbarContext, type TopbarSlots } from '../components/topbar';
+import { RunningTimerPill } from '../components/tracker/RunningTimerPill';
 
 interface NavItem {
   to: string;
@@ -29,6 +37,19 @@ const MAIN: NavItem[] = [
   { to: '/board', label: 'Task board', icon: 'bx-columns', any: [['tasks', 'view']] },
   { to: '/issues', label: 'All issues', icon: 'bx-flag', any: [['issues', 'view']] },
   { to: '/time', label: 'Time logging', icon: 'bx-time-five', any: [['time', 'view']] },
+  {
+    to: '/dar',
+    label: 'Daily Accomplishment Report',
+    icon: 'bx-envelope',
+    any: [['activities', 'view']],
+  },
+  {
+    to: '/dar/saved',
+    label: 'My saved reports',
+    icon: 'bx-archive',
+    any: [['activities', 'view']],
+  },
+  { to: '/leave', label: 'Leave', icon: 'bx-sun', any: [['leave', 'view']] },
 ];
 
 const SETUP: NavItem[] = [
@@ -39,8 +60,8 @@ const SETUP: NavItem[] = [
     any: [['templates', 'view']],
   },
   { to: '/clients', label: 'Clients', icon: 'bx-buildings', any: [['clients', 'view']] },
-  { to: '/workload', label: 'Team & workload', icon: 'bx-group', soon: true },
-  { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', soon: true },
+  { to: '/workload', label: 'Team & workload', icon: 'bx-group', any: [['workload', 'view']] },
+  { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', any: [['reports', 'view']] },
   {
     to: '/admin',
     label: 'Admin',
@@ -88,7 +109,7 @@ function MenuItem({ item, active }: { item: NavItem; active: boolean }) {
     <li className={`menu-item${active ? ' active' : ''}`}>
       <NavLink to={item.to} className="menu-link" aria-current={active ? 'page' : undefined}>
         <i className={`menu-icon bx ${item.icon}`} aria-hidden="true" />
-        <div className="text-truncate">{item.label}</div>
+        <div className="menu-label-wrap">{item.label}</div>
       </NavLink>
     </li>
   );
@@ -129,7 +150,12 @@ export function AppShell() {
   const visible = (items: NavItem[]) =>
     items.filter((i) => !i.any || i.any.some(([r, a]) => hasPermission(permissions, r, a)));
   const isActive = (to: string) =>
-    location.pathname === to || location.pathname.startsWith(`${to}/`);
+    location.pathname === to ||
+    (location.pathname.startsWith(`${to}/`) &&
+      // A more specific item (e.g. /dar/saved under /dar) wins.
+      ![...MAIN, ...SETUP].some(
+        (o) => o.to.startsWith(`${to}/`) && location.pathname.startsWith(o.to),
+      ));
 
   return (
     <div className="layout-wrapper layout-content-navbar">
@@ -198,6 +224,9 @@ export function AppShell() {
               />
               <ul className="navbar-nav flex-row align-items-center gap-3">
                 <li className="nav-item">
+                  <RunningTimerPill enabled={Boolean(permissions?.activities?.view)} />
+                </li>
+                <li className="nav-item">
                   <NotificationBell />
                 </li>
                 <li className="nav-item">
@@ -243,16 +272,21 @@ export function AppShell() {
               </TopbarContext.Provider>
             </main>
             <footer className="content-footer footer bg-footer-theme">
-              <div className="container-xxl py-3 small text-body-secondary">
-                Xceler8 Implementation Tracker · UI based on{' '}
-                <a
-                  href="https://themeselection.com/item/sneat-free-bootstrap-html-admin-template/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Sneat
-                </a>{' '}
-                by ThemeSelection (MIT)
+              <div className="container-xxl py-3 small text-body-secondary d-flex flex-wrap align-items-center gap-2">
+                {/* Mockup v0.9.1: "OpsTrack · by Jomerson & Grok" */}
+                <img src={BRAND_ASSETS.icon} alt="" aria-hidden="true" width={18} height={18} />
+                <span data-testid="app-footer">{APP_FOOTER}</span>
+                <span className="ms-auto">
+                  UI based on{' '}
+                  <a
+                    href="https://themeselection.com/item/sneat-free-bootstrap-html-admin-template/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Sneat
+                  </a>{' '}
+                  by ThemeSelection (MIT)
+                </span>
               </div>
             </footer>
           </div>

@@ -22,6 +22,10 @@ const activityLogSchema = new Schema(
     reason: { type: String, default: null },
     /** Structured context, e.g. `{ role, recordType, permission }` for access rule changes. */
     meta: { type: Schema.Types.Mixed, default: null },
+    /** Client IP of the request that made the change (trusted resolution, see clientIp.ts); null for system jobs. */
+    ip: { type: String, default: null },
+    /** User agent of that request (truncated); null for system jobs. */
+    userAgent: { type: String, default: null },
     at: { type: Date, default: () => new Date() },
   },
   { strict: 'throw', collection: 'activityLogs', versionKey: false },

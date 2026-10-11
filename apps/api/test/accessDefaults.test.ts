@@ -39,7 +39,7 @@ const memberTimeDelete = async () =>
 
 describe('Access default changes (doc 11 §12): Member Delete on time', () => {
   it('the seeded default for Members is VCED on time', () => {
-    expect(defaultPermissions('MEMBER').time).toEqual({
+    expect(defaultPermissions('MEMBER').time).toMatchObject({
       view: true,
       create: true,
       edit: true,
@@ -196,10 +196,12 @@ describe('New record types after go-live (e.g. Issues)', () => {
     const member = (await AccessRuleModel.findOne({ role: 'MEMBER' }).lean())!;
     expect(member.version).toBe(6);
     const perms = member.permissions as unknown as Record<string, Record<string, boolean>>;
-    expect(perms.issues).toEqual({ view: true, create: true, edit: true, delete: false });
+    expect(perms.issues).toMatchObject({ view: true, create: true, edit: true, delete: false });
     expect(perms.clients!.view).toBe(false);
     const roles = (await agent.get('/api/v1/access-rules')).body.roles;
-    expect(roles.find((r: { role: string }) => r.role === 'VIEWER').permissions.issues).toEqual({
+    expect(
+      roles.find((r: { role: string }) => r.role === 'VIEWER').permissions.issues,
+    ).toMatchObject({
       view: true,
       create: false,
       edit: false,

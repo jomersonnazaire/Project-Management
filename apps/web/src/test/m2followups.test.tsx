@@ -210,6 +210,8 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     });
     renderAt(`/projects/new?clientId=${ACME.id}`, <App />);
     await userEvent.selectOptions(await screen.findByLabelText('Template'), 't1');
+    await screen.findByRole('option', { name: 'Implementation' });
+    await userEvent.selectOptions(screen.getByLabelText('Project type *'), 'pt1');
     // DR-10 in the template preview.
     expect(screen.getByTestId('template-preview')).toHaveTextContent(
       'Generates 1 activity, 1 dependency and 1 deliverable.',
@@ -237,17 +239,17 @@ describe('DR-08 estimate cells', () => {
     expect(line).toHaveTextContent(/^– \/ –$/);
     expect(container.querySelector('small')).toHaveTextContent('No estimate');
     rerender(<EstAct est={4} act={6} />);
-    expect(container).toHaveTextContent(/^4h \/ 6h$/);
+    expect(container).toHaveTextContent(/^04:00 \/ 06:00$/);
     rerender(<EstAct est={4} act={0} />);
-    expect(container).toHaveTextContent(/^4h \/ –$/);
+    expect(container).toHaveTextContent(/^04:00 \/ –$/);
   });
 
   it('the checklist shows units and pluralizes the summary (DR-10)', async () => {
     projectApi(project({ taskCount: 1, unestimatedTaskCount: 0 }), 'PROJECT_MANAGER');
     renderAt(`/projects/${PID}`, <App />);
     const row = (await screen.findByRole('button', { name: 'Kickoff' })).closest('tr')!;
-    expect(within(row).getByText('4h / 6h')).toBeInTheDocument();
-    expect(screen.getByText(/Estimated 4h across 1 task ·/)).toBeInTheDocument();
+    expect(within(row).getByText('04:00 / 06:00')).toBeInTheDocument();
+    expect(screen.getByText(/Estimated 04:00 across 1 task ·/)).toBeInTheDocument();
     expect(screen.getByText('1 task · 0 without an estimate')).toBeInTheDocument();
   });
 });
@@ -332,6 +334,6 @@ describe('DR-11 board fits five columns, with a scroll hint when narrower', () =
     const wrap = await screen.findByTestId('board-wrap');
     expect(within(wrap).getAllByRole('region')).toHaveLength(5);
     // DR-08 on board cards.
-    expect(within(wrap).getByText('4h / 6h')).toBeInTheDocument();
+    expect(within(wrap).getByText('04:00 / 06:00')).toBeInTheDocument();
   });
 });

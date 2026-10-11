@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Implementation Project Tracker – Mockup v0.8</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--ink:#1b2333;--mut:#6b7488;--line:#e4e8f0;--pri:#3b5bdb;--pri2:#e8edff;--ok:#2f9e44;--okb:#e6f6ea;--warn:#e8890c;--warnb:#fff3e0;--bad:#e03131;--badb:#ffe8e8;--blue:#1c7ed6;--blueb:#e7f3ff;--pur:#7048e8;--purb:#f0ebff}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 Inter,system-ui,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+.app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+aside{background:#141b2d;color:#c9d1e3;padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+.logo{display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;padding:4px 8px 18px}.logo b{background:var(--pri);border-radius:8px;width:30px;height:30px;display:grid;place-items:center}
+aside a{color:#c9d1e3;text-decoration:none;padding:9px 10px;border-radius:8px;display:flex;gap:10px;align-items:center}
+aside a:hover{background:#1f2840}aside a.on{background:var(--pri);color:#fff}
+aside .sec{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#6f7a94;padding:14px 10px 4px}
+main{padding:0 28px 40px}
+header{display:flex;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:22px}
+header h1{font-size:20px;margin:0;flex:1}
+.search{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;width:260px;color:var(--mut)}
+.av{width:32px;height:32px;border-radius:50%;background:#dbe4ff;color:var(--pri);display:grid;place-items:center;font-weight:700;font-size:12px}
+.btn{background:var(--pri);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.grid{display:grid;gap:16px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:2fr 1fr}.g2{grid-template-columns:1fr 1fr}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h3{margin:0 0 12px;font-size:15px}
+.kpi .n{font-size:28px;font-weight:700}.kpi .l{color:var(--mut)}.kpi .d{font-size:12px;margin-top:4px}
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px}
+.ok{background:var(--okb);color:var(--ok)}.warn{background:var(--warnb);color:var(--warn)}.bad{background:var(--badb);color:var(--bad)}.info{background:var(--blueb);color:var(--blue)}.pur{background:var(--purb);color:var(--pur)}.grey{background:#eef0f4;color:var(--mut)}
+table{width:100%;border-collapse:collapse}th{text-align:left;font-size:12px;color:var(--mut);font-weight:600;padding:8px;border-bottom:1px solid var(--line)}td{padding:10px 8px;border-bottom:1px solid var(--line)}
+.bar{height:8px;background:#edf0f6;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--pri)}
+.note{font-size:12px;color:var(--mut)}
+.ai{border-left:4px solid var(--pur)}.ai .it{padding:10px 0;border-bottom:1px solid var(--line)}.ai .it:last-child{border:0}
+.src{font-size:11px;color:var(--pur);margin-top:4px}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.col{background:#eceff5;border-radius:12px;padding:10px;min-height:420px}.col h4{margin:2px 4px 10px;font-size:13px;display:flex;justify-content:space-between}
+.tk{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;font-size:13px}.tk .m{display:flex;justify-content:space-between;margin-top:8px;color:var(--mut);font-size:12px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px}.tabs span{padding:8px 14px;color:var(--mut);cursor:pointer}.tabs span.on{color:var(--pri);border-bottom:2px solid var(--pri);font-weight:600}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}.field label{font-size:12px;font-weight:600;color:var(--mut)}.field input,.field select,.field textarea{border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit}
+.err input{border-color:var(--bad)}.err small{color:var(--bad)}
+.lock{background:var(--warnb);border:1px solid #ffd8a8;color:#a35a00;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+.banner{background:#fff8db;border:1px solid #ffe066;border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:16px;color:#7a5b00}
+.empty{text-align:center;padding:40px;color:var(--mut)}
+.page{display:none}.page.on{display:block}
+.row{display:flex;gap:10px;align-items:center}.sp{flex:1}
+.tree{font-size:13px}.tree div{padding:7px 8px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between}.tree div:hover{background:#f0f2f7}.tree div.on{background:var(--pri2);color:var(--pri);font-weight:600}.tree .sub{padding-left:22px}
+.steps{display:flex;gap:6px;align-items:center;font-size:12px}.steps span{padding:3px 8px;border-radius:6px;background:#eef0f4;color:var(--mut)}.steps span.d{background:var(--okb);color:var(--ok)}.steps span.c{background:var(--blueb);color:var(--blue);font-weight:600}
+.modal{position:relative;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(20,27,45,.18);padding:18px}
+.drop{border:2px dashed #c5cde0;border-radius:10px;padding:18px;text-align:center;color:var(--mut);margin-bottom:12px}
+.tl{font-size:12px;border-left:2px solid var(--line);padding-left:12px;margin-left:4px}.tl p{margin:0 0 10px}
+.login{position:fixed;inset:0;background:linear-gradient(135deg,#141b2d,#2b3a67);display:none;place-items:center;z-index:10}.login.on{display:grid}
+.lbox{display:grid;grid-template-columns:1fr 1fr;gap:20px}.lbox .modal{width:380px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.big{font-size:56px;font-weight:800;color:var(--pri);margin:0}
+
+/* ===== v0.4 Sneat theme overrides (AA-checked text colors) ===== */
+:root{--bg:#f5f5f9;--card:#fff;--ink:#384551;--mut:#646e78;--line:#e4e6e8;
+--pri:#5355e0;--pri2:#e7e7ff;--ok:#2e7d17;--okb:#e8fadf;--warn:#9a5b00;--warnb:#fff2d6;--bad:#b8240a;--badb:#ffe0db;--blue:#00718a;--blueb:#d7f5fc;--pur:#5355e0;--purb:#e7e7ff}
+body{font-family:"Public Sans",-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--mut);font-size:15px}
+h1,h3,h4,b,td a{color:var(--ink)} a{color:var(--pri)}
+.app{grid-template-columns:260px 1fr}
+aside{background:#fff;color:var(--mut);box-shadow:0 .125rem .375rem rgba(34,48,62,.08);padding:20px 14px}
+.logo{color:var(--ink);font-size:22px;font-weight:700;letter-spacing:-.02em}.logo b{color:#fff;background:var(--pri);border-radius:8px}
+aside a{color:#384551;padding:9px 14px;border-radius:6px;font-weight:400}
+aside a:hover{background:#f2f3f3}aside a.on{background:var(--pri2);color:var(--pri);font-weight:600}
+aside .sec{color:#7a838b;font-size:12px;letter-spacing:.4px;padding:18px 14px 6px}
+aside .sec::before{content:"";display:inline-block;width:14px;height:1px;background:#bdc1c5;vertical-align:middle;margin-right:8px}
+main{padding:16px 26px 40px}
+header{background:#fff;border:0;border-radius:6px;box-shadow:0 .1875rem .5rem rgba(0,0,0,.1);padding:12px 18px;margin-bottom:24px}
+header h1{font-size:18px;font-weight:600}
+.search{border:0;background:transparent;padding:6px 4px}
+.card,.modal{border:0;border-radius:6px;box-shadow:0 .1875rem .5rem rgba(0,0,0,.1);padding:20px}
+.card h3,.modal h3{font-size:16px;font-weight:600;color:var(--ink)}
+.kpi .n{color:var(--ink)}
+.btn{background:var(--pri);border-radius:6px;font-weight:500;box-shadow:0 .125rem .25rem rgba(83,85,224,.4);padding:8px 16px}
+.btn.ghost{background:#fff;color:#5d6878;border:1px solid #8592a3;box-shadow:none}
+.pill{border-radius:4px;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.2px;padding:3px 8px}
+.grey{background:#ebeef0;color:#5d6878}
+th{text-transform:uppercase;font-size:12px;letter-spacing:.5px;color:#384551;font-weight:500;padding:12px 10px}
+td{padding:12px 10px;border-color:#e4e6e8}
+.bar{height:6px;background:#e7e7ff}
+.field input,.field select,.field textarea{border:1px solid #d1d5db;border-radius:6px;color:var(--ink)}
+.field input:focus{border-color:var(--pri);outline:0;box-shadow:0 0 0 3px #e7e7ff}
+.col{background:#fff;box-shadow:0 .1875rem .5rem rgba(0,0,0,.08)}.tk{box-shadow:0 1px 3px rgba(0,0,0,.08);border:0;background:#fbfbfb}
+.tabs span.on{color:var(--pri);border-color:var(--pri)}
+.lock{background:#fff2d6;border:0;color:#7a4800}
+.banner{border:0;background:#e7e7ff;color:#3c3eb8}
+.ai{border-left:3px solid var(--pri)}.src{color:var(--pri)}
+.av{background:var(--pri2);color:var(--pri)}
+.login{background:#f5f5f9}
+.ov{position:fixed;inset:0;background:rgba(34,48,62,.45);display:flex;align-items:center;justify-content:center;z-index:20}.acl td{padding:8px 10px}.acl input{width:17px;height:17px;accent-color:var(--pri)}
+.phase{padding:0;margin-bottom:14px}.ph{display:flex;gap:10px;align-items:center;padding:14px 18px;cursor:pointer;border-bottom:1px solid #e4e6e8}.ph:hover{background:#fafafc}.phase.closed .pb{display:none}.phase.closed .chev{transform:rotate(-90deg)}.chev{transition:.15s;color:var(--pri)}.pb{padding:4px 12px 14px}
+.drag{cursor:grab;color:#a1acb8;width:18px}.dragging{background:#e7e7ff;box-shadow:0 4px 12px rgba(83,85,224,.25)}.dropline td{padding:0;height:3px;background:var(--pri)}.addact{margin-top:10px;font-size:13px}
+.file{display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #e4e6e8;border-radius:6px;margin-bottom:8px;font-size:13px}.fi{width:36px;height:36px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}.fi.pdf{background:#b8240a}.fi.xls{background:#2e7d17}.fi.doc{background:#00718a}.fi.grey{background:#ebeef0;color:#5d6878}.legacy{background:#fafafc}
+.bell{position:relative;font-size:18px;cursor:pointer;padding:4px 6px}.bell i{position:absolute;top:-2px;right:-4px;background:var(--bad);color:#fff;font-style:normal;font-size:10px;font-weight:700;border-radius:9px;padding:1px 5px}
+.msg{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #eef0f2}.msg.hidden{opacity:.8;font-style:italic}.tags span{display:inline-block;font-size:12px;background:#f2f3f5;border-radius:4px;padding:2px 8px;margin:6px 6px 0 0}.day{text-align:center;font-size:12px;color:#7a838b;margin:14px 0 4px}.composer{margin-top:14px;padding-top:14px;border-top:1px solid #e4e6e8}.composer textarea{width:100%;border:1px solid #d1d5db;border-radius:6px;padding:9px;font:inherit;box-sizing:border-box}.sel{border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font:inherit;font-size:13px}
+.nt{display:flex;gap:10px;padding:10px;border-radius:6px;text-decoration:none;color:var(--mut);font-size:13px}.nt:hover{background:#f5f5f9}.nt.un{background:#f3f3ff}.dotu{width:8px;height:8px;border-radius:50%;margin-top:6px}.nt.un .dotu{background:var(--pri)}
+.sevc{background:#b8240a;color:#fff}td code{white-space:nowrap}tr.crit td:first-child{box-shadow:inset 3px 0 0 #b8240a}
+/* ===== v0.8 workforce screens (doc 14) ===== */
+.oq{border-left:3px solid var(--warn);background:#fffaf0}.oq h3{color:#7a4800;font-size:14px}.oq .pill{margin-right:6px}
+.msbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;border:1px solid #8592a3;border-radius:6px;padding:9px 14px;font:inherit;font-weight:600;color:#384551;cursor:pointer}.msbtn:hover{background:#f5f5f9}
+.mslogo{display:inline-grid;grid-template-columns:8px 8px;gap:2px}.mslogo i{width:8px;height:8px;display:block}
+.ordiv{display:flex;align-items:center;gap:10px;color:#646e78;font-size:13px;margin:14px 0}.ordiv::before,.ordiv::after{content:"";flex:1;height:1px;background:#e4e6e8}
+.errbox{background:var(--badb);color:#8a1c08;border-radius:6px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+.runbar{position:sticky;top:8px;z-index:5;display:flex;align-items:center;gap:12px;background:#fff;border-left:4px solid var(--ok);border-radius:6px;box-shadow:0 .25rem .75rem rgba(0,0,0,.14);padding:10px 16px;margin-bottom:16px}
+.runbar .clock{font-variant-numeric:tabular-nums;font-size:20px;font-weight:700;color:var(--ink)}.pulse{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px #e8fadf}
+.runbar.idle{border-left-color:#8592a3}.runbar.idle .pulse{background:#8592a3;box-shadow:0 0 0 4px #ebeef0}
+.sm{padding:3px 10px!important;font-size:12px!important;white-space:nowrap}.btn.out{background:var(--bad);box-shadow:none}.btn.in{background:var(--ok);box-shadow:none}
+tr.running td{background:#f3fbef}tr.dayh td{background:#f5f5f9;font-weight:600;color:var(--ink)}tr.tot td{font-weight:700;color:var(--ink)}
+.btn[disabled]{opacity:.5;cursor:not-allowed;box-shadow:none}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #d1d5db;border-radius:6px;padding:4px 10px;font-size:13px;margin:4px 6px 0 0;color:var(--ink)}
+#dar td:nth-child(1),#dar td:nth-child(5),#dar td:nth-child(6){white-space:nowrap}
+.skel{height:14px;background:linear-gradient(90deg,#ebeef0,#f5f5f9,#ebeef0);border-radius:4px;margin:10px 0}
+@media (max-width:760px){.app{grid-template-columns:1fr}aside{flex-direction:row;overflow-x:auto;padding:8px;gap:2px;position:sticky;top:0;z-index:6}aside .logo,aside .sec{display:none}aside a{white-space:nowrap;padding:7px 10px;font-size:13px}
+main{padding:10px}header{flex-wrap:wrap}.search{display:none}.grid,.g2,.g3,.g4{grid-template-columns:1fr!important}.card{overflow-x:auto}.tabs{overflow-x:auto;white-space:nowrap}.runbar{flex-wrap:wrap}.ov .modal{width:94vw!important}.grid>*,main{min-width:0}table{min-width:560px}.runbar .clock{font-size:17px}}
+</style></head><body>
+<div class="login" id="login"><div class="lbox">
+<div class="modal"><div class="logo" style="color:var(--ink);padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
+<button class="msbtn" onclick="location.hash='mytasks'"><span class="mslogo"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>Sign in with Microsoft</button>
+<div class="ordiv">or</div>
+<div class="field"><label>Email</label><input value="maria@xceler8.example"></div>
+<div class="field err"><label>Password</label><input type="password" value="xxxxxxxx"><small>Email or password is incorrect.</small></div>
+<button class="btn" style="width:100%" onclick="location.hash='mytasks'">Sign in</button><p class="note" style="text-align:center;margin:6px 0 0">You'll land on My tasks.</p><p class="note" style="text-align:center">Forgot your password? Ask an Admin for a reset link.</p>
+<p class="note">Only invited Xceler8 staff can sign in. Client contacts don't have accounts.</p></div>
+<div class="modal"><h3>Set your password</h3><p class="note">Welcome, A. Reyes. You were invited by Jomerson Nazaire.</p>
+<div class="field"><label>New password</label><input type="password" value="xxxxxxxx"></div>
+<p class="note">✓ At least 8 characters &nbsp; ✓ A number &nbsp; ✗ A symbol</p>
+<div class="field err"><label>Confirm password</label><input type="password" value="xxxxx"><small>Passwords don't match.</small></div>
+<button class="btn" style="width:100%">Set password &amp; continue</button></div></div></div>
+<div class="app">
+<aside>
+<div class="logo"><b>IT</b>Impl. Tracker</div>
+<a href="#mytasks" data-p="mytasks">✓ My tasks</a>
+<a href="#dash" data-p="dash">▦ Dashboard</a>
+<a href="#projects" data-p="projects">▤ Projects</a>
+<a href="#board" data-p="board">☰ Task board</a>
+<a href="#project" data-p="project">◧ Project detail</a>
+<a href="#checklist" data-p="checklist">☑ Checklist & evidence <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#convo" data-p="convo">💬 Conversation <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#issues" data-p="issues">⚑ Project issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#allissues" data-p="allissues">⚑ All issues <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#issue" data-p="issue">⚑ Issue detail <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#today" data-p="today">⏰ My tasks · Due <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#plan" data-p="plan">☀ My tasks · Today (plan) <span class="pill info" style="margin-left:auto">M3.5</span></a>
+<a href="#holidays" data-p="holidays">📅 Holidays <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#notif" data-p="notif">🔔 Notifications <span class="pill info" style="margin-left:auto">M3</span></a>
+<a href="#pcontacts" data-p="pcontacts">☏ Project contacts <span class="pill info" style="margin-left:auto">M2</span></a>
+<a href="#docs" data-p="docs">🗀 Documents</a>
+<a href="#time" data-p="time">◷ Time logging</a>
+<div class="sec">Workforce (doc 14)</div>
+<a href="#pmview" data-p="pmview">▦ Dashboard · My projects <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#mslogin" data-p="mslogin">⊞ Microsoft sign-in <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#msusers" data-p="msusers">◉ Admin · Users (Microsoft) <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#tracker" data-p="tracker">⏱ Today · Activity tracker <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#daysheet" data-p="daysheet">◷ Day timesheet <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#dar" data-p="dar">✉ Daily Activity Report <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#leave" data-p="leave">🌴 Leave <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#leaveq" data-p="leaveq">✓ Leave approvals <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#leaveadmin" data-p="leaveadmin">⚙ Admin · Leave <span class="pill info" style="margin-left:auto">New</span></a>
+<div class="sec">Setup</div>
+<a href="#templates" data-p="templates">⧉ Templates</a>
+<a href="#client" data-p="client">☏ Clients <span class="pill info" style="margin-left:auto">New</span></a>
+<a href="#team" data-p="team">◉ Team &amp; workload</a>
+<a href="#reports" data-p="reports">▥ Reports</a>
+<a href="#admin" data-p="admin">⚙ Admin</a>
+<a href="#acl" data-p="acl">🛡 Access rules <span class="pill info" style="margin-left:auto">New</span></a>
+<div class="sec">Review states</div>
+<a href="#taskform" data-p="taskform">✎ Task form</a>
+<a href="#dialogs" data-p="dialogs">◫ Dialogs</a>
+<a href="#states" data-p="states">○ Empty &amp; errors</a>
+<a href="#login" data-p="login">⎋ Login (sign out)</a>
+</aside>
+<main>
+<div class="banner">Mockup v0.8 (Sneat style) for review. All names and numbers are example data, not live data.</div>
+
+<!-- DASHBOARD -->
+<section class="page" id="dash">
+<header><h1>Portfolio dashboard</h1><div class="search">Search projects, tasks…</div><button class="btn">+ New project</button><div class="av">JN</div></header>
+<div class="tabs"><span class="on">Portfolio</span><span onclick="location.hash='pmview'">My projects <span class="pill info">New</span></span></div>
+<div class="grid g4">
+<div class="card kpi"><div class="l">Active projects</div><div class="n">12</div><div class="d note">2 starting this month</div></div>
+<div class="card kpi"><div class="l">Delayed projects</div><div class="n" style="color:var(--bad)">3</div><div class="d note">Need schedule review</div></div>
+<div class="card kpi"><div class="l">Overdue tasks</div><div class="n" style="color:var(--warn)">18</div><div class="d note">7 waiting on client</div></div>
+<div class="card kpi"><div class="l">Hours this week</div><div class="n">286</div><div class="d note">82% team utilization</div></div>
+</div>
+<div class="grid g3" style="margin-top:16px">
+<div class="card"><h3>Active projects</h3>
+<table><tr><th>Project</th><th>Client</th><th>Template</th><th>Progress</th><th>Health</th><th>Go-live</th></tr>
+<tr><td><a href="#project">SAP B1 Rollout</a></td><td>Acme Trading</td><td>SAP B1 Impl.</td><td><div class="bar"><i style="width:62%"></i></div><span class="note">62%</span></td><td><span class="pill bad">Delayed</span></td><td>Nov 20</td></tr>
+<tr><td>API Integration</td><td>Northwind</td><td>Software/API</td><td><div class="bar"><i style="width:45%"></i></div><span class="note">45%</span></td><td><span class="pill warn">At risk</span></td><td>Dec 05</td></tr>
+<tr><td>Cloud Migration</td><td>Globex</td><td>Cloud Deploy</td><td><div class="bar"><i style="width:80%"></i></div><span class="note">80%</span></td><td><span class="pill ok">On track</span></td><td>Oct 30</td></tr>
+<tr><td>Support Onboarding</td><td>Initech</td><td>General IT</td><td><div class="bar"><i style="width:20%"></i></div><span class="note">20%</span></td><td><span class="pill ok">On track</span></td><td>Jan 15</td></tr>
+<tr><td>ERP Upgrade</td><td>Umbrella Corp</td><td>SAP B1 Impl.</td><td><div class="bar"><i style="width:35%;background:#8592a3"></i></div><span class="note">35%</span></td><td><span class="pill grey">⏸ On hold</span></td><td>–</td></tr>
+</table></div>
+<div class="card ai"><h3>✦ AI insights <span class="pill pur">Phase 2</span></h3>
+<div class="it"><b>Acme master data is 6 days late.</b><br><span class="note">Items template still pending from client contact.</span><div class="src">Based on: Task #3, due Oct 3, status Blocked</div></div>
+<div class="it"><b>Maria is over capacity next week.</b><br><span class="note">52h assigned vs 40h available. Suggest moving UAT prep to Ken.</span><div class="src">Based on: 6 tasks, Oct 12–16</div></div>
+<div class="it"><b>UAT defect fixing ran 80% over estimate.</b><div class="src">Based on: 18h actual vs 10h estimated</div></div>
+<button class="btn ghost" style="margin-top:8px;width:100%">Review suggestions (PM approval)</button>
+</div></div>
+<div class="grid g2" style="margin-top:16px">
+<div class="card"><h3>Waiting on client</h3><table>
+<tr><td>Items master data template</td><td>R. Santos · Acme</td><td><span class="pill bad">6d overdue</span></td></tr>
+<tr><td>Business partner template</td><td>R. Santos · Acme</td><td><span class="pill warn">Due tomorrow</span></td></tr>
+<tr><td>API credentials (sandbox)</td><td>L. Cruz · Northwind</td><td><span class="pill grey">Due Oct 15</span></td></tr></table></div>
+<div class="card"><h3>Upcoming milestones</h3><table>
+<tr><td>Globex · Cutover approval</td><td>Oct 24</td><td><span class="pill info">Milestone</span></td></tr>
+<tr><td>Acme · UAT sign-off</td><td>Nov 06</td><td><span class="pill info">Milestone</span></td></tr>
+<tr><td>Northwind · Integration test</td><td>Nov 12</td><td><span class="pill info">Milestone</span></td></tr></table></div>
+</div></section>
+
+<!-- PROJECTS -->
+<section class="page" id="projects">
+<header><h1>Projects</h1><div class="search">Filter…</div><button class="btn" onclick="location.hash='newproj'">+ New project</button></header>
+<div class="card"><div class="tabs"><span class="on">All (12)</span><span>Delayed (3)</span><span>At risk (2)</span><span>On hold (1)</span><span>Completed</span></div>
+<table><tr><th>Project</th><th>Client</th><th>Manager</th><th>Baseline end</th><th>Forecast end</th><th>Schedule variance</th><th>Health</th></tr>
+<tr><td><a href="#project">SAP B1 Rollout</a></td><td>Acme Trading</td><td>J. Nazaire</td><td>Nov 13</td><td>Nov 20</td><td style="color:var(--bad)">+7 days</td><td><span class="pill bad">Delayed</span></td></tr>
+<tr><td>API Integration</td><td>Northwind</td><td>A. Reyes</td><td>Dec 01</td><td>Dec 05</td><td style="color:var(--warn)">+4 days</td><td><span class="pill warn">At risk</span></td></tr>
+<tr><td>Cloud Migration</td><td>Globex</td><td>J. Nazaire</td><td>Oct 30</td><td>Oct 30</td><td>0 days</td><td><span class="pill ok">On track</span></td></tr>
+<tr><td>ERP Upgrade</td><td>Umbrella Corp</td><td>A. Reyes</td><td>Dec 15</td><td>–</td><td class="note">Paused</td><td><span class="pill grey">⏸ On hold</span></td></tr>
+</table></div></section>
+
+<!-- NEW PROJECT -->
+<section class="page" id="newproj">
+<header><h1>New project</h1><button class="btn ghost" onclick="location.hash='projects'">Cancel</button><button class="btn">Generate plan →</button></header>
+<div class="grid g2"><div class="card"><h3>1. Project details</h3>
+<div class="field"><label>Project name *</label><input value="SAP B1 Rollout"></div>
+<div class="field"><label>Client *</label><select><option>Acme Trading</option></select></div>
+<div class="field"><label>Project manager *</label><select><option>Jomerson Nazaire</option></select></div>
+<div class="row"><div class="field sp"><label>Baseline start *</label><input value="2026-09-01"></div><div class="field sp err"><label>Baseline end *</label><input value="2026-08-15"><small>End date must be after the start date.</small></div></div>
+</div>
+<div class="card"><h3>2. Select template</h3>
+<div class="field"><label>Implementation template *</label><select><option>SAP Business One Implementation (v3)</option><option>Software / API Integration</option><option>Cloud Deployment / Migration</option><option>General IT Consulting</option></select></div>
+<p class="note">Generates 10 activities, 9 dependencies and 10 deliverables. The project keeps a snapshot of template v3, so later template edits won't change this project.</p>
+<table><tr><th>#</th><th>Activity</th><th>Responsible</th></tr>
+<tr><td>1</td><td>Data gathering</td><td>Internal</td></tr><tr><td>2</td><td>Submit master data template</td><td>Internal</td></tr><tr><td>3</td><td>Client master data – Items</td><td><span class="pill warn">Client</span></td></tr><tr><td>4</td><td>Client master data – BPs</td><td><span class="pill warn">Client</span></td></tr><tr><td class="note" colspan="3">+ 6 more</td></tr></table>
+</div></div></section>
+
+<!-- BOARD -->
+<section class="page" id="board">
+<header><h1>Task board · SAP B1 Rollout</h1><div class="search">Filter by assignee…</div><button class="btn">+ Task</button></header>
+<div class="board">
+<div class="col"><h4>To Do <span>3</span></h4>
+<div class="tk"><b>Configure system</b><div class="note">Phase: Setup</div><div class="m"><span>Ken L.</span><span>Due Oct 20</span></div><select style="margin-top:8px;width:100%;font-size:12px;padding:4px;border:1px solid var(--line);border-radius:6px"><option>Move to… (keyboard alternative to drag)</option><option>In Progress</option><option>Blocked</option></select></div>
+<div class="tk"><b>End-user training</b><div class="m"><span>Maria P.</span><span>Nov 10</span></div></div>
+<div class="tk"><b>Cutover prep</b><div class="m"><span>Team</span><span>Nov 14</span></div></div></div>
+<div class="col"><h4>In Progress <span>2</span></h4>
+<div class="tk"><b>Validate imported data</b><div class="note">8h est · 12h actual</div><div class="m"><span>Ken L.</span><span class="pill warn">+4h</span></div></div>
+<div class="tk"><b>BP master data</b> <span class="pill warn">Client</span><div class="m"><span>R. Santos</span><span>Tomorrow</span></div></div></div>
+<div class="col"><h4>Blocked <span>1</span></h4>
+<div class="tk" style="border-left:3px solid var(--bad)"><b>Items master data</b> <span class="pill warn">Client</span><div class="note" style="color:var(--bad)">Blocker: waiting for client template</div><div class="m"><span>R. Santos</span><span class="pill bad">6d late</span></div></div></div>
+<div class="col"><h4>For Review <span>1</span></h4>
+<div class="tk"><b>Submit master data template</b><div class="note">Evidence attached ✓</div><div class="m"><span>Maria P.</span><span>Approval pending</span></div></div></div>
+<div class="col"><h4>Completed <span>1</span></h4>
+<div class="tk"><b>Data gathering</b><div class="m"><span>Maria P.</span><span class="pill ok">Done</span></div></div></div>
+</div></section>
+
+<!-- PROJECT DETAIL -->
+<section class="page" id="project">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><button class="btn ghost">Edit</button><button class="btn">Log time</button></header>
+<div class="lock" style="background:var(--badb);border-color:#ffc9c9;color:#a61e1e">⚠ The plan now ends Nov 20, 7 days after the baseline end of Nov 13. Review dates or request a baseline change.</div>
+<div class="tabs"><span class="on">Checklist</span><span>Timeline</span><span>Team</span><span onclick="location.hash='pcontacts'">Active contacts</span><span onclick="location.hash='docs'">Documents</span><span>Time</span><span>Activity log</span></div>
+<div class="grid g3"><div class="card"><h3>Implementation checklist <span class="note">(template snapshot v3)</span></h3>
+<table><tr><th>#</th><th>Activity</th><th>Owner</th><th>Due</th><th>Est / Act</th><th>Status</th></tr>
+<tr><td>1</td><td>Data gathering</td><td>Maria P.</td><td>Sep 10</td><td>16 / 15</td><td><span class="pill ok">Completed</span></td></tr>
+<tr><td>2</td><td>Submit master data template</td><td>Maria P.</td><td>Sep 15</td><td>4 / 4</td><td><span class="pill pur">For Review</span></td></tr>
+<tr><td>3</td><td>Client master data – Items</td><td>R. Santos <span class="pill warn">Client</span></td><td>Oct 3</td><td>– </td><td><span class="pill bad">Blocked</span></td></tr>
+<tr><td>4</td><td>Client master data – BPs</td><td>R. Santos <span class="pill warn">Client</span></td><td>Oct 10</td><td>–</td><td><span class="pill info">In Progress</span></td></tr>
+<tr><td>5</td><td>Validate imported master data</td><td>Ken L.</td><td>Oct 14</td><td>8 / 12</td><td><span class="pill info">In Progress</span></td></tr>
+<tr><td>6</td><td>Configure system &amp; validate</td><td>Ken L.</td><td>Oct 20</td><td>24 / 0</td><td><span class="pill grey">To Do</span></td></tr>
+<tr><td>7</td><td>UAT</td><td>QA team</td><td>Nov 6</td><td>10 / 0</td><td><span class="pill grey">To Do</span></td></tr></table></div>
+<div class="card"><h3>Task: Client master data – Items</h3>
+<div class="field"><label>Accountable owner</label><input value="Maria P. (internal)"></div>
+<div class="field"><label>Client contact responsible</label><input value="R. Santos · Acme Trading"></div>
+<div class="lock">🔒 Client contacts are tracked only. They don't get a login or app access.</div>
+<div class="field"><label>Blocker reason</label><textarea rows="2">Waiting for completed items template from client.</textarea></div>
+<div class="field"><label>Deliverable / evidence</label><input value="Completed items template (not uploaded)"></div>
+<div class="row"><button class="btn ghost">Add follow-up note</button><button class="btn">Mark unblocked</button></div>
+</div></div></section>
+
+
+<!-- DOCUMENTS -->
+<section class="page" id="docs">
+<header><h1>Documents · SAP B1 Rollout</h1><div class="search">Search documents…</div><button class="btn ghost">+ Folder</button><button class="btn ghost">Request document</button><button class="btn">⇪ Upload</button></header>
+<div class="grid" style="grid-template-columns:220px 1fr 320px">
+<div class="card tree"><h3>Folders</h3>
+<div class="on">📁 Contracts <span class="note">4</span></div>
+<div>📁 Phase 1 – Data gathering <span class="note">6</span></div>
+<div class="sub">📁 Master data templates <span class="note">3</span></div>
+<div>📁 Phase 2 – Configuration <span class="note">2</span></div>
+<div>📁 Phase 3 – UAT &amp; Training <span class="note">0</span></div>
+<div>📁 Phase 4 – Go-live <span class="note">0</span></div>
+<div>📁 Meeting minutes <span class="note">5</span></div>
+<p class="note" style="margin-top:12px">Contracts and phase folders are created from the template. Custom folders can be added.</p></div>
+<div class="card"><div class="row" style="margin-bottom:10px"><h3 style="margin:0" class="sp">Contracts</h3><div class="tabs" style="margin:0;border:0"><span class="on">All</span><span>Requested (1)</span><span>Submitted (1)</span><span>Signed (2)</span></div></div>
+<table><tr><th>Document</th><th>Status</th><th>Requested by</th><th>Submitted by</th><th>Version</th><th>Updated</th></tr>
+<tr style="background:#f8f9ff"><td>📄 Statement of Work.pdf</td><td><span class="pill ok">Signed</span></td><td>J. Nazaire</td><td>R. Santos <span class="pill warn">Client</span></td><td>v3</td><td>Sep 02</td></tr>
+<tr><td>📄 Master Services Agreement.pdf</td><td><span class="pill ok">Signed</span></td><td>J. Nazaire</td><td>J. Nazaire</td><td>v1</td><td>Aug 28</td></tr>
+<tr><td>📄 Change Request #01.docx</td><td><span class="pill info">Submitted</span></td><td>Maria P.</td><td>Maria P.</td><td>v2</td><td>Oct 07</td></tr>
+<tr><td>📄 NDA – Acme Trading</td><td><span class="pill warn">Requested</span></td><td>J. Nazaire</td><td class="note">Waiting on R. Santos · due Oct 12</td><td>–</td><td>Oct 05</td></tr></table>
+<p class="note">Max 25 MB per file. PDF, Word, Excel, images. Uploading a file with an existing name adds a new version instead of overwriting.</p>
+</div>
+<div class="card"><h3>Statement of Work.pdf</h3>
+<div class="steps"><span class="d">✓ Requested</span>›<span class="d">✓ Submitted</span>›<span class="c">✓ Signed</span></div>
+<div class="lock" style="margin-top:12px">🔒 Signed documents are locked. A change needs a new version, and the signed copy is kept.</div>
+<div class="tl"><p><b>Signed</b> by R. Santos (client, recorded by J. Nazaire)<br><span class="note">Sep 02, 3:14 PM</span></p><p><b>Submitted</b> v3 by Maria P.<br><span class="note">Aug 30, 10:02 AM</span></p><p><b>Requested</b> by J. Nazaire<br><span class="note">Aug 25, 9:00 AM</span></p></div>
+<div class="row"><button class="btn ghost">Versions (3)</button><button class="btn">Download</button></div>
+<p class="note">Downloads are permission-checked. Client contacts can be named on a document but have no access.</p></div>
+</div>
+<div class="grid g2" style="margin-top:16px">
+<div class="modal"><h3>Request a document</h3>
+<div class="field"><label>Document name *</label><input value="NDA – Acme Trading"></div>
+<div class="row"><div class="field sp"><label>Folder *</label><select><option>Contracts</option></select></div><div class="field sp"><label>Due date *</label><input value="2026-10-12"></div></div>
+<div class="field"><label>Requested from *</label><select><option>R. Santos · Acme Trading (client contact)</option></select></div>
+<div class="field"><label>Linked task (optional)</label><select><option>None</option></select></div>
+<div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn">Send request</button></div></div>
+<div class="modal"><h3>Upload document</h3>
+<div class="drop">Drag files here or <b style="color:var(--pri)">browse</b><br><span class="note">Up to 25 MB · PDF, DOCX, XLSX, PNG, JPG</span></div>
+<div class="field err"><label>File</label><input value="cutover-plan.exe"><small>That file type isn't allowed.</small></div>
+<div class="row"><div class="field sp"><label>Status</label><select><option>Submitted</option><option>Signed</option></select></div><div class="field sp"><label>Fulfils request</label><select><option>NDA – Acme Trading</option></select></div></div>
+<div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn">Upload</button></div></div>
+</div></section>
+
+
+<!-- MY TASKS -->
+<section class="page" id="mytasks">
+<header><h1>My tasks</h1><div class="search">Search my tasks…</div><div class="av">MP</div></header>
+<div class="grid g4">
+<div class="card kpi"><div class="l">Overdue</div><div class="n" style="color:var(--bad)">2</div></div>
+<div class="card kpi"><div class="l">Due this week</div><div class="n">4</div></div>
+<div class="card kpi"><div class="l">Waiting for my review</div><div class="n" style="color:var(--pur)">1</div></div>
+<div class="card kpi"><div class="l">Logged this week</div><div class="n">34h</div><div class="d note">of 40h available</div></div></div>
+<div class="card" style="margin-top:16px"><div class="tabs"><span class="on">Assigned to me (7)</span><span>I'm accountable (3)</span><span>To review (1)</span><span>Completed</span></div>
+<table><tr><th>Task</th><th>Project</th><th>Role</th><th>Due</th><th>Est / Act</th><th>Status</th><th></th></tr>
+<tr><td>Submit master data template</td><td>SAP B1 Rollout</td><td>Accountable</td><td style="color:var(--bad)">Oct 6 · 3d late</td><td>4 / 4</td><td><span class="pill pur">For Review</span></td><td><button class="btn ghost" onclick="location.hash='dialogs'">Review</button></td></tr>
+<tr><td>Items master data</td><td>SAP B1 Rollout</td><td>Accountable</td><td style="color:var(--bad)">Oct 3 · 6d late</td><td>–</td><td><span class="pill bad">Blocked</span></td><td><button class="btn ghost">Follow up</button></td></tr>
+<tr><td>End-user training plan</td><td>SAP B1 Rollout</td><td>Assignee</td><td>Oct 14</td><td>6 / 2</td><td><span class="pill info">In Progress</span></td><td><button class="btn ghost" onclick="location.hash='time'">Log time</button></td></tr>
+<tr><td>Requirements workshop</td><td>API Integration</td><td>Assignee</td><td>Oct 15</td><td>8 / 0</td><td><span class="pill grey">To Do</span></td><td><button class="btn ghost">Start</button></td></tr></table></div></section>
+
+<!-- TASK FORM -->
+<section class="page" id="taskform">
+<header><h1>Edit task · Configure system &amp; validate setup</h1><button class="btn ghost">Cancel</button><button class="btn">Save task</button></header>
+<div class="grid g2"><div class="card"><h3>Details</h3>
+<div class="field"><label>Task name *</label><input value="Configure system &amp; validate setup"></div>
+<div class="row"><div class="field sp"><label>Phase *</label><select><option>Phase 2 – Configuration</option></select></div><div class="field sp"><label>Type</label><select><option>Configuration</option></select></div></div>
+<div class="row"><div class="field sp"><label>Priority</label><select><option>High</option></select></div><div class="field sp"><label>Mandatory</label><select><option>Yes – required for go-live</option></select></div></div>
+<div class="field"><label>Responsible party *</label><div class="row"><label><input type="radio" checked> Internal team</label><label><input type="radio"> Client</label></div></div>
+<div class="row"><div class="field sp"><label>Team</label><select><option>Technical</option></select></div><div class="field sp"><label>Accountable owner * (one person)</label><select><option>Ken L.</option></select></div></div>
+<div class="field"><label>Other assignees</label><input value="A. Reyes ×"></div>
+<div class="field"><label>Client contact (optional, no access)</label><select><option>None</option></select></div></div>
+<div class="card"><h3>Schedule &amp; dependencies</h3>
+<div class="row"><div class="field sp"><label>Planned start *</label><input value="2026-10-15"></div><div class="field sp err"><label>Due date *</label><input value="2026-10-12"><small>Due date can't be before the start date.</small></div></div>
+<div class="field"><label>Estimated hours</label><input value="24"></div>
+<div class="field"><label>Depends on</label><input value="#5 Validate imported master data ×"></div>
+<div class="lock">⛓ This task can't start until <b>#5 Validate imported master data</b> is completed. It's In Progress, due Oct 14.</div>
+<div class="field"><label>Deliverable / evidence required</label><input value="Configuration evidence"></div>
+<div class="field"><label>Requires approval</label><select><option>Yes – project manager</option></select></div></div></div></section>
+
+<!-- DIALOGS -->
+<section class="page" id="dialogs">
+<header><h1>Dialogs</h1><span class="note">Shown as overlays over the task board or project detail.</span></header>
+<div class="grid g2">
+<div class="modal"><h3>Review: Submit master data template</h3>
+<p class="note">Submitted by Maria P. on Oct 7 · Evidence: master-data-template.xlsx ✓</p>
+<div class="field"><label>Decision *</label><div class="row"><label><input type="radio" checked> Approve, mark Completed</label><label><input type="radio"> Reject, return to In Progress</label></div></div>
+<div class="field"><label>Comment (required when rejecting)</label><textarea rows="3" placeholder="Explain what needs to change"></textarea></div>
+<div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn" style="background:var(--ok)">Approve</button></div>
+<p class="note">Saved to the activity log with your name and time.</p></div>
+<div class="modal"><h3>Mark task as blocked</h3>
+<p class="note">Items master data · SAP B1 Rollout</p>
+<div class="field"><label>Blocked by *</label><select><option>Waiting on client</option><option>Waiting on internal task</option><option>External vendor</option><option>Other</option></select></div>
+<div class="field"><label>Waiting on</label><select><option>R. Santos · Acme Trading (client contact)</option></select></div>
+<div class="field err"><label>Reason *</label><textarea rows="3"></textarea><small>Add a reason so the PM knows what's needed.</small></div>
+<div class="field"><label>Expected by</label><input value="2026-10-12"></div>
+<div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn" style="background:var(--bad)">Mark blocked</button></div></div>
+<div class="modal"><h3>Reject: Change Request #01</h3>
+<div class="field"><label>Comment *</label><textarea rows="2">Pricing table is missing the Phase 2 hours.</textarea></div>
+<div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn" style="background:var(--bad)">Reject</button></div></div>
+<div class="modal"><h3>Can't start this task</h3>
+<p>⛓ <b>Configure system</b> depends on <b>#5 Validate imported master data</b>, which isn't completed yet.</p>
+<div class="row"><span class="sp"></span><button class="btn ghost">View #5</button><button class="btn">OK</button></div></div>
+</div></section>
+
+<!-- TEMPLATE EDITOR -->
+<section class="page" id="tpledit">
+<header><h1>SAP Business One Implementation <span class="pill grey">Draft v4</span></h1><button class="btn ghost">Discard draft</button><button class="btn ghost">Save draft</button><button class="btn">Publish v4 (Admin)</button></header>
+<div class="lock">Publishing creates v4 for new projects only. The 5 running projects keep their v3 snapshot.</div>
+<div class="grid g3"><div class="card"><h3>Phases &amp; activities</h3>
+<table><tr><th></th><th>#</th><th>Activity</th><th>Responsible</th><th>Est. h</th><th>Depends on</th><th>Mandatory</th></tr>
+<tr><td colspan="7" style="background:#f8f9fc;font-weight:600">Phase 1 – Data gathering <span class="note">· creates folder</span></td></tr>
+<tr><td>⋮⋮</td><td>1</td><td>Data gathering</td><td>Internal · Consultant</td><td>16</td><td>–</td><td>✓</td></tr>
+<tr><td>⋮⋮</td><td>2</td><td>Submit master data template</td><td>Internal · Consultant</td><td>4</td><td>1</td><td>✓</td></tr>
+<tr><td>⋮⋮</td><td>3</td><td>Client master data – Items</td><td><span class="pill warn">Client</span></td><td>–</td><td>2</td><td>✓</td></tr>
+<tr><td>⋮⋮</td><td>4</td><td>Client master data – BPs</td><td><span class="pill warn">Client</span></td><td>–</td><td>2</td><td>✓</td></tr>
+<tr><td colspan="7" style="background:#f8f9fc;font-weight:600">Phase 2 – Configuration</td></tr>
+<tr><td>⋮⋮</td><td>5</td><td>Validate imported master data</td><td>Internal · Data specialist</td><td>8</td><td>3, 4</td><td>✓</td></tr>
+<tr style="background:var(--badb)"><td>⋮⋮</td><td>6</td><td>Configure system &amp; validate</td><td>Internal · Technical</td><td>24</td><td>6 <span class="pill bad">Circular</span></td><td>✓</td></tr>
+<tr><td colspan="7"><button class="btn ghost">+ Activity</button> <button class="btn ghost">+ Phase</button></td></tr></table></div>
+<div class="card"><h3>Activity 6 settings</h3>
+<div class="field"><label>Deliverable / evidence</label><input value="Configuration evidence"></div>
+<div class="field err"><label>Depends on</label><input value="6"><small>An activity can't depend on itself.</small></div>
+<div class="field"><label>Default folder for evidence</label><select><option>Phase 2 – Configuration</option></select></div>
+<div class="field"><label>Requires approval</label><select><option>Yes – project manager</option></select></div>
+<p class="note">Version history: v1 Jan 2026, v2 May 2026, v3 Aug 2026 (current)</p></div></div></section>
+
+<!-- CLIENT DETAIL -->
+<section class="page" id="client">
+<header><h1>Acme Trading Corp. <span class="pill ok">Active</span></h1><button class="btn ghost">Edit client</button><button class="btn" onclick="document.getElementById('addc').style.display='flex'">+ Add contact</button></header>
+<div class="note" style="margin:-12px 0 12px"><a href="#admin">Clients</a> › Acme Trading Corp.</div>
+<div class="tabs"><span>Details</span><span class="on">Contacts <span class="pill grey">3</span></span><span onclick="location.hash='clientproj'">Projects <span class="pill grey">3</span></span></div>
+<div class="lock">🔒 Client contacts are tracked only. They don't get a login or app access.</div>
+<div class="card"><div class="row" style="margin-bottom:10px"><div class="search">Search contacts…</div><span class="sp"></span><select style="border:1px solid #d1d5db;border-radius:6px;padding:7px"><option>Active</option><option>Inactive</option><option>All</option></select></div>
+<table><tr><th>Name</th><th>Position</th><th>Email</th><th>Phone</th><th>Projects</th><th>Status</th><th></th></tr>
+<tr><td><b>R. Santos</b></td><td>Finance Manager</td><td>rsantos@acme.example</td><td>+63 917 555 0101</td><td>2</td><td><span class="pill ok">Active</span></td><td>⋮</td></tr>
+<tr><td><b>L. Cruz</b></td><td>IT Lead</td><td>lcruz@acme.example</td><td>+63 917 555 0102</td><td>1</td><td><span class="pill ok">Active</span></td><td>⋮</td></tr>
+<tr><td><b>M. Dela Rosa</b></td><td>Warehouse Supervisor</td><td>mdr@acme.example</td><td>–</td><td>0</td><td><span class="pill ok">Active</span></td><td>⋮</td></tr></table>
+<p class="note">The ⋮ menu has Edit and Deactivate. Deactivated contacts stay on past projects marked Inactive. The old Client contacts page now redirects to Clients.</p></div>
+<div class="grid g2" style="margin-top:16px"><div class="card"><h3>Empty state</h3><div class="empty">☏<br><b>No contacts yet</b><p class="note">Add the people at this client your team follows up with.</p><button class="btn">+ Add contact</button></div></div>
+<div class="card"><h3>Viewer / Member (View only)</h3><p class="note">The "+ Add contact" button and ⋮ menu are hidden. The list is read-only.</p></div></div>
+<div id="addc" class="ov" style="display:none"><div class="modal" style="width:440px"><div class="row"><h3 style="margin:0">Add contact to Acme Trading Corp.</h3><span class="sp"></span><span style="cursor:pointer" onclick="this.closest('.ov').style.display='none'">✕</span></div><br>
+<div class="field"><label>Full name *</label><input></div><div class="field"><label>Position</label><input></div>
+<div class="field err"><label>Email</label><input value="rsantos@"><small>Enter a valid email address, or leave it blank.</small></div><div class="field"><label>Phone</label><input></div>
+<p class="note">The client is set automatically. Contacts never get a login.</p>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Save contact</button></div></div></div>
+</section>
+<!-- CLIENT PROJECTS TAB -->
+<section class="page" id="clientproj">
+<header><h1>Acme Trading Corp. <span class="pill ok">Active</span></h1><button class="btn ghost">Edit client</button><button class="btn">+ New project</button></header>
+<div class="note" style="margin:-12px 0 12px"><a href="#admin">Clients</a> › Acme Trading Corp.</div>
+<div class="tabs"><span>Details</span><span onclick="location.hash='client'">Contacts <span class="pill grey">3</span></span><span class="on">Projects <span class="pill grey">3</span></span></div>
+<div class="card"><div class="row" style="margin-bottom:10px"><div class="search">Search projects…</div><span class="sp"></span><select style="border:1px solid #d1d5db;border-radius:6px;padding:7px"><option>All statuses</option><option>Active</option><option>Delayed</option><option>On hold</option><option>Completed</option><option>Archived</option></select></div>
+<table><tr><th>Project</th><th>Project manager</th><th>Start</th><th>Planned end</th><th>Progress</th><th>Status</th></tr>
+<tr><td><a href="#project"><b>SAP B1 Rollout</b></a></td><td>Jomerson N.</td><td>Aug 18</td><td>Nov 20</td><td><div class="bar"><i style="width:42%"></i></div><span class="note">42%</span></td><td><span class="pill bad">Delayed</span></td></tr>
+<tr><td><a href="#project"><b>Warehouse Add-on</b></a></td><td>Petra M.</td><td>Oct 1</td><td>Dec 15</td><td><div class="bar"><i style="width:10%"></i></div><span class="note">10%</span></td><td><span class="pill info">Active</span></td></tr>
+<tr><td><a href="#project"><b>2025 Upgrade</b></a></td><td>Jomerson N.</td><td>Feb 3</td><td>May 30</td><td><div class="bar"><i style="width:100%"></i></div><span class="note">100%</span></td><td><span class="pill ok">Completed</span></td></tr></table>
+<p class="note">Read-only list; open a project to change it. Members only see projects they're on, and the count in the tab follows the same rule. Archived projects are hidden unless you pick Archived.</p></div>
+<div class="grid g2" style="margin-top:16px"><div class="card"><h3>Empty state (Milestone 1.5)</h3><div class="empty">▤<br><b>No projects yet</b><p class="note">Projects linked to this client will show here.</p></div></div>
+<div class="card"><h3>Member view</h3><p class="note">A Member on only SAP B1 Rollout sees one row and "Projects 1". "+ New project" is hidden.</p></div></div>
+</section>
+<!-- CHECKLIST + EVIDENCE (M3) -->
+<section class="page" id="checklist">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header><div class="tabs"><span class="on" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="" onclick="location.hash='convo'">Conversation</span><span class="" onclick="location.hash='issues'">Issues <span class="pill bad">5</span></span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
+<div class="grid" style="grid-template-columns:1fr 380px"><div>
+<div class="card phase"><div class="ph" onclick="this.parentElement.classList.toggle('closed')"><span class="chev">▾</span><b>Phase 1 – Data gathering</b><span class="note">4 activities · 2 done</span><span class="sp"></span><div class="bar" style="width:120px"><i style="width:50%"></i></div></div>
+<div class="pb"><table><tr><th></th><th>#</th><th>Activity</th><th>Owner</th><th>Due</th><th>Est / Act</th><th>Status</th></tr>
+<tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>1</td><td><a href="#checklist"><b>Data gathering</b></a></td><td>Maria P.</td><td>Sep 10</td><td>16h / 15h</td><td><span class="pill ok">Completed</span></td></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>2</td><td><a href="#checklist"><b>Submit master data template</b></a></td><td>Maria P.</td><td>Sep 15</td><td>4h / 4h</td><td><span class="pill pur">For review</span></td></tr>
+<tr class="dragging"><td class="drag">⋮⋮</td><td>3</td><td><b>Client master data – Items</b> <span class="pill warn">Client</span></td><td>R. Santos</td><td>Oct 3</td><td>– / –<div class="note">No estimate</div></td><td><span class="pill bad">Blocked</span></td></tr>
+<tr class="dropline"><td colspan="7"></td></tr>
+<tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>4</td><td><a href="#checklist"><b>Client master data – BPs</b></a></td><td>R. Santos</td><td>Oct 10</td><td>– / –<div class="note">No estimate</div></td><td><span class="pill info">In progress</span></td></tr></table>
+<button class="btn ghost addact">+ Add activity to Phase 1</button></div></div>
+<div class="card phase closed"><div class="ph" onclick="this.parentElement.classList.toggle('closed')"><span class="chev">▾</span><b>Phase 2 – Configuration</b><span class="note">2 activities · 0 done</span><span class="sp"></span><div class="bar" style="width:120px"><i style="width:0%"></i></div></div>
+<div class="pb"><table><tr><th></th><th>#</th><th>Activity</th><th>Owner</th><th>Due</th><th>Est / Act</th><th>Status</th></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>5</td><td><a href="#checklist"><b>Validate imported master data</b></a></td><td>Ken L.</td><td>Oct 14</td><td>8h / 12h</td><td><span class="pill info">In progress</span></td></tr><tr draggable="true"><td class="drag" title="Drag to reorder, or focus and press Alt+↑/↓">⋮⋮</td><td>6</td><td><a href="#checklist"><b>Configure system &amp; validate</b></a></td><td>Ken L.</td><td>Oct 20</td><td>24h / –</td><td><span class="pill grey">To do</span></td></tr></table><button class="btn ghost addact">+ Add activity to Phase 2</button></div></div>
+<p class="note">Click anywhere on a phase header to open or close it. Drag ⋮⋮ to reorder (keyboard: focus the handle, Alt+↑/↓). Each row's ⋮ menu also has Move up and Move down for touch screens (Move up is greyed out on a phase's first row, Move down on its last). Reordering changes display order only, never dependencies or dates. The highlighted row shows a drag in progress.</p>
+</div>
+<div class="card"><h3>Submit master data template</h3><p class="note">Deliverable: completed master data template</p>
+<h4 style="margin:14px 0 8px">Evidence</h4>
+<div class="drop">⇪ Drop a file here or <a href="#checklist">browse</a><div class="note">PDF, Word or Excel · up to 25 MB each</div></div>
+<div class="file"><span class="fi pdf">PDF</span><div><b>Master_Data_Template_v2.pdf</b><div class="note">1.8 MB · Maria P. · Sep 15</div></div><span class="sp"></span><a href="#checklist">Download</a></div>
+<div class="file"><span class="fi xls">XLS</span><div><b>Items_Upload.xlsx</b><div class="note">640 KB · Maria P. · Sep 15</div></div><span class="sp"></span><a href="#checklist">Download</a></div>
+<div class="file up"><span class="fi doc">DOC</span><div style="flex:1"><b>Signoff_Memo.docx</b><div class="bar" style="margin-top:6px"><i style="width:62%"></i></div><div class="note">Uploading… 62%</div></div><a href="#checklist">Cancel</a></div>
+<div class="file legacy"><span class="fi grey">🔗</span><div><b>sharepoint.example/…/template</b><div class="note">Link (legacy) · added before file uploads</div></div></div>
+<div class="field err" style="margin-top:12px"><small>⚠ screenshot.png can't be added. Evidence must be a PDF, Word or Excel file.</small></div>
+<div class="field err"><small>⚠ report.pdf isn't a real PDF, so it wasn't uploaded.</small></div>
+<div class="field err"><small>⚠ Big_Export.xlsx is 31 MB. The limit is 25 MB.</small></div>
+<div class="field err"><small>⚠ Macros.xlsm can't be added. Save it as .xlsx without macros.</small></div>
+<h4 style="margin:14px 0 8px">Follow-up</h4>
+<div class="field"><textarea rows="2" placeholder="Add a follow-up note…"></textarea></div>
+<div class="row"><span class="note">Notifies Maria P., Ken L. (reviewer) and Jomerson N. (PM)</span><span class="sp"></span><button class="btn">Post follow-up</button></div>
+</div></div>
+<div class="card" style="margin-top:16px"><h3>Template editor: + Add activity per phase</h3><p class="note">Each phase card in the template editor ends with its own "+ Add activity to Phase N" button. The new row opens inline in that phase, with no phase picker, and rows drag the same way as above.</p></div>
+</section>
+<!-- CONVERSATION (M3) -->
+<section class="page" id="convo">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header><div class="tabs"><span class="" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="on" onclick="location.hash='convo'">Conversation</span><span class="" onclick="location.hash='issues'">Issues <span class="pill bad">5</span></span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:10px"><div class="search">Search conversation…</div><span class="sp"></span><select class="sel"><option>All types</option><option>Notes</option><option>Calls</option><option>Meetings</option><option>Decisions</option></select><select class="sel"><option>All tasks</option></select></div>
+<div class="day">Thu, Oct 8</div>
+<div class="msg"><div class="av">KL</div><div style="flex:1"><div class="row"><b>Ken L.</b><span class="pill grey">Note</span><span class="note">10:12 AM</span></div><div>Import of item master failed on 14 rows with missing UoM. Sent the list back to the client.</div><div class="tags"><span>☑ Validate imported master data</span></div></div></div>
+<div class="msg"><div class="av">JN</div><div style="flex:1"><div class="row"><b>Jomerson N.</b><span class="pill info">Call</span><span class="note">2:40 PM</span></div><div>Called R. Santos. They will send the corrected items template by Friday.</div><div class="tags"><span>☑ Client master data – Items</span><span>☏ R. Santos · Acme</span></div></div></div>
+<div class="day">Fri, Oct 9</div>
+<div class="msg"><div class="av">MP</div><div style="flex:1"><div class="row"><b>Maria P.</b><span class="pill ok">Decision</span><span class="note">9:05 AM</span></div><div>Agreed with the client to go live with BPs first and add items in week 2.</div><div class="tags"><span>☑ Client master data – BPs</span></div></div></div>
+<div class="msg"><div class="av">MP</div><div style="flex:1"><div class="row"><b>Maria P.</b><span class="pill grey">Note</span><span class="note">9:30 AM</span></div><div>&lt;script&gt;alert(1)&lt;/script&gt; ← shown as plain text, never run</div></div></div>
+<div class="msg hidden"><div class="av">?</div><div class="note">Message hidden by Ada Admin on Oct 9 for breaking the conduct policy. (Q-31, if approved)</div></div>
+<div class="composer"><div class="row" style="margin-bottom:8px"><select class="sel"><option>Note</option><option>Call</option><option>Meeting</option><option>Decision</option></select><select class="sel"><option>Tag a task (optional)</option></select><select class="sel"><option>Tag a client contact (optional)</option></select></div>
+<textarea rows="3" placeholder="Write a message for the project team…"></textarea>
+<div class="row" style="margin-top:8px"><span class="note">Messages are permanent and can't be edited or deleted.</span><span class="sp"></span><button class="btn">Post</button></div></div>
+</div>
+<div><div class="card"><h3>Who sees this</h3><p class="note">Everyone who can see the project. Viewers can read but don't get the message box; they see "You can read this conversation but not post."</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">💬<br><b>No messages yet</b><p class="note">Record calls, meetings and decisions here so the whole team knows what was agreed.</p></div></div></div></div>
+</section>
+<!-- PROJECT ISSUES (M3.5) -->
+<section class="page" id="issues">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn" onclick="document.getElementById('newiss').style.display='flex'">+ Raise issue</button><div class="av">JN</div></header>
+<div class="tabs"><span class="" onclick="location.hash='checklist'">Checklist</span><span class="" onclick="location.hash='board'">Board</span><span class="" onclick="location.hash='team'">Team</span><span class="" onclick="location.hash='pcontacts'">Active contacts</span><span class="" onclick="location.hash='convo'">Conversation</span><span class="on" onclick="location.hash='issues'">Issues <span class="pill bad">5</span></span><span class="" onclick="location.hash='docs'">Documents</span><span class="" onclick="location.hash='time'">Time</span><span class="" onclick="location.hash='project'">Activity log</span></div>
+<div class="grid g4" style="margin-bottom:16px"><div class="card kpi"><div class="l">Open</div><div class="n">5</div></div><div class="card kpi"><div class="l">Critical / High open</div><div class="n" style="color:var(--bad)">1 / 1</div></div><div class="card kpi"><div class="l">Overdue</div><div class="n" style="color:var(--bad)">2</div></div><div class="card kpi"><div class="l">Waiting on client</div><div class="n" style="color:var(--warn)">1</div></div></div>
+<div class="card"><div class="row" style="margin-bottom:10px;flex-wrap:wrap"><div class="search">Search issues…</div><span class="sp"></span><select class="sel"><option>Open statuses</option><option>All</option><option>Closed</option></select><select class="sel"><option>All severities</option></select><select class="sel"><option>Any owner</option></select><select class="sel"><option>Before &amp; after go-live</option><option>Before go-live</option><option>After go-live</option></select></div>
+<table><tr><th>ID</th><th>Title</th><th>Stage</th><th>Severity</th><th>Status</th><th>Owner</th><th>Client contact</th><th>Due</th></tr>
+<tr class="crit"><td><a href="#issue"><code>ACME-SAP-ISS-014</code></a></td><td><a href="#issue"><b>Item import fails on missing UoM</b></a></td><td class="note">Before go-live</td><td><span class="pill sevc">Critical</span></td><td><span class="pill pur">In progress</span></td><td>Ken L.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 9 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-013</code></a></td><td><a href="#issue"><b>Tax codes on BP master don't match BIR setup</b></a></td><td class="note">Before go-live</td><td><span class="pill bad">High</span></td><td><span class="pill warn">Waiting on client</span></td><td>Maria P.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 8 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-012</code></a></td><td><a href="#issue"><b>Approval email lands in spam</b></a></td><td class="note">Before go-live</td><td><span class="pill warn">Medium</span></td><td><span class="pill info">Open</span></td><td>–</td><td>L. Cruz</td><td style="">Oct 16</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-011</code></a></td><td><a href="#issue"><b>Training deck needs Tagalog version</b></a></td><td class="note">Before go-live</td><td><span class="pill grey">Low</span></td><td><span class="pill info">Open</span></td><td>Maria P.</td><td>–</td><td style="">Oct 29</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-009</code></a></td><td><a href="#issue"><b>Duplicate BP codes from legacy data</b></a></td><td class="note">Before go-live</td><td><span class="pill warn">Medium</span></td><td><span class="pill ok">Resolved</span></td><td>Ken L.</td><td>R. Santos</td><td style="">Oct 6</td></tr>
+</table>
+<p class="note">Critical rows carry a red edge. Overdue dates turn red. Resolved issues close automatically after 7 days unless reopened (Q-33). The ID is never reused.</p></div>
+<div class="grid g2" style="margin-top:16px">
+<div class="card"><h3>Completed project</h3><div class="lock" style="background:var(--blueb);color:#00586b">ℹ This project is completed. The plan is read-only, but you can still raise and update issues for post-go-live support.</div><p class="note">New issues default to the "After go-live" stage.</p></div>
+<div class="card"><h3>Archived project</h3><div class="lock">🔒 This project is archived, so its issues are read-only. "+ Raise issue" is hidden.</div>
+<h3 style="margin-top:14px">Archiving with open issues</h3><div class="modal" style="box-shadow:none;border:1px solid #e4e6e8"><b>Archive SAP B1 Rollout?</b><p class="note">5 issues are still open: ACME-SAP-ISS-014, -013, -012, -011, -009. After archiving, nobody can update them.</p><div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn" style="background:var(--bad)">Archive anyway</button></div></div></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">⚑<br><b>No issues raised</b><p class="note">Raise an issue when something blocks the implementation or comes up after go-live.</p><button class="btn">+ Raise issue</button></div></div>
+<div id="newiss" class="ov" style="display:none"><div class="modal" style="width:560px;max-height:90vh;overflow:auto"><div class="row"><h3 style="margin:0">Raise issue · SAP B1 Rollout</h3><span class="sp"></span><span style="cursor:pointer" onclick="this.closest('.ov').style.display='none'">✕</span></div><br>
+<div class="field err"><label>Title *</label><input value=""><small>Enter a title.</small></div>
+<div class="field"><label>Description *</label><textarea rows="3"></textarea></div>
+<div class="grid g2" style="gap:12px"><div class="field"><label>Severity *</label><select><option>Critical</option><option selected>High</option><option>Medium</option><option>Low</option></select></div><div class="field"><label>Category *</label><select><option>Bug</option><option>Configuration</option><option>Data</option><option>Training</option><option>Change request</option><option>Other</option></select></div>
+<div class="field"><label>Stage</label><select><option>Before go-live</option><option>After go-live</option></select></div><div class="field"><label>Due date</label><input value="Oct 14 (High · 3 working days)"></div>
+<div class="field"><label>Owner</label><select><option>Unassigned</option><option>Ken L.</option></select></div><div class="field"><label>Reported by client contact</label><select><option>None</option><option>R. Santos</option></select></div></div>
+<div class="field"><label>Related task</label><select><option>None</option><option>Client master data – Items</option></select></div>
+<div class="drop">⇪ Attach PDF, Word or Excel · up to 25 MB</div>
+<div class="row"><span class="note">Changing the default due date asks for a reason.</span><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Raise issue</button></div></div></div>
+</section>
+<!-- ALL ISSUES (M3.5) -->
+<section class="page" id="allissues">
+<header><h1>All issues</h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">JN</div></header>
+<div class="card"><div class="row" style="margin-bottom:10px;flex-wrap:wrap"><div class="search">Search issues…</div><span class="sp"></span><select class="sel"><option>Open statuses</option><option>All</option><option>Closed</option></select><select class="sel"><option>All severities</option></select><select class="sel"><option>Any owner</option></select><select class="sel"><option>Before &amp; after go-live</option><option>Before go-live</option><option>After go-live</option></select><select class="sel"><option>All projects</option></select><select class="sel"><option>All clients</option></select><button class="btn ghost">Export CSV</button></div>
+<table><tr><th>ID</th><th>Project</th><th>Title</th><th>Stage</th><th>Severity</th><th>Status</th><th>Owner</th><th>Client contact</th><th>Due</th></tr>
+<tr class="crit"><td><a href="#issue"><code>ACME-SAP-ISS-014</code></a></td><td>SAP B1 Rollout</td><td><a href="#issue"><b>Item import fails on missing UoM</b></a></td><td class="note">Before go-live</td><td><span class="pill sevc">Critical</span></td><td><span class="pill pur">In progress</span></td><td>Ken L.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 9 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>NWF-UPG-ISS-031</code></a></td><td>Northwind Upgrade</td><td><a href="#issue"><b>Year-end closing report times out</b></a></td><td class="note">After go-live</td><td><span class="pill bad">High</span></td><td><span class="pill info">Open</span></td><td>A. Reyes</td><td>J. Tan</td><td style="">Oct 12</td></tr>
+<tr class=""><td><a href="#issue"><code>ACME-SAP-ISS-013</code></a></td><td>SAP B1 Rollout</td><td><a href="#issue"><b>Tax codes on BP master don't match BIR setup</b></a></td><td class="note">Before go-live</td><td><span class="pill bad">High</span></td><td><span class="pill warn">Waiting on client</span></td><td>Maria P.</td><td>R. Santos</td><td style="color:var(--bad);font-weight:600">Oct 8 · overdue</td></tr>
+<tr class=""><td><a href="#issue"><code>NWF-UPG-ISS-029</code></a></td><td>Northwind Upgrade</td><td><a href="#issue"><b>Users want a shortcut to stock report</b></a></td><td class="note">After go-live</td><td><span class="pill grey">Low</span></td><td><span class="pill pur">In progress</span></td><td>Grace T.</td><td>–</td><td style="">Oct 30</td></tr>
+</table><p class="note">Sorted by severity, then due date. Members see only issues on projects they're on. Viewers can read but not raise.</p></div>
+</section>
+<!-- ISSUE DETAIL (M3.5) -->
+<section class="page" id="issue">
+<header><h1><code style="font-size:15px">ACME-SAP-ISS-013</code> Tax codes on BP master don't match BIR setup</h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit</button><button class="btn" onclick="document.getElementById('resolve').style.display='flex'">Mark resolved</button><div class="av">JN</div></header>
+<div class="note" style="margin:-12px 0 12px"><a href="#issues">SAP B1 Rollout › Issues</a></div>
+<div class="steps" style="margin-bottom:16px"><span class="d">Open</span><span class="d">In progress</span><span class="c">Waiting on client</span><span class="">Resolved</span><span class="">Closed</span></div>
+<div class="grid" style="grid-template-columns:1fr 320px"><div>
+<div class="card"><h3>Description</h3><p>Vendor BPs imported with VAT codes from the legacy system. Three codes don't exist in the BIR-aligned tax setup, so A/P invoices fail to post.</p>
+<h4 style="margin:14px 0 8px">Attachments</h4>
+<div class="file"><span class="fi xls">XLS</span><div><b>BP_TaxCode_Mismatch.xlsx</b><div class="note">220 KB · Maria P. · Oct 7</div></div><span class="sp"></span><a href="#issue">Download</a></div>
+<div class="drop" style="padding:10px">⇪ Attach PDF, Word or Excel · up to 25 MB</div>
+<h4 style="margin:14px 0 8px">Links</h4><div class="tags"><span>☑ Client master data – BPs</span><span>💬 Call with R. Santos · Oct 8, 2:40 PM</span><a href="#issue" class="note">+ Link task or message</a></div></div>
+<div class="card" style="margin-top:16px"><h3>Comments &amp; history</h3>
+<div class="msg"><div class="av">MP</div><div><b>Maria P.</b> <span class="note">Oct 7, 3:10 PM</span><div>Raised with severity High. Due Oct 10.</div></div></div>
+<div class="msg"><div class="av">MP</div><div><b>Maria P.</b> <span class="note">Oct 8, 9:00 AM</span><div class="note">Status: In progress → <b>Waiting on client</b></div><div>Asked R. Santos which of the three codes they actually use.</div></div></div>
+<div class="msg"><div class="av">JN</div><div><b>Jomerson N.</b> <span class="note">Oct 8, 4:30 PM</span><div class="note">Due date: Oct 10 → <b>Oct 8</b> · Reason: client go-live moved up</div></div></div>
+<div class="composer"><textarea rows="2" placeholder="Add a comment… (notifies owner, reporter and PM)"></textarea><div class="row" style="margin-top:8px"><span class="sp"></span><button class="btn">Comment</button></div></div></div></div>
+<div><div class="card"><div class="field"><label>Status</label><select><option>Waiting on client</option><option>In progress</option></select></div>
+<div class="field"><label>Severity</label><select><option>High</option></select></div><div class="field"><label>Category</label><select><option>Data</option></select></div>
+<div class="field"><label>Stage</label><select><option>Before go-live</option></select></div><div class="field"><label>Owner</label><select><option>Maria P.</option></select></div>
+<div class="field"><label>Reported by</label><input value="Maria P. · for R. Santos (Acme)"></div><div class="field"><label>Due date</label><input value="Oct 8 · 1 day overdue" style="color:var(--bad)"></div></div>
+<div class="card" style="margin-top:16px"><h3>Closed state</h3><div class="lock" style="background:var(--okb);color:#225e11">✓ Closed Oct 15 by Jomerson N. Resolution: "Mapped the 3 legacy codes to VAT12/VATEX."</div><p class="note">PMs and Admins see "Reopen", which asks for a reason. Only Admins see Delete.</p></div></div></div>
+<div id="resolve" class="ov" style="display:none"><div class="modal" style="width:440px"><h3>Resolve issue</h3><div class="field err"><label>Resolution *</label><textarea rows="3"></textarea><small>Describe how it was fixed before resolving.</small></div><p class="note">It closes automatically in 7 days unless the PM or reporter reopens it.</p><div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Resolve</button></div></div></div>
+</section>
+<!-- MY TASKS TODAY (M3) -->
+<section class="page" id="today">
+<header><h1>My tasks</h1><div class="search">Search my tasks…</div><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
+<div class="tabs"><span onclick="location.hash='plan'">Today <span class="pill grey">5</span></span><span class="on">Due <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">Assigned to me</span><span>I'm accountable</span><span>To review</span><span>Completed</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:8px"><b style="color:var(--ink)">Friday, Oct 9</b><span class="note">Philippine time</span></div>
+<h4 style="margin:10px 0 4px;color:var(--bad)">Overdue · 2</h4>
+<table><tr><th>Task</th><th>Due</th><th>Status</th><th></th></tr>
+<tr class="od"><td><a href="#checklist"><b>Client master data – Items</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td style="color:var(--bad);font-weight:600">Oct 3 · 6 days overdue</td><td><span class="pill bad">Blocked</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr class="od"><td><a href="#checklist"><b>Validate imported master data</b></a><div class="note">SAP B1 Rollout · Phase 2</div></td><td style="color:var(--bad);font-weight:600">Oct 8 · 1 day overdue</td><td><span class="pill info">In progress</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<h4 style="margin:16px 0 4px">Due today · 2</h4>
+<table><tr><th>Task</th><th>Due</th><th>Status</th><th></th></tr>
+<tr class=""><td><a href="#checklist"><b>Submit BP tax code mapping</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td style="">Today</td><td><span class="pill info">In progress</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr class=""><td><a href="#checklist"><b>Prepare UAT scripts</b></a><div class="note">Northwind Upgrade · Phase 3</div></td><td style="">Today</td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<p class="note">Open tasks assigned to you (owner or assignee). Overdue tasks are listed first. "Today" uses Philippine time, so it flips at midnight here, not in UTC. Done tasks drop off the list.</p></div>
+<div><div class="card"><h3>Empty state</h3><div class="empty" style="padding:16px">☀<br><b>Nothing due today</b><p class="note">You're clear for today. <a href="#mytasks">See all assigned to me</a></p></div></div>
+<div class="card" style="margin-top:16px"><h3>Holiday</h3><div class="lock" style="background:var(--blueb);color:#00586b">📅 Today is Bonifacio Day (regular holiday). New due dates skip today. Tasks already due today keep their date.</div></div></div></div>
+</section>
+<!-- MY TASKS TODAY / PLAN (M3.5) -->
+<section class="page" id="plan">
+<header><h1>My tasks</h1><div class="search">Search my tasks…</div><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
+<div class="tabs"><span class="on">Today <span class="pill grey">5</span></span><span onclick="location.hash='today'">Due <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">Assigned to me</span><span>I'm accountable</span><span>To review</span><span>Completed</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:8px"><b style="color:var(--ink)">Friday, Oct 9</b><span class="note">Philippine time · by planned date</span></div>
+<h4 style="margin:10px 0 4px">Planned for today · 2</h4>
+<table><tr><th>Task</th><th>Planned</th><th>Due</th><th></th><th>Status</th><th></th></tr>
+<tr><td><a href="#checklist"><b>Prepare UAT scripts</b></a><div class="note">Northwind Upgrade · Phase 3</div></td><td>Oct 9</td><td>Oct 14</td><td></td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr><td><a href="#checklist"><b>Submit BP tax code mapping</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td>Oct 7 → Oct 9</td><td>Today</td><td></td><td><span class="pill info">In progress</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<h4 style="margin:16px 0 4px;color:var(--warn)">Aging · 3 <span class="note" style="font-weight:400">planned start has passed and the task is not started or past due · age in working days</span></h4>
+<table><tr><th>Task</th><th>Planned</th><th>Due</th><th>Age</th><th>Status</th><th></th></tr>
+<tr><td><a href="#checklist"><b>Client master data – Items</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td>Sep 29</td><td>Oct 3 · overdue</td><td><span class="pill bad">8 days</span></td><td><span class="pill bad">Blocked</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr><td><a href="#checklist"><b>Configure system &amp; validate</b></a><div class="note">SAP B1 Rollout · Phase 2</div></td><td>Oct 5</td><td>Oct 20</td><td><span class="pill warn">4 days</span></td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr>
+<tr><td><a href="#checklist"><b>Draft training outline</b></a><div class="note">Northwind Upgrade · Phase 4</div></td><td>Oct 8</td><td>Oct 23</td><td><span class="pill grey">1 day</span></td><td><span class="pill grey">To do</span></td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Log time</button></td></tr></table>
+<p class="note">Oldest first. Age badge turns amber at 3+ days and red at 7+ . Completed tasks drop off. A task can appear here and on the Due tab.</p></div>
+<div><div class="card"><h3>Rules (doc 12, FR-TSK-22 to 25)</h3><p class="note">Each task sits in one section. Aging: planned start passed and still Not started, or past due. Planned for today: any other open task with today between planned start and due, including work in progress. Blocked tasks show; On hold tasks are hidden. Age counts working days, so holidays and the Working days setting apply.</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">☀<br><b>Nothing planned for today</b><p class="note">No aging tasks either. <a href="#today">Check what's due</a></p></div></div></div></div>
+</section>
+<!-- HOLIDAYS (M3) -->
+<section class="page" id="holidays">
+<header><h1>Admin</h1><button class="btn" onclick="document.getElementById('addh').style.display='flex'">+ Add holiday</button><div class="av">AA</div></header>
+<div class="tabs"><span onclick="location.hash='admin'">Users</span><span>Teams</span><span>Clients</span><span>Settings</span><span class="on">Holidays</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<div class="row" style="margin-bottom:10px"><button class="btn ghost" style="padding:4px 10px">‹</button><b style="color:var(--ink);font-size:16px">2026</b><button class="btn ghost" style="padding:4px 10px">›</button><span class="sp"></span><select class="sel"><option>All types</option><option>Regular holiday</option><option>Special non-working day</option><option>Special working day</option></select><button class="btn ghost">Copy from 2025…</button></div>
+<table><tr><th>Date</th><th>Day</th><th>Name</th><th>Type</th><th>Note</th><th></th></tr>
+<tr><td>Nov 1</td><td class="note">Sun</td><td><b>All Saints' Day</b></td><td><span class="pill warn">Special non-working</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Nov 2</td><td class="note">Mon</td><td><b>All Souls' Day</b></td><td><span class="pill warn">Special non-working</span></td><td class="note">Proclamation no. — (example)</td><td>✎ ⋮</td></tr>
+<tr><td>Nov 30</td><td class="note">Mon</td><td><b>Bonifacio Day</b></td><td><span class="pill bad">Regular holiday</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Dec 8</td><td class="note">Tue</td><td><b>Feast of the Immaculate Conception</b></td><td><span class="pill warn">Special non-working</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Dec 12</td><td class="note">Sat</td><td><b>Make-up workday</b></td><td><span class="pill ok">Special working day</span></td><td class="note">Counts as a workday</td><td>✎ ⋮</td></tr>
+<tr><td>Dec 24</td><td class="note">Thu</td><td><b>Christmas Eve</b></td><td><span class="pill warn">Special non-working</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+<tr><td>Dec 25</td><td class="note">Fri</td><td><b>Christmas Day</b></td><td><span class="pill bad">Regular holiday</span></td><td class="note"></td><td>✎ ⋮</td></tr>
+</table><p class="note">Example data only. Admins enter each year's proclaimed holidays. Due dates skip regular holidays and special non-working days. A special working day counts as a workday, even on a Saturday or Sunday.</p></div>
+<div><div class="card" style="margin-bottom:16px"><h3>Working days</h3><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px"><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Mon</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Tue</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Wed</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Thu</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" checked class="wd" onchange="wdChk()"> Fri</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox"  class="wd" onchange="wdChk()"> Sat</label><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox"  class="wd" onchange="wdChk()"> Sun</label></div>
+<div id="wderr" class="field err" style="display:none;margin:8px 0 0"><small>Keep at least one working day.</small></div>
+<p class="note">Due dates count only these days. Holidays still apply on top, and a special working day always counts. Changes affect new due dates only, never ones already set.</p><button class="btn" style="width:100%">Save working days</button></div>
+<div class="card"><h3>What changes</h3><p class="note">Adding a holiday never moves existing due dates; it only affects dates worked out from then on. Every change is logged.</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty year</h3><div class="empty" style="padding:16px">📅<br><b>No holidays for 2027 yet</b><p class="note">Due dates will count only the working days set above.</p><button class="btn ghost">Copy from 2026…</button></div></div></div></div>
+<div id="addh" class="ov" style="display:none"><div class="modal" style="width:440px"><div class="row"><h3 style="margin:0">Add holiday</h3><span class="sp"></span><span style="cursor:pointer" onclick="this.closest('.ov').style.display='none'">✕</span></div><br>
+<div class="field"><label>Date *</label><input value="11/30/2026"></div>
+<div class="field"><label>Name *</label><input value="Bonifacio Day"></div>
+<div class="field"><label>Type *</label><select><option>Regular holiday</option><option>Special non-working day</option><option>Special working day</option></select><small class="note">Regular holidays and special non-working days are skipped in due dates. Special working days count as workdays.</small></div>
+<div class="field err"><label>Note</label><input><small>Nov 30, 2026 already has a holiday ("Bonifacio Day").</small></div>
+<div class="lock" style="background:var(--warnb)">⚠ 12 tasks are due on this day. Their due dates won't change. <a href="#allissues">Review the 12 tasks</a></div>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn">Save holiday</button></div></div></div>
+</section>
+<!-- NOTIFICATIONS (M3) -->
+<section class="page" id="notif">
+<header><h1>SAP B1 Rollout <span class="pill bad">Delayed</span></h1><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><button class="btn ghost">Edit project</button><div class="av">JN</div></header>
+<div class="grid g2"><div class="modal" style="max-width:420px"><div class="row"><h3 style="margin:0">Notifications</h3><span class="sp"></span><a href="#notif" class="note">Mark all as read</a></div><br>
+<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Maria P.</b> added a follow-up on <b>Client master data – Items</b> · SAP B1 Rollout<div class="note">5 min ago</div></div></a>
+<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Ken L.</b> uploaded evidence on <b>Validate imported master data</b><div class="note">1 hour ago</div></div></a>
+<a class="nt un" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Jomerson N.</b> added a follow-up on <b>Configure system &amp; validate</b><div class="note">Yesterday, 4:10 PM</div></div></a>
+<a class="nt" href="#checklist"><span class="dotu"></span><div style="flex:1"><b>Maria P.</b> added a follow-up on <b>Submit master data template</b><div class="note">Oct 7</div></div></a>
+<p class="note" style="text-align:center;margin:10px 0 0">Showing the last 30 days</p></div>
+<div><div class="card"><h3>Bell in the top bar</h3><p class="note">The red count shows unread notifications (9+ above nine). Clicking one opens that task and marks it read. The person who wrote the follow-up isn't notified. Anyone removed from the project stops seeing its notifications.</p><div class="row"><div class="bell">🔔<i>3</i></div><span class="note">unread</span><div class="bell">🔔</div><span class="note">all read</span></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">🔔<br><b>You're all caught up</b><p class="note">Follow-ups on your tasks will show here.</p></div></div></div></div>
+</section>
+<!-- PROJECT ACTIVE CONTACTS (M2) -->
+<section class="page" id="pcontacts">
+<header><h1>SAP B1 Rollout</h1><button class="btn">+ Add contact</button></header>
+<div class="tabs"><span onclick="location.hash='project'">Checklist</span><span>Timeline</span><span>Team</span><span class="on">Active contacts</span><span onclick="location.hash='docs'">Documents</span><span>Time</span><span>Activity log</span></div>
+<div class="grid g3"><div class="card"><h3>Active contacts · Acme Trading Corp.</h3>
+<table><tr><th>Name</th><th>Position</th><th>Email</th><th>Phone</th><th></th></tr>
+<tr><td><b>R. Santos</b></td><td>Finance Manager</td><td>rsantos@acme.example</td><td>+63 917 555 0101</td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Remove</button></td></tr>
+<tr><td><b>L. Cruz</b></td><td>IT Lead</td><td>lcruz@acme.example</td><td>+63 917 555 0102</td><td><button class="btn ghost" style="padding:3px 10px;font-size:12px">Remove</button></td></tr>
+<tr style="opacity:.7"><td><b>J. Lim</b> <span class="pill grey">Inactive</span></td><td>Former Controller</td><td>jlim@acme.example</td><td>–</td><td></td></tr></table>
+<p class="note">Only contacts from this project's client can be added. Editing the list needs Edit on Projects; others see it read-only.</p></div>
+<div><div class="modal"><h3>Add contact</h3><div class="search" style="border:1px solid #d1d5db;width:auto">Search Acme contacts…</div>
+<div class="tree" style="margin-top:8px"><div><span><input type="checkbox" checked disabled> R. Santos</span><span class="note">added</span></div><div><span><input type="checkbox" checked disabled> L. Cruz</span><span class="note">added</span></div><div><span><input type="checkbox"> M. Dela Rosa</span><span class="note">Warehouse Supervisor</span></div></div>
+<div class="row" style="margin-top:10px"><a href="#client" class="note">Manage Acme contacts</a><span class="sp"></span><button class="btn">Add</button></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">Acme Trading Corp. has no contacts yet.<br><a href="#client">Add one in the client's Contacts tab</a></div></div>
+<div class="card" style="margin-top:16px"><h3>Changing the client</h3><p class="note">Changing this project's client clears its active contacts. You'll be asked to confirm first.</p></div></div></div>
+</section>
+<!-- ACCESS RULES -->
+<section class="page" id="acl">
+<header><h1>Access rules</h1><button class="btn ghost" onclick="document.getElementById('rst').style.display='flex'">Reset role to defaults</button><div class="av">JN</div></header>
+<div class="tabs"><span class="" onclick="aclTab(0)">Admin</span><span class="on" onclick="aclTab(1)">PM</span><span class="" onclick="aclTab(2)">Member</span><span class="" onclick="aclTab(3)">Viewer</span></div>
+<div class="grid" style="grid-template-columns:1fr 300px"><div class="card">
+<p class="note" style="margin-top:0">Tick what this role can do with each kind of record. Create, Edit or Delete always include View. The scope column is fixed in the app and can't be widened here.</p>
+<div class="aclg" data-r="0" style="display:none"><table class="acl"><tr><th>Record type</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Scope (fixed)</th></tr><tr><td><b>Users &amp; invites</b> 🔒<div class="note"><code>users</code></div></td><td><input type="checkbox" data-a="V" checked disabled title="Locked so nobody can lock every Admin out"></td><td><input type="checkbox" data-a="C" checked disabled title="Locked so nobody can lock every Admin out"></td><td><input type="checkbox" data-a="E" checked disabled title="Locked so nobody can lock every Admin out"></td><td><input type="checkbox" data-a="D" checked disabled title="Locked so nobody can lock every Admin out"></td><td class="note">–</td></tr><tr><td><b>Teams</b><div class="note"><code>teams</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Settings</b><div class="note"><code>settings</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Access rules</b> 🔒<div class="note"><code>accessRules</code></div></td><td><input type="checkbox" data-a="V" checked disabled title="Locked so nobody can lock every Admin out"></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E" checked disabled title="Locked so nobody can lock every Admin out"></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Clients</b><div class="note"><code>clients</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Client contacts</b><div class="note"><code>contacts</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Templates</b><div class="note"><code>templates</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Projects</b><div class="note"><code>projects</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Tasks</b><div class="note"><code>tasks</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Task approvals</b><div class="note"><code>approvals</code></div></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Time entries</b><div class="note"><code>time</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Documents &amp; folders</b><div class="note"><code>documents</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Reports &amp; dashboard</b><div class="note"><code>reports</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Audit log</b><div class="note"><code>audit</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr></table></div><div class="aclg" data-r="1" style="display:block"><table class="acl"><tr><th>Record type</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Scope (fixed)</th></tr><tr><td><b>Users &amp; invites</b><div class="note"><code>users</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Teams</b><div class="note"><code>teams</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Settings</b><div class="note"><code>settings</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Access rules</b><div class="note"><code>accessRules</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Clients</b><div class="note"><code>clients</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Client contacts</b><div class="note"><code>contacts</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Templates</b><div class="note"><code>templates</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Projects</b><div class="note"><code>projects</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" disabled title="Only Admins can delete projects (Q-26)"> <span class="note">Archive only</span></td></tr><tr><td><b>Tasks</b><div class="note"><code>tasks</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Task approvals</b><div class="note"><code>approvals</code></div></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Time entries</b><div class="note"><code>time</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Documents &amp; folders</b><div class="note"><code>documents</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked ></td><td class="note">–</td></tr><tr><td><b>Reports &amp; dashboard</b><div class="note"><code>reports</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Audit log</b><div class="note"><code>audit</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr></table></div><div class="aclg" data-r="2" style="display:none"><table class="acl"><tr><th>Record type</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Scope (fixed)</th></tr><tr><td><b>Users &amp; invites</b><div class="note"><code>users</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Teams</b><div class="note"><code>teams</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Settings</b><div class="note"><code>settings</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Access rules</b><div class="note"><code>accessRules</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Clients</b><div class="note"><code>clients</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Client contacts</b><div class="note"><code>contacts</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Templates</b><div class="note"><code>templates</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Projects</b><div class="note"><code>projects</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">Only projects they belong to</td></tr><tr><td><b>Tasks</b><div class="note"><code>tasks</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">Own tasks only</td></tr><tr><td><b>Task approvals</b><div class="note"><code>approvals</code></div></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">Designated reviewer only</td></tr><tr><td><b>Time entries</b><div class="note"><code>time</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E" checked ></td><td><input type="checkbox" data-a="D" checked></td><td class="note">Own entries only</td></tr><tr><td><b>Documents &amp; folders</b><div class="note"><code>documents</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C" checked ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Reports &amp; dashboard</b><div class="note"><code>reports</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Audit log</b><div class="note"><code>audit</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr></table></div><div class="aclg" data-r="3" style="display:none"><table class="acl"><tr><th>Record type</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Scope (fixed)</th></tr><tr><td><b>Users &amp; invites</b><div class="note"><code>users</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Teams</b><div class="note"><code>teams</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Settings</b><div class="note"><code>settings</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Access rules</b><div class="note"><code>accessRules</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Clients</b><div class="note"><code>clients</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Client contacts</b><div class="note"><code>contacts</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Templates</b><div class="note"><code>templates</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Projects</b><div class="note"><code>projects</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Tasks</b><div class="note"><code>tasks</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Task approvals</b><div class="note"><code>approvals</code></div></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Time entries</b><div class="note"><code>time</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Documents &amp; folders</b><div class="note"><code>documents</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" data-a="C"  ></td><td><input type="checkbox" data-a="E"  ></td><td><input type="checkbox" data-a="D"  ></td><td class="note">–</td></tr><tr><td><b>Reports &amp; dashboard</b><div class="note"><code>reports</code></div></td><td><input type="checkbox" data-a="V" checked ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr><tr><td><b>Audit log</b><div class="note"><code>audit</code></div></td><td><input type="checkbox" data-a="V"  ></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td><input type="checkbox" disabled title="Doesn't apply to this record type"> <span class="note">n/a</span></td><td class="note">–</td></tr></table></div>
+<p class="note">🔒 Admin access to Users and Access rules is locked so nobody can lock every Admin out. n/a means the action doesn't exist for that record type.</p></div>
+<div><div class="card"><h3>How changes apply</h3><p class="note">Saved changes take effect on each user's very next request, with no sign-out needed. Every changed box is recorded in the audit log.</p></div>
+<div class="card" style="margin-top:16px"><h3>Review states</h3>
+<div class="lock" style="background:var(--badb);color:#8a1c08">⚠ Someone else saved these rules while you were editing. Reload to see their changes, then make yours again. <button class="btn ghost" style="padding:3px 10px;margin-top:6px">Reload</button></div>
+<div class="lock" style="background:var(--badb);color:#8a1c08">You no longer have permission to do this.</div><p class="note">Shown on any form whose save returns 403.</p></div></div></div>
+<div id="savebar" style="display:none;position:sticky;bottom:12px;margin-top:16px" class="card row"><b>You have unsaved changes for <span id="sbr">PM</span>.</b><span class="sp"></span><button class="btn ghost" onclick="location.reload()">Discard</button><button class="btn" onclick="document.getElementById('cfm').style.display='flex'">Save changes</button></div>
+<div id="cfm" class="ov" style="display:none"><div class="modal" style="width:420px"><h3>Save access rules?</h3><p>These changes apply right away to everyone with this role, on their next action in the app.</p><div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn" onclick="this.closest('.ov').style.display='none';document.getElementById('savebar').style.display='none'">Save</button></div></div></div>
+<div id="rst" class="ov" style="display:none"><div class="modal" style="width:420px"><h3>Reset to defaults?</h3><p>This role's permissions go back to the original settings. This applies right away and is recorded in the audit log.</p><div class="row"><span class="sp"></span><button class="btn ghost" onclick="this.closest('.ov').style.display='none'">Cancel</button><button class="btn" style="background:var(--bad)" onclick="this.closest('.ov').style.display='none'">Reset</button></div></div></div>
+</section>
+<!-- ADMIN -->
+<section class="page" id="admin">
+<header><h1>Admin</h1><button class="btn">+ Invite user</button></header>
+<div class="tabs"><span class="on">Users</span><span>Teams</span><span>Clients</span><span>Settings</span><span onclick="location.hash='holidays'">Holidays</span></div>
+<div class="grid g3"><div class="card"><table><tr><th>Name</th><th>Email</th><th>Access</th><th>Job role</th><th>Teams</th><th>Status</th><th></th></tr>
+<tr><td>Jomerson Nazaire</td><td>jnazaire@xceler8.example</td><td>Admin</td><td>Project Manager</td><td>Management</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap">Copy reset link</button></td></tr>
+<tr><td>Maria P.</td><td>maria@xceler8.example</td><td>Member</td><td>Consultant</td><td>Consulting</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap">Copy reset link</button></td></tr>
+<tr><td>Ken L.</td><td>ken@xceler8.example</td><td>Member</td><td>Technical / Data</td><td>Technical</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap">Copy reset link</button></td></tr>
+<tr><td>A. Reyes</td><td>areyes@xceler8.example</td><td>Member</td><td>Developer</td><td>Development</td><td><span class="pill warn">Invited</span></td><td><button class="btn ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap">New invite link</button></td></tr>
+<tr><td>Grace T.</td><td>grace@xceler8.example</td><td>Viewer</td><td>Project Manager</td><td>Management</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost" style="padding:4px 10px;font-size:12px;white-space:nowrap">Copy reset link</button></td></tr>
+<tr><td>Old Account</td><td>former@xceler8.example</td><td>Member</td><td>Support</td><td>Support</td><td><span class="pill grey">Deactivated</span></td><td></td></tr></table>
+<p class="note">Client contacts are managed under Clients and never appear here, because they don't have accounts. Reset links are single use and expire in 24 hours. Creating a new link cancels any earlier unused one.</p></div>
+<div class="card"><h3>Invite user</h3>
+<div class="field"><label>Full name *</label><input value="A. Reyes"></div>
+<div class="field err"><label>Email *</label><input value="areyes@"><small>Enter a valid email address.</small></div>
+<div class="field"><label>Access role * (what they can do)</label><select><option>Admin</option><option>Project Manager</option><option selected>Member</option><option>Viewer (read-only)</option></select></div>
+<div class="field"><label>Job role * (what they do)</label><select><option>Consultant</option><option selected>Developer</option><option>Researcher / BA</option><option>Support</option><option>QA / Tester</option><option>Technical / Data Specialist</option><option>Project Manager</option></select></div>
+<div class="field"><label>Teams</label><input value="Development ×"></div>
+<button class="btn" style="width:100%">Create invite link</button>
+<div class="field" style="margin-top:10px"><label>Invite link (single use, expires in 72 hours, share it yourself)</label><div class="row"><input class="sp" value="https://…/invite/7f3a…" readonly><button class="btn ghost">Copy</button></div></div>
+<h3 style="margin-top:18px">Settings</h3><p class="note">Delayed when forecast is more than <b>5</b> days past baseline · Working hours per week: <b>40</b></p></div></div></section>
+
+<!-- STATES -->
+<section class="page" id="states">
+<header><h1>Empty states &amp; error pages</h1></header>
+<div class="grid g2">
+<div class="card empty"><div style="font-size:34px">▤</div><h3>No projects yet</h3><p>Create your first project and pick a template to generate its plan.</p><button class="btn">+ New project</button></div>
+<div class="card empty"><div style="font-size:34px">✓</div><h3>You're all caught up</h3><p>No tasks are assigned to you right now.</p></div>
+<div class="card empty"><div style="font-size:34px">🗀</div><h3>This folder is empty</h3><p>Upload a file or request one from a team member or client contact.</p><button class="btn ghost">Request document</button> <button class="btn">Upload</button></div>
+<div class="card empty"><div style="font-size:34px">◷</div><h3>No time logged this week</h3><p>Log hours against a task to see them here.</p><button class="btn">Log time</button></div>
+<div class="card empty"><p class="big">403</p><h3>You don't have access to this project</h3><p>Ask the project manager to add you to the project.</p><button class="btn ghost" onclick="location.hash='mytasks'">Go to My tasks</button></div>
+<div class="card empty"><p class="big">404</p><h3>We couldn't find that page</h3><p>It may have been moved or archived.</p><button class="btn ghost" onclick="location.hash='dash'">Back to dashboard</button></div>
+<div class="card"><h3>Loading state</h3><div class="bar" style="height:14px;margin:8px 0;width:60%"></div><div class="bar" style="height:14px;margin:8px 0"></div><div class="bar" style="height:14px;margin:8px 0;width:80%"></div><p class="note">Skeleton rows show while lists load.</p></div>
+</div></section>
+
+<!-- TIME -->
+<section class="page" id="time">
+<header><h1>Time logging</h1><button class="btn ghost">◀ Week of Oct 5 ▶</button></header>
+<div class="grid g3"><div class="card"><h3>My entries this week</h3>
+<table><tr><th>Date</th><th>Project</th><th>Task</th><th>Hours</th><th>Type</th><th>Notes</th></tr>
+<tr><td>Oct 5</td><td>SAP B1 Rollout</td><td>Validate imported data</td><td>6.0</td><td><span class="pill info">Execution</span></td><td>Item import check</td></tr>
+<tr><td>Oct 6</td><td>SAP B1 Rollout</td><td>Validate imported data</td><td>6.0</td><td><span class="pill info">Execution</span></td><td>Exceptions report</td></tr>
+<tr><td>Oct 7</td><td>API Integration</td><td>Auth endpoint</td><td>2.0</td><td><span class="pill warn">Waiting</span></td><td>Waiting on sandbox keys</td></tr>
+<tr><td colspan="3"><b>Total</b></td><td><b>14.0</b></td><td colspan="2" class="note">of 40h available (35% utilization)</td></tr></table></div>
+<div class="card"><h3>Log time</h3>
+<div class="field"><label>Project *</label><select><option>SAP B1 Rollout</option></select></div>
+<div class="field"><label>Task *</label><select><option>Validate imported master data</option></select></div>
+<div class="row"><div class="field sp"><label>Work date *</label><input value="2026-10-09"></div><div class="field sp err"><label>Hours *</label><input value="0"><small>Enter between 0.25 and 24.</small></div></div>
+<div class="field"><label>Type</label><select><option>Execution</option><option>Waiting on client / external</option><option>Rework</option></select></div>
+<div class="field"><label>Notes</label><textarea rows="2"></textarea></div>
+<button class="btn" style="width:100%">Save entry</button></div></div></section>
+
+<!-- TEMPLATES -->
+<section class="page" id="templates">
+<header><h1>Implementation templates</h1><button class="btn">+ New template</button></header>
+<div class="grid g2">
+<div class="card"><h3>SAP Business One Implementation <span class="pill info">v3</span></h3><p class="note">10 activities · 4 phases · used by 5 projects</p><p class="note">Editing creates v4. Running projects keep their snapshot.</p><button class="btn ghost" onclick="location.hash='tpledit'">Edit</button></div>
+<div class="card"><h3>Software / API Integration <span class="pill info">v1</span></h3><p class="note">8 activities · used by 3 projects</p><button class="btn ghost">Open</button></div>
+<div class="card"><h3>Cloud Deployment / Migration <span class="pill info">v2</span></h3><p class="note">9 activities · used by 2 projects</p><button class="btn ghost">Open</button></div>
+<div class="card"><h3>General IT Consulting <span class="pill grey">Draft</span></h3><p class="note">No activities yet</p><button class="btn ghost">Open</button></div>
+</div></section>
+
+<!-- CONTACTS -->
+<section class="page" id="contacts">
+<header><h1>Client contacts</h1><div class="search">Search contacts…</div><button class="btn">+ Contact</button></header>
+<div class="lock">🔒 Client contacts are stored separately from user accounts and can't sign in. Tagging one on a task never grants access.</div>
+<div class="card"><table><tr><th>Name</th><th>Company</th><th>Department</th><th>Email</th><th>Projects</th><th>Pending items</th></tr>
+<tr><td>R. Santos</td><td>Acme Trading</td><td>Finance</td><td>rsantos@example.com</td><td>SAP B1 Rollout</td><td><span class="pill bad">2 (1 overdue)</span></td></tr>
+<tr><td>L. Cruz</td><td>Northwind</td><td>IT</td><td>lcruz@example.com</td><td>API Integration</td><td><span class="pill grey">1</span></td></tr>
+<tr><td>P. Gomez</td><td>Globex</td><td>Operations</td><td>pgomez@example.com</td><td>Cloud Migration</td><td><span class="pill ok">0</span></td></tr></table></div></section>
+
+<!-- TEAM -->
+<section class="page" id="team">
+<header><h1>Team &amp; workload</h1><button class="btn ghost">This week</button></header>
+<div class="card"><table><tr><th>Person</th><th>Role</th><th>Team</th><th>Assigned</th><th>Recorded</th><th>Utilization</th></tr>
+<tr><td>Maria P.</td><td>Consultant</td><td>Consulting</td><td>52h</td><td>34h</td><td><div class="bar"><i style="width:100%;background:var(--bad)"></i></div><span class="note" style="color:var(--bad)">130% assigned</span></td></tr>
+<tr><td>Ken L.</td><td>Data Specialist</td><td>Technical</td><td>36h</td><td>30h</td><td><div class="bar"><i style="width:90%"></i></div><span class="note">90%</span></td></tr>
+<tr><td>A. Reyes</td><td>Developer</td><td>Development</td><td>28h</td><td>22h</td><td><div class="bar"><i style="width:70%"></i></div><span class="note">70%</span></td></tr></table>
+<p class="note">Hours aren't used as a performance score. Waiting time and scope changes are shown separately.</p></div></section>
+
+<!-- REPORTS -->
+<section class="page" id="reports">
+<header><h1>Reports</h1><button class="btn ghost">Export CSV</button></header>
+<div class="tabs"><span class="on">Effort variance</span><span>Overdue tasks</span><span>Timesheets</span><span>Project status</span></div>
+<div class="card"><table><tr><th>Activity</th><th>Estimated</th><th>Actual</th><th>Variance</th><th>Overrun</th></tr>
+<tr><td>Master data validation</td><td>8</td><td>12</td><td style="color:var(--bad)">+4</td><td>+50%</td></tr>
+<tr><td>API integration</td><td>16</td><td>14</td><td style="color:var(--ok)">−2</td><td>−12.5%</td></tr>
+<tr><td>UAT defect fixing</td><td>10</td><td>18</td><td style="color:var(--bad)">+8</td><td>+80%</td></tr>
+<tr><td>Kickoff call (no estimate)</td><td>0</td><td>2</td><td>+2</td><td><span class="pill grey">No estimate</span></td></tr></table></div>
+<div class="card empty" style="margin-top:16px">No overdue tasks for the selected filters. Try widening the date range.</div>
+</section>
+
+<!-- ===================== v0.8 · doc 14 workforce screens ===================== -->
+<!-- M4 · PM VIEW: MY PROJECTS (doc 14 §6) -->
+<section class="page" id="pmview">
+<header><h1>Dashboard</h1><div class="search">Search projects, tasks…</div><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">JN</div></header>
+<div class="tabs"><span onclick="location.hash='dash'">Portfolio</span><span class="on">My projects <span class="pill grey">4</span></span></div>
+<div class="card">
+<div class="row" style="margin-bottom:12px;flex-wrap:wrap"><select class="sel"><option>All health</option><option>Delayed</option><option>At risk</option><option>On track</option><option>On hold</option></select><select class="sel"><option>All clients</option><option>Acme Trading</option><option>Northwind</option><option>Globex</option><option>Umbrella Corp</option></select><select class="sel"><option>Sort: Days late (most first)</option><option>Sort: Health</option><option>Sort: Client</option></select><span class="sp"></span><span class="note">Projects you manage · Admins see all</span></div>
+<table><tr><th>Project</th><th>Health</th><th>Status</th><th>% complete</th><th>Forecast vs baseline</th><th>Overdue tasks</th><th>Blocked</th><th>Open Crit/High issues</th><th>Waiting on client</th></tr>
+<tr class="crit"><td><a href="#project"><b>SAP B1 Rollout</b></a><div class="note">Acme Trading</div></td><td><span class="pill bad">Delayed</span></td><td>In progress</td><td><div class="bar"><i style="width:62%"></i></div><span class="note">62%</span></td><td>Nov 20 vs Nov 13<div style="color:var(--bad);font-weight:600">7 days late</div></td><td style="color:var(--bad);font-weight:600">5</td><td><span class="pill bad">2</span></td><td><a href="#allissues">1 Critical · 2 High</a></td><td>3</td></tr>
+<tr><td><a href="#project"><b>API Integration</b></a><div class="note">Northwind</div></td><td><span class="pill warn">At risk</span></td><td>In progress</td><td><div class="bar"><i style="width:45%"></i></div><span class="note">45%</span></td><td>Dec 05 vs Dec 01<div style="color:var(--bad);font-weight:600">4 days late</div></td><td>2</td><td><span class="pill grey">0</span></td><td><a href="#allissues">1 High</a></td><td>1</td></tr>
+<tr><td><a href="#project"><b>Cloud Migration</b></a><div class="note">Globex</div></td><td><span class="pill ok">On track</span></td><td>In progress</td><td><div class="bar"><i style="width:80%"></i></div><span class="note">80%</span></td><td>Oct 30 vs Oct 30<div class="note">On time</div></td><td>0</td><td><span class="pill grey">0</span></td><td class="note">None</td><td>0</td></tr>
+<tr><td><a href="#project"><b>ERP Upgrade</b></a><div class="note">Umbrella Corp</div></td><td><span class="pill grey">⏸ On hold</span></td><td>On hold</td><td><div class="bar"><i style="width:35%;background:#8592a3"></i></div><span class="note">35%</span></td><td class="note">Paused</td><td>1</td><td><span class="pill grey">0</span></td><td class="note">None</td><td>0</td></tr></table>
+<p class="note">One row per project you manage (Admins see all, Viewers see all read-only, Members don't get this tab). "N days late" = forecast end minus baseline end. Click a project to open it. % complete depends on Q-08.</p></div>
+<div class="grid g3" style="margin-top:16px"><div class="card"><h3>Who needs a follow-up</h3>
+<h4 style="margin:6px 0 4px">SAP B1 Rollout</h4>
+<table><tr><th>Person</th><th>Type</th><th>Overdue</th><th>Aging</th><th>Items</th></tr>
+<tr><td><b>Ken L.</b></td><td><span class="pill info">Team</span></td><td><span class="pill bad">2</span></td><td><span class="pill warn">1</span></td><td><a href="#checklist">Validate imported master data</a>, <a href="#checklist">Configure system</a></td></tr>
+<tr><td><b>Maria P.</b></td><td><span class="pill info">Team</span></td><td><span class="pill bad">1</span></td><td><span class="pill grey">0</span></td><td><a href="#checklist">Submit BP tax code mapping</a></td></tr>
+<tr><td><b>R. Santos</b><div class="note">Finance Manager · Acme</div></td><td><span class="pill warn">Client contact</span></td><td><span class="pill bad">2</span></td><td class="note">–</td><td><a href="#docs">Items master data template (requested doc)</a>, <a href="#checklist">Client master data – Items</a></td></tr></table>
+<h4 style="margin:16px 0 4px">API Integration</h4>
+<table><tr><th>Person</th><th>Type</th><th>Overdue</th><th>Aging</th><th>Items</th></tr>
+<tr><td><b>A. Reyes</b></td><td><span class="pill info">Team</span></td><td><span class="pill grey">0</span></td><td><span class="pill warn">2</span></td><td><a href="#checklist">Auth endpoint</a>, <a href="#checklist">Error mapping</a></td></tr>
+<tr><td><b>L. Cruz</b><div class="note">IT Lead · Northwind</div></td><td><span class="pill warn">Client contact</span></td><td><span class="pill bad">1</span></td><td class="note">–</td><td><a href="#docs">API credentials (sandbox) (requested doc)</a></td></tr></table>
+<p class="note">Team members: overdue or aging tasks (aging per FR-TSK-23/24). Client contacts: overdue requested documents or tasks. Each count links to the item. Client contacts still have no login.</p></div>
+<div><div class="card"><h3>Loading</h3><div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:85%"></div><p class="note">Skeleton rows while projects load.</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:16px">▤<br><b>You don't manage any projects yet</b><p class="note">Projects where you're the project manager show here.</p></div></div>
+<div class="card" style="margin-top:16px"><h3>Nobody to follow up</h3><div class="empty" style="padding:12px">✓<br><b>No overdue or aging items</b><p class="note">on this project.</p></div></div></div></div>
+</section>
+
+<!-- M5 · MICROSOFT SIGN-IN (doc 14 §1) -->
+<section class="page" id="mslogin">
+<header><h1>Sign in · Microsoft (review states)</h1><span class="note">The live sign-in page is <a href="#login">Login (sign out)</a>; these are its states side by side.</span></header>
+<div class="grid" style="grid-template-columns:repeat(3,1fr)">
+<div class="modal"><div class="logo" style="padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
+<button class="msbtn"><span class="mslogo"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>Sign in with Microsoft</button>
+<div class="ordiv">or</div>
+<div class="field"><label>Email</label><input value="maria@xceler8.example"></div>
+<div class="field"><label>Password</label><input type="password" value="xxxxxxxx"></div>
+<button class="btn" style="width:100%">Sign in</button>
+<p class="note">Personal-email accounts (e.g. Gmail) keep using email and password (Q-38).</p></div>
+<div class="modal"><div class="logo" style="padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
+<div class="errbox">Your Microsoft account isn't set up in this app. Ask an Admin for an invite.</div>
+<button class="msbtn"><span class="mslogo"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>Sign in with Microsoft</button>
+<div class="ordiv">or</div>
+<div class="field"><label>Email</label><input></div><div class="field"><label>Password</label><input type="password"></div><button class="btn" style="width:100%">Sign in</button>
+<p class="note">Account not in Users: refused, no account created (Q-37 default). Text from FR-SSO-04.</p></div>
+<div class="modal"><div class="logo" style="padding:0 0 14px"><b style="color:#fff">IT</b>Implementation Tracker</div><h3>Sign in</h3>
+<div class="errbox">This Microsoft account belongs to a different organization. Sign in with your Xceler8 Microsoft account, or use email and password.</div>
+<button class="msbtn"><span class="mslogo"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>Sign in with Microsoft</button>
+<div class="ordiv">or</div>
+<div class="field"><label>Email</label><input></div><div class="field"><label>Password</label><input type="password"></div><button class="btn" style="width:100%">Sign in</button>
+<p class="note">Wrong tenant: refused (FR-SSO-02, checks <code>tid</code> and issuer). Wording is a placeholder.</p></div>
+</div>
+<div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:16px">
+<div class="card"><h3>Loading</h3><div class="empty" style="padding:16px"><div class="mslogo" style="transform:scale(1.6);margin-bottom:14px"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></div><br><b>Signing you in with Microsoft…</b><p class="note">Shown on return from Microsoft while the API checks the account.</p></div></div>
+<div class="card"><h3>Deactivated user</h3><div class="errbox">Your account has been deactivated. Contact an Admin.</div><p class="note">FR-SSO-05: deactivated users are refused even with a valid Microsoft sign-in. Wording is a placeholder. Same if the user was deleted in Entra (EC-74): Microsoft fails; an Admin deactivates them here by hand (Q-40: no sync in M5).</p></div>
+<div class="card oq"><h3>Open questions</h3><p class="note"><span class="pill warn">Spec gap</span>Doc 14 gives the exact text only for the "not set up" error. Wrong-tenant and deactivated messages above are placeholders.</p><p class="note"><span class="pill warn">Q-36</span>Microsoft sits alongside passwords (default). An Admin "Microsoft only" switch comes later, so it isn't shown in this mockup.</p></div>
+</div>
+<div class="card" style="margin-top:16px"><h3>Rules</h3><p class="note">Single Xceler8 tenant only. MFA and lockout for Microsoft sign-in are handled by Microsoft; our password lockout doesn't apply to it. Session rules don't change (30-min idle, 12-hour cap). Sign-in method (password / Microsoft) is recorded on each sign-in.</p></div>
+</section>
+
+<!-- M5 · ADMIN USERS WITH MICROSOFT LINK + SUPERVISOR (doc 14 §1, §3, §5) -->
+<section class="page" id="msusers">
+<header><h1>Admin</h1><button class="btn">+ Invite user</button><div class="av">JN</div></header>
+<div class="tabs"><span class="on">Users</span><span>Teams</span><span>Clients</span><span>Settings</span><span onclick="location.hash='holidays'">Holidays</span><span onclick="location.hash='leaveadmin'">Leave</span></div>
+<div class="grid" style="grid-template-columns:1fr 360px"><div class="card"><table><tr><th>Name</th><th>Email</th><th>Access</th><th>Sign-in</th><th>Supervisor</th><th>Status</th><th></th></tr>
+<tr><td>Jomerson Nazaire</td><td>jnazaire@xceler8.example</td><td>Admin</td><td><span class="pill info" title="Linked Oct 9 · Entra object ID stored">⊞ Microsoft linked</span></td><td class="note">–</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost sm">Edit</button></td></tr>
+<tr style="background:#f3f3ff"><td><b>Maria P.</b></td><td>maria@xceler8.example</td><td>Member</td><td><span class="pill info">⊞ Microsoft linked</span></td><td>Jomerson Nazaire</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost sm">Edit</button></td></tr>
+<tr><td>Ken L.</td><td>ken@xceler8.example</td><td>Member</td><td><span class="pill grey">Password only</span></td><td>Maria P.</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost sm">Edit</button></td></tr>
+<tr><td>Jom (personal)</td><td>jom@gmail.com</td><td>Admin</td><td><span class="pill grey">Password only</span><div class="note">Personal email (Q-38)</div></td><td class="note">–</td><td><span class="pill ok">Active</span></td><td><button class="btn ghost sm">Edit</button></td></tr>
+<tr><td>A. Reyes</td><td>areyes@xceler8.example</td><td>Member</td><td><span class="pill grey">Not signed in yet</span></td><td><span class="pill warn">Supervisor needed</span></td><td><span class="pill warn">Invited</span></td><td><button class="btn ghost sm">Edit</button></td></tr>
+<tr><td>Old Account</td><td>former@xceler8.example</td><td>Member</td><td><span class="pill info">⊞ Microsoft linked</span></td><td class="note">–</td><td><span class="pill grey">Deactivated</span></td><td></td></tr></table>
+<p class="note">"Microsoft linked" means the user has signed in with Microsoft once and their Entra object ID is stored; later sign-ins match on it, so an email change in Entra doesn't break the link. Linked users can still use their password while Microsoft-only is off (EC-73). "Supervisor needed" shows when a user has no active supervisor (EC-77).</p></div>
+<div class="card"><h3>Edit user · Maria P.</h3><p class="note">Sign-in: ⊞ Microsoft linked Oct 9 · password also set</p>
+<h4 style="margin:12px 0 8px">Daily Activity Report</h4>
+<div class="field"><label>Direct supervisor</label><select><option>Jomerson Nazaire</option><option>Ken L.</option><option>Grace T.</option></select></div>
+<div class="field err"><label>Report CC emails (up to 5)</label><div><span class="chip">ops@xceler8.example ✕</span><span class="chip">pmo@xceler8.example ✕</span><span class="chip" style="border-color:var(--bad);color:var(--bad)">grace@xceler8 ✕</span></div><small>"grace@xceler8" isn't a valid email address.</small></div>
+<div class="field err"><label>Supervisor (other error states)</label><small>A user can't supervise themselves.</small><small>Ken L. already reports to Maria P., so Maria can't report to Ken.</small><small>Up to 5 CC emails.</small></div>
+<button class="btn" style="width:100%">Save</button>
+<p class="note">Admins manage these fields; users see their own read-only (Q-42 default). Supervisor is separate from Access role: a Member can supervise without extra permissions beyond "my team" views.</p></div></div>
+</section>
+
+<!-- M6 · ACTIVITY TRACKER IN MY TASKS › TODAY (doc 14 §2) -->
+<section class="page" id="tracker">
+<header><h1>My tasks</h1><div class="search">Search my tasks…</div><button class="btn" onclick="ov('qa')">+ Quick activity</button><div class="bell" onclick="location.hash='notif'">🔔<i>3</i></div><div class="av">MP</div></header>
+<div class="runbar" data-run><span class="pulse"></span><div style="flex:1;min-width:0"><div class="note">Running · started <span data-runstart>8:58 AM</span> PH time</div><b data-runname>Submit BP tax code mapping</b> <span class="note" data-runproj>· SAP B1 Rollout</span></div><span class="clock" data-clock>01:12:05</span><button class="btn out sm" onclick="stopRun()">Time out</button></div>
+<div class="tabs"><span class="on">Today <span class="pill grey">5</span></span><span onclick="location.hash='today'">Due <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">Assigned to me</span><span>I'm accountable</span><span>To review</span><span>Completed</span><span onclick="location.hash='daysheet'">Day timesheet</span></div>
+<div class="grid" style="grid-template-columns:1fr 320px"><div class="card">
+<div class="row" style="margin-bottom:8px"><b style="color:var(--ink)">Friday, Oct 9</b><span class="note">Philippine time · by planned date</span><span class="sp"></span><span class="note">Hours rendered today: <b>4h 37m</b></span></div>
+<h4 style="margin:10px 0 4px">Planned for today · 2</h4>
+<table id="trk"><tr><th>Task</th><th>Planned</th><th>Due</th><th>Status</th><th>Today</th><th></th></tr>
+<tr data-t="Prepare UAT scripts" data-p="· Northwind Upgrade"><td><a href="#checklist"><b>Prepare UAT scripts</b></a><div class="note">Northwind Upgrade · Phase 3</div></td><td>Oct 9</td><td>Oct 14</td><td><span class="pill grey">To do</span></td><td>1h 15m</td><td><button class="btn in sm" onclick="tin(this)">▶ Time in</button></td></tr>
+<tr class="running" data-t="Submit BP tax code mapping" data-p="· SAP B1 Rollout"><td><a href="#checklist"><b>Submit BP tax code mapping</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td>Oct 7 → Oct 9</td><td>Today</td><td><span class="pill info">In progress</span></td><td><b data-clock2>1h 12m</b> <span class="pill ok">Running</span></td><td><button class="btn out sm" onclick="stopRun()">■ Time out</button></td></tr></table>
+<h4 style="margin:16px 0 4px;color:var(--warn)">Aging · 3</h4>
+<table><tr><th>Task</th><th>Planned</th><th>Due</th><th>Status</th><th>Today</th><th></th></tr>
+<tr data-t="Client master data – Items" data-p="· SAP B1 Rollout"><td><a href="#checklist"><b>Client master data – Items</b></a><div class="note">SAP B1 Rollout · Phase 1</div></td><td>Sep 29</td><td>Oct 3 · overdue</td><td><span class="pill bad">Blocked</span></td><td class="note">–</td><td><button class="btn in sm" onclick="tin(this)">▶ Time in</button></td></tr>
+<tr data-t="Configure system &amp; validate" data-p="· SAP B1 Rollout"><td><a href="#checklist"><b>Configure system &amp; validate</b></a><div class="note">SAP B1 Rollout · Phase 2</div></td><td>Oct 5</td><td>Oct 20</td><td><span class="pill grey">To do</span></td><td class="note">–</td><td><button class="btn in sm" onclick="tin(this)">▶ Time in</button></td></tr>
+<tr style="opacity:.75"><td><b>Migrate legacy reports</b><div class="note">ERP Upgrade · Phase 2</div></td><td>Oct 6</td><td>Oct 22</td><td><span class="pill grey">⏸ On hold</span></td><td class="note">–</td><td><button class="btn in sm" disabled title="Project is on hold">▶ Time in</button></td></tr></table>
+<h4 style="margin:16px 0 4px">Quick activities today · 1</h4>
+<table><tr><th>Activity</th><th>Category</th><th>Time in – out</th><th>Duration</th><th></th></tr>
+<tr data-t="Weekly team stand-up" data-p="· Internal meeting"><td><b>Weekly team stand-up</b><div class="note">No project</div></td><td><span class="pill grey">Internal meeting</span></td><td>8:30 – 8:58 AM</td><td>28m</td><td><button class="btn in sm" onclick="tin(this)">▶ Time in</button></td></tr>
+</table>
+<p class="note">One timer at a time: starting another task stops the running one at the same moment. Times are set by the server in Philippine time. The running item also shows in the top bar on every page. Tasks on On hold projects can't be timed.</p></div>
+<div><div class="card"><h3>Forgotten timer</h3><div class="lock">⏱ A timer left running stops automatically at <b>11:59 PM PH time</b>. Entries can't run past midnight.</div>
+<table><tr><td><b>Validate imported master data</b><div class="note">Oct 8 · 1:05 PM – 11:59 PM</div></td><td><span class="pill warn">Auto-stopped – please check</span></td></tr></table><p class="note">You can edit it until the weekly lock. Closing the browser doesn't stop a timer (EC-75).</p></div>
+<div class="card" style="margin-top:16px"><h3>24-hour cap</h3><div class="errbox">You can't log more than 24 hours on Oct 8. This entry would bring the day to 25h 10m. Shorten an entry first.</div><p class="note">Wording is a placeholder; the cap is the existing FR-TIME rule.</p></div>
+<div class="card" style="margin-top:16px"><h3>Other states</h3>
+<div class="lock" style="background:var(--badb);color:#8a1c08">ERP Upgrade was put on hold, so your timer on "Migrate legacy reports" stopped at 10:42 AM (EC-76).</div>
+<div class="lock" style="background:var(--blueb);color:#00586b">You're on approved leave today. Start the timer anyway? <i>(Half-day leave: you can continue.)</i></div>
+<div class="empty" style="padding:12px">☀<br><b>Nothing planned for today</b><p class="note">Use + Quick activity to time non-project work.</p></div></div>
+<div class="card oq" style="margin-top:16px"><h3>Open questions</h3><p class="note"><span class="pill warn">Q-39</span>Outlook meetings in this tab are optional part B (proposed: yes, after the core tracker). Not drawn here.</p><p class="note"><span class="pill warn">Q-47</span>Tracker shown for all users (proposed default).</p></div></div></div>
+<div id="qa" class="ov" style="display:none"><div class="modal" style="width:460px"><div class="row"><h3 style="margin:0">Quick activity</h3><span class="sp"></span><span style="cursor:pointer" onclick="cv(this)">✕</span></div><p class="note">Not linked to a project. Only you, your supervisor and Admins can see it.</p>
+<div class="field err"><label>Title *</label><input placeholder="e.g. Client call with Initech"><small>Add a title.</small></div>
+<div class="field"><label>Category *</label><select><option>Internal meeting</option><option>Client meeting</option><option>Pre-sales</option><option>Training</option><option>Admin work</option><option>Support</option><option>Other</option></select><small class="note">Admins can edit this list.</small></div>
+<div class="field"><label>Notes</label><textarea rows="2"></textarea></div>
+<div class="field"><label>When</label><div class="row"><label><input type="radio" name="qaw" checked onchange="qaw(0)"> Start timer now</label><label><input type="radio" name="qaw" onchange="qaw(1)"> Enter time in and time out</label></div></div>
+<div id="qatimes" style="display:none"><div class="row"><div class="field sp"><label>Date *</label><input value="10/09/2026"></div><div class="field sp"><label>Time in *</label><input value="2:00 PM"></div><div class="field sp err"><label>Time out *</label><input value="1:30 PM"><small>Time out must be after time in.</small></div></div>
+<div class="errbox">This overlaps "Prepare UAT scripts" (1:15 – 2:30 PM). Timed entries can't overlap.</div></div>
+<p class="note" id="qanote">Starting this stops the running timer on "Submit BP tax code mapping".</p>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn">Start timer</button></div></div></div>
+</section>
+
+<!-- M6 · DAY TIMESHEET, SUBMIT & REOPEN (doc 14 FR-ACT-10..14) -->
+<section class="page" id="daysheet">
+<header><h1>My tasks</h1><div class="search">Search my tasks…</div><button class="btn ghost" onclick="ov('addent')">+ Add entry</button><div class="av">MP</div></header>
+<div class="runbar" data-run><span class="pulse"></span><div style="flex:1;min-width:0"><div class="note">Running · started <span data-runstart>8:58 AM</span> PH time</div><b data-runname>Submit BP tax code mapping</b> <span class="note" data-runproj>· SAP B1 Rollout</span></div><span class="clock" data-clock>01:12:05</span><button class="btn out sm" onclick="stopRun()">Time out</button></div>
+<div class="tabs"><span onclick="location.hash='tracker'">Today <span class="pill grey">5</span></span><span onclick="location.hash='today'">Due <span class="pill bad">4</span></span><span onclick="location.hash='mytasks'">Assigned to me</span><span>I'm accountable</span><span>To review</span><span>Completed</span><span class="on">Day timesheet</span></div>
+<div class="grid" style="grid-template-columns:1fr 320px"><div class="card">
+<div class="row" style="margin-bottom:12px;flex-wrap:wrap"><button class="btn ghost sm">‹</button><b style="color:var(--ink);font-size:16px">Friday, Oct 9</b><button class="btn ghost sm">›</button><span class="pill grey">Not submitted</span><span class="sp"></span><span class="note" id="subhint">Stop the running timer first</span><button class="btn" id="subbtn" disabled onclick="ov('subcf')">Submit day</button></div>
+<div class="lock" style="background:var(--blueb);color:#00586b">↺ <b>Reopened by Jomerson Nazaire</b> on Oct 9, 9:05 AM · Reason: "Missing the 2–3 PM client call with Acme." <span class="note">(example from Oct 8)</span></div>
+<table><tr><th>Time in</th><th>Time out</th><th>Duration</th><th>Project / task or category</th><th>Type</th><th>Notes</th><th></th></tr>
+<tr><td>8:30 AM</td><td>8:58 AM</td><td>28m</td><td><b>Weekly team stand-up</b><div class="note">Quick activity</div></td><td><span class="pill grey">Internal meeting</span></td><td class="note">–</td><td>✎</td></tr>
+<tr class="running"><td>8:58 AM</td><td><span class="pill ok">Running</span></td><td data-clock2>1h 12m</td><td><b>Submit BP tax code mapping</b><div class="note">SAP B1 Rollout</div></td><td><span class="pill info">Execution</span></td><td class="note">Mapping VAT codes</td><td></td></tr>
+<tr><td>10:30 AM</td><td>11:45 AM</td><td>1h 15m</td><td><b>Prepare UAT scripts</b><div class="note">Northwind Upgrade</div></td><td><span class="pill info">Execution</span></td><td class="note">Scenarios 1–6</td><td>✎</td></tr>
+<tr><td>1:00 PM</td><td>2:42 PM</td><td>1h 42m</td><td><b>Client master data – Items</b><div class="note">SAP B1 Rollout</div></td><td><span class="pill warn">Waiting</span></td><td class="note">Chased R. Santos</td><td>✎</td></tr>
+<tr class="tot"><td colspan="2">Hours rendered</td><td>4h 37m</td><td colspan="4" class="note" style="font-weight:400">Sum of time in/out pairs (running timer counted up to now)</td></tr></table>
+<p class="note">All your timed entries for the day: project tasks and quick activities. Add an entry by hand with time in and time out. Pairs can't overlap. Submit day locks the day's entries; your supervisor or an Admin can reopen it with a reason. At the weekly lock, unsubmitted days are locked as they are and flagged "Not submitted" for your supervisor.</p></div>
+<div><div class="card"><h3>Submitted day</h3><div class="lock" style="background:var(--okb);color:#1f5a0f">✓ Submitted Oct 7, 6:12 PM · entries locked</div><p class="note">Supervisor view of a submitted day:</p><button class="btn ghost" style="width:100%" onclick="ov('reopen')">Reopen day…</button></div>
+<div class="card" style="margin-top:16px"><h3>Not submitted (weekly lock)</h3><div class="lock">🔒 Oct 2 wasn't submitted. It was locked as it stood at the weekly lock. <span class="pill warn">Not submitted</span></div></div>
+<div class="card" style="margin-top:16px"><h3>Overlap refused</h3><div class="errbox">This entry overlaps "Prepare UAT scripts" (10:30 – 11:45 AM). Change the times so they don't overlap.</div><p class="note">Server refuses with 422 (FR-ACT-05/11).</p></div>
+<div class="card" style="margin-top:16px"><h3>Empty day</h3><div class="empty" style="padding:12px">◷<br><b>No entries on Sat, Oct 10</b><p class="note"><a href="#daysheet" onclick="ov('addent')">Add an entry</a></p></div></div>
+<div class="card oq" style="margin-top:16px"><h3>Open question</h3><p class="note"><span class="pill warn">Spec gap</span>Doc 14 doesn't say whether a past day can be submitted late (before the weekly lock), or whether the user is notified when a day is reopened. Shown minimally here.</p></div></div></div>
+<div id="addent" class="ov" style="display:none"><div class="modal" style="width:460px"><div class="row"><h3 style="margin:0">Add entry · Oct 9</h3><span class="sp"></span><span style="cursor:pointer" onclick="cv(this)">✕</span></div><br>
+<div class="field"><label>Task or quick activity *</label><select><option>Prepare UAT scripts · Northwind Upgrade</option><option>Quick activity…</option></select></div>
+<div class="row"><div class="field sp"><label>Time in *</label><input value="11:30 AM"></div><div class="field sp"><label>Time out *</label><input value="12:15 PM"></div></div>
+<div class="errbox">This entry overlaps "Prepare UAT scripts" (10:30 – 11:45 AM). Change the times so they don't overlap.</div>
+<div class="field"><label>Type</label><select><option>Execution</option><option>Waiting on client / external</option><option>Rework</option></select></div>
+<div class="field"><label>Notes</label><textarea rows="2"></textarea></div>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn">Save entry</button></div></div></div>
+<div id="subcf" class="ov" style="display:none"><div class="modal" style="width:420px"><h3>Submit Oct 9?</h3><p>4h 37m in 4 entries. Submitting locks the day's entries. Only your supervisor or an Admin can reopen it.</p><div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn" onclick="cv(this)">Submit day</button></div></div></div>
+<div id="reopen" class="ov" style="display:none"><div class="modal" style="width:440px"><div class="row"><h3 style="margin:0">Reopen Oct 7 · Maria P.</h3><span class="sp"></span><span style="cursor:pointer" onclick="cv(this)">✕</span></div><p class="note">Maria can edit the day's entries again. The reason shows on the day and is recorded in the audit log.</p>
+<div class="field err"><label>Reason *</label><textarea rows="3"></textarea><small>Add a reason for reopening.</small></div>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn" onclick="cv(this)">Reopen day</button></div></div></div>
+</section>
+
+<!-- M7 · DAILY ACTIVITY REPORT (doc 14 §3) -->
+<section class="page" id="dar">
+<header><h1>Daily Activity Report</h1><button class="btn ghost">Export PDF</button><button class="btn ghost">Export Excel</button><button class="btn" onclick="ov('darsend')">Send to supervisor</button><div class="av">MP</div></header>
+<div class="grid" style="grid-template-columns:1fr 320px"><div class="card">
+<div class="row" style="margin-bottom:12px;flex-wrap:wrap;align-items:flex-end"><div class="field" style="margin:0"><label>From</label><input value="10/06/2026" style="width:130px"></div><div class="field" style="margin:0"><label>To</label><input value="10/09/2026" style="width:130px"></div><button class="btn ghost">Today</button><span class="sp"></span><span class="note">Default today · max 31 days · Philippine time</span></div>
+<table><tr><th>Date</th><th>Activity / task</th><th>Type</th><th>Project</th><th>Time in</th><th>Time out</th><th>Hours</th><th>Status</th><th>Notes</th></tr>
+<tr class="dayh"><td colspan="6">Tue, Oct 6</td><td></td><td colspan="2"><span class="pill info">On leave</span> <span class="note">Vacation</span></td></tr>
+<tr class="dayh"><td colspan="6">Wed, Oct 7 <span class="pill ok">Submitted</span></td><td>7.50</td><td colspan="2"></td></tr>
+<tr><td>Oct 7</td><td>Validate imported master data</td><td><span class="pill info">Execution</span></td><td>SAP B1 Rollout</td><td>8:30 AM</td><td>12:00 PM</td><td>3.50</td><td>In progress</td><td class="note">Item import check</td></tr>
+<tr><td>Oct 7</td><td>Client meeting: Acme weekly</td><td><span class="pill grey">Client meeting</span></td><td class="note">–</td><td>1:00 PM</td><td>2:00 PM</td><td>1.00</td><td class="note">–</td><td class="note">Status call</td></tr>
+<tr><td>Oct 7</td><td>Submit master data template</td><td><span class="pill warn">Rework</span></td><td>SAP B1 Rollout</td><td>2:15 PM</td><td>5:15 PM</td><td>3.00</td><td>For review</td><td class="note">Fixed column order</td></tr>
+<tr class="dayh"><td colspan="6">Thu, Oct 8 <span class="pill warn">Not submitted</span></td><td>10.90</td><td colspan="2"></td></tr>
+<tr><td>Oct 8</td><td>Validate imported master data</td><td><span class="pill info">Execution</span></td><td>SAP B1 Rollout</td><td>1:05 PM</td><td>11:59 PM</td><td>10.90</td><td>In progress</td><td class="note"><span class="pill warn">Auto-stopped – please check</span></td></tr>
+<tr class="dayh"><td colspan="6">Fri, Oct 9 <span class="pill grey">Not submitted</span></td><td>4.62</td><td colspan="2"></td></tr>
+<tr><td>Oct 9</td><td>Weekly team stand-up</td><td><span class="pill grey">Internal meeting</span></td><td class="note">–</td><td>8:30 AM</td><td>8:58 AM</td><td>0.47</td><td class="note">–</td><td class="note">–</td></tr>
+<tr><td>Oct 9</td><td>Submit BP tax code mapping</td><td><span class="pill info">Execution</span></td><td>SAP B1 Rollout</td><td>8:58 AM</td><td><span class="pill ok">Running</span></td><td>1.20</td><td>In progress</td><td class="note">Mapping VAT codes</td></tr>
+<tr><td>Oct 9</td><td>Prepare UAT scripts</td><td><span class="pill info">Execution</span></td><td>Northwind Upgrade</td><td>10:30 AM</td><td>11:45 AM</td><td>1.25</td><td>To do</td><td class="note">Scenarios 1–6</td></tr>
+<tr><td>Oct 9</td><td>Client master data – Items</td><td><span class="pill warn">Waiting</span></td><td>SAP B1 Rollout</td><td>1:00 PM</td><td>2:42 PM</td><td>1.70</td><td>Blocked</td><td class="note">Chased R. Santos</td></tr>
+<tr class="tot"><td colspan="6">Range total · 4 days (1 on leave)</td><td>23.02</td><td colspan="2"></td></tr></table>
+<p class="note">Project tasks and quick activities for each day, with daily and range totals. Days on leave show "On leave". Each day is marked Submitted or Not submitted. Future days in the range are left out (EC-80).</p>
+<div class="card" style="box-shadow:none;background:#fafafc;margin-top:12px"><h3 style="font-size:14px">Sent log</h3><table><tr><td>Oct 7 · 6:20 PM</td><td>Oct 7 – Oct 7</td><td>To Jomerson Nazaire · CC ops@, pmo@</td><td><a href="#dar">PDF as sent</a></td></tr><tr><td>Oct 8 · 9:10 AM</td><td>Oct 7 – Oct 7</td><td>Re-sent · same recipients</td><td><a href="#dar">PDF as sent</a></td></tr></table><p class="note">Each send is its own log entry with sender, time and recipients. The PDF is kept, so later time changes don't alter what was sent.</p></div></div>
+<div><div class="card"><h3>My report profile</h3><div class="field"><label>Direct supervisor</label><input value="Jomerson Nazaire · jnazaire@xceler8.example" readonly style="background:#f5f5f9"></div><div class="field"><label>Report CC emails</label><div><span class="chip">ops@xceler8.example</span><span class="chip">pmo@xceler8.example</span></div></div><p class="note">Managed by an Admin. Ask an Admin to change these (Q-42 default).</p></div>
+<div class="card" style="margin-top:16px"><h3>Validation</h3><div class="field err" style="margin:0"><small>The range can be up to 31 days. Pick a shorter range.</small></div><div class="field err" style="margin:6px 0 0"><small>"From" must be on or before "To".</small></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:12px">◷<br><b>No time entries in this range</b><p class="note">Try another date range, or log time in <a href="#tracker">My tasks › Today</a>.</p></div></div>
+<div class="card" style="margin-top:16px"><h3>Loading</h3><div class="skel" style="width:60%"></div><div class="skel"></div><div class="skel" style="width:80%"></div></div>
+<div class="card" style="margin-top:16px"><h3>No Xceler8 mailbox</h3><div class="lock" style="background:var(--blueb);color:#00586b">You signed in with a personal email, so the report can't be emailed from your mailbox. Export it instead; your supervisor gets an in-app notice that a report is ready.</div><div class="row"><button class="btn ghost sm">Export PDF</button><button class="btn ghost sm">Export Excel</button><span class="note">Send is replaced by Export (FR-DAR-04b)</span></div></div>
+<div class="card" style="margin-top:16px"><h3>No supervisor</h3><div class="lock"><span class="pill warn">Supervisor needed</span> You don't have a supervisor yet. Ask an Admin to set one before sending.</div><button class="btn" disabled style="width:100%">Send to supervisor</button></div>
+<div class="card oq" style="margin-top:16px"><h3>Open questions</h3><p class="note"><span class="pill warn">Q-41</span>Email now, sent from your own mailbox through Microsoft (proposed default).</p><p class="note"><span class="pill warn">Q-43</span>Manual Send only; nothing sends automatically.</p><p class="note"><span class="pill warn">Spec gap</span>"Status" column isn't defined (task status shown here). Doc 14 doesn't say if days must be submitted before sending.</p></div></div></div>
+<div id="darsend" class="ov" style="display:none"><div class="modal" style="width:480px"><div class="row"><h3 style="margin:0">Send Daily Activity Report</h3><span class="sp"></span><span style="cursor:pointer" onclick="cv(this)">✕</span></div><br>
+<div class="field"><label>To (your supervisor)</label><input value="Jomerson Nazaire <jnazaire@xceler8.example>" readonly style="background:#f5f5f9"></div>
+<div class="field"><label>CC (from your profile)</label><div><span class="chip">ops@xceler8.example</span><span class="chip">pmo@xceler8.example</span></div></div>
+<div class="field"><label>Summary in the email</label><textarea rows="3" readonly style="background:#f5f5f9">Maria P. · Oct 6 – Oct 9 · 23.02 hours · 1 day on leave · 2 days not submitted.</textarea></div>
+<div class="file"><span class="fi pdf">PDF</span><div><b>DAR_MariaP_2026-10-06_to_2026-10-09.pdf</b><div class="note">Attached</div></div></div>
+<p class="note">Sent from your own mailbox (maria@xceler8.example). Your supervisor also gets an in-app notice.</p>
+<div class="errbox">Couldn't send the report. Try again. Nothing was sent.</div>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn" onclick="cv(this)">Send</button></div></div></div>
+</section>
+
+<!-- M8 · MY LEAVE (doc 14 §4) -->
+<section class="page" id="leave">
+<header><h1>Leave</h1><button class="btn" onclick="ov('fileleave')">+ File leave</button><div class="av">MP</div></header>
+<div class="tabs"><span class="on">My leave</span><span onclick="location.hash='leaveq'">Team approvals <span class="pill warn">2</span></span></div>
+<div class="grid" style="grid-template-columns:1fr 320px"><div>
+<div class="card"><div class="row" style="margin-bottom:10px"><h3 style="margin:0">My balances</h3><button class="btn ghost sm">‹</button><b style="color:var(--ink)">2026</b><button class="btn ghost sm">›</button><span class="sp"></span><span class="note">Calendar year Jan–Dec (Q-45 default)</span></div>
+<table><tr><th>Leave type</th><th>Paid</th><th>Entitlement</th><th>Carry-over</th><th>Taken</th><th>Pending</th><th>Balance</th></tr>
+<tr><td><b>Vacation</b></td><td>Paid</td><td>15</td><td>2</td><td>5</td><td>3</td><td><b>9</b></td></tr>
+<tr><td><b>Sick</b></td><td>Paid</td><td>15</td><td>0</td><td>2</td><td>0</td><td><b>13</b></td></tr>
+<tr><td><b>Emergency</b></td><td>Paid</td><td>3</td><td>0</td><td>0</td><td>0</td><td><b>3</b></td></tr>
+<tr><td><b>Service Incentive Leave</b></td><td>Paid</td><td>5</td><td>0</td><td>1</td><td>0</td><td><b>4</b></td></tr>
+<tr><td><b>Bereavement</b></td><td>Paid</td><td>3</td><td>0</td><td>0</td><td>0</td><td><b>3</b></td></tr>
+<tr style="opacity:.7"><td><b>Maternity</b> · <b>Paternity</b> · <b>Solo Parent</b></td><td>Paid</td><td colspan="5" class="note">No entitlement set for you</td></tr>
+<tr><td><b>Unpaid</b></td><td>Unpaid</td><td class="note">–</td><td class="note">–</td><td>0</td><td>0</td><td class="note">No limit</td></tr></table>
+<p class="note">Balance = entitlement + carry-over − taken − pending, in working days. Days are example values; Admins set them (Q-44: HR to confirm the list and days).</p></div>
+<div class="card" style="margin-top:16px"><h3>My requests</h3>
+<table><tr><th>Dates</th><th>Type</th><th>Working days</th><th>Filed</th><th>Status</th><th></th></tr>
+<tr><td>Oct 29 – Nov 3</td><td>Vacation</td><td>3</td><td>Oct 9</td><td><span class="pill warn">Pending</span><div class="note">Jomerson Nazaire</div></td><td><button class="btn ghost sm">Cancel</button></td></tr>
+<tr><td>Oct 6</td><td>Vacation</td><td>1</td><td>Sep 28</td><td><span class="pill ok">Approved</span><div class="note">by Jomerson Nazaire</div></td><td class="note">Past · Admin can cancel</td></tr>
+<tr><td>Sep 14 (PM half)</td><td>Sick</td><td>0.5</td><td>Sep 14</td><td><span class="pill ok">Approved</span></td><td></td></tr>
+<tr><td>Aug 20 – 21</td><td>Vacation</td><td>2</td><td>Aug 10</td><td><span class="pill bad">Rejected</span><div class="note">"UAT week, please move."</div></td><td></td></tr>
+<tr><td>Jul 3</td><td>Emergency</td><td>1</td><td>Jul 2</td><td><span class="pill grey">Cancelled</span></td><td></td></tr></table>
+<p class="note">Approved leave shows as "On leave" on My tasks, the workload view and the DAR. Approved leave in the past can be cancelled only by an Admin. Every filing, approval and cancellation is audited.</p></div></div>
+<div><div class="card"><h3>Loading</h3><div class="skel" style="width:70%"></div><div class="skel"></div><div class="skel" style="width:50%"></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:12px">🌴<br><b>No leave requests yet</b><p class="note">Requests you file show here with their status.</p><button class="btn ghost sm" onclick="ov('fileleave')">+ File leave</button></div></div>
+<div class="card oq" style="margin-top:16px"><h3>Open questions</h3><p class="note"><span class="pill warn">Q-46</span>Your direct supervisor approves or rejects (proposed default). If your supervisor is deactivated, pending leave goes to Admins (EC-77).</p><p class="note"><span class="pill warn">Spec gap</span>Doc 14 doesn't say whether users can cancel their own pending or future approved leave, or whether a half-day is AM or PM. Shown minimally here.</p></div></div></div>
+<div id="fileleave" class="ov" style="display:none"><div class="modal" style="width:480px"><div class="row"><h3 style="margin:0">File leave</h3><span class="sp"></span><span style="cursor:pointer" onclick="cv(this)">✕</span></div><br>
+<div class="field"><label>Leave type *</label><select><option>Vacation (balance 9)</option><option>Sick (balance 13)</option><option>Emergency (balance 3)</option><option>Service Incentive Leave (balance 4)</option><option>Bereavement (balance 3)</option><option>Unpaid</option></select></div>
+<div class="row"><div class="field sp"><label>From *</label><input value="10/29/2026"></div><div class="field sp"><label>To *</label><input value="11/03/2026"></div></div>
+<div class="field"><label><input type="checkbox"> Half-day</label><small class="note">Only for leave types whose unit is half-day.</small></div>
+<div class="lock" style="background:var(--blueb);color:#00586b"><b>3 working days</b> · Oct 29, Oct 30, Nov 3. Not counted: Oct 31–Nov 1 (weekend, All Saints' Day) and Nov 2 (All Souls' Day).</div>
+<div class="field"><label>Document</label><div class="drop" style="margin:0;padding:10px">⇪ Attach a file · PDF, Word or Excel · up to 25 MB</div><small class="note">Shown only for leave types that need a document. Same visibility as the reason.</small></div>
+<div class="field"><label>Reason</label><textarea rows="2">Family trip</textarea><small class="note">Don't include medical details. Only you, your supervisor and Admins can see this.</small></div>
+<div class="field err" style="margin-bottom:6px"><small>You have 9 Vacation days left. This request needs 10. Choose fewer days or Unpaid leave.</small></div>
+<div class="field err" style="margin-bottom:6px"><small>This overlaps your pending Vacation request for Oct 29 – Nov 3.</small></div>
+<div class="field err"><small>Pick a "To" date on or after the "From" date.</small></div>
+<p class="note">Goes to Jomerson Nazaire for approval.</p>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn">File leave</button></div></div></div>
+</section>
+
+<!-- M8 · SUPERVISOR APPROVAL QUEUE (Q-46 default) -->
+<section class="page" id="leaveq">
+<header><h1>Leave</h1><button class="btn ghost">Export balances</button><div class="av">JN</div></header>
+<div class="tabs"><span onclick="location.hash='leave'">My leave</span><span class="on">Team approvals <span class="pill warn">2</span></span></div>
+<div class="grid" style="grid-template-columns:1fr 320px"><div>
+<div class="card"><h3>Waiting for your approval</h3>
+<table><tr><th>Person</th><th>Type</th><th>Dates</th><th>Working days</th><th>Balance after</th><th>Reason</th><th></th></tr>
+<tr><td><b>Maria P.</b></td><td>Vacation</td><td>Oct 29 – Nov 3</td><td>3</td><td>9 → 6</td><td class="note">Family trip</td><td style="white-space:nowrap"><button class="btn sm" style="background:var(--ok)" onclick="ov('lvdec')">Approve</button> <button class="btn ghost sm" onclick="ov('lvdec')">Reject</button></td></tr>
+<tr><td><b>Ken L.</b></td><td>Sick</td><td>Oct 12 (AM half)</td><td>0.5</td><td>11 → 10.5</td><td class="note">Personal appointment</td><td style="white-space:nowrap"><button class="btn sm" style="background:var(--ok)">Approve</button> <button class="btn ghost sm">Reject</button></td></tr></table>
+<p class="note">Requests from people who report to you. Reasons are visible only to the person, their supervisor and Admins.</p></div>
+<div class="card" style="margin-top:16px"><h3>My team's balances · 2026</h3>
+<table><tr><th>Person</th><th>Vacation</th><th>Sick</th><th>Emergency</th><th>SIL</th></tr>
+<tr><td>Maria P.</td><td>9</td><td>13</td><td>3</td><td>4</td></tr>
+<tr><td>Ken L.</td><td>12</td><td>11</td><td>3</td><td>5</td></tr></table></div></div>
+<div><div class="card"><h3>Empty state</h3><div class="empty" style="padding:12px">✓<br><b>No leave waiting for you</b></div></div>
+<div class="card" style="margin-top:16px"><h3>Supervisor deactivated</h3><div class="lock">Pending leave from A. Reyes went to Admins because their supervisor was deactivated (EC-77).</div></div>
+<div class="card oq" style="margin-top:16px"><h3>Open questions</h3><p class="note"><span class="pill warn">Q-46</span>Supervisor approves (proposed). If Jomerson picks "tracked only", this tab goes away.</p><p class="note"><span class="pill warn">Spec gap</span>Doc 14 doesn't say if a rejection comment is required, or who is notified of a decision.</p></div></div></div>
+<div id="lvdec" class="ov" style="display:none"><div class="modal" style="width:440px"><h3>Leave request · Maria P.</h3><p class="note">Vacation · Oct 29 – Nov 3 · 3 working days · balance 9 → 6</p>
+<div class="field"><label>Decision *</label><div class="row"><label><input type="radio" name="lvd" checked> Approve</label><label><input type="radio" name="lvd"> Reject</label></div></div>
+<div class="field"><label>Comment</label><textarea rows="2"></textarea></div>
+<div class="row"><span class="sp"></span><button class="btn ghost" onclick="cv(this)">Cancel</button><button class="btn" style="background:var(--ok)" onclick="cv(this)">Save decision</button></div><p class="note">Recorded in the audit log.</p></div></div>
+</section>
+
+<!-- M8 · ADMIN LEAVE TYPES & BALANCES -->
+<section class="page" id="leaveadmin">
+<header><h1>Admin</h1><button class="btn">+ Leave type</button><div class="av">JN</div></header>
+<div class="tabs"><span onclick="location.hash='msusers'">Users</span><span>Teams</span><span>Clients</span><span>Settings</span><span onclick="location.hash='holidays'">Holidays</span><span class="on">Leave</span></div>
+<div class="grid" style="grid-template-columns:1fr 340px"><div>
+<div class="card"><h3>Leave types</h3>
+<table><tr><th>Name</th><th>Paid</th><th>Unit</th><th>Needs document</th><th>Carry-over limit</th><th></th></tr>
+<tr><td><b>Vacation</b></td><td>Paid</td><td>Half-day</td><td>No</td><td>5 days</td><td>✎</td></tr>
+<tr><td><b>Sick</b></td><td>Paid</td><td>Half-day</td><td>Yes</td><td>None</td><td>✎</td></tr>
+<tr><td><b>Emergency</b></td><td>Paid</td><td>Day</td><td>No</td><td>None</td><td>✎</td></tr>
+<tr><td><b>Service Incentive Leave</b></td><td>Paid</td><td>Day</td><td>No</td><td>None</td><td>✎</td></tr>
+<tr><td><b>Maternity</b></td><td>Paid</td><td>Day</td><td>Yes</td><td>None</td><td>✎</td></tr>
+<tr><td><b>Paternity</b></td><td>Paid</td><td>Day</td><td>Yes</td><td>None</td><td>✎</td></tr>
+<tr><td><b>Solo Parent</b></td><td>Paid</td><td>Day</td><td>Yes</td><td>None</td><td>✎</td></tr>
+<tr><td><b>Bereavement</b></td><td>Paid</td><td>Day</td><td>No</td><td>None</td><td>✎</td></tr>
+<tr><td><b>Unpaid</b></td><td>Unpaid</td><td>Half-day</td><td>No</td><td class="note">–</td><td>✎</td></tr></table>
+<p class="note">Starting list from FR-LV-01. Paid/unpaid, unit, document and carry-over values here are examples for HR to confirm (Q-44, Q-45). Documents follow the M3 file rules and are visible only to the person, their supervisor and Admins.</p></div>
+<div class="card" style="margin-top:16px"><div class="row" style="margin-bottom:10px"><h3 style="margin:0">Entitlements · 2026</h3><span class="sp"></span><select class="sel"><option>Vacation</option><option>Sick</option></select><button class="btn ghost sm">Export balances</button></div>
+<table><tr><th>Person</th><th>Entitlement</th><th>Carry-over from 2025</th><th>Taken</th><th>Pending</th><th>Balance</th></tr>
+<tr><td>Maria P.</td><td><input class="sel" value="15" style="width:60px"></td><td><input class="sel" value="2" style="width:60px"></td><td>5</td><td>3</td><td>9</td></tr>
+<tr><td>Ken L.</td><td><input class="sel" value="15" style="width:60px"></td><td><input class="sel" value="0" style="width:60px"></td><td>3</td><td>0</td><td>12</td></tr>
+<tr><td>A. Reyes</td><td><input class="sel" value="4" style="width:60px;border-color:var(--bad)"></td><td><input class="sel" value="0" style="width:60px"></td><td>6</td><td>0</td><td style="color:var(--bad);font-weight:600">−2 <span class="pill bad">Negative</span></td></tr></table>
+<div class="lock" style="margin-top:12px">⚠ A. Reyes has already taken 6 Vacation days. Setting 4 makes the balance −2. You can save, and the balance will be flagged (EC-79).</div>
+<div class="row"><span class="sp"></span><button class="btn">Save entitlements</button></div>
+<p class="note">Every entitlement change is audited.</p></div></div>
+<div><div class="modal"><h3>Edit leave type</h3>
+<div class="field err"><label>Name *</label><input value=""><small>Add a name.</small></div>
+<div class="field"><label>Paid</label><div class="row"><label><input type="radio" name="lp" checked> Paid</label><label><input type="radio" name="lp"> Unpaid</label></div></div>
+<div class="field"><label>Unit</label><select><option>Day</option><option>Half-day</option></select></div>
+<div class="field"><label><input type="checkbox"> Needs a document</label></div>
+<div class="field"><label>Carry-over limit (days)</label><input value="0"></div>
+<div class="row"><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn">Save</button></div></div>
+<div class="card" style="margin-top:16px"><h3>Empty state</h3><div class="empty" style="padding:12px">🌴<br><b>No leave types yet</b><p class="note">Add the types HR has confirmed.</p></div></div>
+<div class="card oq" style="margin-top:16px"><h3>Open questions</h3><p class="note"><span class="pill warn">Q-44</span>Which types and days per year: HR to confirm.</p><p class="note"><span class="pill warn">Q-45</span>Calendar year with carry-over set per type (proposed). Hire-date anniversary isn't shown.</p></div></div></div>
+</section>
+
+</main></div>
+<script>
+function go(){var p=(location.hash||'#dash').slice(1);document.getElementById('login').classList.toggle('on',p==='login');document.querySelectorAll('.page').forEach(s=>s.classList.toggle('on',s.id===p));document.querySelectorAll('aside a').forEach(a=>a.classList.toggle('on',a.dataset.p===p||(p==='newproj'&&a.dataset.p==='projects')||(p==='clientproj'&&a.dataset.p==='client')||(p==='tpledit'&&a.dataset.p==='templates')));}
+
+function aclTab(i){document.querySelectorAll('#acl .tabs span').forEach((t,j)=>t.classList.toggle('on',i==j));document.querySelectorAll('.aclg').forEach(g=>g.style.display=g.dataset.r==i?'block':'none');document.getElementById('sbr').textContent=['Admin','PM','Member','Viewer'][i];}
+document.querySelectorAll('.acl input[data-a]').forEach(c=>c.addEventListener('change',e=>{const r=c.closest('tr'),v=r.querySelector('[data-a=V]');
+if(c.dataset.a!='V'&&c.checked&&v)v.checked=true;
+if(c.dataset.a=='V'&&!c.checked&&[...r.querySelectorAll('[data-a]')].some(x=>x.dataset.a!='V'&&x.checked)){c.checked=true;alert('View is included in Create, Edit and Delete. Untick those first.');}
+document.getElementById('savebar').style.display='flex';}));
+function wdChk(){const c=[...document.querySelectorAll('.wd')];if(!c.some(x=>x.checked)){event.target.checked=true;document.getElementById('wderr').style.display='block'}else document.getElementById('wderr').style.display='none'}
+
+/* v0.8 tracker demo: one running timer, live elapsed, Submit day disabled while running */
+function ov(id){document.getElementById(id).style.display='flex'}function cv(el){el.closest('.ov').style.display='none'}
+function qaw(m){document.getElementById('qatimes').style.display=m?'block':'none';document.getElementById('qanote').style.display=m?'none':'block'}
+var runT0=Date.now()-(72*60+5)*1000,running=true;
+function fmt(ms){var t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor(t%3600/60),x=t%60;return [h,m,x].map(n=>String(n).padStart(2,'0')).join(':')}
+function tick(){if(!running)return;var e=Date.now()-runT0;document.querySelectorAll('[data-clock]').forEach(c=>c.textContent=fmt(e));var mm=Math.floor(e/60000);document.querySelectorAll('[data-clock2]').forEach(c=>c.textContent=Math.floor(mm/60)+'h '+(mm%60)+'m')}
+setInterval(tick,1000);
+function setSubmit(){var b=document.getElementById('subbtn'),h=document.getElementById('subhint');if(!b)return;b.disabled=running;h.style.display=running?'inline':'none'}
+function stopRun(){running=false;document.querySelectorAll('[data-run]').forEach(r=>{r.classList.add('idle');r.querySelector('.note').textContent='No timer running';r.querySelector('[data-runname]').textContent='Press Time in on a task, or + Quick activity';r.querySelector('[data-runproj]').textContent='';r.querySelector('.btn').style.display='none'});
+document.querySelectorAll('tr.running').forEach(r=>{r.classList.remove('running');r.querySelectorAll('[data-clock2]').forEach(c=>c.removeAttribute('data-clock2'));var b=r.querySelector('button');if(b){b.className='btn in sm';b.textContent='▶ Time in';b.setAttribute('onclick','tin(this)')}var p=r.querySelector('.pill.ok');if(p)p.remove()});setSubmit()}
+function tin(btn){var tr=btn.closest('tr');stopRun();running=true;runT0=Date.now();tr.classList.add('running');btn.className='btn out sm';btn.textContent='■ Time out';btn.setAttribute('onclick','stopRun()');
+document.querySelectorAll('[data-run]').forEach(r=>{r.classList.remove('idle');r.querySelector('.note').innerHTML='Running · started just now PH time';r.querySelector('[data-runname]').textContent=tr.dataset.t.replace('&amp;','&');r.querySelector('[data-runproj]').textContent=' '+tr.dataset.p;r.querySelector('.btn').style.display=''});setSubmit();tick()}
+setSubmit();
+window.onhashchange=go;go();
+</script></body></html>
