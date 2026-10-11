@@ -36,6 +36,7 @@ class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
       themeMode: ref.watch(themeModeProvider),
       routerConfig: ref.watch(routerProvider),
       builder: (context, child) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (AppConfig.demoMode) const DemoBanner(),
           if (!ref.watch(connectionProvider)) const DisconnectedBanner(),
