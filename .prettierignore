@@ -5,3 +5,4 @@ package-lock.json
 docs
 apps/web/src/vendor
 .data
+mobile/
