@@ -153,6 +153,22 @@ void main() {
       '/projects/p1/time',
       '/projects/p1/activity',
       '/projects/p1/edit',
+      '/projects/p1?tab=time',
+      '/projects/p1?tab=activity',
+      '/issues/i1',
+      '/issues/new',
+      '/projects/p1/documents',
+      '/projects/p1/conversation',
+      '/insights',
+      '/insights?tab=workload',
+      '/insights?tab=reports',
+      '/reports/project-status',
+      '/reports/timesheets',
+      '/profile',
+      '/change-password',
+      '/clients',
+      '/clients/c1',
+      '/tasks/t4/history',
     ]) {
       c.read(routerProvider).go(loc);
       await tester.pumpAndSettle();

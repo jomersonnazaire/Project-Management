@@ -24,59 +24,68 @@ final p3RepositoryProvider = Provider<P3Repository>(
 
 P3Repository _r(Ref ref) => ref.watch(p3RepositoryProvider);
 
+// Every read returns a fresh copy, so a refresh after a mock (in-place) change still notifies.
+Future<Json> _one(Future<Json> f) async => cloneJson(await f);
+Future<List<Json>> _many(Future<List<Json>> f) async =>
+    jsonList(cloneList(await f));
+
 final issueDetailProvider = FutureProvider.family<Json, String>(
-  (ref, id) => _r(ref).issue(id),
+  (ref, id) => _one(_r(ref).issue(id)),
 );
 final issueActivityProvider = FutureProvider.family<List<Json>, String>(
-  (ref, id) => _r(ref).issueActivity(id),
+  (ref, id) => _many(_r(ref).issueActivity(id)),
 );
 final taskIssuesProvider = FutureProvider.family<List<Json>, String>(
-  (ref, id) => _r(ref).issues(taskId: id),
+  (ref, id) => _many(_r(ref).issues(taskId: id)),
 );
 final issueOptionsProvider = FutureProvider.family<Json, String>(
-  (ref, id) => _r(ref).issueOptions(id),
+  (ref, id) => _one(_r(ref).issueOptions(id)),
 );
 final foldersProvider = FutureProvider.family<List<Json>, String>(
-  (ref, id) => _r(ref).folders(id),
+  (ref, id) => _many(_r(ref).folders(id)),
 );
 final documentsProvider =
     FutureProvider.family<
       List<Json>,
       ({String projectId, String? folderId, String? status})
     >(
-      (ref, k) =>
-          _r(ref)
-              .documents(k.projectId, folderId: k.folderId, status: k.status),
+      (ref, k) => _many(
+        _r(ref).documents(k.projectId, folderId: k.folderId, status: k.status),
+      ),
     );
 final messagesProvider = FutureProvider.family<List<Json>, String>(
-  (ref, id) => _r(ref).messages(id),
+  (ref, id) => _many(_r(ref).messages(id)),
 );
-final clientsProvider = FutureProvider<List<Json>>((ref) => _r(ref).clients());
+final clientsProvider = FutureProvider<List<Json>>(
+  (ref) => _many(_r(ref).clients()),
+);
 final clientProvider = FutureProvider.family<Json, String>(
-  (ref, id) => _r(ref).client(id),
+  (ref, id) => _one(_r(ref).client(id)),
 );
 final clientContactsProvider = FutureProvider.family<List<Json>, String>(
-  (ref, id) => _r(ref).clientContacts(id),
+  (ref, id) => _many(_r(ref).clientContacts(id)),
 );
 final clientProjectsProvider = FutureProvider.family<List<Json>, String>(
-  (ref, id) => _r(ref).clientProjects(id),
+  (ref, id) => _many(_r(ref).clientProjects(id)),
 );
-final portfolioProvider = FutureProvider<Json>((ref) => _r(ref).dashboard());
+final portfolioProvider = FutureProvider<Json>(
+  (ref) => _one(_r(ref).dashboard()),
+);
 final myProjectsReportProvider = FutureProvider<List<Json>>(
-  (ref) => _r(ref).myProjects(),
+  (ref) => _many(_r(ref).myProjects()),
 );
 final workloadProvider = FutureProvider<List<Json>>(
-  (ref) => _r(ref).workload(),
+  (ref) => _many(_r(ref).workload()),
 );
 final reportProvider = FutureProvider.family<Json, String>(
-  (ref, name) => _r(ref).report(name),
+  (ref, name) => _one(_r(ref).report(name)),
 );
 final waitingOnClientProvider = FutureProvider<List<Json>>(
-  (ref) => _r(ref).waitingOnClient(),
+  (ref) => _many(_r(ref).waitingOnClient()),
 );
 final profileProvider = FutureProvider<Json>((ref) async {
   final u = await ref.watch(authProvider.future);
-  return _r(ref).profile(u?.id ?? 'me');
+  return _one(_r(ref).profile(u?.id ?? 'me'));
 });
 
 /// Picks any document file (Documents › Upload). Overridden in tests.

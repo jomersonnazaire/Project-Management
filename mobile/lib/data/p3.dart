@@ -1,12 +1,18 @@
 // P3 (m8-polish): issues, documents, conversation, clients, dashboard, my projects, workload,
 // reports, profile/password. The API answers JSON; the mock answers the same JSON shapes, so the
 // UI parses one format. Helpers below read it defensively.
+import 'dart:convert';
+
 import 'api_client.dart';
 import 'mock_repositories.dart';
 import 'models.dart';
 import 'ph_time.dart';
 
 typedef Json = Map<String, dynamic>;
+
+/// Fresh copy, so a provider refresh always yields a new value (the mock mutates in place).
+Json cloneJson(Object v) => jsonDecode(jsonEncode(v)) as Json;
+List<Object?> cloneList(Object v) => jsonDecode(jsonEncode(v)) as List<Object?>;
 
 List<Json> jsonList(Object? v) => [
   for (final e in (v as List? ?? const [])) e as Json,

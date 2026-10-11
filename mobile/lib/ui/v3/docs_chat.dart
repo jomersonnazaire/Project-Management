@@ -175,15 +175,21 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                         key: Key('folder_${f['id']}'),
                         leading: const Icon(Icons.folder_outlined),
                         title: Text('${f['name']}'),
-                        subtitle: Text(
-                          '${f['documentCount']} ${f['documentCount'] == 1 ? 'document' : 'documents'}',
-                        ),
-                        trailing: f['restricted'] == true
-                            ? StatusChip(
+                        subtitle: Wrap(
+                          spacing: Space.s,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              '${f['documentCount']} ${f['documentCount'] == 1 ? 'document' : 'documents'}',
+                            ),
+                            if (f['restricted'] == true)
+                              StatusChip(
                                 label: 'Restricted folder',
                                 colors: context.statusColors.todo,
-                              )
-                            : null,
+                              ),
+                          ],
+                        ),
                         onTap: () => setState(() => _folder = '${f['id']}'),
                       ),
                     ],
