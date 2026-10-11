@@ -4,7 +4,7 @@
 Built from the `pm-mobile-design` handoff: Material 3, indigo seed `#3F51B5` (primary pinned to #3F51B5 in light mode), a `StatusColors` ThemeExtension, and a 390×844 baseline. Includes dark mode.
 
 ## Setup
-- Flutter stable 3.27+ (built and tested with 3.47.7 / Dart 3.13).
+- Flutter stable with **Dart ≥ 3.13.5** (`environment: sdk: ^3.13.5`). Built and tested with Flutter 3.47.7 / Dart 3.13.5; the lock has `meta 1.19.0`, `vector_math 2.4.3`.
 - `cd mobile && flutter pub get`
 
 ## Run
@@ -22,7 +22,8 @@ flutter build web --dart-define=API_BASE_URL=https://<api-host>/api/v1
 ```
 
 ### Demo login (demo mode only)
-- Any email plus a password of **4+ characters** signs you in as "Jonathan Esmalla".
+- Any email plus a password of **4+ characters** signs you in as "Jomerson Nazaire" (PM). `admin@…`, `member@…`, `viewer@…` sign in with that role.
+- A **Demo mode** banner is always shown at the top so it can't be mistaken for the real Portal.
 - A password shorter than 4 characters shows "Email or password is incorrect."
 - The password `locked` simulates the sign-in rate limit (429 → SnackBar).
 - In demo mode "today" is fixed to Sun 11 Oct 2026, 14:00, so screenshots and tests stay deterministic.
@@ -36,9 +37,26 @@ flutter build web --dart-define=API_BASE_URL=https://<api-host>/api/v1
 How the app talks to the API (see `lib/data/api_client.dart`):
 - **Auth is a session cookie** set by `POST /auth/login`. The splash screen restores the session with `GET /auth/me`.
   - **Web:** the browser keeps the HttpOnly cookie (`BrowserClient.withCredentials`). The API's CORS allow-list must include the Flutter web origin. Cross-site cookies need `SameSite=None; Secure`, or serve the app from the same site as the API.
-  - **Android/iOS:** the client keeps the `Set-Cookie` value in memory and sends it back. It is **not persisted** across app restarts yet (TODO: secure storage).
+  - **Android/iOS:** the session cookie is persisted in `flutter_secure_storage` (Keychain / Android Keystore) with a last-active time, so a restart stays signed in.
+- Every request sends `X-Client: mobile`. The API then gives the session a **sliding 3-day idle window** (`MOBILE_SESSION_IDLE_HOURS`, default 72; absolute cap `MOBILE_SESSION_ABSOLUTE_DAYS`, default 30). Web sessions keep their 30-minute idle timeout. Opening/resuming the app calls `GET /auth/me`, which slides the window. After 3 days without activity the app (and server) ask you to sign in again.
 - Every non-GET request sends `X-Requested-With: xc8-web`, which the API's CSRF guard requires.
-- API errors (`{ error: { code, message } }`) become `ApiException` and are shown in SnackBars or inline.
+- Errors: **401** → session cleared, back to sign-in. **403** → "You don't have access…" view (and routes gated by `/auth/me/permissions`). **422/400** → `error.details[]` mapped to form fields. **5xx, timeout (20 s), offline/DNS** → "Disconnected from the server. Please contact your System Admin." banner/screen with **Retry**; this never signs you out. Lists support pull-to-refresh.
+- **Server time only:** the client keeps `serverOffset` from the `Date` header of every response and from `now` on `/tracker/running`. Time in/out, the running timer, switch, "today" and date limits use `ApiClient.serverNow()` (via `nowProvider` / `clockProvider`), never the device clock.
+
+### Live integration tests (local m8-polish API)
+```bash
+# 1. API + in-memory MongoDB (apps/api)
+cd apps/api && npm ci
+npx tsx scripts/dev-db.ts &              # mongodb://127.0.0.1:27027/?replicaSet=rs0
+# .env: MONGODB_URI=…, SEED_ADMIN_PASSWORD / SEED_USER_PASSWORD (avoid '#', dotenv treats it as a comment)
+npm run seed && npx tsx --env-file=.env src/server.ts &
+# 2. App API layer against it (credentials via env only, never committed)
+cd mobile
+IT_API_BASE_URL=http://localhost:4000/api/v1 \
+IT_ACCOUNTS='admin@xceler8.example|<pw>;pm@xceler8.example|<pw>;member@xceler8.example|<pw>;viewer@xceler8.example|<pw>' \
+flutter test test/integration/api_integration_test.dart
+```
+Without those variables the integration tests are skipped. They log in per role, check `/auth/me` and permissions, parse every read endpoint the screens use (403 accepted where the role is not allowed), 422 field mapping and logout → 401.
 
 Endpoints used:
 - **Auth:** `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/setup-password`

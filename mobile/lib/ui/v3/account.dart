@@ -428,6 +428,7 @@ class ClientDetailScreen extends ConsumerWidget {
               ),
               AsyncView(
                 value: ref.watch(clientContactsProvider(clientId)),
+                onRetry: () => ref.invalidate(clientContactsProvider(clientId)),
                 data: (cs) => ListView(
                   key: const Key('clientContactsList'),
                   padding: const EdgeInsets.all(Space.m),
@@ -463,6 +464,7 @@ class ClientDetailScreen extends ConsumerWidget {
               ),
               AsyncView(
                 value: ref.watch(clientProjectsProvider(clientId)),
+                onRetry: () => ref.invalidate(clientProjectsProvider(clientId)),
                 data: (ps) => ListView(
                   padding: const EdgeInsets.all(Space.m),
                   children: [

@@ -605,6 +605,7 @@ class SavedReportDetailScreen extends ConsumerWidget {
     final sc = context.statusColors;
     return AsyncView(
       value: ref.watch(savedReportProvider(id)),
+      onRetry: () => ref.invalidate(savedReportProvider(id)),
       data: (sr) {
         final r = sr.report!;
         return Scaffold(

@@ -443,6 +443,7 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
     final t = Theme.of(context).textTheme;
     return AsyncView(
       value: ref.watch(projectTasksProvider(widget.projectId)),
+      onRetry: () => ref.invalidate(projectTasksProvider(widget.projectId)),
       data: (tasks) => Column(
         children: [
           Expanded(

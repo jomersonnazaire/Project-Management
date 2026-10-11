@@ -283,6 +283,7 @@ class NotificationsScreen extends ConsumerWidget {
       ),
       body: AsyncView(
         value: ref.watch(notificationsProvider),
+        onRetry: () => ref.invalidate(notificationsProvider),
         data: (list) {
           bool isToday(AppNotification n) =>
               n.at.year == today.year &&
@@ -345,6 +346,7 @@ class _IssuesListState extends ConsumerState<IssuesList> {
     final sc = context.statusColors;
     return AsyncView(
       value: ref.watch(issuesProvider(widget.projectId)),
+      onRetry: () => ref.invalidate(issuesProvider(widget.projectId)),
       data: (all) {
         final open = all.where((i) => i.isOpen).length;
         final shown = all.where(

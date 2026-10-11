@@ -275,8 +275,9 @@ class ApiP3Repository implements P3Repository {
       jsonList((await api.get('/document-requests/mine'))['items']);
 
   @override
+  // GET /users/:id is Admin-only; the own profile comes from /auth/me (same UserDto).
   Future<Json> profile(String userId) async =>
-      (await api.get('/users/$userId'))['user'] as Json;
+      (await api.get('/auth/me'))['user'] as Json;
   @override
   Future<void> changePassword(String current, String next) => api.post(
     '/auth/change-password',

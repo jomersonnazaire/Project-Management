@@ -99,7 +99,15 @@ class AsyncView<T> extends StatelessWidget {
   final VoidCallback? onRetry;
   @override
   Widget build(BuildContext context) => value.when(
-    data: data,
+    skipLoadingOnRefresh: true,
+    // Pull-to-refresh on every async screen that can be reloaded (no-op if not scrollable).
+    data: (v) => onRetry == null
+        ? data(v)
+        : RefreshIndicator(
+            notificationPredicate: (n) => n.depth == 0,
+            onRefresh: () async => onRetry!(),
+            child: data(v),
+          ),
     loading: () => const Center(child: CircularProgressIndicator()),
     error: (e, _) => Center(
       child: Padding(
