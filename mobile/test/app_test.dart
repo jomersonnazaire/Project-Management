@@ -18,7 +18,7 @@ void main() {
 
       await tester.enterText(
         find.byKey(const Key('loginEmail')),
-        'jonathan@xceler8.com',
+        'jomerson@xceler8.com',
       );
       await tester.enterText(find.byKey(const Key('loginPassword')), 'x');
       await tester.tap(find.byKey(const Key('loginSubmit')));
@@ -37,7 +37,7 @@ void main() {
       await tester.tap(find.byKey(const Key('loginSubmit')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('homeScreen')), findsOneWidget);
-      expect(find.text('Good afternoon, Jonathan'), findsOneWidget);
+      expect(find.text('Good afternoon, Jomerson'), findsOneWidget);
     });
   });
 
@@ -155,6 +155,11 @@ void main() {
 
   testWidgets('admin tools and appearance toggle are on More', (tester) async {
     await pumpApp(tester, location: '/more');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('adminTools')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.byKey(const Key('adminTools')), findsOneWidget);
     await tester.ensureVisible(find.text('Dark'));
     await tester.pumpAndSettle();

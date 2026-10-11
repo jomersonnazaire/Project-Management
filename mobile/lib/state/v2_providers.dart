@@ -14,7 +14,7 @@ import 'providers.dart';
 /// Current instant. Demo mode starts at Sun Oct 11, 2026 14:00 PH and then runs in real time
 /// (so the running timer ticks); tests override it with a fixed instant.
 final nowProvider = Provider<DateTime Function()>((ref) {
-  if (!AppConfig.demoMode) return () => DateTime.now().toUtc();
+  if (!AppConfig.demoMode) return ref.watch(apiClientProvider).serverNow;
   final base = DateTime.utc(2026, 10, 11, 6);
   final started = DateTime.now();
   return () => base.add(DateTime.now().difference(started));

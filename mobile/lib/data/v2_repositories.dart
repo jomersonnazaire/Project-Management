@@ -117,6 +117,8 @@ class ApiTrackerRepository implements TrackerRepository {
   @override
   Future<Running> running() async {
     final b = await api.get('/tracker/running');
+    final now = DateTime.tryParse('${b['now']}');
+    if (now != null) api.observeServerNow(now);
     return Running(
       entry: b['entry'] is Map
           ? TrackerEntry.fromJson(b['entry'] as Map<String, dynamic>)

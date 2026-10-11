@@ -310,7 +310,7 @@ class MockP3Store {
         'overdue': false,
         'description':
             'Users on Safari 17 get sent back to the login page after SSO.',
-        'reportedBy': ref('u1', 'Jonathan Esmalla'),
+        'reportedBy': ref('u1', 'Jomerson Nazaire'),
         'createdAt': '2026-10-09T02:00:00.000Z',
         'version': 0,
         'links': {
@@ -376,7 +376,7 @@ class MockP3Store {
       {
         'id': 'a1',
         'kind': 'EVENT',
-        'actor': ref('u1', 'Jonathan Esmalla'),
+        'actor': ref('u1', 'Jomerson Nazaire'),
         'at': '2026-10-09T02:00:00.000Z',
         'text': null,
         'action': 'issue_created',
@@ -415,7 +415,7 @@ class MockP3Store {
       },
     ]);
     documents.addAll([
-      _doc('d1', 'f1', 'Signed SOW.pdf', 'SIGNED', by: 'Jonathan Esmalla'),
+      _doc('d1', 'f1', 'Signed SOW.pdf', 'SIGNED', by: 'Jomerson Nazaire'),
       _doc(
         'd2',
         'f1',
@@ -446,7 +446,7 @@ class MockP3Store {
         'id': 'm1',
         'text': 'Kickoff done. Ana will send the IdP metadata by Oct 8.',
         'type': 'MEETING',
-        'author': ref('u1', 'Jonathan Esmalla'),
+        'author': ref('u1', 'Jomerson Nazaire'),
         'at': '2026-10-01T03:00:00.000Z',
         'task': null,
         'contacts': [
@@ -571,7 +571,7 @@ class MockP3Store {
     'requiresSignature': folder == 'f1',
     'request': status == 'REQUESTED' || from != null
         ? {
-            'requestedBy': {'id': 'u1', 'name': 'Jonathan Esmalla'},
+            'requestedBy': {'id': 'u1', 'name': 'Jomerson Nazaire'},
             'requestedFrom': {'name': from ?? ''},
             'dueDate': due,
             'overdue': overdue,
@@ -601,7 +601,7 @@ class MockP3Repository implements P3Repository {
   final MockP3Store s;
   final MockStore store;
   static const _now = '2026-10-11T06:00:00.000Z';
-  Json _me() => {'id': 'u1', 'name': 'Jonathan Esmalla'};
+  Json _me() => {'id': 'u1', 'name': 'Jomerson Nazaire'};
 
   ApiException _field(String path, String msg) =>
       ApiException(msg, status: 400, fields: {path: msg});
@@ -852,7 +852,7 @@ class MockP3Repository implements P3Repository {
       folderId,
       name,
       'SUBMITTED',
-      by: 'Jonathan Esmalla',
+      by: 'Jomerson Nazaire',
     ),
     'updatedAt': _now,
   };
@@ -1060,7 +1060,7 @@ class MockP3Repository implements P3Repository {
   ];
   static final _workload = <Json>[
     {
-      'person': {'id': 'u1', 'name': 'Jonathan Esmalla'},
+      'person': {'id': 'u1', 'name': 'Jomerson Nazaire'},
       'jobRole': 'Project manager',
       'teams': [
         {'id': 'tm1', 'name': 'Delivery'},
@@ -1160,7 +1160,7 @@ class MockP3Repository implements P3Repository {
           'id': 't4',
           'name': 'Configure SSO',
           'project': {'name': 'Acme Corp rollout'},
-          'owner': {'name': 'Jonathan E.'},
+          'owner': {'name': 'Jomerson Nazaire'},
           'dueDate': '2026-10-08',
           'daysOverdue': 3,
           'party': 'CLIENT',
@@ -1178,7 +1178,7 @@ class MockP3Repository implements P3Repository {
         {
           'id': 'ts1',
           'workDate': '2026-10-09',
-          'user': {'name': 'Jonathan Esmalla'},
+          'user': {'name': 'Jomerson Nazaire'},
           'project': {'name': 'Acme Corp rollout'},
           'task': {'name': 'Configure roles'},
           'type': 'EXECUTION',
@@ -1230,8 +1230,8 @@ class MockP3Repository implements P3Repository {
   @override
   Future<Json> profile(String userId) async => {
     'id': userId,
-    'name': 'Jonathan Esmalla',
-    'email': 'jonathan@xceler8.com',
+    'name': 'Jomerson Nazaire',
+    'email': 'jomerson@xceler8.com',
     'jobRole': 'Project manager',
     'systemRole': 'PROJECT_MANAGER',
     'supervisor': {'id': 'u9', 'name': 'Queen Reyes'},
@@ -1263,8 +1263,8 @@ class MockP3Repository implements P3Repository {
       );
     }
     return {
-      'name': 'Jonathan',
-      'email': 'jonathan@xceler8.com',
+      'name': 'Jomerson',
+      'email': 'jomerson@xceler8.com',
       'purpose': token == 'demo-reset' ? 'RESET' : 'INVITE',
     };
   }

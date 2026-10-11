@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config.dart';
 import '../data/api_client.dart';
+import '../data/ph_time.dart';
+import '../data/session_store.dart';
 import '../data/api_repositories.dart';
 import '../data/mock_repositories.dart';
 import '../data/models.dart';
@@ -12,8 +14,42 @@ import '../data/repositories.dart';
 
 /// Override in tests / demo. Defaults: API when API_BASE_URL is set, otherwise mock data.
 final mockStoreProvider = Provider<MockStore>((ref) => MockStore());
-final apiClientProvider = Provider<ApiClient>(
-  (ref) => ApiClient(AppConfig.apiBaseUrl),
+
+/// Secure storage for the session cookie (overridden with a memory store in tests).
+final sessionStoreProvider = Provider<SessionStore>(
+  (ref) => SecureSessionStore(),
+);
+
+/// Device clock; only used to measure the server offset (tests override it).
+final deviceClockProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
+
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final api = ApiClient(
+    AppConfig.apiBaseUrl,
+    store: ref.watch(sessionStoreProvider),
+    deviceClock: ref.watch(deviceClockProvider),
+  );
+  // 401 → back to sign-in; unreachable → the Disconnected banner (never a logout).
+  api.onUnauthorized = () =>
+      Future.microtask(() => ref.read(authProvider.notifier).sessionEnded());
+  api.onReachability = (ok) =>
+      Future.microtask(() => ref.read(connectionProvider.notifier).set(ok));
+  return api;
+});
+
+/// false while the API is unreachable (offline, timeout, DNS, 5xx).
+class ConnectionController extends Notifier<bool> {
+  @override
+  bool build() => true;
+  void set(bool ok) {
+    if (state != ok) state = ok;
+  }
+}
+
+final connectionProvider = NotifierProvider<ConnectionController, bool>(
+  ConnectionController.new,
 );
 
 T _pick<T>(Ref ref, T Function(ApiClient) api, T Function(MockStore) mock) =>
@@ -59,11 +95,17 @@ final issueRepositoryProvider = Provider<IssueRepository>(
 );
 
 /// "Today" — overridable so tests and goldens are deterministic.
-final clockProvider = Provider<DateTime Function()>(
-  (ref) => AppConfig.demoMode
-      ? () => MockStore.today.add(const Duration(hours: 14))
-      : DateTime.now,
-);
+/// Wall-clock "now" in PH time for date limits. Live: server time, never the device clock.
+final clockProvider = Provider<DateTime Function()>((ref) {
+  if (AppConfig.demoMode) {
+    return () => MockStore.today.add(const Duration(hours: 14));
+  }
+  final api = ref.watch(apiClientProvider);
+  return () {
+    final p = toPh(api.serverNow());
+    return DateTime(p.year, p.month, p.day, p.hour, p.minute, p.second);
+  };
+});
 
 class AuthController extends AsyncNotifier<AppUser?> {
   @override
@@ -77,6 +119,31 @@ class AuthController extends AsyncNotifier<AppUser?> {
   Future<void> logout() async {
     await ref.read(authRepositoryProvider).logout();
     state = const AsyncData(null);
+  }
+
+  /// The server said 401: the session is gone, so sign in again.
+  void sessionEnded() {
+    if (state.value != null) state = const AsyncData(null);
+  }
+
+  /// App open/resume: refresh the sliding session (GET /auth/me touches it server-side).
+  /// Offline keeps the user signed in; only a 401 signs out.
+  Future<void> refreshSession() async {
+    if (AppConfig.demoMode || state.value == null) return;
+    try {
+      final u = await ref.read(authRepositoryProvider).currentUser();
+      if (u == null) state = const AsyncData(null);
+    } on ApiException {
+      // Disconnected banner handles it.
+    }
+  }
+
+  /// Retry after a connection failure at start-up.
+  Future<void> retry() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(authRepositoryProvider).currentUser(),
+    );
   }
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -106,10 +107,21 @@ class AsyncView<T> extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off, color: Theme.of(context).colorScheme.error),
+            Icon(
+              e is ApiException && e.status == 403
+                  ? Icons.lock_outline
+                  : Icons.cloud_off,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: Space.s),
-            Text('$e', textAlign: TextAlign.center),
-            if (onRetry != null)
+            Text(
+              e is ApiException && e.status == 403
+                  ? "You don't have access to this. Ask an Admin if you need it."
+                  : '$e',
+              key: const Key('asyncError'),
+              textAlign: TextAlign.center,
+            ),
+            if (onRetry != null && !(e is ApiException && e.status == 403))
               TextButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),

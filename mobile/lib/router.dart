@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'app.dart' show DisconnectedScreen;
+
 import 'ui/widgets/permission_gate.dart';
 
 import 'state/providers.dart';
@@ -37,13 +39,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (auth.isLoading && !auth.hasValue) {
         return loc == '/splash' ? null : '/splash';
       }
+      if (auth.hasError && !auth.hasValue) {
+        return loc == '/disconnected' ? null : '/disconnected';
+      }
       final signedIn = auth.value != null;
       if (!signedIn) return public ? null : '/login';
+      if (loc == '/disconnected') return '/home';
       if (public || loc == '/splash') return '/home';
       return null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
+      GoRoute(
+        path: '/disconnected',
+        builder: (_, _) => const DisconnectedScreen(),
+      ),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(
         path: '/setup-password',

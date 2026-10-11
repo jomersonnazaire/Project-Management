@@ -25,7 +25,7 @@ class MockStore {
         status: ProjectStatus.active,
         progress: 78,
         goLive: d(10, 30),
-        managerName: 'Jonathan E.',
+        managerName: 'Jomerson Nazaire',
         taskCount: 7,
         projectTypeId: 'pt1',
         projectTypeName: 'Implementation',
@@ -74,7 +74,7 @@ class MockStore {
         status: ProjectStatus.planning,
         progress: 8,
         goLive: DateTime(2027, 1, 10),
-        managerName: 'Jonathan E.',
+        managerName: 'Jomerson Nazaire',
         taskCount: 0,
         clientId: 'c4',
         managerId: 'u1',
@@ -91,8 +91,8 @@ class MockStore {
       String project = 'p1',
       String pn = 'Acme Corp',
       DateTime? due,
-      String owner = 'Jonathan E.',
-      List<String> assignees = const ['Jonathan E.'],
+      String owner = 'Jomerson Nazaire',
+      List<String> assignees = const ['Jomerson Nazaire'],
       String? blocker,
       bool approval = false,
       double? est,
@@ -377,8 +377,8 @@ class MockAuthRepository implements AuthRepository {
   String systemRole;
   static const user = AppUser(
     id: 'u1',
-    name: 'Jonathan Esmalla',
-    email: 'jonathan@xceler8.com',
+    name: 'Jomerson Nazaire',
+    email: 'jomerson@xceler8.com',
     role: 'Project Manager · Consultant',
   );
   AppUser get _me => AppUser(

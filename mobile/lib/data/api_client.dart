@@ -4,18 +4,74 @@ import 'package:http/http.dart' as http;
 
 import 'http_factory.dart';
 import 'models.dart';
+import 'session_store.dart';
 
 /// Thin JSON client for the OpsTrack API (/api/v1).
 ///
 /// Auth is a session cookie set by POST /auth/login. State-changing requests must
 /// carry `X-Requested-With: xc8-web` (CSRF guard in apps/api/src/middleware/security.ts).
 class ApiClient {
-  ApiClient(this.baseUrl, {http.Client? client})
-    : _http = client ?? createHttpClient();
+  ApiClient(
+    this.baseUrl, {
+    http.Client? client,
+    this.store,
+    DateTime Function()? deviceClock,
+    this.timeout = const Duration(seconds: 20),
+  }) : _http = client ?? createHttpClient(),
+       _device = deviceClock ?? DateTime.now;
 
   final String baseUrl;
   final http.Client _http;
   final Map<String, String> _cookies = {};
+  final SessionStore? store;
+  final Duration timeout;
+  final DateTime Function() _device;
+
+  /// Called on a 401 (session ended) and when the server becomes (un)reachable.
+  void Function()? onUnauthorized;
+  void Function(bool reachable)? onReachability;
+
+  /// Server minus device clock, from the `Date` header (and tracker `now` values).
+  Duration serverOffset = Duration.zero;
+
+  /// Server time (UTC). Use this, never the device clock, for timers and "today".
+  DateTime serverNow() => _device().toUtc().add(serverOffset);
+
+  /// Tracker endpoints return `now`; it's more precise than the Date header (seconds).
+  void observeServerNow(DateTime serverUtc) =>
+      serverOffset = serverUtc.toUtc().difference(_device().toUtc());
+
+  void _observeDate(String? header) {
+    if (header == null) return;
+    final d = _parseHttpDate(header);
+    if (d != null) {
+      final off = d.difference(_device().toUtc());
+      // The Date header only has whole seconds; ignore sub-second jitter.
+      if ((off - serverOffset).abs() > const Duration(seconds: 1)) {
+        serverOffset = off;
+      }
+    }
+  }
+
+  /// Restores a stored session; false when none or idle for more than [sessionIdle].
+  Future<bool> restoreSession() async {
+    final s = await store?.read();
+    if (s == null) return false;
+    if (_device().toUtc().difference(s.lastActive.toUtc()) > sessionIdle) {
+      await store?.clear();
+      return false;
+    }
+    _cookies
+      ..clear()
+      ..addAll(s.cookies);
+    return true;
+  }
+
+  /// Records activity (app open/resume, each successful call) for the sliding window.
+  Future<void> touch() async {
+    if (store == null || (_cookies.isEmpty && !browserManagesCookies)) return;
+    await store!.write(StoredSession(Map.of(_cookies), _device().toUtc()));
+  }
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = baseUrl.endsWith('/')
@@ -28,6 +84,8 @@ class ApiClient {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     'X-Requested-With': 'xc8-web',
+    // Asks the API for a mobile session (sliding 3-day idle window).
+    'X-Client': 'mobile',
     if (!browserManagesCookies && _cookies.isNotEmpty)
       'Cookie': _cookies.entries.map((e) => '${e.key}=${e.value}').join('; '),
   };
@@ -68,11 +126,29 @@ class ApiClient {
   Future<Map<String, dynamic>> _send(Future<http.Response> req) async {
     final http.Response res;
     try {
-      res = await req;
+      res = await req.timeout(timeout);
     } catch (e) {
-      throw ApiException('Can\'t reach the server. Check your connection.');
+      onReachability?.call(false);
+      throw ApiException(disconnectedMessage, status: 0, code: 'OFFLINE');
     }
+    _observeDate(res.headers['date']);
     _storeCookies(res.headers['set-cookie']);
+    if (res.statusCode >= 500) {
+      onReachability?.call(false);
+      throw ApiException(
+        disconnectedMessage,
+        status: res.statusCode,
+        code: 'SERVER_ERROR',
+      );
+    }
+    onReachability?.call(true);
+    if (res.statusCode == 401) {
+      _cookies.clear();
+      await store?.clear();
+      onUnauthorized?.call();
+    } else if (res.statusCode < 400) {
+      await touch();
+    }
     final decoded = res.body.isEmpty ? null : jsonDecode(res.body);
     final map = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
     if (res.statusCode >= 400) {
@@ -117,5 +193,43 @@ class ApiClient {
     }
   }
 
-  void clearSession() => _cookies.clear();
+  Future<void> clearSession() async {
+    _cookies.clear();
+    await store?.clear();
+  }
+}
+
+const disconnectedMessage =
+    'Disconnected from the server. Please contact your System Admin.';
+
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// RFC 7231 IMF-fixdate, e.g. "Sun, 11 Oct 2026 13:40:48 GMT".
+DateTime? _parseHttpDate(String s) {
+  final m = RegExp(r'(\d{1,2}) (\w{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2})')
+      .firstMatch(s);
+  if (m == null) return null;
+  final mon = _months.indexOf(m[2]!);
+  if (mon < 0) return null;
+  return DateTime.utc(
+    int.parse(m[3]!),
+    mon + 1,
+    int.parse(m[1]!),
+    int.parse(m[4]!),
+    int.parse(m[5]!),
+    int.parse(m[6]!),
+  );
 }

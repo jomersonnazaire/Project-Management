@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'http_factory.dart';
 import 'models.dart';
 import 'repositories.dart';
 
@@ -16,6 +17,8 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<AppUser?> currentUser() async {
+    // Native: only call the API when a non-expired session was restored from secure storage.
+    if (!await api.restoreSession() && !browserManagesCookies) return null;
     try {
       final body = await api.get('/auth/me');
       return AppUser.fromJson(body['user'] as Map<String, dynamic>);
@@ -38,8 +41,10 @@ class ApiAuthRepository implements AuthRepository {
   Future<void> logout() async {
     try {
       await api.post('/auth/logout');
+    } on ApiException {
+      // Offline or already ended: still forget the session on this device.
     } finally {
-      api.clearSession();
+      await api.clearSession();
     }
   }
 

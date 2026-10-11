@@ -464,70 +464,81 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
                     color: s.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(Space.m),
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                status.label,
-                                style: t.titleMedium,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: Space.s),
-                            Badge(
-                              label: Text('${col.length}'),
-                              backgroundColor: s.secondaryContainer,
-                              textColor: s.onSecondaryContainer,
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: col.isEmpty
-                            ? Center(
-                                child: Text('No tasks', style: t.bodySmall),
-                              )
-                            : ListView(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: Space.m - 4,
+                  // Very short boards (large text + banners): scroll the column instead.
+                  child: LayoutBuilder(
+                    builder: (context, box) {
+                      final column = Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(Space.m),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    status.label,
+                                    style: t.titleMedium,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                                children: [
-                                  for (final task in col)
-                                    _BoardCard(
-                                      task: task,
-                                      onLongPress: canW(ref, 'tasks', 'edit')
-                                          ? () => _move(task)
-                                          : null,
+                                const SizedBox(width: Space.s),
+                                Badge(
+                                  label: Text('${col.length}'),
+                                  backgroundColor: s.secondaryContainer,
+                                  textColor: s.onSecondaryContainer,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: col.isEmpty
+                                ? Center(
+                                    child: Text('No tasks', style: t.bodySmall),
+                                  )
+                                : ListView(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: Space.m - 4,
                                     ),
-                                ],
-                              ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(Space.m),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.swipe,
-                              size: 20,
-                              color: s.onSurfaceVariant,
+                                    children: [
+                                      for (final task in col)
+                                        _BoardCard(
+                                          task: task,
+                                          onLongPress:
+                                              canW(ref, 'tasks', 'edit')
+                                              ? () => _move(task)
+                                              : null,
+                                        ),
+                                    ],
+                                  ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(Space.m),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.swipe,
+                                  size: 20,
+                                  color: s.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: Space.s),
+                                Expanded(
+                                  child: Text(
+                                    'Swipe or long-press a card to move it',
+                                    style: t.bodySmall,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: Space.s),
-                            Expanded(
-                              child: Text(
-                                'Swipe or long-press a card to move it',
-                                style: t.bodySmall,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          ),
+                        ],
+                      );
+                      return box.maxHeight < 320
+                          ? SingleChildScrollView(
+                              child: SizedBox(height: 320, child: column),
+                            )
+                          : column;
+                    },
                   ),
                 );
               },

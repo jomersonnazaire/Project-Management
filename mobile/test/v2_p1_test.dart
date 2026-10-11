@@ -283,7 +283,7 @@ void main() {
       c.read(selectedDayProvider.notifier).set(DateTime(2026, 10, 2));
       await t.pumpAndSettle();
       await tapKey(t, 'reopenDay');
-      expect(find.text('Reopen Oct 2 · Jonathan Esmalla'), findsOneWidget);
+      expect(find.text('Reopen Oct 2 · Jomerson Nazaire'), findsOneWidget);
       await tapKey(t, 'confirmReopen');
       expect(find.text('Add a reason for reopening.'), findsOneWidget);
       await t.enterText(find.byKey(const Key('reopenReason')), 'Missed Friday');

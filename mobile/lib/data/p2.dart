@@ -754,7 +754,7 @@ class MockLeaveStore {
     items.addAll([
       LeaveItem(
         id: 'l1',
-        userName: 'Jonathan Esmalla',
+        userName: 'Jomerson Nazaire',
         typeId: 'lt1',
         typeName: 'Vacation',
         dayPart: 'FULL',
@@ -764,7 +764,7 @@ class MockLeaveStore {
       ),
       LeaveItem(
         id: 'l2',
-        userName: 'Jonathan Esmalla',
+        userName: 'Jomerson Nazaire',
         typeId: 'lt1',
         typeName: 'Vacation',
         dayPart: 'AM',
@@ -774,7 +774,7 @@ class MockLeaveStore {
       ),
       LeaveItem(
         id: 'l3',
-        userName: 'Jonathan Esmalla',
+        userName: 'Jomerson Nazaire',
         typeId: 'lt1',
         typeName: 'Vacation',
         dayPart: 'AM',
@@ -785,7 +785,7 @@ class MockLeaveStore {
       ),
       LeaveItem(
         id: 'l4',
-        userName: 'Jonathan Esmalla',
+        userName: 'Jomerson Nazaire',
         typeId: 'lt1',
         typeName: 'Vacation',
         dayPart: 'PM',
@@ -796,7 +796,7 @@ class MockLeaveStore {
       ),
       LeaveItem(
         id: 'l5',
-        userName: 'Jonathan Esmalla',
+        userName: 'Jomerson Nazaire',
         typeId: 'lt2',
         typeName: 'Sick',
         dayPart: 'FULL',
@@ -952,7 +952,7 @@ class MockLeaveRepository implements LeaveRepository {
     }
     final item = LeaveItem(
       id: 'l${s._n++}',
-      userName: 'Jonathan Esmalla',
+      userName: 'Jomerson Nazaire',
       typeId: type.id,
       typeName: type.name,
       dayPart: i.dayPart,
@@ -1024,7 +1024,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
           FollowUp(
             id: 'f1',
             note: 'Asked Acme IT for the SSO metadata.',
-            author: 'Jonathan E.',
+            author: 'Jomerson Nazaire',
             at: DateTime.utc(2026, 10, 8, 2),
           ),
         ],
@@ -1058,7 +1058,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
         HistoryItem(
           id: 'h${_h.length}${DateTime.now().microsecond}',
           at: DateTime.utc(2026, 10, 11, 6),
-          actor: 'Jonathan Esmalla',
+          actor: 'Jomerson Nazaire',
           action: action,
           reason: reason,
           changes: changes,
@@ -1073,7 +1073,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
     bool? canApprove,
   }) => TaskExtras(
     approvalComment: comment ?? e.approvalComment,
-    approvalBy: comment != null ? 'Jonathan Esmalla' : e.approvalBy,
+    approvalBy: comment != null ? 'Jomerson Nazaire' : e.approvalBy,
     evidence: evidence ?? e.evidence,
     followUps: followUps ?? e.followUps,
     canEdit: e.canEdit,
@@ -1168,7 +1168,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
           type: 'FILE',
           name: f.name,
           size: f.size,
-          addedBy: 'Jonathan Esmalla',
+          addedBy: 'Jomerson Nazaire',
           at: DateTime.utc(2026, 10, 11, 6),
         ),
       ],
@@ -1221,7 +1221,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
         FollowUp(
           id: 'f${e.followUps.length + 10}',
           note: note.trim(),
-          author: 'Jonathan Esmalla',
+          author: 'Jomerson Nazaire',
           at: DateTime.utc(2026, 10, 11, 6),
         ),
       ],
@@ -1316,7 +1316,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
     HistoryItem(
       id: 'h0',
       at: DateTime.utc(2026, 9, 28, 1),
-      actor: 'Jonathan Esmalla',
+      actor: 'Jomerson Nazaire',
       action: 'task_created',
     ),
   ];
@@ -1336,7 +1336,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
 
   @override
   Future<List<NamedRef>> projectPeople(String projectId) async => const [
-    NamedRef('u1', 'Jonathan Esmalla'),
+    NamedRef('u1', 'Jomerson Nazaire'),
     NamedRef('u2', 'Queen Reyes'),
     NamedRef('u3', 'Mark Kim'),
   ];
@@ -1348,7 +1348,7 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
   static final _state = <MockStore, Map<String, ProjectExtras>>{};
   static final _log = <MockStore, Map<String, List<HistoryItem>>>{};
   static const _people = {
-    'u1': 'Jonathan Esmalla',
+    'u1': 'Jomerson Nazaire',
     'u2': 'Queen Reyes',
     'u3': 'Mark Kim',
   };
@@ -1381,7 +1381,7 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
           : null) ??
       const ProjectExtras(
         members: [
-          NamedRef('u1', 'Jonathan Esmalla'),
+          NamedRef('u1', 'Jomerson Nazaire'),
           NamedRef('u3', 'Mark Kim'),
         ],
         contacts: [
@@ -1404,7 +1404,7 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
         HistoryItem(
           id: 'a${_l[id]!.length + 9}',
           at: DateTime.utc(2026, 10, 11, 6),
-          actor: 'Jonathan Esmalla',
+          actor: 'Jomerson Nazaire',
           action: action,
           changes: c,
         ),
@@ -1417,7 +1417,7 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
     final rows = [
       ProjectTimeRow(
         id: 'pt1',
-        person: 'Jonathan Esmalla',
+        person: 'Jomerson Nazaire',
         task: 'Configure roles',
         date: DateTime(2026, 10, 9),
         hours: 3.5,
@@ -1439,7 +1439,7 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
       ),
       ProjectTimeRow(
         id: 'pt4',
-        person: 'Jonathan Esmalla',
+        person: 'Jomerson Nazaire',
         task: 'Configure roles',
         date: DateTime(2026, 10, 2),
         hours: 1.5,
@@ -1466,7 +1466,7 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
     HistoryItem(
       id: 'a1',
       at: DateTime.utc(2026, 8, 3, 1),
-      actor: 'Jonathan Esmalla',
+      actor: 'Jomerson Nazaire',
       action: 'project_created',
     ),
   ];

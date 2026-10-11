@@ -17,7 +17,7 @@ class MockTrackerStore {
   DateTime Function() now;
   DateTime get today => phDate(now());
 
-  static const me = (id: 'u1', name: 'Jonathan Esmalla');
+  static const me = (id: 'u1', name: 'Jomerson Nazaire');
   static const people = [
     me,
     (id: 'u2', name: 'Queen Reyes'),
@@ -711,7 +711,9 @@ class MockMyTasksRepository implements MyTasksRepository {
           phase: x.phase,
           role: x.id == 't7'
               ? 'REVIEWER'
-              : (x.ownerName == 'Jonathan E.' ? 'ACCOUNTABLE' : 'ASSIGNEE'),
+              : (x.ownerName == 'Jomerson Nazaire'
+                    ? 'ACCOUNTABLE'
+                    : 'ASSIGNEE'),
           dueDate: x.dueDate,
           plannedStart: x.plannedStart,
           overdue:
@@ -985,7 +987,7 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
   ];
   @override
   Future<List<NamedRef>> people() async => const [
-    NamedRef('u1', 'Jonathan Esmalla'),
+    NamedRef('u1', 'Jomerson Nazaire'),
     NamedRef('u2', 'Queen Reyes'),
     NamedRef('u3', 'Mark Kim'),
   ];
@@ -1014,7 +1016,7 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
         status: ProjectStatus.planning,
         progress: 0,
         goLive: p.endDate,
-        managerName: 'Jonathan E.',
+        managerName: 'Jomerson Nazaire',
         projectTypeId: t?.id,
         projectTypeName: t?.name,
         clientId: p.clientId,
@@ -1060,7 +1062,7 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
       goLive: p.endDate ?? o.goLive,
       managerName:
           const {
-            'u1': 'Jonathan Esmalla',
+            'u1': 'Jomerson Nazaire',
             'u2': 'Queen Reyes',
             'u3': 'Mark Kim',
           }[p.managerId] ??
