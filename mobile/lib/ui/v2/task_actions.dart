@@ -12,6 +12,7 @@ import '../../state/providers.dart';
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'dependencies.dart';
 
 void refreshTask(WidgetRef ref, Task t) {
   invalidateTask(ref, t);
@@ -493,6 +494,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
   Party _party = Party.internal;
   String? _owner, _contact;
   Set<String> _assignees = {};
+  List<String> _deps = [];
   DateTime? _planned, _due;
   bool _approval = false, _mandatory = false, _loaded = false, _busy = false;
   Map<String, String> _errors = {};
@@ -519,6 +521,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
     _owner = x.ownerId;
     _contact = x.clientContactId;
     _assignees = {...x.assigneeIds};
+    _deps = [...t.dependsOn];
     _planned = t.plannedStart;
     _due = t.dueDate;
     _approval = t.requiresApproval;
@@ -533,6 +536,11 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
         'dueDate': "Due date can't be before the start date.",
       if (est.isNotEmpty && ((double.tryParse(est) ?? -1) < 0))
         'estHours': 'Enter hours as a number.',
+      'dependsOn': ?dependencyProblem(
+        _task!.id,
+        _deps,
+        ref.read(projectTasksProvider(_task!.projectId)).value ?? const [],
+      ),
     };
     setState(() => _errors = e);
     if (e.isNotEmpty) return;
@@ -558,6 +566,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
               requiresApproval: _approval,
               mandatory: _mandatory,
               clientContactId: _party == Party.client ? _contact : null,
+              dependsOn: _deps,
             ),
           );
       refreshTask(ref, t);
@@ -565,8 +574,12 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
     } on ApiException catch (err) {
       if (mounted) {
         setState(
-          () =>
-              _errors = err.fields.isNotEmpty ? err.fields : {'_': err.message},
+          () => _errors = err.fields.isNotEmpty
+              ? err.fields
+              : err.code == 'DEPENDENCY_CYCLE' ||
+                    err.code == 'INVALID_DEPENDENCY'
+              ? {'dependsOn': err.message}
+              : {'_': err.message},
         );
       }
     } finally {
@@ -739,6 +752,17 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                         ),
                       ),
                   ],
+                ),
+                gap(),
+                DependenciesField(
+                  projectId: _task!.projectId,
+                  taskId: _task!.id,
+                  selected: _deps,
+                  errorText: _errors['dependsOn'],
+                  onChanged: (v) => setState(() {
+                    _deps = v;
+                    _errors = {..._errors}..remove('dependsOn');
+                  }),
                 ),
                 gap(),
                 date(

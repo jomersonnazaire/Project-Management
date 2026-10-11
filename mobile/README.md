@@ -200,3 +200,7 @@ Sample IDs: projects `p1`–`p4`; tasks `t1`–`t8` (`t3` In progress, `t4` Bloc
 - Deep links to create/edit screens a role cannot use show a "no access" page (`PermissionGate`).
 - Demo invite tokens: `demo`, `demo-invite`, `demo-reset`; any other token shows "Link not valid".
 - Tests: `test/roles_test.dart` (gating matrix per Admin/PM/Member/Viewer, strict parse, loading state, S4 fixes).
+
+### Conversation posting and task dependencies
+- Conversation composer shows only when FR-CNV-04 `canPost` holds in the app: `conversations.create` and (edit rights on the project, or project membership/PM). Otherwise the web's note "You can read this conversation but not post." A server 403 also switches to that note and shows the server message.
+- Create/Edit task: "Depends on" chips + searchable multi-select sheet of tasks in the same project. Validation mirrors `routes/tasks.ts` + shared `findCycle` (no self, project tasks only, "Circular dependency: A → B → A."); sent as `dependsOn` on `POST /projects/:id/tasks` and `PATCH /tasks/:id`.

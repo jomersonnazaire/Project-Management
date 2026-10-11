@@ -92,6 +92,7 @@ class ApiProjectRepository implements ProjectRepository {
       'mandatory': t.mandatory,
       if (t.ownerId != null) 'ownerId': t.ownerId,
       'assigneeIds': t.assigneeIds,
+      'dependsOn': t.dependsOn,
       if (t.reviewerId != null) 'reviewerId': t.reviewerId,
     });
     return Task.fromJson(body['task'] as Map<String, dynamic>);

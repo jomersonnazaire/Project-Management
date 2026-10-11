@@ -2,6 +2,7 @@
 import 'api_client.dart';
 import 'mock_repositories.dart';
 import 'models.dart';
+import '../ui/v2/dependencies.dart' show dependencyProblem;
 import 'ph_time.dart';
 import 'v2_repositories.dart';
 
@@ -376,7 +377,9 @@ class TaskEdit {
     this.requiresApproval,
     this.mandatory,
     this.clientContactId,
+    this.dependsOn,
   });
+  final List<String>? dependsOn;
   final int version;
   final String? name, phase, ownerId, deliverable, clientContactId;
   final Priority? priority;
@@ -402,6 +405,7 @@ class TaskEdit {
     'requiresApproval': ?requiresApproval,
     'mandatory': ?mandatory,
     'clientContactId': clientContactId,
+    'dependsOn': ?dependsOn,
   };
 }
 
@@ -1199,6 +1203,23 @@ class MockTaskActionsRepository implements TaskActionsRepository {
       );
     }
     final t = store.tasks[_i(taskId)];
+    if (d.dependsOn != null) {
+      // Same checks as routes/tasks.ts (DEPENDENCY_CYCLE / INVALID_DEPENDENCY, 422).
+      final p = dependencyProblem(
+        taskId,
+        d.dependsOn!,
+        store.tasks.where((x) => x.projectId == t.projectId).toList(),
+      );
+      if (p != null) {
+        throw ApiException(
+          p,
+          status: 422,
+          code: p.startsWith('Dependencies')
+              ? 'INVALID_DEPENDENCY'
+              : 'DEPENDENCY_CYCLE',
+        );
+      }
+    }
     final people = {
       for (final p in await projectPeople(t.projectId)) p.id: p.name,
     };
@@ -1221,7 +1242,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
       status: t.status,
       previousStatus: t.previousStatus,
       blockerReason: t.blockerReason,
-      dependsOn: t.dependsOn,
+      dependsOn: d.dependsOn ?? t.dependsOn,
       requiresApproval: d.requiresApproval ?? t.requiresApproval,
       mandatory: d.mandatory ?? t.mandatory,
       reviewerName: t.reviewerName,
@@ -1313,6 +1334,14 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
   Map<String, List<HistoryItem>> get _l => _log.putIfAbsent(store, () => {});
   ProjectExtras _get(String id) =>
       _s[id] ??
+      (id == 'p2'
+          ? const ProjectExtras(
+              members: [
+                NamedRef('u2', 'Queen Reyes'),
+                NamedRef('u3', 'Mark Kim'),
+              ],
+            )
+          : null) ??
       const ProjectExtras(
         members: [
           NamedRef('u1', 'Jonathan Esmalla'),

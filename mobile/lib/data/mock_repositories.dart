@@ -166,7 +166,7 @@ class MockStore {
         est: 8,
         actual: 6,
         party: Party.client,
-        deps: ['Environment setup'],
+        deps: ['t2'],
       ),
       t(
         't5',
@@ -479,6 +479,7 @@ class MockProjectRepository implements ProjectRepository {
       requiresApproval: n.requiresApproval,
       mandatory: n.mandatory,
       ownerName: n.ownerName ?? MockAuthRepository.user.name,
+      dependsOn: n.dependsOn,
     );
     store.tasks.add(t);
     return t;

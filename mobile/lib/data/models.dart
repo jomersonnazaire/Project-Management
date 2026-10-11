@@ -297,7 +297,9 @@ class NewTask {
     this.ownerName,
     this.reviewerId,
     this.assigneeIds = const [],
+    this.dependsOn = const [],
   });
+  final List<String> dependsOn;
   final String name;
   final String? phase, ownerId, ownerName, reviewerId;
   final List<String> assigneeIds;

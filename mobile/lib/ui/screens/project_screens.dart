@@ -1,6 +1,7 @@
 import '../../state/v2_providers.dart';
 import '../v2/project_form.dart';
 import '../../state/p2_providers.dart';
+import '../v2/dependencies.dart';
 import '../v2/project_p2.dart';
 
 import 'package:flutter/material.dart';
@@ -649,6 +650,7 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
   bool _approval = false, _mandatory = false, _busy = false;
   String? _owner, _reviewer;
   final _assignees = <String>{};
+  List<String> _deps = [];
 
   @override
   void dispose() {
@@ -759,6 +761,7 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
                   ?.name,
               reviewerId: _approval ? _reviewer : null,
               assigneeIds: _assignees.toList(),
+              dependsOn: _deps,
             ),
           );
       ref.invalidate(projectTasksProvider(widget.projectId));
@@ -870,6 +873,13 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
               onChanged: (v) => setState(() => _approval = v),
             ),
             ..._reviewerField(),
+            DependenciesField(
+              projectId: widget.projectId,
+              taskId: null,
+              selected: _deps,
+              onChanged: (v) => setState(() => _deps = v),
+            ),
+            const SizedBox(height: Space.m),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Mandatory'),

@@ -311,7 +311,24 @@ class _Body extends StatelessWidget {
                       ListTile(
                         leading: const Icon(Icons.link),
                         title: const Text('Depends on'),
-                        subtitle: Text(t.dependsOn.join(', ')),
+                        subtitle: Consumer(
+                          builder: (_, ref, _) {
+                            final names = {
+                              for (final x
+                                  in ref
+                                          .watch(
+                                            projectTasksProvider(t.projectId),
+                                          )
+                                          .value ??
+                                      const <Task>[])
+                                x.id: x.name,
+                            };
+                            return Text(
+                              t.dependsOn.map((d) => names[d] ?? d).join(', '),
+                              key: const Key('taskDependsOn'),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ],

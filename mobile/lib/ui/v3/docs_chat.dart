@@ -7,6 +7,7 @@ import '../../data/models.dart';
 import '../../data/p3.dart';
 import '../../state/p3_providers.dart';
 import '../../state/v2_providers.dart';
+import '../../state/p2_providers.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -329,8 +330,44 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       });
       ref.invalidate(messagesProvider(widget.projectId));
     } on ApiException catch (e) {
+      if (e.status == 403) {
+        // The server decides (FR-CNV-04); switch to the read-only note and say why.
+        setState(() {
+          _forbidden = true;
+          _error = null;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                e.message.isEmpty
+                    ? 'Only people on this project can post here.'
+                    : e.message,
+              ),
+            ),
+          );
+        }
+        return;
+      }
       setState(() => _error = e.fields['text'] ?? e.message);
     }
+  }
+
+  bool _forbidden = false;
+
+  /// FR-CNV-04 canPost: conversations.create AND (edit rights on the project OR membership),
+  /// and the project isn't archived.
+  bool _canPost() {
+    if (_forbidden || !canW(ref, 'conversations', 'create')) return false;
+    final p = ref.watch(projectProvider(widget.projectId)).value;
+    final me = ref.watch(authProvider).value;
+    if (p == null || me == null) return false;
+    if (canEditProject(ref, p) || p.managerId == me.id) return true;
+    final members = ref
+        .watch(projectExtrasProvider(widget.projectId))
+        .value
+        ?.members;
+    return members?.any((m) => m.id == me.id) ?? false;
   }
 
   Future<void> _tag() async {
@@ -493,7 +530,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               },
             ),
           ),
-          if (!canW(ref, 'conversations', 'create'))
+          if (!_canPost())
             const SafeArea(
               top: false,
               child: Padding(
