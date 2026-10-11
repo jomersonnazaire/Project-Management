@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/models.dart';
 import '../../theme/app_theme.dart';
@@ -105,3 +106,37 @@ class SectionHeader extends StatelessWidget {
 void showError(BuildContext context, Object e) => ScaffoldMessenger.of(context)
   ..hideCurrentSnackBar()
   ..showSnackBar(SnackBar(content: Text('$e')));
+
+/// Pops if there is a back stack (in-app navigation), otherwise goes to [fallback]
+/// (deep links / cold starts have nothing to pop).
+void popOrGo(BuildContext context, String fallback) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go(fallback);
+  }
+}
+
+/// AppBar leading that always offers a way back: the normal back button when the
+/// route can pop, otherwise an up arrow to [fallback].
+class BackOrUpButton extends StatelessWidget {
+  const BackOrUpButton({super.key, required this.fallback, this.icon = Icons.arrow_back});
+  final String fallback;
+  final IconData icon;
+  @override
+  Widget build(BuildContext context) => IconButton(
+    key: const Key('backButton'),
+    icon: Icon(icon),
+    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+    onPressed: () => popOrGo(context, fallback),
+  );
+}
+
+/// One-line label that shrinks instead of wrapping mid-word at large text scales.
+class FitLabel extends StatelessWidget {
+  const FitLabel(this.text, {super.key});
+  final String text;
+  @override
+  Widget build(BuildContext context) =>
+      FittedBox(fit: BoxFit.scaleDown, child: Text(text, maxLines: 1, softWrap: false));
+}

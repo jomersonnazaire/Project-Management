@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../config.dart';
 
 import '../../data/models.dart';
 import '../../state/providers.dart';
@@ -17,7 +20,33 @@ class TaskDetailScreen extends ConsumerWidget {
     final task = ref.watch(taskProvider(taskId));
     return Scaffold(
       key: const Key('taskDetailScreen'),
-      appBar: AppBar(),
+      appBar: AppBar(
+        leading: BackOrUpButton(
+          fallback: task.hasValue ? '/projects/${task.requireValue.projectId}' : '/home',
+        ),
+        actions: [
+          IconButton(
+            key: const Key('taskEdit'),
+            tooltip: 'Edit task',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: task.hasValue ? () => _openOnWeb(context, task.requireValue) : null,
+          ),
+          PopupMenuButton<String>(
+            key: const Key('taskOverflow'),
+            tooltip: 'More options',
+            onSelected: (v) {
+              if (v == 'refresh') ref.invalidate(taskProvider(taskId));
+              if (v == 'web' && task.hasValue) _openOnWeb(context, task.requireValue);
+              if (v == 'project' && task.hasValue) context.go('/projects/${task.requireValue.projectId}');
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+              PopupMenuItem(value: 'project', child: Text('Open project')),
+              PopupMenuItem(value: 'web', child: Text('Open in web app')),
+            ],
+          ),
+        ],
+      ),
       body: AsyncView(
         value: task,
         onRetry: () => ref.invalidate(taskProvider(taskId)),
@@ -26,6 +55,15 @@ class TaskDetailScreen extends ConsumerWidget {
       bottomNavigationBar: task.hasValue ? _ActionBar(task: task.requireValue) : null,
     );
   }
+}
+
+/// Full task editing (owner, assignees, dependencies…) lives on the web for now.
+Future<void> _openOnWeb(BuildContext context, Task t) async {
+  final ok = await launchUrl(
+    Uri.parse('${AppConfig.webAppUrl}/projects/${t.projectId}?task=${t.id}'),
+    mode: LaunchMode.externalApplication,
+  );
+  if (!ok && context.mounted) showError(context, 'Could not open the web app.');
 }
 
 class _ActionBar extends ConsumerWidget {
@@ -45,7 +83,7 @@ class _ActionBar extends ConsumerWidget {
               child: OutlinedButton.icon(
                 key: const Key('taskLogTime'),
                 icon: const Icon(Icons.timer_outlined),
-                label: const Text('Log time'),
+                label: const FitLabel('Log time'),
                 onPressed: () => context.go('/log?task=${task.id}&project=${task.projectId}'),
               ),
             ),
@@ -60,7 +98,7 @@ class _ActionBar extends ConsumerWidget {
                         final to = await showStatusPicker(context, task);
                         if (to != null && context.mounted) await requestStatusChange(context, ref, task, to);
                       },
-                child: const Text('Change status'),
+                child: const FitLabel('Change status'),
               ),
             ),
           ],
@@ -228,12 +266,46 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
   }
 
   DateTime get _weekStart => _day.subtract(Duration(days: _day.weekday - 1));
+  DateTime get _today {
+    final n = ref.read(clockProvider)();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  bool get _canGoNext => !_weekStart.add(const Duration(days: 7)).isAfter(_today);
+
+  void _selectDay(DateTime d) => setState(() => _day = d.isAfter(_today) ? _today : d);
+
+  Future<void> _pickDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _day,
+      firstDate: DateTime(_today.year - 1),
+      lastDate: _today, // no future dates
+    );
+    if (d != null) _selectDay(d);
+  }
 
   Future<void> _save() async {
     final h = double.tryParse(_hours.text.trim());
     if (_taskId == null) return showError(context, 'Choose a task.');
     if (h == null || h <= 0 || h > 24 || (h * 4) != (h * 4).roundToDouble()) {
       return showError(context, 'Enter hours in steps of 0.25 (max 24).');
+    }
+    if (_day.isAfter(_today)) return showError(context, "You can't log time on a future date.");
+    final logged =
+        ref
+            .read(timeWeekProvider(_weekStart))
+            .value
+            ?.entries
+            .where((e) => DateUtils.isSameDay(e.workDate, _day))
+            .fold<double>(0, (a, e) => a + e.hours) ??
+        0;
+    if (logged + h > 24) {
+      return showError(
+        context,
+        'That makes ${fmtHours(logged + h)}h on ${fmtDate(_day)}. A day can have at most 24h '
+        '(${fmtHours(24 - logged)}h left).',
+      );
     }
     setState(() => _busy = true);
     try {
@@ -266,7 +338,17 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
 
     return Scaffold(
       key: const Key('logTimeScreen'),
-      appBar: AppBar(title: const Text('Log time')),
+      appBar: AppBar(
+        title: const Text('Log time'),
+        actions: [
+          IconButton(
+            key: const Key('pickDate'),
+            tooltip: 'Pick a date',
+            icon: const Icon(Icons.calendar_month_outlined),
+            onPressed: _pickDate,
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(Space.m),
         children: [
@@ -274,6 +356,7 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
             children: [
               IconButton(
                 key: const Key('prevWeek'),
+                tooltip: 'Previous week',
                 icon: const Icon(Icons.chevron_left),
                 onPressed: () => setState(() => _day = _day.subtract(const Duration(days: 7))),
               ),
@@ -286,8 +369,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
               ),
               IconButton(
                 key: const Key('nextWeek'),
+                tooltip: 'Next week',
                 icon: const Icon(Icons.chevron_right),
-                onPressed: () => setState(() => _day = _day.add(const Duration(days: 7))),
+                onPressed: _canGoNext ? () => _selectDay(_day.add(const Duration(days: 7))) : null,
               ),
             ],
           ),
@@ -299,6 +383,7 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
                   builder: (_) {
                     final d = _weekStart.add(Duration(days: i));
                     final sel = d == _day;
+                    final future = d.isAfter(_today);
                     final hrs =
                         week.value?.entries
                             .where((e) => DateUtils.isSameDay(e.workDate, d))
@@ -308,14 +393,20 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
                       child: InkWell(
                         key: Key('day_$i'),
                         borderRadius: BorderRadius.circular(12),
-                        onTap: () => setState(() => _day = d),
+                        onTap: future ? null : () => _selectDay(d),
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 2),
                           padding: const EdgeInsets.symmetric(vertical: Space.s),
                           decoration: BoxDecoration(
-                            color: sel ? s.primary : null,
+                            color: sel ? s.primary : s.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(12),
                           ),
+                          foregroundDecoration: future
+                              ? BoxDecoration(
+                                  color: s.surface.withValues(alpha: .6),
+                                  borderRadius: BorderRadius.circular(12),
+                                )
+                              : null,
                           child: Column(
                             children: [
                               Text(
@@ -341,7 +432,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
           ),
           const SizedBox(height: Space.m),
           DropdownMenu<String>(
-            key: const Key('projectDropdown'),
+            key: Key('projectDropdown_$_projectId'),
+            trailingIcon: const Icon(Icons.arrow_drop_down, semanticLabel: 'Show projects'),
+            selectedTrailingIcon: const Icon(Icons.arrow_drop_up, semanticLabel: 'Hide projects'),
             expandedInsets: EdgeInsets.zero,
             label: const Text('Project'),
             initialSelection: _projectId,
@@ -353,7 +446,9 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
           ),
           const SizedBox(height: Space.m),
           DropdownMenu<String>(
-            key: ValueKey('taskDropdown_$_projectId'),
+            key: ValueKey('taskDropdown_${_projectId}_$_taskId'),
+            trailingIcon: const Icon(Icons.arrow_drop_down, semanticLabel: 'Show tasks'),
+            selectedTrailingIcon: const Icon(Icons.arrow_drop_up, semanticLabel: 'Hide tasks'),
             expandedInsets: EdgeInsets.zero,
             label: const Text('Task'),
             enabled: project != null,

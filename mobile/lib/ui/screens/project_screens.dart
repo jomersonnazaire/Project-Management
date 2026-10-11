@@ -131,7 +131,15 @@ class _ProjectCard extends StatelessWidget {
 enum ProjectTab { checklist, board, issues, more }
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
-  const ProjectDetailScreen({super.key, required this.projectId, this.initialTab = ProjectTab.checklist});
+  const ProjectDetailScreen({
+    super.key,
+    required this.projectId,
+    this.initialTab = ProjectTab.checklist,
+    this.navNonce = '',
+  });
+
+  /// The full location; changes on every navigation to this route.
+  final String navNonce;
   final String projectId;
   final ProjectTab initialTab;
   @override
@@ -140,6 +148,13 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
 
 class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   late ProjectTab _tab = widget.initialTab;
+
+  @override
+  void didUpdateWidget(ProjectDetailScreen old) {
+    super.didUpdateWidget(old);
+    // The shell keeps this page alive; follow ?tab= changes from later navigation.
+    if (widget.initialTab != old.initialTab || widget.navNonce != old.navNonce) _tab = widget.initialTab;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -190,13 +205,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                 key: const Key('projectTabs'),
                 showSelectedIcon: false,
                 segments: const [
-                  ButtonSegment(value: ProjectTab.checklist, label: Text('Checklist')),
+                  ButtonSegment(value: ProjectTab.checklist, label: FitLabel('Checklist')),
                   ButtonSegment(
                     value: ProjectTab.board,
-                    label: Text('Board', key: Key('boardTab')),
+                    label: FitLabel('Board', key: Key('boardTab')),
                   ),
-                  ButtonSegment(value: ProjectTab.issues, label: Text('Issues')),
-                  ButtonSegment(value: ProjectTab.more, label: Text('More')),
+                  ButtonSegment(value: ProjectTab.issues, label: FitLabel('Issues')),
+                  ButtonSegment(value: ProjectTab.more, label: FitLabel('More')),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (v) => setState(() => _tab = v.first),
@@ -363,7 +378,14 @@ class _KanbanBoardState extends ConsumerState<KanbanBoard> {
                         padding: const EdgeInsets.all(Space.m),
                         child: Row(
                           children: [
-                            Text(status.label, style: t.titleMedium),
+                            Flexible(
+                              child: Text(
+                                status.label,
+                                style: t.titleMedium,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             const SizedBox(width: Space.s),
                             Badge(
                               label: Text('${col.length}'),
@@ -465,10 +487,17 @@ class _BoardCard extends StatelessWidget {
               const SizedBox(height: Space.s + 4),
               Row(
                 children: [
-                  PriorityChip(task.priority),
-                  const SizedBox(width: Space.s),
-                  Text(fmtDate(task.dueDate), style: Theme.of(context).textTheme.bodySmall),
-                  const Spacer(),
+                  Expanded(
+                    child: Wrap(
+                      spacing: Space.s,
+                      runSpacing: Space.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        PriorityChip(task.priority),
+                        Text(fmtDate(task.dueDate), style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
                   if (task.assignees.isNotEmpty) InitialsAvatar(task.assignees.first, radius: 13),
                 ],
               ),
@@ -541,7 +570,7 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
             ),
           );
       ref.invalidate(projectTasksProvider(widget.projectId));
-      if (mounted) context.pop();
+      if (mounted) popOrGo(context, '/projects/${widget.projectId}?tab=checklist');
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -554,7 +583,7 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
     return Scaffold(
       key: const Key('createTaskScreen'),
       appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => context.pop()),
+        leading: BackOrUpButton(fallback: '/projects/${widget.projectId}', icon: Icons.close),
         title: const Text('New task'),
         actions: [
           TextButton(key: const Key('saveTask'), onPressed: _busy ? null : _save, child: const Text('Save')),

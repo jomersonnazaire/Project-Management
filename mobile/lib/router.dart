@@ -59,9 +59,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                     path: ':id',
                     builder: (_, s) => ProjectDetailScreen(
                       projectId: s.pathParameters['id']!,
-                      initialTab: s.uri.queryParameters['tab'] == 'board'
-                          ? ProjectTab.board
-                          : ProjectTab.checklist,
+                      initialTab:
+                          ProjectTab.values
+                              .where((t) => t.name == s.uri.queryParameters['tab'])
+                              .firstOrNull ??
+                          ProjectTab.checklist,
+                      navNonce: s.uri.toString(),
                     ),
                   ),
                 ],

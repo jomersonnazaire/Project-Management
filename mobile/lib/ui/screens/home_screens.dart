@@ -60,13 +60,7 @@ class HomeScreen extends ConsumerWidget {
                   children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: Space.m),
-                      child: GridView.count(
-                        crossAxisCount: 2,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: Space.s,
-                        crossAxisSpacing: Space.s,
-                        childAspectRatio: 1.7,
+                      child: _KpiGrid(
                         children: [
                           _Kpi('Open tasks', '${d.open}', s.primaryContainer, s.onPrimaryContainer),
                           _Kpi('Blocked', '${d.blocked}', sc.blocked.container, sc.blocked.onContainer),
@@ -149,15 +143,18 @@ class _Kpi extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     color: bg,
-    child: Padding(
-      padding: const EdgeInsets.all(Space.m),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg)),
-          Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: fg)),
-        ],
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 96),
+      child: Padding(
+        padding: const EdgeInsets.all(Space.m),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg)),
+            Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: fg)),
+          ],
+        ),
       ),
     ),
   );
@@ -251,6 +248,7 @@ class NotificationsScreen extends ConsumerWidget {
     return Scaffold(
       key: const Key('notificationsScreen'),
       appBar: AppBar(
+        leading: const BackOrUpButton(fallback: '/home'),
         title: const Text('Notifications'),
         actions: [
           TextButton(
@@ -386,7 +384,10 @@ class IssuesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     key: const Key('issuesScreen'),
-    appBar: AppBar(title: const Text('Issues')),
+    appBar: AppBar(
+      leading: const BackOrUpButton(fallback: '/more'),
+      title: const Text('Issues'),
+    ),
     body: const IssuesList(),
   );
 }
@@ -422,6 +423,10 @@ class MoreScreen extends ConsumerWidget {
                   key: const Key('moreIssues'),
                   leading: const Icon(Icons.bug_report_outlined),
                   title: const Text('Issues'),
+                  subtitle: Text(
+                    '${ref.watch(issuesProvider(null)).value?.where((i) => i.isOpen).length ?? '…'} open',
+                    key: const Key('moreIssuesCount'),
+                  ),
                   onTap: () => context.push('/issues'),
                 ),
                 ListTile(
@@ -495,4 +500,29 @@ class MoreScreen extends ConsumerWidget {
     );
     if (!ok && context.mounted) showError(context, 'Could not open the web app.');
   }
+}
+
+/// 2-column KPI grid whose rows grow with text scale (no fixed aspect ratio).
+class _KpiGrid extends StatelessWidget {
+  const _KpiGrid({required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      for (var i = 0; i < children.length; i += 2)
+        Padding(
+          padding: EdgeInsets.only(bottom: i + 2 < children.length ? Space.s : 0),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: children[i]),
+                const SizedBox(width: Space.s),
+                Expanded(child: i + 1 < children.length ? children[i + 1] : const SizedBox()),
+              ],
+            ),
+          ),
+        ),
+    ],
+  );
 }

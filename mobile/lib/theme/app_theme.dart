@@ -108,7 +108,12 @@ abstract final class AppTheme {
   static ThemeData get dark => _build(Brightness.dark);
 
   static ThemeData _build(Brightness b) {
-    final scheme = ColorScheme.fromSeed(seedColor: _seed, brightness: b);
+    // tonalSpot mutes the brand indigo; pin primary to #3F51B5 in light mode (QA #3) while
+    // keeping tonalSpot's soft containers. Dark mode keeps the generated light-indigo primary.
+    final base = ColorScheme.fromSeed(seedColor: _seed, brightness: b);
+    final scheme = b == Brightness.light
+        ? base.copyWith(primary: _seed, onPrimary: Colors.white, surfaceTint: _seed)
+        : base;
     const text = TextTheme(
       displaySmall: TextStyle(fontSize: 36, fontWeight: FontWeight.w400, height: 1.22),
       headlineMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w400, height: 1.29),
