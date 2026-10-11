@@ -33,14 +33,6 @@ const EnvSchema = z.object({
     .min(1)
     .max(24 * 30)
     .default(12),
-  /** Mobile app sessions: sliding idle window (3 days) and an absolute cap (90 days). */
-  MOBILE_SESSION_IDLE_HOURS: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(24 * 30)
-    .default(72),
-  MOBILE_SESSION_ABSOLUTE_DAYS: z.coerce.number().int().min(1).max(365).default(90),
   LOCKOUT_THRESHOLD: z.coerce.number().int().min(1).default(5),
   LOCKOUT_MINUTES: z.coerce.number().int().min(1).default(15),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),

@@ -13,8 +13,6 @@ const sessionSchema = new Schema(
     absoluteExpiresAt: { type: Date, required: true },
     ip: { type: String, default: null },
     userAgent: { type: String, default: null, maxlength: 300 },
-    /** Mobile app sessions (X-Client: mobile) slide on MOBILE_SESSION_IDLE_HOURS instead. */
-    idleMinutes: { type: Number, default: null },
   },
   { timestamps: true, strict: 'throw' },
 );

@@ -36,7 +36,7 @@ export async function authenticate(config: AppConfig, req: Request, res: Respons
     throw unauthorized('Your session has ended. Please sign in again.', 'SESSION_EXPIRED');
   }
   if (now - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
-    const idleExpiry = now + (session.idleMinutes ?? config.SESSION_IDLE_MINUTES) * 60_000;
+    const idleExpiry = now + config.SESSION_IDLE_MINUTES * 60_000;
     await SessionModel.updateOne(
       { _id: session._id },
       {
