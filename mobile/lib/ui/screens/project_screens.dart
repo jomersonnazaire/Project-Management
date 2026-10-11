@@ -1,4 +1,5 @@
 import '../v2/project_form.dart';
+import '../v2/project_p2.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -304,7 +305,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                 ProjectTab.checklist => ChecklistView(projectId: p.id),
                 ProjectTab.board => KanbanBoard(projectId: p.id),
                 ProjectTab.issues => IssuesList(projectId: p.id),
-                ProjectTab.more => _ProjectInfo(p),
+                ProjectTab.more => ProjectInfoView(p),
               },
             ),
           ],
@@ -312,41 +313,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       ),
     );
   }
-}
-
-class _ProjectInfo extends StatelessWidget {
-  const _ProjectInfo(this.p);
-  final Project p;
-  @override
-  Widget build(BuildContext context) => ListView(
-    children: [
-      ListTile(
-        leading: const Icon(Icons.business),
-        title: const Text('Client'),
-        subtitle: Text(p.clientName),
-      ),
-      ListTile(
-        leading: const Icon(Icons.person_outline),
-        title: const Text('Project manager'),
-        subtitle: Text(p.managerName ?? '—'),
-      ),
-      ListTile(
-        leading: const Icon(Icons.flag_outlined),
-        title: const Text('Go-live'),
-        subtitle: Text(fmtDate(p.goLive)),
-      ),
-      ListTile(
-        leading: const Icon(Icons.checklist),
-        title: const Text('Tasks'),
-        subtitle: Text('${p.taskCount}'),
-      ),
-      const ListTile(
-        leading: Icon(Icons.open_in_new),
-        title: Text('Documents, conversation, handover'),
-        subtitle: Text('Available on the web app'),
-      ),
-    ],
-  );
 }
 
 class ChecklistView extends ConsumerWidget {

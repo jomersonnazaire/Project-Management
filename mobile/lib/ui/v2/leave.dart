@@ -83,12 +83,25 @@ class _RecordLeaveSheetState extends ConsumerState<RecordLeaveSheet> {
     if (e.isNotEmpty) return;
     setState(() => _busy = true);
     try {
-      await ref.read(leaveRepositoryProvider).record(
-        LeaveInput(typeId: _type!, dayPart: _part, from: _from, to: _to, reason: _reason.text),
-      );
+      await ref
+          .read(leaveRepositoryProvider)
+          .record(
+            LeaveInput(
+              typeId: _type!,
+              dayPart: _part,
+              from: _from,
+              to: _to,
+              reason: _reason.text,
+            ),
+          );
       if (mounted) Navigator.pop(context, true);
     } on ApiException catch (err) {
-      if (mounted) setState(() => _errors = err.fields.isNotEmpty ? err.fields : {'_': err.message});
+      if (mounted) {
+        setState(
+          () =>
+              _errors = err.fields.isNotEmpty ? err.fields : {'_': err.message},
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -101,7 +114,13 @@ class _RecordLeaveSheetState extends ConsumerState<RecordLeaveSheet> {
     final bal = ref.watch(leaveBalancesProvider(_from.year)).value;
     final t = Theme.of(context).textTheme;
     final s = Theme.of(context).colorScheme;
-    Widget dateField(String key, String label, DateTime v, String field, bool from) => InkWell(
+    Widget dateField(
+      String key,
+      String label,
+      DateTime v,
+      String field,
+      bool from,
+    ) => InkWell(
       key: Key(key),
       onTap: () => _pick(from),
       child: InputDecorator(
@@ -109,7 +128,10 @@ class _RecordLeaveSheetState extends ConsumerState<RecordLeaveSheet> {
           labelText: label,
           errorText: _errors[field],
           errorMaxLines: 3,
-          suffixIcon: const Icon(Icons.calendar_today_outlined, semanticLabel: 'Pick a date'),
+          suffixIcon: const Icon(
+            Icons.calendar_today_outlined,
+            semanticLabel: 'Pick a date',
+          ),
         ),
         child: Text(longDayShort(v)),
       ),
@@ -128,12 +150,19 @@ class _RecordLeaveSheetState extends ConsumerState<RecordLeaveSheet> {
               Card(
                 key: const Key('noSupervisorBanner'),
                 color: context.statusColors.forReview.container,
-                child: const Padding(padding: EdgeInsets.all(Space.m), child: Text(noSupervisorLeave)),
+                child: const Padding(
+                  padding: EdgeInsets.all(Space.m),
+                  child: Text(noSupervisorLeave),
+                ),
               ),
               const SizedBox(height: Space.m),
             ],
             if (_errors['_'] != null) ...[
-              Text(_errors['_']!, key: const Key('leaveError'), style: TextStyle(color: s.error)),
+              Text(
+                _errors['_']!,
+                key: const Key('leaveError'),
+                style: TextStyle(color: s.error),
+              ),
               const SizedBox(height: Space.s),
             ],
             DropdownMenu<String>(
@@ -143,7 +172,8 @@ class _RecordLeaveSheetState extends ConsumerState<RecordLeaveSheet> {
               errorText: _errors['leaveTypeId'],
               initialSelection: _type,
               dropdownMenuEntries: [
-                for (final lt in types) DropdownMenuEntry(value: lt.id, label: lt.name),
+                for (final lt in types)
+                  DropdownMenuEntry(value: lt.id, label: lt.name),
               ],
               onSelected: (v) => setState(() {
                 _type = v;
@@ -151,10 +181,14 @@ class _RecordLeaveSheetState extends ConsumerState<RecordLeaveSheet> {
                 if (nt?.fullDaysOnly ?? false) _part = 'FULL';
               }),
             ),
-            if (_errors['leaveTypeId'] != null && _errors['leaveTypeId']!.length > 40)
+            if (_errors['leaveTypeId'] != null &&
+                _errors['leaveTypeId']!.length > 40)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(_errors['leaveTypeId']!, style: t.bodySmall?.copyWith(color: s.error)),
+                child: Text(
+                  _errors['leaveTypeId']!,
+                  style: t.bodySmall?.copyWith(color: s.error),
+                ),
               ),
             const SizedBox(height: Space.m),
             Text('Day part *', style: t.labelLarge),
@@ -179,7 +213,10 @@ class _RecordLeaveSheetState extends ConsumerState<RecordLeaveSheet> {
             if (_errors['dayPart'] != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(_errors['dayPart']!, style: t.bodySmall?.copyWith(color: s.error)),
+                child: Text(
+                  _errors['dayPart']!,
+                  style: t.bodySmall?.copyWith(color: s.error),
+                ),
               ),
             const SizedBox(height: Space.m),
             dateField('leaveFromField', 'From', _from, 'from', true),
@@ -268,7 +305,10 @@ class _MyLeave extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    StatusChip(label: 'Supervisor needed', colors: sc.forReview),
+                    StatusChip(
+                      label: 'Supervisor needed',
+                      colors: sc.forReview,
+                    ),
                     const SizedBox(height: Space.s),
                     const Text(noSupervisorLeave),
                   ],
@@ -282,14 +322,16 @@ class _MyLeave extends ConsumerWidget {
                 key: const Key('leavePrevYear'),
                 tooltip: 'Previous year',
                 icon: const Icon(Icons.chevron_left),
-                onPressed: () => ref.read(leaveYearProvider.notifier).set(year - 1),
+                onPressed: () =>
+                    ref.read(leaveYearProvider.notifier).set(year - 1),
               ),
               Text('$year', key: const Key('leaveYear'), style: t.titleSmall),
               IconButton(
                 key: const Key('leaveNextYear'),
                 tooltip: 'Next year',
                 icon: const Icon(Icons.chevron_right),
-                onPressed: () => ref.read(leaveYearProvider.notifier).set(year + 1),
+                onPressed: () =>
+                    ref.read(leaveYearProvider.notifier).set(year + 1),
               ),
             ],
           ),
@@ -298,7 +340,8 @@ class _MyLeave extends ConsumerWidget {
           AsyncView(
             value: bal,
             onRetry: () => ref.invalidate(leaveBalancesProvider(year)),
-            data: (b) => Column(children: [for (final x in b.items) _BalanceCard(x)]),
+            data: (b) =>
+                Column(children: [for (final x in b.items) _BalanceCard(x)]),
           ),
           const SizedBox(height: Space.l),
           Text('My leave', style: t.titleMedium),
@@ -309,9 +352,17 @@ class _MyLeave extends ConsumerWidget {
             data: (items) => items.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.all(Space.l),
-                    child: Text('No leave recorded yet', key: Key('myLeaveEmpty'), textAlign: TextAlign.center),
+                    child: Text(
+                      'No leave recorded yet',
+                      key: Key('myLeaveEmpty'),
+                      textAlign: TextAlign.center,
+                    ),
                   )
-                : Column(children: [for (final l in items) _LeaveCard(l, today: today)]),
+                : Column(
+                    children: [
+                      for (final l in items) _LeaveCard(l, today: today),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -340,7 +391,8 @@ class _BalanceCard extends StatelessWidget {
               children: [
                 Text(b.type.name, style: t.titleSmall),
                 if (!b.type.paid) StatusChip(label: 'Unpaid', colors: sc.todo),
-                if (b.negative) StatusChip(label: 'Negative', colors: sc.blocked),
+                if (b.negative)
+                  StatusChip(label: 'Negative', colors: sc.blocked),
               ],
             ),
             const SizedBox(height: 4),
@@ -366,7 +418,10 @@ Future<void> _cancel(BuildContext context, WidgetRef ref, LeaveItem l) async {
         '${leaveRangeLabel(l.from, l.to)} · ${l.partLabel}. This restores your balance and tells your supervisor.',
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep it')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Keep it'),
+        ),
         FilledButton(
           key: const Key('confirmCancelLeave'),
           style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
@@ -381,7 +436,8 @@ Future<void> _cancel(BuildContext context, WidgetRef ref, LeaveItem l) async {
     await ref.read(leaveRepositoryProvider).cancel(l.id);
     invalidateLeave(ref);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leave cancelled')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Leave cancelled')));
     }
   } catch (e) {
     if (context.mounted) showError(context, e);
@@ -412,7 +468,9 @@ class _LeaveCard extends ConsumerWidget {
               PopupMenuItem(
                 key: Key('cancelHalf_${h.dayPart}'),
                 value: h,
-                child: Text('Cancel ${h.dayPart == 'AM' ? 'morning (AM)' : 'afternoon (PM)'}'),
+                child: Text(
+                  'Cancel ${h.dayPart == 'AM' ? 'morning (AM)' : 'afternoon (PM)'}',
+                ),
               ),
         ],
       );
@@ -434,11 +492,22 @@ class _LeaveCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${l.typeName} · ${leaveRangeLabel(l.from, l.to)}', style: t.titleSmall),
-                  Text('${l.partLabel} · ${leaveDaysLabel(l.days)} ${l.days == 1 ? 'day' : 'days'}', style: t.bodySmall),
-                  if (l.reason != null && l.reason!.isNotEmpty) Text(l.reason!, style: t.bodySmall),
+                  Text(
+                    '${l.typeName} · ${leaveRangeLabel(l.from, l.to)}',
+                    style: t.titleSmall,
+                  ),
+                  Text(
+                    '${l.partLabel} · ${leaveDaysLabel(l.days)} ${l.days == 1 ? 'day' : 'days'}',
+                    style: t.bodySmall,
+                  ),
+                  if (l.reason != null && l.reason!.isNotEmpty)
+                    Text(l.reason!, style: t.bodySmall),
                   if (!l.cancelled && !l.canCancel && past)
-                    Text(pastLeaveAdminOnly, key: Key('pastLeave_${l.id}'), style: t.bodySmall),
+                    Text(
+                      pastLeaveAdminOnly,
+                      key: Key('pastLeave_${l.id}'),
+                      style: t.bodySmall,
+                    ),
                 ],
               ),
             ),
@@ -469,14 +538,20 @@ class _TeamLeave extends ConsumerWidget {
           if (tl.items.isEmpty)
             const Padding(
               padding: EdgeInsets.all(Space.l),
-              child: Text('No team leave in the next 30 days', key: Key('teamLeaveEmpty'), textAlign: TextAlign.center),
+              child: Text(
+                'No team leave in the next 30 days',
+                key: Key('teamLeaveEmpty'),
+                textAlign: TextAlign.center,
+              ),
             ),
           for (final l in tl.items)
             Card(
               child: ListTile(
                 leading: InitialsAvatar(l.userName),
                 title: Text(l.userName),
-                subtitle: Text('${l.typeName} · ${leaveRangeLabel(l.from, l.to)} · ${l.partLabel}'),
+                subtitle: Text(
+                  '${l.typeName} · ${leaveRangeLabel(l.from, l.to)} · ${l.partLabel}',
+                ),
               ),
             ),
           if (tl.people.isNotEmpty) ...[
@@ -496,13 +571,19 @@ class _TeamLeave extends ConsumerWidget {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(p.name, style: t.titleSmall),
-                          if (p.noSupervisor) StatusChip(label: 'Supervisor needed', colors: sc.forReview),
+                          if (p.noSupervisor)
+                            StatusChip(
+                              label: 'Supervisor needed',
+                              colors: sc.forReview,
+                            ),
                         ],
                       ),
                       for (final b in p.balances)
                         Text(
                           '${b.type.name}: ${leaveDaysLabel(b.balance)} left${b.negative ? ' · Negative' : ''}',
-                          style: t.bodySmall?.copyWith(color: b.negative ? sc.blocked.onContainer : null),
+                          style: t.bodySmall?.copyWith(
+                            color: b.negative ? sc.blocked.onContainer : null,
+                          ),
                         ),
                     ],
                   ),

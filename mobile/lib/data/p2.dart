@@ -7,9 +7,14 @@ import 'v2_repositories.dart';
 
 // ---------------- Leave (packages/shared/src/leave.ts) ----------------
 
-const dayPartLabels = {'FULL': 'Full day', 'AM': 'Half day AM', 'PM': 'Half day PM'};
+const dayPartLabels = {
+  'FULL': 'Full day',
+  'AM': 'Half day AM',
+  'PM': 'Half day PM',
+};
 const fullDayAmPm = 'Full day (AM + PM)';
-const halfDaySingleDate = 'A half day is on a single date. Set "To" to the same date.';
+const halfDaySingleDate =
+    'A half day is on a single date. Set "To" to the same date.';
 const toBeforeFrom = 'Pick a "To" date on or after the "From" date.';
 const noWorkingDays = 'This range has no working days. Pick working days.';
 const morningTaken = 'You already have leave recorded for this morning.';
@@ -21,16 +26,24 @@ const noSupervisorLeave =
 String _days(num n) => '${fmtNum(n)} ${n == 1 ? 'day' : 'days'}';
 String overBalanceMessage(num left, String type, num need) =>
     'You have ${_days(left)} of $type left, and this needs ${_days(need)}. Choose fewer days or another leave type.';
-String fullDayTypeMessage(String type) => '$type is taken in full days. Choose Full day.';
+String fullDayTypeMessage(String type) =>
+    '$type is taken in full days. Choose Full day.';
 String fmtNum(num n) => n == n.roundToDouble() ? '${n.toInt()}' : '$n';
 
 /// leaveDaysLabel: real minus sign (U+2212); null → "–".
-String leaveDaysLabel(num? n) => n == null ? '–' : (n < 0 ? '\u2212${fmtNum(n.abs())}' : fmtNum(n));
+String leaveDaysLabel(num? n) =>
+    n == null ? '–' : (n < 0 ? '\u2212${fmtNum(n.abs())}' : fmtNum(n));
 String leaveRangeLabel(DateTime from, DateTime to) =>
     from == to ? shortDate(from) : '${shortDate(from)} – ${shortDate(to)}';
 
 class LeaveType {
-  const LeaveType(this.id, this.name, {this.paid = true, this.unit = 'HALF_DAY', this.needsDocument = false});
+  const LeaveType(
+    this.id,
+    this.name, {
+    this.paid = true,
+    this.unit = 'HALF_DAY',
+    this.needsDocument = false,
+  });
   final String id, name, unit;
   final bool paid, needsDocument;
   bool get fullDaysOnly => unit == 'DAY';
@@ -65,7 +78,8 @@ class LeaveItem {
   final bool canCancel;
   final List<LeaveItem>? halves;
   bool get cancelled => status == 'CANCELLED';
-  String get partLabel => halves != null ? fullDayAmPm : dayPartLabels[dayPart] ?? dayPart;
+  String get partLabel =>
+      halves != null ? fullDayAmPm : dayPartLabels[dayPart] ?? dayPart;
 
   factory LeaveItem.fromJson(Map<String, dynamic> j) => LeaveItem(
     id: '${j['id']}',
@@ -98,20 +112,25 @@ List<LeaveItem> mergeHalfDays(List<LeaveItem> items) {
     final a = am[key(l)], p = pm[key(l)];
     if (a != null && p != null && (l.id == a.id || l.id == p.id)) {
       used.addAll([a.id, p.id]);
-      final reasons = {a.reason, p.reason}.whereType<String>().where((r) => r.isNotEmpty);
-      out.add(LeaveItem(
-        id: '${a.id}+${p.id}',
-        userName: a.userName,
-        typeId: a.typeId,
-        typeName: a.typeName,
-        dayPart: 'FULL',
-        from: a.from,
-        to: a.to,
-        days: a.days + p.days,
-        reason: reasons.isEmpty ? null : reasons.join(' / '),
-        canCancel: a.canCancel || p.canCancel,
-        halves: [a, p],
-      ));
+      final reasons = {
+        a.reason,
+        p.reason,
+      }.whereType<String>().where((r) => r.isNotEmpty);
+      out.add(
+        LeaveItem(
+          id: '${a.id}+${p.id}',
+          userName: a.userName,
+          typeId: a.typeId,
+          typeName: a.typeName,
+          dayPart: 'FULL',
+          from: a.from,
+          to: a.to,
+          days: a.days + p.days,
+          reason: reasons.isEmpty ? null : reasons.join(' / '),
+          canCancel: a.canCancel || p.canCancel,
+          halves: [a, p],
+        ),
+      );
       continue;
     }
     out.add(l);
@@ -120,7 +139,14 @@ List<LeaveItem> mergeHalfDays(List<LeaveItem> items) {
 }
 
 class LeaveBalance {
-  const LeaveBalance({required this.type, this.entitlement, this.carryOver = 0, this.recorded = 0, this.balance, this.negative = false});
+  const LeaveBalance({
+    required this.type,
+    this.entitlement,
+    this.carryOver = 0,
+    this.recorded = 0,
+    this.balance,
+    this.negative = false,
+  });
   final LeaveType type;
   final num? entitlement, balance;
   final num carryOver, recorded;
@@ -143,7 +169,11 @@ class Balances {
 }
 
 class TeamPerson {
-  const TeamPerson(this.name, {this.noSupervisor = false, this.balances = const []});
+  const TeamPerson(
+    this.name, {
+    this.noSupervisor = false,
+    this.balances = const [],
+  });
   final String name;
   final bool noSupervisor;
   final List<LeaveBalance> balances;
@@ -156,7 +186,13 @@ class TeamLeave {
 }
 
 class LeaveInput {
-  const LeaveInput({required this.typeId, required this.dayPart, required this.from, required this.to, this.reason});
+  const LeaveInput({
+    required this.typeId,
+    required this.dayPart,
+    required this.from,
+    required this.to,
+    this.reason,
+  });
   final String typeId, dayPart;
   final DateTime from, to;
   final String? reason;
@@ -181,7 +217,15 @@ abstract interface class LeaveRepository {
 // ---------------- Task actions (TaskDto extras) ----------------
 
 class Evidence {
-  const Evidence({required this.id, required this.type, required this.name, this.url, this.size, this.addedBy, required this.at});
+  const Evidence({
+    required this.id,
+    required this.type,
+    required this.name,
+    this.url,
+    this.size,
+    this.addedBy,
+    required this.at,
+  });
   final String id, type, name;
   final String? url, addedBy;
   final int? size;
@@ -199,7 +243,13 @@ class Evidence {
 }
 
 class FollowUp {
-  const FollowUp({required this.id, required this.note, this.author, this.contact, required this.at});
+  const FollowUp({
+    required this.id,
+    required this.note,
+    this.author,
+    this.contact,
+    required this.at,
+  });
   final String id, note;
   final String? author, contact;
   final DateTime at;
@@ -230,7 +280,12 @@ class TaskExtras {
     this.deliverable,
     this.clientContactId,
   });
-  final String? approvalComment, approvalBy, deleteBlockedReason, ownerId, deliverable, clientContactId;
+  final String? approvalComment,
+      approvalBy,
+      deleteBlockedReason,
+      ownerId,
+      deliverable,
+      clientContactId;
   final List<Evidence> evidence;
   final List<FollowUp> followUps;
   final List<String> assigneeIds;
@@ -242,8 +297,14 @@ class TaskExtras {
     return TaskExtras(
       approvalComment: ap['comment'] as String?,
       approvalBy: (ap['decidedBy'] as Map?)?['name'] as String?,
-      evidence: [for (final e in (j['evidence'] as List? ?? const [])) Evidence.fromJson(e as Map<String, dynamic>)],
-      followUps: [for (final e in (j['followUps'] as List? ?? const [])) FollowUp.fromJson(e as Map<String, dynamic>)],
+      evidence: [
+        for (final e in (j['evidence'] as List? ?? const []))
+          Evidence.fromJson(e as Map<String, dynamic>),
+      ],
+      followUps: [
+        for (final e in (j['followUps'] as List? ?? const []))
+          FollowUp.fromJson(e as Map<String, dynamic>),
+      ],
       canEdit: can['edit'] as bool? ?? false,
       canPlan: can['plan'] as bool? ?? false,
       canStatus: can['status'] as bool? ?? false,
@@ -251,7 +312,10 @@ class TaskExtras {
       deletable: j['deletable'] as bool? ?? false,
       deleteBlockedReason: j['deleteBlockedReason'] as String?,
       ownerId: (j['owner'] as Map?)?['id'] as String?,
-      assigneeIds: [for (final a in (j['assignees'] as List? ?? const [])) '${(a as Map)['id']}'],
+      assigneeIds: [
+        for (final a in (j['assignees'] as List? ?? const []))
+          '${(a as Map)['id']}',
+      ],
       deliverable: j['deliverable'] as String?,
       clientContactId: (j['clientContact'] as Map?)?['id'] as String?,
     );
@@ -259,7 +323,14 @@ class TaskExtras {
 }
 
 class HistoryItem {
-  const HistoryItem({required this.id, required this.at, this.actor, required this.action, this.changes = const [], this.reason});
+  const HistoryItem({
+    required this.id,
+    required this.at,
+    this.actor,
+    required this.action,
+    this.changes = const [],
+    this.reason,
+  });
   final String id, action;
   final DateTime at;
   final String? actor, reason;
@@ -272,13 +343,19 @@ class HistoryItem {
     reason: j['reason'] as String?,
     changes: [
       for (final c in (j['changes'] as List? ?? const []))
-        (field: '${(c as Map)['field']}', old: c['old']?.toString(), now: c['new']?.toString()),
+        (
+          field: '${(c as Map)['field']}',
+          old: c['old']?.toString(),
+          now: c['new']?.toString(),
+        ),
     ],
   );
 
   /// "task_status_changed" → "Status changed".
   String get label {
-    final s = action.replaceFirst(RegExp(r'^(task|project)_'), '').replaceAll('_', ' ');
+    final s = action
+        .replaceFirst(RegExp(r'^(task|project)_'), '')
+        .replaceAll('_', ' ');
     return s.isEmpty ? action : s[0].toUpperCase() + s.substring(1);
   }
 }
@@ -319,7 +396,9 @@ class TaskEdit {
     'plannedStart': plannedStart == null ? null : ymd(plannedStart!),
     'dueDate': dueDate == null ? null : ymd(dueDate!),
     'estHours': estHours,
-    'deliverable': (deliverable == null || deliverable!.trim().isEmpty) ? null : deliverable!.trim(),
+    'deliverable': (deliverable == null || deliverable!.trim().isEmpty)
+        ? null
+        : deliverable!.trim(),
     'requiresApproval': ?requiresApproval,
     'mandatory': ?mandatory,
     'clientContactId': clientContactId,
@@ -340,7 +419,9 @@ const evidenceTypesLabel = 'PDF, Word or Excel · up to 25 MB each';
 /// Client check before asking for an upload link (the server repeats it: fileIssue()).
 String? evidenceProblem(PickedFile f) {
   final ext = f.name.contains('.') ? f.name.split('.').last.toLowerCase() : '';
-  if (!evidenceExt.contains(ext)) return '${f.name}: Upload a PDF, Word or Excel file.';
+  if (!evidenceExt.contains(ext)) {
+    return '${f.name}: Upload a PDF, Word or Excel file.';
+  }
   if (f.size > evidenceMaxBytes) return '${f.name}: Files can be up to 25 MB.';
   return null;
 }
@@ -348,7 +429,8 @@ String? evidenceProblem(PickedFile f) {
 const _mime = {
   'pdf': 'application/pdf',
   'doc': 'application/msword',
-  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'docx':
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'xls': 'application/vnd.ms-excel',
   'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
@@ -369,7 +451,13 @@ abstract interface class TaskActionsRepository {
 // ---------------- Project detail extras ----------------
 
 class Contact {
-  const Contact(this.id, this.name, {this.position, this.email, this.added = false});
+  const Contact(
+    this.id,
+    this.name, {
+    this.position,
+    this.email,
+    this.added = false,
+  });
   final String id, name;
   final String? position, email;
   final bool added;
@@ -383,19 +471,36 @@ class Contact {
 }
 
 class ProjectExtras {
-  const ProjectExtras({this.members = const [], this.contacts = const [], this.canEdit = true});
+  const ProjectExtras({
+    this.members = const [],
+    this.contacts = const [],
+    this.canEdit = true,
+  });
   final List<NamedRef> members;
   final List<Contact> contacts;
   final bool canEdit;
   factory ProjectExtras.fromJson(Map<String, dynamic> j) => ProjectExtras(
-    members: [for (final m in (j['members'] as List? ?? const [])) NamedRef('${(m as Map)['id']}', '${m['name']}')],
-    contacts: [for (final c in (j['activeContacts'] as List? ?? const [])) Contact.fromJson(c as Map<String, dynamic>)],
+    members: [
+      for (final m in (j['members'] as List? ?? const []))
+        NamedRef('${(m as Map)['id']}', '${m['name']}'),
+    ],
+    contacts: [
+      for (final c in (j['activeContacts'] as List? ?? const []))
+        Contact.fromJson(c as Map<String, dynamic>),
+    ],
     canEdit: (j['can'] as Map?)?['edit'] as bool? ?? true,
   );
 }
 
 class ProjectTimeRow {
-  const ProjectTimeRow({required this.id, required this.person, required this.task, required this.date, required this.hours, this.type = 'EXECUTION'});
+  const ProjectTimeRow({
+    required this.id,
+    required this.person,
+    required this.task,
+    required this.date,
+    required this.hours,
+    this.type = 'EXECUTION',
+  });
   final String id, person, task, type;
   final DateTime date;
   final double hours;
@@ -410,7 +515,12 @@ class ProjectTimeRow {
 }
 
 class ProjectTime {
-  const ProjectTime(this.items, this.total, this.byType, {this.allPeople = true});
+  const ProjectTime(
+    this.items,
+    this.total,
+    this.byType, {
+    this.allPeople = true,
+  });
   final List<ProjectTimeRow> items;
   final double total;
   final Map<String, double> byType;
@@ -438,20 +548,23 @@ class ApiLeaveRepository implements LeaveRepository {
   ApiLeaveRepository(this.api);
   final ApiClient api;
   @override
-  Future<List<LeaveType>> types() async => [for (final t in _items(await api.get('/leave/types'))) LeaveType.fromJson(t)];
+  Future<List<LeaveType>> types() async => [
+    for (final t in _items(await api.get('/leave/types')))
+      LeaveType.fromJson(t),
+  ];
   @override
   Future<Balances> balances(int year) async {
     final b = await api.get('/leave/balances', {'year': '$year'});
-    return Balances(
-      (b['year'] as num?)?.toInt() ?? year,
-      [for (final i in _items(b)) LeaveBalance.fromJson(i)],
-      supervisorName: (b['supervisor'] as Map?)?['name'] as String?,
-    );
+    return Balances((b['year'] as num?)?.toInt() ?? year, [
+      for (final i in _items(b)) LeaveBalance.fromJson(i),
+    ], supervisorName: (b['supervisor'] as Map?)?['name'] as String?);
   }
 
   @override
-  Future<List<LeaveItem>> mine(int year) async =>
-      [for (final i in _items(await api.get('/leave', {'year': '$year'}))) LeaveItem.fromJson(i)];
+  Future<List<LeaveItem>> mine(int year) async => [
+    for (final i in _items(await api.get('/leave', {'year': '$year'})))
+      LeaveItem.fromJson(i),
+  ];
   @override
   Future<TeamLeave> team() async {
     final b = await api.get('/leave/team');
@@ -462,15 +575,19 @@ class ApiLeaveRepository implements LeaveRepository {
           TeamPerson(
             '${((p as Map)['user'] as Map?)?['name'] ?? ''}',
             noSupervisor: p['noSupervisor'] as bool? ?? false,
-            balances: [for (final i in (p['items'] as List? ?? const [])) LeaveBalance.fromJson(i as Map<String, dynamic>)],
+            balances: [
+              for (final i in (p['items'] as List? ?? const []))
+                LeaveBalance.fromJson(i as Map<String, dynamic>),
+            ],
           ),
       ],
     );
   }
 
   @override
-  Future<LeaveItem> record(LeaveInput input) async =>
-      LeaveItem.fromJson((await api.post('/leave', input.toJson()))['item'] as Map<String, dynamic>);
+  Future<LeaveItem> record(LeaveInput input) async => LeaveItem.fromJson(
+    (await api.post('/leave', input.toJson()))['item'] as Map<String, dynamic>,
+  );
   @override
   Future<void> cancel(String id) => api.post('/leave/$id/cancel');
 }
@@ -485,13 +602,18 @@ class ApiTaskActionsRepository implements TaskActionsRepository {
   }
 
   @override
-  Future<void> approve(String taskId, int version, {String? comment}) => api.post('/tasks/$taskId/approve', {
-    'version': version,
-    if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
-  });
+  Future<void> approve(String taskId, int version, {String? comment}) =>
+      api.post('/tasks/$taskId/approve', {
+        'version': version,
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
+      });
   @override
   Future<void> requestChanges(String taskId, int version, String comment) =>
-      api.post('/tasks/$taskId/reject', {'version': version, 'comment': comment.trim()});
+      api.post('/tasks/$taskId/reject', {
+        'version': version,
+        'comment': comment.trim(),
+      });
 
   /// m8-polish: POST /tasks/:id/evidence/uploads → PUT bytes → POST /uploads/:id/complete.
   @override
@@ -504,20 +626,26 @@ class ApiTaskActionsRepository implements TaskActionsRepository {
     });
     final t = (b['uploads'] as List).first as Map<String, dynamic>;
     await api.putBytes('${t['uploadUrl']}', {
-      for (final e in ((t['headers'] as Map?) ?? const {}).entries) '${e.key}': '${e.value}',
+      for (final e in ((t['headers'] as Map?) ?? const {}).entries)
+        '${e.key}': '${e.value}',
     }, f.bytes);
     await api.post('/uploads/${t['id']}/complete');
   }
 
   @override
-  Future<void> deleteEvidence(String taskId, String evidenceId) => api.delete('/tasks/$taskId/evidence/$evidenceId');
+  Future<void> deleteEvidence(String taskId, String evidenceId) =>
+      api.delete('/tasks/$taskId/evidence/$evidenceId');
   @override
-  Future<void> addFollowUp(String taskId, String note) => api.post('/tasks/$taskId/follow-ups', {'note': note.trim()});
+  Future<void> addFollowUp(String taskId, String note) =>
+      api.post('/tasks/$taskId/follow-ups', {'note': note.trim()});
   @override
-  Future<void> update(String taskId, TaskEdit edit) => api.patch('/tasks/$taskId', edit.toJson());
+  Future<void> update(String taskId, TaskEdit edit) =>
+      api.patch('/tasks/$taskId', edit.toJson());
   @override
-  Future<List<HistoryItem>> history(String taskId) async =>
-      [for (final i in _items(await api.get('/tasks/$taskId/history'))) HistoryItem.fromJson(i)];
+  Future<List<HistoryItem>> history(String taskId) async => [
+    for (final i in _items(await api.get('/tasks/$taskId/history')))
+      HistoryItem.fromJson(i),
+  ];
   @override
   Future<void> delete(String taskId) => api.delete('/tasks/$taskId');
   @override
@@ -532,24 +660,36 @@ class ApiProjectExtrasRepository implements ProjectExtrasRepository {
   final ApiClient api;
   @override
   Future<ProjectExtras> extras(String projectId) async =>
-      ProjectExtras.fromJson((await api.get('/projects/$projectId'))['project'] as Map<String, dynamic>);
+      ProjectExtras.fromJson(
+        (await api.get('/projects/$projectId'))['project']
+            as Map<String, dynamic>,
+      );
   @override
   Future<ProjectTime> time(String projectId) async {
     final b = await api.get('/projects/$projectId/time');
     return ProjectTime(
       [for (final i in _items(b)) ProjectTimeRow.fromJson(i)],
       (b['total'] as num? ?? 0).toDouble(),
-      {for (final e in ((b['byType'] as Map?) ?? const {}).entries) '${e.key}': (e.value as num).toDouble()},
+      {
+        for (final e in ((b['byType'] as Map?) ?? const {}).entries)
+          '${e.key}': (e.value as num).toDouble(),
+      },
       allPeople: b['scope'] == 'ALL',
     );
   }
 
   @override
-  Future<List<HistoryItem>> activity(String projectId) async =>
-      [for (final i in _items(await api.get('/projects/$projectId/activity'))) HistoryItem.fromJson(i)];
+  Future<List<HistoryItem>> activity(String projectId) async => [
+    for (final i in _items(await api.get('/projects/$projectId/activity')))
+      HistoryItem.fromJson(i),
+  ];
   @override
-  Future<List<Contact>> contactOptions(String projectId) async =>
-      [for (final i in _items(await api.get('/projects/$projectId/contact-options'))) Contact.fromJson(i)];
+  Future<List<Contact>> contactOptions(String projectId) async => [
+    for (final i in _items(
+      await api.get('/projects/$projectId/contact-options'),
+    ))
+      Contact.fromJson(i),
+  ];
   @override
   Future<void> addContact(String projectId, String contactId) =>
       api.post('/projects/$projectId/contacts', {'contactId': contactId});
@@ -573,11 +713,60 @@ class MockLeaveStore {
     final t = MockStore.today;
     DateTime d(int add) => DateTime(t.year, t.month, t.day + add);
     items.addAll([
-      LeaveItem(id: 'l1', userName: 'Jonathan Esmalla', typeId: 'lt1', typeName: 'Vacation', dayPart: 'FULL', from: DateTime(2026, 10, 6), to: DateTime(2026, 10, 6), days: 1),
-      LeaveItem(id: 'l2', userName: 'Jonathan Esmalla', typeId: 'lt1', typeName: 'Vacation', dayPart: 'AM', from: DateTime(2026, 10, 7), to: DateTime(2026, 10, 7), days: 0.5),
-      LeaveItem(id: 'l3', userName: 'Jonathan Esmalla', typeId: 'lt1', typeName: 'Vacation', dayPart: 'AM', from: d(4), to: d(4), days: 0.5, canCancel: true),
-      LeaveItem(id: 'l4', userName: 'Jonathan Esmalla', typeId: 'lt1', typeName: 'Vacation', dayPart: 'PM', from: d(4), to: d(4), days: 0.5, canCancel: true),
-      LeaveItem(id: 'l5', userName: 'Jonathan Esmalla', typeId: 'lt2', typeName: 'Sick', dayPart: 'FULL', from: d(8), to: d(9), days: 2, reason: 'Check-up', canCancel: true),
+      LeaveItem(
+        id: 'l1',
+        userName: 'Jonathan Esmalla',
+        typeId: 'lt1',
+        typeName: 'Vacation',
+        dayPart: 'FULL',
+        from: DateTime(2026, 10, 6),
+        to: DateTime(2026, 10, 6),
+        days: 1,
+      ),
+      LeaveItem(
+        id: 'l2',
+        userName: 'Jonathan Esmalla',
+        typeId: 'lt1',
+        typeName: 'Vacation',
+        dayPart: 'AM',
+        from: DateTime(2026, 10, 7),
+        to: DateTime(2026, 10, 7),
+        days: 0.5,
+      ),
+      LeaveItem(
+        id: 'l3',
+        userName: 'Jonathan Esmalla',
+        typeId: 'lt1',
+        typeName: 'Vacation',
+        dayPart: 'AM',
+        from: d(4),
+        to: d(4),
+        days: 0.5,
+        canCancel: true,
+      ),
+      LeaveItem(
+        id: 'l4',
+        userName: 'Jonathan Esmalla',
+        typeId: 'lt1',
+        typeName: 'Vacation',
+        dayPart: 'PM',
+        from: d(4),
+        to: d(4),
+        days: 0.5,
+        canCancel: true,
+      ),
+      LeaveItem(
+        id: 'l5',
+        userName: 'Jonathan Esmalla',
+        typeId: 'lt2',
+        typeName: 'Sick',
+        dayPart: 'FULL',
+        from: d(8),
+        to: d(9),
+        days: 2,
+        reason: 'Check-up',
+        canCancel: true,
+      ),
     ]);
   }
   static const types = [
@@ -617,24 +806,65 @@ class MockLeaveRepository implements LeaveRepository {
         final ent = t.paid ? MockLeaveStore.entitlement[t.id] : null;
         final rec = _used(t.id, year);
         final bal = ent == null ? null : ent - rec;
-        return LeaveBalance(type: t, entitlement: ent, recorded: rec, balance: bal, negative: (bal ?? 0) < 0);
+        return LeaveBalance(
+          type: t,
+          entitlement: ent,
+          recorded: rec,
+          balance: bal,
+          negative: (bal ?? 0) < 0,
+        );
       }(),
   ];
 
   @override
-  Future<Balances> balances(int year) async =>
-      Balances(year, _balances(year), supervisorName: s.hasSupervisor ? 'Queen Reyes' : null);
+  Future<Balances> balances(int year) async => Balances(
+    year,
+    _balances(year),
+    supervisorName: s.hasSupervisor ? 'Queen Reyes' : null,
+  );
   @override
   Future<List<LeaveItem>> mine(int year) async =>
-      s.items.where((l) => l.from.year == year || l.to.year == year).toList()..sort((a, b) => b.from.compareTo(a.from));
+      s.items.where((l) => l.from.year == year || l.to.year == year).toList()
+        ..sort((a, b) => b.from.compareTo(a.from));
   @override
   Future<TeamLeave> team() async => TeamLeave(
     [
-      LeaveItem(id: 'tl1', userName: 'Mark Kim', typeId: 'lt1', typeName: 'Vacation', dayPart: 'FULL', from: DateTime(2026, 10, 14), to: DateTime(2026, 10, 16), days: 3),
+      LeaveItem(
+        id: 'tl1',
+        userName: 'Mark Kim',
+        typeId: 'lt1',
+        typeName: 'Vacation',
+        dayPart: 'FULL',
+        from: DateTime(2026, 10, 14),
+        to: DateTime(2026, 10, 16),
+        days: 3,
+      ),
     ],
     [
-      TeamPerson('Mark Kim', balances: [LeaveBalance(type: MockLeaveStore.types[0], entitlement: 15, recorded: 3, balance: 12)]),
-      TeamPerson('Ana Cruz', noSupervisor: true, balances: [LeaveBalance(type: MockLeaveStore.types[1], entitlement: 10, recorded: 11, balance: -1, negative: true)]),
+      TeamPerson(
+        'Mark Kim',
+        balances: [
+          LeaveBalance(
+            type: MockLeaveStore.types[0],
+            entitlement: 15,
+            recorded: 3,
+            balance: 12,
+          ),
+        ],
+      ),
+      TeamPerson(
+        'Ana Cruz',
+        noSupervisor: true,
+        balances: [
+          LeaveBalance(
+            type: MockLeaveStore.types[1],
+            entitlement: 10,
+            recorded: 11,
+            balance: -1,
+            negative: true,
+          ),
+        ],
+      ),
     ],
   );
 
@@ -643,17 +873,27 @@ class MockLeaveRepository implements LeaveRepository {
 
   @override
   Future<LeaveItem> record(LeaveInput i) async {
-    final type = MockLeaveStore.types.where((t) => t.id == i.typeId).firstOrNull;
+    final type = MockLeaveStore.types
+        .where((t) => t.id == i.typeId)
+        .firstOrNull;
     if (type == null) throw _fail('leaveTypeId', 'Choose a leave type.');
     if (i.to.isBefore(i.from)) throw _fail('to', toBeforeFrom);
-    if (i.dayPart != 'FULL' && i.from != i.to) throw _fail('to', halfDaySingleDate);
-    if (type.fullDaysOnly && i.dayPart != 'FULL') throw _fail('dayPart', fullDayTypeMessage(type.name));
+    if (i.dayPart != 'FULL' && i.from != i.to) {
+      throw _fail('to', halfDaySingleDate);
+    }
+    if (type.fullDaysOnly && i.dayPart != 'FULL') {
+      throw _fail('dayPart', fullDayTypeMessage(type.name));
+    }
     final wd = workingDays(i.from, i.to);
     if (wd == 0) throw _fail('to', noWorkingDays, code: 'NO_WORKING_DAYS');
     final need = i.dayPart == 'FULL' ? wd : 0.5;
     for (final l in s.items.where((l) => !l.cancelled)) {
       if (l.to.isBefore(i.from) || l.from.isAfter(i.to)) continue;
-      if (l.dayPart != 'FULL' && i.dayPart != 'FULL' && l.dayPart != i.dayPart) continue;
+      if (l.dayPart != 'FULL' &&
+          i.dayPart != 'FULL' &&
+          l.dayPart != i.dayPart) {
+        continue;
+      }
       final msg = i.dayPart == 'AM'
           ? morningTaken
           : i.dayPart == 'PM'
@@ -661,9 +901,15 @@ class MockLeaveRepository implements LeaveRepository {
           : 'You already have leave filed for ${leaveRangeLabel(l.from, l.to)}.';
       throw _fail('from', msg, code: 'LEAVE_OVERLAP');
     }
-    final bal = _balances(i.from.year).firstWhere((b) => b.type.id == type.id).balance;
+    final bal = _balances(i.from.year)
+        .firstWhere((b) => b.type.id == type.id)
+        .balance;
     if (bal != null && need > bal) {
-      throw _fail('leaveTypeId', overBalanceMessage(bal, type.name, need), code: 'OVER_BALANCE');
+      throw _fail(
+        'leaveTypeId',
+        overBalanceMessage(bal, type.name, need),
+        code: 'OVER_BALANCE',
+      );
     }
     final item = LeaveItem(
       id: 'l${s._n++}',
@@ -685,10 +931,20 @@ class MockLeaveRepository implements LeaveRepository {
   Future<void> cancel(String id) async {
     final i = s.items.indexWhere((l) => l.id == id);
     final l = s.items[i];
-    if (!l.from.isAfter(MockStore.today)) throw ApiException(pastLeaveAdminOnly, status: 422, code: 'PAST_LEAVE');
+    if (!l.from.isAfter(MockStore.today)) {
+      throw ApiException(pastLeaveAdminOnly, status: 422, code: 'PAST_LEAVE');
+    }
     s.items[i] = LeaveItem(
-      id: l.id, userName: l.userName, typeId: l.typeId, typeName: l.typeName, dayPart: l.dayPart,
-      from: l.from, to: l.to, days: l.days, reason: l.reason, status: 'CANCELLED',
+      id: l.id,
+      userName: l.userName,
+      typeId: l.typeId,
+      typeName: l.typeName,
+      dayPart: l.dayPart,
+      from: l.from,
+      to: l.to,
+      days: l.days,
+      reason: l.reason,
+      status: 'CANCELLED',
     );
   }
 }
@@ -698,39 +954,98 @@ class MockTaskActionsRepository implements TaskActionsRepository {
   final MockStore store;
   static final _extras = <MockStore, Map<String, TaskExtras>>{};
   static final _history = <MockStore, Map<String, List<HistoryItem>>>{};
-  Map<String, TaskExtras> get _x => _extras.putIfAbsent(store, () => {
-    't4': TaskExtras(
-      canApprove: true,
-      evidence: [
-        Evidence(id: 'e1', type: 'FILE', name: 'Roles matrix.xlsx', size: 48213, addedBy: 'Mark Kim', at: DateTime.utc(2026, 10, 9, 3)),
-        Evidence(id: 'e2', type: 'LINK', name: 'Sign-off notes', url: 'https://example.com/notes', addedBy: 'Mark Kim', at: DateTime.utc(2026, 9, 2, 3)),
-      ],
-      followUps: [FollowUp(id: 'f1', note: 'Asked Acme IT for the SSO metadata.', author: 'Jonathan E.', at: DateTime.utc(2026, 10, 8, 2))],
-      deleteBlockedReason: 'It has 2 evidence files and 1 follow-up. Delete those first.',
-      ownerId: 'u1',
-      assigneeIds: const ['u1'],
-    ),
-    't8': const TaskExtras(deletable: true, ownerId: 'u1', assigneeIds: ['u1']),
-  });
-  Map<String, List<HistoryItem>> get _h => _history.putIfAbsent(store, () => {});
+  Map<String, TaskExtras> get _x => _extras.putIfAbsent(
+    store,
+    () => {
+      't7': const TaskExtras(
+        canApprove: true,
+        ownerId: 'u1',
+        assigneeIds: ['u1'],
+      ),
+      't4': TaskExtras(
+        evidence: [
+          Evidence(
+            id: 'e1',
+            type: 'FILE',
+            name: 'Roles matrix.xlsx',
+            size: 48213,
+            addedBy: 'Mark Kim',
+            at: DateTime.utc(2026, 10, 9, 3),
+          ),
+          Evidence(
+            id: 'e2',
+            type: 'LINK',
+            name: 'Sign-off notes',
+            url: 'https://example.com/notes',
+            addedBy: 'Mark Kim',
+            at: DateTime.utc(2026, 9, 2, 3),
+          ),
+        ],
+        followUps: [
+          FollowUp(
+            id: 'f1',
+            note: 'Asked Acme IT for the SSO metadata.',
+            author: 'Jonathan E.',
+            at: DateTime.utc(2026, 10, 8, 2),
+          ),
+        ],
+        deleteBlockedReason:
+            'It has 2 evidence files and 1 follow-up. Delete those first.',
+        ownerId: 'u1',
+        assigneeIds: const ['u1'],
+      ),
+      't8': const TaskExtras(
+        deletable: true,
+        ownerId: 'u1',
+        assigneeIds: ['u1'],
+      ),
+    },
+  );
+  Map<String, List<HistoryItem>> get _h =>
+      _history.putIfAbsent(store, () => {});
 
   int _i(String id) => store.tasks.indexWhere((t) => t.id == id);
-  TaskExtras _get(String id) => _x[id] ?? const TaskExtras(ownerId: 'u1', assigneeIds: ['u1']);
-  void _log(String id, String action, {String? reason, List<({String field, String? old, String? now})> changes = const []}) =>
-      _h.putIfAbsent(id, () => []).insert(
+  TaskExtras _get(String id) =>
+      _x[id] ?? const TaskExtras(ownerId: 'u1', assigneeIds: ['u1']);
+  void _log(
+    String id,
+    String action, {
+    String? reason,
+    List<({String field, String? old, String? now})> changes = const [],
+  }) => _h
+      .putIfAbsent(id, () => [])
+      .insert(
         0,
-        HistoryItem(id: 'h${_h.length}${DateTime.now().microsecond}', at: DateTime.utc(2026, 10, 11, 6), actor: 'Jonathan Esmalla', action: action, reason: reason, changes: changes),
+        HistoryItem(
+          id: 'h${_h.length}${DateTime.now().microsecond}',
+          at: DateTime.utc(2026, 10, 11, 6),
+          actor: 'Jonathan Esmalla',
+          action: action,
+          reason: reason,
+          changes: changes,
+        ),
       );
 
-  TaskExtras _with(TaskExtras e, {String? comment, List<Evidence>? evidence, List<FollowUp>? followUps, bool? canApprove}) => TaskExtras(
+  TaskExtras _with(
+    TaskExtras e, {
+    String? comment,
+    List<Evidence>? evidence,
+    List<FollowUp>? followUps,
+    bool? canApprove,
+  }) => TaskExtras(
     approvalComment: comment ?? e.approvalComment,
     approvalBy: comment != null ? 'Jonathan Esmalla' : e.approvalBy,
     evidence: evidence ?? e.evidence,
     followUps: followUps ?? e.followUps,
-    canEdit: e.canEdit, canPlan: e.canPlan, canStatus: e.canStatus,
+    canEdit: e.canEdit,
+    canPlan: e.canPlan,
+    canStatus: e.canStatus,
     canApprove: canApprove ?? e.canApprove,
-    deletable: e.deletable, deleteBlockedReason: e.deleteBlockedReason,
-    ownerId: e.ownerId, assigneeIds: e.assigneeIds, deliverable: e.deliverable,
+    deletable: e.deletable,
+    deleteBlockedReason: e.deleteBlockedReason,
+    ownerId: e.ownerId,
+    assigneeIds: e.assigneeIds,
+    deliverable: e.deliverable,
   );
 
   @override
@@ -739,14 +1054,33 @@ class MockTaskActionsRepository implements TaskActionsRepository {
   Task _decide(String id, TaskStatus to, String state) {
     final t = store.tasks[_i(id)];
     if (t.status != TaskStatus.forReview) {
-      throw ApiException('Only tasks in For Review can be approved or rejected.', status: 400);
+      throw ApiException(
+        'Only tasks in For Review can be approved or rejected.',
+        status: 400,
+      );
     }
     final n = Task(
-      id: t.id, projectId: t.projectId, name: t.name, projectName: t.projectName, phase: t.phase,
-      priority: t.priority, party: t.party, ownerName: t.ownerName, assignees: t.assignees,
-      plannedStart: t.plannedStart, dueDate: t.dueDate, estHours: t.estHours, actualHours: t.actualHours,
-      status: to, dependsOn: t.dependsOn, requiresApproval: t.requiresApproval, mandatory: t.mandatory,
-      reviewerName: t.reviewerName, approvalState: state, version: t.version + 1, overdue: t.overdue,
+      id: t.id,
+      projectId: t.projectId,
+      name: t.name,
+      projectName: t.projectName,
+      phase: t.phase,
+      priority: t.priority,
+      party: t.party,
+      ownerName: t.ownerName,
+      assignees: t.assignees,
+      plannedStart: t.plannedStart,
+      dueDate: t.dueDate,
+      estHours: t.estHours,
+      actualHours: t.actualHours,
+      status: to,
+      dependsOn: t.dependsOn,
+      requiresApproval: t.requiresApproval,
+      mandatory: t.mandatory,
+      reviewerName: t.reviewerName,
+      approvalState: state,
+      version: t.version + 1,
+      overdue: t.overdue,
     );
     store.tasks[_i(id)] = n;
     return n;
@@ -760,10 +1094,24 @@ class MockTaskActionsRepository implements TaskActionsRepository {
   }
 
   @override
-  Future<void> requestChanges(String taskId, int version, String comment) async {
-    if (comment.trim().isEmpty) throw ApiException('Comment is required.', status: 400, fields: {'comment': 'Comment is required.'});
+  Future<void> requestChanges(
+    String taskId,
+    int version,
+    String comment,
+  ) async {
+    if (comment.trim().isEmpty) {
+      throw ApiException(
+        'Comment is required.',
+        status: 400,
+        fields: {'comment': 'Comment is required.'},
+      );
+    }
     _decide(taskId, TaskStatus.inProgress, 'REJECTED');
-    _x[taskId] = _with(_get(taskId), comment: comment.trim(), canApprove: false);
+    _x[taskId] = _with(
+      _get(taskId),
+      comment: comment.trim(),
+      canApprove: false,
+    );
     _log(taskId, 'task_rejected', reason: comment.trim());
   }
 
@@ -772,71 +1120,143 @@ class MockTaskActionsRepository implements TaskActionsRepository {
     final p = evidenceProblem(f);
     if (p != null) throw ApiException(p, status: 422);
     final e = _get(taskId);
-    _x[taskId] = _with(e, evidence: [
-      ...e.evidence,
-      Evidence(id: 'e${e.evidence.length + 10}', type: 'FILE', name: f.name, size: f.size, addedBy: 'Jonathan Esmalla', at: DateTime.utc(2026, 10, 11, 6)),
-    ]);
-    _log(taskId, 'task_evidence_added', changes: [(field: 'evidence', old: null, now: f.name)]);
+    _x[taskId] = _with(
+      e,
+      evidence: [
+        ...e.evidence,
+        Evidence(
+          id: 'e${e.evidence.length + 10}',
+          type: 'FILE',
+          name: f.name,
+          size: f.size,
+          addedBy: 'Jonathan Esmalla',
+          at: DateTime.utc(2026, 10, 11, 6),
+        ),
+      ],
+    );
+    _log(
+      taskId,
+      'task_evidence_added',
+      changes: [(field: 'evidence', old: null, now: f.name)],
+    );
   }
 
   @override
   Future<void> deleteEvidence(String taskId, String evidenceId) async {
     final e = _get(taskId);
-    _x[taskId] = _with(e, evidence: e.evidence.where((x) => x.id != evidenceId).toList());
+    _x[taskId] = _with(
+      e,
+      evidence: e.evidence.where((x) => x.id != evidenceId).toList(),
+    );
   }
 
   @override
   Future<void> addFollowUp(String taskId, String note) async {
-    if (note.trim().isEmpty) throw ApiException('Note is required.', status: 400, fields: {'note': 'Note is required.'});
+    if (note.trim().isEmpty) {
+      throw ApiException(
+        'Note is required.',
+        status: 400,
+        fields: {'note': 'Note is required.'},
+      );
+    }
     final e = _get(taskId);
-    _x[taskId] = _with(e, followUps: [
-      ...e.followUps,
-      FollowUp(id: 'f${e.followUps.length + 10}', note: note.trim(), author: 'Jonathan Esmalla', at: DateTime.utc(2026, 10, 11, 6)),
-    ]);
+    _x[taskId] = _with(
+      e,
+      followUps: [
+        ...e.followUps,
+        FollowUp(
+          id: 'f${e.followUps.length + 10}',
+          note: note.trim(),
+          author: 'Jonathan Esmalla',
+          at: DateTime.utc(2026, 10, 11, 6),
+        ),
+      ],
+    );
   }
 
   @override
   Future<void> update(String taskId, TaskEdit d) async {
     if (d.name != null && d.name!.trim().isEmpty) {
-      throw ApiException('Task name is required.', status: 400, fields: {'name': 'Task name is required.'});
+      throw ApiException(
+        'Task name is required.',
+        status: 400,
+        fields: {'name': 'Task name is required.'},
+      );
     }
     final t = store.tasks[_i(taskId)];
-    final people = {for (final p in await projectPeople(t.projectId)) p.id: p.name};
+    final people = {
+      for (final p in await projectPeople(t.projectId)) p.id: p.name,
+    };
     store.tasks[_i(taskId)] = Task(
-      id: t.id, projectId: t.projectId, projectName: t.projectName,
+      id: t.id,
+      projectId: t.projectId,
+      projectName: t.projectName,
       name: d.name?.trim() ?? t.name,
       phase: d.phase ?? t.phase,
       priority: d.priority ?? t.priority,
       party: d.party ?? t.party,
       ownerName: d.ownerId == null ? t.ownerName : people[d.ownerId],
-      assignees: d.assigneeIds == null ? t.assignees : [for (final a in d.assigneeIds!) people[a] ?? a],
-      plannedStart: d.plannedStart, dueDate: d.dueDate, estHours: d.estHours,
-      actualHours: t.actualHours, status: t.status, previousStatus: t.previousStatus,
-      blockerReason: t.blockerReason, dependsOn: t.dependsOn,
+      assignees: d.assigneeIds == null
+          ? t.assignees
+          : [for (final a in d.assigneeIds!) people[a] ?? a],
+      plannedStart: d.plannedStart,
+      dueDate: d.dueDate,
+      estHours: d.estHours,
+      actualHours: t.actualHours,
+      status: t.status,
+      previousStatus: t.previousStatus,
+      blockerReason: t.blockerReason,
+      dependsOn: t.dependsOn,
       requiresApproval: d.requiresApproval ?? t.requiresApproval,
       mandatory: d.mandatory ?? t.mandatory,
-      reviewerName: t.reviewerName, approvalState: t.approvalState, version: t.version + 1, overdue: t.overdue,
+      reviewerName: t.reviewerName,
+      approvalState: t.approvalState,
+      version: t.version + 1,
+      overdue: t.overdue,
     );
     final e = _get(taskId);
     _x[taskId] = TaskExtras(
-      approvalComment: e.approvalComment, approvalBy: e.approvalBy, evidence: e.evidence, followUps: e.followUps,
-      canApprove: e.canApprove, deletable: e.deletable, deleteBlockedReason: e.deleteBlockedReason,
-      ownerId: d.ownerId ?? e.ownerId, assigneeIds: d.assigneeIds ?? e.assigneeIds, deliverable: d.deliverable,
+      approvalComment: e.approvalComment,
+      approvalBy: e.approvalBy,
+      evidence: e.evidence,
+      followUps: e.followUps,
+      canApprove: e.canApprove,
+      deletable: e.deletable,
+      deleteBlockedReason: e.deleteBlockedReason,
+      ownerId: d.ownerId ?? e.ownerId,
+      assigneeIds: d.assigneeIds ?? e.assigneeIds,
+      deliverable: d.deliverable,
     );
-    _log(taskId, 'task_updated', changes: [if (d.name != null && d.name != t.name) (field: 'name', old: t.name, now: d.name)]);
+    _log(
+      taskId,
+      'task_updated',
+      changes: [
+        if (d.name != null && d.name != t.name)
+          (field: 'name', old: t.name, now: d.name),
+      ],
+    );
   }
 
   @override
   Future<List<HistoryItem>> history(String taskId) async => [
     ...?_h[taskId],
-    HistoryItem(id: 'h0', at: DateTime.utc(2026, 9, 28, 1), actor: 'Jonathan Esmalla', action: 'task_created'),
+    HistoryItem(
+      id: 'h0',
+      at: DateTime.utc(2026, 9, 28, 1),
+      actor: 'Jonathan Esmalla',
+      action: 'task_created',
+    ),
   ];
 
   @override
   Future<void> delete(String taskId) async {
     final e = _get(taskId);
     if (!e.deletable) {
-      throw ApiException(e.deleteBlockedReason ?? 'This task has records and can’t be deleted.', status: 409, code: 'TASK_HAS_RECORDS');
+      throw ApiException(
+        e.deleteBlockedReason ?? 'This task has records and can’t be deleted.',
+        status: 409,
+        code: 'TASK_HAS_RECORDS',
+      );
     }
     store.tasks.removeAt(_i(taskId));
   }
@@ -854,30 +1274,96 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
   final MockStore store;
   static final _state = <MockStore, Map<String, ProjectExtras>>{};
   static final _log = <MockStore, Map<String, List<HistoryItem>>>{};
-  static const _people = {'u1': 'Jonathan Esmalla', 'u2': 'Queen Reyes', 'u3': 'Mark Kim'};
+  static const _people = {
+    'u1': 'Jonathan Esmalla',
+    'u2': 'Queen Reyes',
+    'u3': 'Mark Kim',
+  };
   static const _allContacts = [
-    Contact('k1', 'Ana Cruz', position: 'IT Manager', email: 'ana@acme.example'),
-    Contact('k2', 'Ben Tan', position: 'Finance Lead', email: 'ben@acme.example'),
+    Contact(
+      'k1',
+      'Ana Cruz',
+      position: 'IT Manager',
+      email: 'ana@acme.example',
+    ),
+    Contact(
+      'k2',
+      'Ben Tan',
+      position: 'Finance Lead',
+      email: 'ben@acme.example',
+    ),
     Contact('k3', 'Carla Diaz', position: 'HR Officer'),
   ];
   Map<String, ProjectExtras> get _s => _state.putIfAbsent(store, () => {});
   Map<String, List<HistoryItem>> get _l => _log.putIfAbsent(store, () => {});
-  ProjectExtras _get(String id) => _s[id] ?? const ProjectExtras(
-    members: [NamedRef('u1', 'Jonathan Esmalla'), NamedRef('u3', 'Mark Kim')],
-    contacts: [Contact('k1', 'Ana Cruz', position: 'IT Manager', email: 'ana@acme.example')],
-  );
-  void _add(String id, String action, List<({String field, String? old, String? now})> c) =>
-      _l.putIfAbsent(id, () => []).insert(0, HistoryItem(id: 'a${_l[id]!.length + 9}', at: DateTime.utc(2026, 10, 11, 6), actor: 'Jonathan Esmalla', action: action, changes: c));
+  ProjectExtras _get(String id) =>
+      _s[id] ??
+      const ProjectExtras(
+        members: [
+          NamedRef('u1', 'Jonathan Esmalla'),
+          NamedRef('u3', 'Mark Kim'),
+        ],
+        contacts: [
+          Contact(
+            'k1',
+            'Ana Cruz',
+            position: 'IT Manager',
+            email: 'ana@acme.example',
+          ),
+        ],
+      );
+  void _add(
+    String id,
+    String action,
+    List<({String field, String? old, String? now})> c,
+  ) => _l
+      .putIfAbsent(id, () => [])
+      .insert(
+        0,
+        HistoryItem(
+          id: 'a${_l[id]!.length + 9}',
+          at: DateTime.utc(2026, 10, 11, 6),
+          actor: 'Jonathan Esmalla',
+          action: action,
+          changes: c,
+        ),
+      );
 
   @override
   Future<ProjectExtras> extras(String projectId) async => _get(projectId);
   @override
   Future<ProjectTime> time(String projectId) async {
     final rows = [
-      ProjectTimeRow(id: 'pt1', person: 'Jonathan Esmalla', task: 'Configure roles', date: DateTime(2026, 10, 9), hours: 3.5),
-      ProjectTimeRow(id: 'pt2', person: 'Mark Kim', task: 'Data migration dry run', date: DateTime(2026, 10, 8), hours: 2, type: 'WAITING'),
-      ProjectTimeRow(id: 'pt3', person: 'Mark Kim', task: 'Environment setup', date: DateTime(2026, 10, 4), hours: 5),
-      ProjectTimeRow(id: 'pt4', person: 'Jonathan Esmalla', task: 'Configure roles', date: DateTime(2026, 10, 2), hours: 1.5, type: 'REWORK'),
+      ProjectTimeRow(
+        id: 'pt1',
+        person: 'Jonathan Esmalla',
+        task: 'Configure roles',
+        date: DateTime(2026, 10, 9),
+        hours: 3.5,
+      ),
+      ProjectTimeRow(
+        id: 'pt2',
+        person: 'Mark Kim',
+        task: 'Data migration dry run',
+        date: DateTime(2026, 10, 8),
+        hours: 2,
+        type: 'WAITING',
+      ),
+      ProjectTimeRow(
+        id: 'pt3',
+        person: 'Mark Kim',
+        task: 'Environment setup',
+        date: DateTime(2026, 10, 4),
+        hours: 5,
+      ),
+      ProjectTimeRow(
+        id: 'pt4',
+        person: 'Jonathan Esmalla',
+        task: 'Configure roles',
+        date: DateTime(2026, 10, 2),
+        hours: 1.5,
+        type: 'REWORK',
+      ),
     ];
     final by = <String, double>{'EXECUTION': 0, 'WAITING': 0, 'REWORK': 0};
     for (final r in rows) {
@@ -889,30 +1375,62 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
   @override
   Future<List<HistoryItem>> activity(String projectId) async => [
     ...?_l[projectId],
-    HistoryItem(id: 'a2', at: DateTime.utc(2026, 10, 9, 4), actor: 'Mark Kim', action: 'task_status_changed', changes: const [(field: 'status', old: 'IN_PROGRESS', now: 'FOR_REVIEW')]),
-    HistoryItem(id: 'a1', at: DateTime.utc(2026, 8, 3, 1), actor: 'Jonathan Esmalla', action: 'project_created'),
+    HistoryItem(
+      id: 'a2',
+      at: DateTime.utc(2026, 10, 9, 4),
+      actor: 'Mark Kim',
+      action: 'task_status_changed',
+      changes: const [(field: 'status', old: 'IN_PROGRESS', now: 'FOR_REVIEW')],
+    ),
+    HistoryItem(
+      id: 'a1',
+      at: DateTime.utc(2026, 8, 3, 1),
+      actor: 'Jonathan Esmalla',
+      action: 'project_created',
+    ),
   ];
   @override
   Future<List<Contact>> contactOptions(String projectId) async {
     final added = {for (final c in _get(projectId).contacts) c.id};
-    return [for (final c in _allContacts) Contact(c.id, c.name, position: c.position, email: c.email, added: added.contains(c.id))];
+    return [
+      for (final c in _allContacts)
+        Contact(
+          c.id,
+          c.name,
+          position: c.position,
+          email: c.email,
+          added: added.contains(c.id),
+        ),
+    ];
   }
 
-  ProjectExtras _copy(ProjectExtras e, {List<NamedRef>? members, List<Contact>? contacts}) =>
-      ProjectExtras(members: members ?? e.members, contacts: contacts ?? e.contacts, canEdit: e.canEdit);
+  ProjectExtras _copy(
+    ProjectExtras e, {
+    List<NamedRef>? members,
+    List<Contact>? contacts,
+  }) => ProjectExtras(
+    members: members ?? e.members,
+    contacts: contacts ?? e.contacts,
+    canEdit: e.canEdit,
+  );
 
   @override
   Future<void> addContact(String projectId, String contactId) async {
     final e = _get(projectId);
     final c = _allContacts.firstWhere((c) => c.id == contactId);
     _s[projectId] = _copy(e, contacts: [...e.contacts, c]);
-    _add(projectId, 'project_contact_added', [(field: 'contact', old: null, now: c.name)]);
+    _add(projectId, 'project_contact_added', [
+      (field: 'contact', old: null, now: c.name),
+    ]);
   }
 
   @override
   Future<void> removeContact(String projectId, String contactId) async {
     final e = _get(projectId);
-    _s[projectId] = _copy(e, contacts: e.contacts.where((c) => c.id != contactId).toList());
+    _s[projectId] = _copy(
+      e,
+      contacts: e.contacts.where((c) => c.id != contactId).toList(),
+    );
   }
 
   @override
@@ -920,20 +1438,40 @@ class MockProjectExtrasRepository implements ProjectExtrasRepository {
     final i = store.projects.indexWhere((p) => p.id == projectId);
     final o = store.projects[i];
     store.projects[i] = Project(
-      id: o.id, name: o.name, clientName: o.clientName, status: o.status, progress: o.progress,
-      goLive: o.goLive, managerName: _people[managerId], taskCount: o.taskCount,
-      projectTypeId: o.projectTypeId, projectTypeName: o.projectTypeName, projectTypeActive: o.projectTypeActive,
-      clientId: o.clientId, managerId: managerId, startDate: o.startDate, code: o.code, description: o.description,
+      id: o.id,
+      name: o.name,
+      clientName: o.clientName,
+      status: o.status,
+      progress: o.progress,
+      goLive: o.goLive,
+      managerName: _people[managerId],
+      taskCount: o.taskCount,
+      projectTypeId: o.projectTypeId,
+      projectTypeName: o.projectTypeName,
+      projectTypeActive: o.projectTypeActive,
+      clientId: o.clientId,
+      managerId: managerId,
+      startDate: o.startDate,
+      code: o.code,
+      description: o.description,
     );
     final e = _get(projectId);
     if (!e.members.any((m) => m.id == managerId)) {
-      _s[projectId] = _copy(e, members: [...e.members, NamedRef(managerId, _people[managerId]!)]);
+      _s[projectId] = _copy(
+        e,
+        members: [...e.members, NamedRef(managerId, _people[managerId]!)],
+      );
     }
-    _add(projectId, 'project_handover', [(field: 'managerId', old: o.managerName, now: _people[managerId])]);
+    _add(projectId, 'project_handover', [
+      (field: 'managerId', old: o.managerName, now: _people[managerId]),
+    ]);
   }
 
   @override
   Future<void> setMembers(String projectId, List<String> memberIds) async {
-    _s[projectId] = _copy(_get(projectId), members: [for (final id in memberIds) NamedRef(id, _people[id] ?? id)]);
+    _s[projectId] = _copy(
+      _get(projectId),
+      members: [for (final id in memberIds) NamedRef(id, _people[id] ?? id)],
+    );
   }
 }

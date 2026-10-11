@@ -1023,13 +1023,19 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
         code: p.code,
       ),
     );
-    if (p.memberIds != null) await MockProjectExtrasRepository(store).setMembers(id, {...p.memberIds!, ?p.managerId}.toList());
+    if (p.memberIds != null) {
+      await MockProjectExtrasRepository(store)
+          .setMembers(id, {...p.memberIds!, ?p.managerId}.toList());
+    }
     return id;
   }
 
   @override
   Future<void> update(String id, ProjectInput p) async {
-    if (p.memberIds != null) await MockProjectExtrasRepository(store).setMembers(id, {...p.memberIds!, ?p.managerId}.toList());
+    if (p.memberIds != null) {
+      await MockProjectExtrasRepository(store)
+          .setMembers(id, {...p.memberIds!, ?p.managerId}.toList());
+    }
     final i = store.projects.indexWhere((x) => x.id == id);
     final o = store.projects[i];
     final t = MockTrackerStore.projectTypes
@@ -1052,7 +1058,13 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
       status: p.status == null ? o.status : ProjectStatus.fromApi(p.status),
       progress: o.progress,
       goLive: p.endDate ?? o.goLive,
-      managerName: const {'u1': 'Jonathan Esmalla', 'u2': 'Queen Reyes', 'u3': 'Mark Kim'}[p.managerId] ?? o.managerName,
+      managerName:
+          const {
+            'u1': 'Jonathan Esmalla',
+            'u2': 'Queen Reyes',
+            'u3': 'Mark Kim',
+          }[p.managerId] ??
+          o.managerName,
       taskCount: o.taskCount,
       projectTypeId: t?.id ?? o.projectTypeId,
       projectTypeName: t?.name ?? o.projectTypeName,

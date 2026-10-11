@@ -9,6 +9,8 @@ import 'ui/screens/project_screens.dart';
 import 'ui/screens/task_screens.dart';
 import 'ui/v2/dar.dart';
 import 'ui/v2/leave.dart';
+import 'ui/v2/project_p2.dart';
+import 'ui/v2/task_actions.dart';
 import 'ui/v2/day_timesheet.dart';
 import 'ui/v2/my_tasks_v2.dart';
 import 'ui/v2/project_form.dart';
@@ -43,6 +45,24 @@ final routerProvider = Provider<GoRouter>((ref) {
             SetPasswordScreen(token: s.uri.queryParameters['token'] ?? ''),
       ),
       GoRoute(
+        path: '/tasks/:id/edit',
+        builder: (_, s) => EditTaskScreen(taskId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/tasks/:id/history',
+        builder: (_, s) => TaskHistoryScreen(taskId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/projects/:id/time',
+        builder: (_, s) =>
+            ProjectTimeScreen(projectId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/projects/:id/activity',
+        builder: (_, s) =>
+            ProjectActivityScreen(projectId: s.pathParameters['id']!),
+      ),
+      GoRoute(
         path: '/tasks/:id',
         builder: (_, s) => TaskDetailScreen(taskId: s.pathParameters['id']!),
       ),
@@ -66,8 +86,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           projectId: s.uri.queryParameters['project'],
         ),
       ),
-      GoRoute(path: '/leave', builder: (_, s) => LeaveScreen(initialTab: s.uri.queryParameters['tab'])),
-        GoRoute(path: '/dar', builder: (_, _) => const DarGenerateScreen()),
+      GoRoute(
+        path: '/leave',
+        builder: (_, s) =>
+            LeaveScreen(initialTab: s.uri.queryParameters['tab']),
+      ),
+      GoRoute(path: '/dar', builder: (_, _) => const DarGenerateScreen()),
       GoRoute(
         path: '/dar/saved',
         builder: (_, _) => const SavedReportsScreen(),

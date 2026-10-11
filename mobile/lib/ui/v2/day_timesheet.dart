@@ -279,7 +279,10 @@ class DayView extends ConsumerWidget {
                                 icon: const Icon(Icons.add, size: 18),
                                 label: const Text('Add leave'),
                                 onPressed: () async {
-                                  if (await showRecordLeave(context, date: day.date)) {
+                                  if (await showRecordLeave(
+                                    context,
+                                    date: day.date,
+                                  )) {
                                     invalidateLeave(ref);
                                   }
                                 },

@@ -9,6 +9,7 @@ import '../../data/models.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../v2/entry_sheet.dart';
+import '../v2/task_actions.dart';
 import '../widgets/common.dart';
 import '../widgets/status_flow.dart';
 
@@ -33,14 +34,20 @@ class TaskDetailScreen extends ConsumerWidget {
             tooltip: 'Edit task',
             icon: const Icon(Icons.edit_outlined),
             onPressed: task.hasValue
-                ? () => _openOnWeb(context, task.requireValue)
+                ? () => context.push('/tasks/$taskId/edit')
                 : null,
           ),
           PopupMenuButton<String>(
             key: const Key('taskOverflow'),
             tooltip: 'More options',
             onSelected: (v) {
-              if (v == 'refresh') ref.invalidate(taskProvider(taskId));
+              if (v == 'refresh' && task.hasValue) {
+                refreshTask(ref, task.requireValue);
+              }
+              if (v == 'history') context.push('/tasks/$taskId/history');
+              if (v == 'delete' && task.hasValue) {
+                deleteTask(context, ref, task.requireValue);
+              }
               if (v == 'web' && task.hasValue) {
                 _openOnWeb(context, task.requireValue);
               }
@@ -51,7 +58,13 @@ class TaskDetailScreen extends ConsumerWidget {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'refresh', child: Text('Refresh')),
               PopupMenuItem(value: 'project', child: Text('Open project')),
+              PopupMenuItem(value: 'history', child: Text('History')),
               PopupMenuItem(value: 'web', child: Text('Open in web app')),
+              PopupMenuItem(
+                key: Key('taskDelete'),
+                value: 'delete',
+                child: Text('Delete task'),
+              ),
             ],
           ),
         ],
@@ -68,7 +81,7 @@ class TaskDetailScreen extends ConsumerWidget {
   }
 }
 
-/// Full task editing (owner, assignees, dependencies…) lives on the web for now.
+/// Dependencies and subtasks are still edited on the web.
 Future<void> _openOnWeb(BuildContext context, Task t) async {
   final ok = await launchUrl(
     Uri.parse('${AppConfig.webAppUrl}/projects/${t.projectId}?task=${t.id}'),
@@ -227,30 +240,7 @@ class _Body extends StatelessWidget {
                   ],
                 ),
               ),
-              if (t.requiresApproval) ...[
-                const SizedBox(height: Space.m),
-                Text('Approval', style: text.titleSmall),
-                const SizedBox(height: Space.s),
-                Card(
-                  child: ListTile(
-                    leading: InitialsAvatar(t.reviewerName ?? 'PM'),
-                    title: Text(
-                      '${t.reviewerName ?? 'Project manager'} · reviewer',
-                    ),
-                    subtitle: const Text('Required before Done'),
-                    trailing: StatusChip(
-                      label: switch (t.approvalState) {
-                        'APPROVED' => 'Approved',
-                        'REJECTED' => 'Rejected',
-                        _ => 'Pending',
-                      },
-                      colors: t.approvalState == 'APPROVED'
-                          ? sc.done
-                          : sc.forReview,
-                    ),
-                  ),
-                ),
-              ],
+              TaskActionsSection(task: t),
               const SizedBox(height: Space.l),
             ],
           ),

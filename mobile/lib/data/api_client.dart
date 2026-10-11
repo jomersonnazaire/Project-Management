@@ -48,10 +48,17 @@ class ApiClient {
   );
 
   /// PUT raw bytes to a short-lived upload link (UploadTicketDto.uploadUrl).
-  Future<void> putBytes(String url, Map<String, String> headers, List<int> bytes) async {
+  Future<void> putBytes(
+    String url,
+    Map<String, String> headers,
+    List<int> bytes,
+  ) async {
     final res = await _http.put(Uri.parse(url), headers: headers, body: bytes);
     if (res.statusCode >= 300) {
-      throw ApiException('Upload failed (${res.statusCode}).', status: res.statusCode);
+      throw ApiException(
+        'Upload failed (${res.statusCode}).',
+        status: res.statusCode,
+      );
     }
   }
 

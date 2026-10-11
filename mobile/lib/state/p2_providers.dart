@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config.dart';
@@ -5,7 +6,9 @@ import '../data/p2.dart';
 import 'providers.dart';
 import 'v2_providers.dart';
 
-final mockLeaveStoreProvider = Provider<MockLeaveStore>((ref) => MockLeaveStore());
+final mockLeaveStoreProvider = Provider<MockLeaveStore>(
+  (ref) => MockLeaveStore(),
+);
 
 final leaveRepositoryProvider = Provider<LeaveRepository>(
   (ref) => AppConfig.demoMode
@@ -24,9 +27,21 @@ final projectExtrasRepositoryProvider = Provider<ProjectExtrasRepository>(
 );
 
 /// Picks one evidence file. Overridden in tests; the app uses file_picker.
-final evidencePickerProvider = Provider<Future<PickedFile?> Function()>((ref) => () async => null);
+final evidencePickerProvider = Provider<Future<PickedFile?> Function()>(
+  (ref) => () async {
+    final f = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: evidenceExt,
+    );
+    if (f == null) return null;
+    final bytes = await f.readAsBytes();
+    return PickedFile(f.name, bytes.length, bytes);
+  },
+);
 
-final leaveTypesProvider = FutureProvider<List<LeaveType>>((ref) => ref.watch(leaveRepositoryProvider).types());
+final leaveTypesProvider = FutureProvider<List<LeaveType>>(
+  (ref) => ref.watch(leaveRepositoryProvider).types(),
+);
 final leaveYearProvider = NotifierProvider<LeaveYear, int>(LeaveYear.new);
 
 class LeaveYear extends Notifier<int> {
@@ -39,9 +54,12 @@ final leaveBalancesProvider = FutureProvider.family<Balances, int>(
   (ref, y) => ref.watch(leaveRepositoryProvider).balances(y),
 );
 final myLeaveProvider = FutureProvider.family<List<LeaveItem>, int>(
-  (ref, y) async => mergeHalfDays(await ref.watch(leaveRepositoryProvider).mine(y)),
+  (ref, y) async =>
+      mergeHalfDays(await ref.watch(leaveRepositoryProvider).mine(y)),
 );
-final teamLeaveProvider = FutureProvider<TeamLeave>((ref) => ref.watch(leaveRepositoryProvider).team());
+final teamLeaveProvider = FutureProvider<TeamLeave>(
+  (ref) => ref.watch(leaveRepositoryProvider).team(),
+);
 
 void invalidateLeave(WidgetRef ref) {
   ref.invalidate(leaveBalancesProvider);
@@ -62,6 +80,7 @@ final projectExtrasProvider = FutureProvider.family<ProjectExtras, String>(
 final projectTimeProvider = FutureProvider.family<ProjectTime, String>(
   (ref, id) => ref.watch(projectExtrasRepositoryProvider).time(id),
 );
-final projectActivityProvider = FutureProvider.family<List<HistoryItem>, String>(
-  (ref, id) => ref.watch(projectExtrasRepositoryProvider).activity(id),
-);
+final projectActivityProvider =
+    FutureProvider.family<List<HistoryItem>, String>(
+      (ref, id) => ref.watch(projectExtrasRepositoryProvider).activity(id),
+    );

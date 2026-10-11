@@ -6,6 +6,7 @@ import '../../data/models.dart';
 import '../../data/tracker_models.dart';
 import '../../data/v2_repositories.dart';
 import '../../state/providers.dart';
+import '../../state/p2_providers.dart';
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -93,7 +94,8 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   final _code = TextEditingController();
   final _desc = TextEditingController();
   final _reason = TextEditingController();
-  String? _template, _client, _type, _manager;
+  String? _template, _client, _type, _manager, _status;
+  Set<String> _members = {};
   DateTime? _start, _end;
   Map<String, String> _errors = {};
   bool _loaded = false, _busy = false;
@@ -120,6 +122,10 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
       Project? p;
       if (_edit) {
         p = await ref.read(projectRepositoryProvider).get(widget.projectId!);
+        final x = await ref
+            .read(projectExtrasRepositoryProvider)
+            .extras(widget.projectId!);
+        _members = {for (final m in x.members) m.id};
       }
       if (!mounted) return;
       setState(() {
@@ -134,6 +140,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
           _client = p.clientId;
           _type = p.projectTypeId;
           _manager = p.managerId;
+          _status = p.status.api;
           _start = p.startDate;
           _end = p.goLive;
         }
@@ -230,6 +237,8 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
       endDate: _end,
       description: _desc.text.trim(),
       rebaselineReason: _baselineChanged ? _reason.text.trim() : null,
+      status: _edit ? _status : null,
+      memberIds: {..._members, ?_manager}.toList(),
     );
     try {
       final repo = ref.read(projectAdminRepositoryProvider);
@@ -315,6 +324,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
           : ListView(
+              key: const Key('projectFormList'),
               padding: const EdgeInsets.all(Space.m),
               children: [
                 if (_errors['_'] != null)
@@ -400,6 +410,43 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                     style: t.bodySmall,
                   ),
                 ),
+                gap(),
+                Text('Team members', style: t.labelLarge),
+                Wrap(
+                  key: const Key('projectMembersField'),
+                  spacing: Space.s,
+                  children: [
+                    for (final p in _people)
+                      FilterChip(
+                        key: Key('projectMember_${p.id}'),
+                        label: Text(p.name),
+                        selected: _members.contains(p.id) || p.id == _manager,
+                        onSelected: p.id == _manager
+                            ? null
+                            : (v) => setState(
+                                () => v
+                                    ? _members.add(p.id)
+                                    : _members.remove(p.id),
+                              ),
+                      ),
+                  ],
+                ),
+                if (_edit) ...[
+                  gap(),
+                  DropdownMenu<String>(
+                    key: const Key('projectStatusField'),
+                    expandedInsets: EdgeInsets.zero,
+                    label: const Text('Status'),
+                    initialSelection: _status,
+                    dropdownMenuEntries: [
+                      for (final st in ProjectStatus.values.where(
+                        (x) => x != ProjectStatus.other,
+                      ))
+                        DropdownMenuEntry(value: st.api, label: st.label),
+                    ],
+                    onSelected: (v) => setState(() => _status = v),
+                  ),
+                ],
                 gap(),
                 Builder(
                   builder: (context) {

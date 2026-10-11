@@ -17,6 +17,7 @@ Future<ProviderContainer> pumpApp(
   bool signedIn = true,
   String? location,
   ThemeMode themeMode = ThemeMode.light,
+  List overrides = const [],
 }) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
@@ -32,6 +33,7 @@ Future<ProviderContainer> pumpApp(
       clockProvider.overrideWithValue(() => DateTime(2026, 10, 11, 14)),
       nowProvider.overrideWithValue(() => testNow),
       tickerProvider.overrideWith((ref) => Stream.value(0)),
+      ...overrides,
     ],
   );
   addTearDown(container.dispose);
