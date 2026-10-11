@@ -52,12 +52,13 @@ class FakeApi {
       'content-type': 'application/json',
       'date': httpDate(serverTime),
     };
-    if (status500 > 0)
+    if (status500 > 0) {
       return http.Response(
         '{"error":{"message":"boom"}}',
         status500,
         headers: h,
       );
+    }
     final p = req.url.path.replaceFirst('/api/v1', '');
     if (p == '/auth/login') {
       final b = jsonDecode(req.body) as Map;
@@ -82,8 +83,9 @@ class FakeApi {
         headers: h,
       );
     }
-    if (p == '/auth/me')
+    if (p == '/auth/me') {
       return http.Response(jsonEncode({'user': _user}), 200, headers: h);
+    }
     if (p == '/auth/me/permissions') {
       return http.Response(
         jsonEncode({'role': 'PROJECT_MANAGER', 'permissions': {}}),
@@ -381,5 +383,3 @@ void main() {
   });
 }
 
-// Keep the import used.
-typedef _U = AppUser;
