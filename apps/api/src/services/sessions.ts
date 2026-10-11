@@ -28,12 +28,19 @@ export async function createSession(
 ): Promise<void> {
   const token = newToken();
   const now = new Date();
+  // The mobile app (OpsTrack) asks for a sliding 3-day session; the web keeps the defaults.
+  const mobile = req.get('x-client') === 'mobile';
+  const idleMinutes = mobile ? config.MOBILE_SESSION_IDLE_HOURS * 60 : config.SESSION_IDLE_MINUTES;
+  const absoluteMs = mobile
+    ? config.MOBILE_SESSION_ABSOLUTE_DAYS * 86_400_000
+    : config.SESSION_ABSOLUTE_HOURS * 3_600_000;
   await SessionModel.create({
     tokenHash: sha256(token),
     userId,
     lastSeenAt: now,
-    expiresAt: new Date(now.getTime() + config.SESSION_IDLE_MINUTES * 60_000),
-    absoluteExpiresAt: new Date(now.getTime() + config.SESSION_ABSOLUTE_HOURS * 3_600_000),
+    expiresAt: new Date(now.getTime() + idleMinutes * 60_000),
+    absoluteExpiresAt: new Date(now.getTime() + absoluteMs),
+    idleMinutes: mobile ? idleMinutes : null,
     ip,
     userAgent: (req.headers['user-agent'] ?? '').slice(0, 300) || null,
   });

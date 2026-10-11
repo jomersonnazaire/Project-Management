@@ -71,7 +71,7 @@ export function createApp(
       origin: (origin, cb) => cb(null, !origin || isAllowedOrigin(origin)),
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-      allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id'],
+      allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id', 'X-Client'],
       exposedHeaders: ['X-Request-Id', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
       maxAge: 600,
     }),
