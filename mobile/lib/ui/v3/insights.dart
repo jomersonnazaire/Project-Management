@@ -10,6 +10,7 @@ import '../../state/providers.dart';
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/kpi.dart';
 import 'issues.dart';
 
 const healthLabels = {
@@ -34,60 +35,18 @@ String _num(Object? n) {
   return n == n.roundToDouble() ? '${n.toInt()}' : n.toStringAsFixed(1);
 }
 
+/// Portfolio KPI: the shared [KpiCard].
 class _Stat extends StatelessWidget {
   const _Stat(this.label, this.value, this.colors, {super.key});
   final String label, value;
   final StatusPair colors;
   @override
-  Widget build(BuildContext context) => Card(
-    color: colors.container,
-    child: Padding(
-      padding: const EdgeInsets.all(Space.m),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium
-                ?.copyWith(color: colors.onContainer),
-          ),
-          const SizedBox(height: Space.s),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(color: colors.onContainer),
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) =>
+      KpiCard(label, value, colors.container, colors.onContainer);
 }
 
-/// Two per row, one per row at large text.
-class StatGrid extends StatelessWidget {
-  const StatGrid({super.key, required this.children});
-  final List<Widget> children;
-  @override
-  Widget build(BuildContext context) {
-    final cols = MediaQuery.textScalerOf(context).scale(10) > 15 ? 1 : 2;
-    return Column(
-      children: [
-        for (var i = 0; i < children.length; i += cols)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var j = i; j < i + cols; j++)
-                  Expanded(
-                    child: j < children.length ? children[j] : const SizedBox(),
-                  ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
+/// Shared grid (kept as a name for the Insights screens).
+typedef StatGrid = KpiGrid;
 
 /// Home › Portfolio (design 50). Filters are applied on the client: GET /dashboard takes no filters.
 class PortfolioSection extends ConsumerStatefulWidget {
@@ -134,12 +93,16 @@ class _PortfolioSectionState extends ConsumerState<PortfolioSection> {
         };
         return Padding(
           key: const Key('portfolio'),
-          padding: const EdgeInsets.symmetric(horizontal: Space.m),
+          padding: const EdgeInsets.symmetric(horizontal: KpiGrid.pagePadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Portfolio', style: t.titleMedium),
-              const SizedBox(height: Space.s),
+              // Same inset and style as SectionHeader ('Due soon').
+              Padding(
+                key: const Key('portfolioHeader'),
+                padding: const EdgeInsets.only(top: Space.m, bottom: Space.s),
+                child: Text('Portfolio', style: t.titleSmall),
+              ),
               Wrap(
                 spacing: Space.s,
                 runSpacing: Space.s,
@@ -158,7 +121,7 @@ class _PortfolioSectionState extends ConsumerState<PortfolioSection> {
                   ),
                 ],
               ),
-              const SizedBox(height: Space.s),
+              const SizedBox(height: KpiGrid.gap),
               StatGrid(
                 children: [
                   _Stat(
@@ -180,7 +143,12 @@ class _PortfolioSectionState extends ConsumerState<PortfolioSection> {
                     sc.forReview,
                     key: const Key('dashWaiting'),
                   ),
-                  _Stat('Open issues', _num(iss['open']), sc.inProgress),
+                  _Stat(
+                    'Open issues',
+                    _num(iss['open']),
+                    sc.inProgress,
+                    key: const Key('dashOpenIssues'),
+                  ),
                 ],
               ),
               const SizedBox(height: Space.m),
