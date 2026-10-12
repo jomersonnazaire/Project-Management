@@ -48,6 +48,21 @@ describe('Sign in (US-01)', () => {
     expect(me.body.user.id).toBe(user._id.toString());
   });
 
+  it('rejects the correct password plus one character, and minus one (web and mobile)', async () => {
+    // A fresh user per password, so the lockout threshold isn't reached.
+    for (const pw of [`${PASSWORD}s`, PASSWORD.slice(0, -1), ` ${PASSWORD}`]) {
+      const user = await createUser();
+      expect((await loginReq(app, user.email, pw)).status).toBe(401);
+      const m = await request(app)
+        .post('/api/v1/auth/mobile/login')
+        .set(CSRF)
+        .send({ email: user.email, password: pw });
+      expect(m.status).toBe(401);
+      expect(m.body.token).toBeUndefined();
+      expect((await loginReq(app, user.email, PASSWORD)).status).toBe(200);
+    }
+  });
+
   it('AC-01.2 gives the same generic error for a wrong password and an unknown email', async () => {
     const user = await createUser();
     const wrong = await loginReq(app, user.email, 'Wrong-password-1!');

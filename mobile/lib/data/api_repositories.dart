@@ -42,6 +42,9 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<AppUser> login(String email, String password) async {
+    // Always a fresh sign-in against the API: drop any stored token/cookie first, so a
+    // failed attempt can never fall back to an earlier session.
+    await api.clearSession();
     final creds = {'email': email, 'password': password};
     // Native apps use the mobile sign-in (device token in the body). Browsers can't (the API
     // refuses it when Origin/Sec-Fetch-* are present), so the web build keeps the cookie.

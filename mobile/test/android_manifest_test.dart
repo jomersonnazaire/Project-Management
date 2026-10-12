@@ -10,5 +10,12 @@ void main() {
         .readAsStringSync();
     expect(main, contains('android.permission.INTERNET'));
     expect(main, isNot(contains('usesCleartextTraffic="true"')));
+    // Audit: the app needs no other runtime permissions (file_picker uses the system
+    // document picker, location is chosen from a list, notifications are in-app only).
+    final perms = RegExp(r'uses-permission android:name="([^"]+)"')
+        .allMatches(main)
+        .map((m) => m[1])
+        .toList();
+    expect(perms, ['android.permission.INTERNET']);
   });
 }

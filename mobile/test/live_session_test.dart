@@ -253,6 +253,27 @@ void main() {
       },
     );
 
+    test(
+      'live sign-in with a wrong password fails and stores nothing',
+      () async {
+        final f = FakeApi()..loggedIn = false;
+        final store = MemorySessionStore();
+        final api = ApiClient(
+          base,
+          client: f.client,
+          store: store,
+          deviceClock: device,
+        );
+        await expectLater(
+          ApiAuthRepository(api).login('a@x', 'rights'),
+          throwsA(isA<ApiException>().having((e) => e.status, 's', 401)),
+        );
+        expect(f.calls.last, 'POST /auth/mobile/login');
+        expect(store.value, isNull);
+        expect(api.bearer, isNull);
+      },
+    );
+
     test('403 MOBILE_ONLY falls back to the cookie sign-in, not "disconnected"', () async {
       final f = FakeApi()..pathStatus['/auth/mobile/login'] = 403;
       final api = ApiClient(
