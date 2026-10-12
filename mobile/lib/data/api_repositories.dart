@@ -21,9 +21,18 @@ class ApiAuthRepository implements AuthRepository {
     if (!await api.restoreSession() && !browserManagesCookies) return null;
     try {
       // Mobile token: refresh extends the 3-day sliding window (feature/mobile-sessions-api).
-      final body = api.bearer != null
-          ? await api.post('/auth/mobile/refresh')
-          : await api.get('/auth/me');
+      Map<String, dynamic> body;
+      if (api.bearer != null) {
+        try {
+          body = await api.post('/auth/mobile/refresh');
+        } on ApiException catch (e) {
+          // API without /auth/mobile/* (rolled back): a 404 is not "disconnected".
+          if (e.status != 404) rethrow;
+          body = await api.get('/auth/me');
+        }
+      } else {
+        body = await api.get('/auth/me');
+      }
       return AppUser.fromJson(body['user'] as Map<String, dynamic>);
     } on ApiException catch (e) {
       if (e.status == 401) return null;
@@ -43,8 +52,9 @@ class ApiAuthRepository implements AuthRepository {
         await api.touch();
         return AppUser.fromJson(body['user'] as Map<String, dynamic>);
       } on ApiException catch (e) {
-        // Older API without the mobile endpoint: standard cookie session.
-        if (e.status != 404) rethrow;
+        // Older API without the mobile endpoint (404), or a proxy that makes the request
+        // look like a browser (403 MOBILE_ONLY): use the standard cookie session.
+        if (e.status != 404 && e.code != 'MOBILE_ONLY') rethrow;
       }
     }
     final body = await api.post('/auth/login', creds);

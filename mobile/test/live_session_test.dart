@@ -45,6 +45,7 @@ class FakeApi {
   bool loggedIn = true;
   int status500 = 0;
   bool mobileApi = true;
+  bool mobileOnly = false;
   final pathStatus = <String, int>{};
   final calls = <String>[];
   final headers = <Map<String, String>>[];
@@ -69,7 +70,9 @@ class FakeApi {
       return http.Response(
         jsonEncode({
           'error': {
-            'code': forced == 403 ? 'FORBIDDEN' : 'X',
+            'code': forced == 403
+                ? (mobileOnly ? 'MOBILE_ONLY' : 'FORBIDDEN')
+                : 'X',
             'message': "You don't have permission to do this.",
           },
         }),
@@ -249,6 +252,38 @@ void main() {
         expect(store.value, isNull);
       },
     );
+
+    test('403 MOBILE_ONLY falls back to the cookie sign-in, not "disconnected"', () async {
+      final f = FakeApi()..pathStatus['/auth/mobile/login'] = 403;
+      final api = ApiClient(
+        base,
+        client: f.client,
+        store: MemorySessionStore(),
+        deviceClock: device,
+      );
+      // pathStatus answers code FORBIDDEN; simulate the API's MOBILE_ONLY code.
+      f.mobileOnly = true;
+      final u = await ApiAuthRepository(api).login('a@x', 'right');
+      expect(u.id, 'u1');
+      expect(f.calls.last, 'POST /auth/login');
+    });
+
+    test('stored token but refresh route gone (404): falls back to /auth/me, not disconnected', () async {
+      final f = FakeApi();
+      final store = MemorySessionStore();
+      await ApiAuthRepository(
+        ApiClient(base, client: f.client, store: store, deviceClock: device),
+      ).login('a@x', 'right');
+      f.mobileApi = false;
+      final api = ApiClient(
+        base,
+        client: f.client,
+        store: store,
+        deviceClock: device,
+      );
+      expect((await ApiAuthRepository(api).currentUser())?.id, 'u1');
+      expect(f.calls.last, 'GET /auth/me');
+    });
 
     test('older API without /auth/mobile/*: falls back to the standard cookie session', () async {
       final f = FakeApi()..mobileApi = false;
