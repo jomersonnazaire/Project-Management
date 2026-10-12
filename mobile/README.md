@@ -8,18 +8,30 @@ Built from the `pm-mobile-design` handoff: Material 3, indigo seed `#3F51B5` (pr
 - `cd mobile && flutter pub get`
 
 ## Run
+With no flags the app uses the **live OpsTrack API**: `https://xc8-projectmgmt-api-tc3w.azurewebsites.net/api/v1`.
 ```bash
-# Demo mode: no backend, in-memory sample data that matches the mockups
-flutter run -d chrome
+flutter run                      # device/emulator, live API
+flutter run -d chrome            # web, live API (the API's CORS_ORIGINS must include this origin)
 
-# Against the API
-flutter run -d chrome \
-  --dart-define=API_BASE_URL=http://localhost:4000/api/v1 \
+# Demo mode (opt-in only): in-memory sample data, no network, "Demo mode" banner
+flutter run --dart-define=DEMO=true          # or --dart-define=API_BASE_URL=demo
+
+# Local API (apps/api on :4000). Android emulator: use 10.0.2.2; debug builds allow http://
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000/api/v1
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:4000/api/v1 \
   --dart-define=WEB_APP_URL=http://localhost:5173
-
-# Release web build
-flutter build web --dart-define=API_BASE_URL=https://<api-host>/api/v1
 ```
+
+## Build
+```bash
+flutter build apk --release      # live API → build/app/outputs/flutter-apk/app-release.apk
+flutter build apk --release --dart-define=DEMO=true                       # demo APK
+flutter build apk --release --dart-define=API_BASE_URL=https://<other-host>/api/v1
+flutter build web                # live API
+```
+- The main `AndroidManifest.xml` declares `INTERNET`, so release builds can reach the API. Release builds are HTTPS-only (no cleartext); only the debug manifest allows `http://` for a local API.
+- The release APK is signed with the debug key (Flutter template). Configure a release keystore before publishing to Play.
+- Tests always run in demo mode or against fakes (`test/flutter_test_config.dart`) and never reach the live API.
 
 ### Demo login (demo mode only)
 - Any email plus a password of **4+ characters** signs you in as "Jomerson Nazaire" (PM). `admin@…`, `member@…`, `viewer@…` sign in with that role.
@@ -31,7 +43,8 @@ flutter build web --dart-define=API_BASE_URL=https://<api-host>/api/v1
 ## API configuration
 | define | meaning |
 |---|---|
-| `API_BASE_URL` | Base URL including `/api/v1`. Empty means demo mode (mock repositories). |
+| `API_BASE_URL` | Base URL including `/api/v1`. Default: the live API. `demo` = demo mode. |
+| `DEMO` | `true` = demo mode (mock repositories, no network). |
 | `WEB_APP_URL` | Web app origin. Admin tools, Clients, Change password and task Edit open it via `url_launcher`. |
 
 How the app talks to the API (see `lib/data/api_client.dart`):
