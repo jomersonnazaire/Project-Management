@@ -85,13 +85,10 @@ function mergePatch(current: PermissionGrid, patch: Record<string, Record<string
         next[record][action as AccessAction] = value;
       }
     }
-    // FR-ACL-15: Export needs View. Turning View off also unticks Export; ticking Export
-    // (with View not turned off in the same change) ticks View, as the grid does.
+    // FR-ACL-15 / DEF-012: Export needs View. With View off, Export is cleared (as the grid
+    // does), so the API never stores Export on without View.
     const r = next[record];
-    if (actionApplies(record, 'export') && r.export && !r.view) {
-      if ((row as Record<string, unknown>).view === false) r.export = false;
-      else r.view = true;
-    }
+    if (actionApplies(record, 'export') && r.export && !r.view) r.export = false;
   }
   return { next, issues };
 }

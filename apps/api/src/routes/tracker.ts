@@ -456,6 +456,8 @@ export function trackerRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const entry = await TimeEntryModel.findById(idParam(req));
     if (!entry) throw notFound();
+    // NFR-25 (DEF-014): people who can't view the entry get the same 404 as a made-up id (the
+    // central scope gate answers it before the access rules); supervisors/Admins get VIEW_ONLY.
     if (!entry.userId.equals(user._id)) {
       if (await canViewPerson(user, entry.userId)) {
         throw forbidden('You can view this entry, but only its owner can change it.', 'VIEW_ONLY');
