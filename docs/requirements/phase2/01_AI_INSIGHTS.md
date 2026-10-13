@@ -84,7 +84,7 @@ We should measure real token use during a pilot before setting the budget.
 ## 6. Open questions
 | ID | Question | Proposed default |
 |----|----------|------------------|
-| Q-AI-01 | Is it OK to send project data to xAI's API? Do we need a data processing agreement or client consent under the Data Privacy Act? | Get Jomerson's and legal's OK, send minimized data only, and review xAI's data terms |
+| Q-AI-01 | Is it OK to send project data to xAI's API? Do we need a data processing agreement or client consent under the Data Privacy Act? | Get Jomerson's and legal's OK, send minimized data only, and review xAI's data terms **On hold (2026-10-13, 9:15 PM SGT):** with all of Phase 2, until the whole app is built and working. |
 | Q-AI-02 | Global endpoint or US regional endpoint (+10%)? | Global, unless a client contract requires otherwise |
 | Q-AI-03 | Pseudonymize person names before sending? | Yes for client contacts. Internal names are allowed |
 | Q-AI-04 | Who sees insights: PMs only, or members too? | PMs, Admins, and Viewers. Members see insights about their own tasks |
