@@ -517,7 +517,9 @@ export function MyTasksPage() {
     });
   // FR-DOC-26: documents requested from me (overdue ones in red), shown with the Today tab.
   const requests = useDocumentRequests('mine', useCan('documents', 'view'));
-  const week = useTimeWeek();
+  // Q-70: no time access (e.g. Viewers) → no week query and no 'Logged this week' card.
+  const canViewTime = Boolean(permissions?.time?.view);
+  const week = useTimeWeek(undefined, canViewTime);
   const counts = mine.data?.counts;
   const items = mine.data?.items ?? [];
   const holiday = mine.data?.holiday;
@@ -537,11 +539,15 @@ export function MyTasksPage() {
     { label: 'Overdue', value: String(counts?.overdue ?? 0) },
     { label: 'Due this week', value: String(counts?.dueThisWeek ?? 0) },
     { label: 'Waiting for my review', value: String(counts?.toReview ?? 0) },
-    {
-      label: 'Logged this week',
-      value: hoursLabel(week.data?.loggedTotal ?? week.data?.total ?? 0),
-      sub: `of ${hoursLabel(week.data?.capacity ?? user?.weeklyCapacityHours ?? 40)} available`,
-    },
+    ...(canViewTime
+      ? [
+          {
+            label: 'Logged this week',
+            value: hoursLabel(week.data?.loggedTotal ?? week.data?.total ?? 0),
+            sub: `of ${hoursLabel(week.data?.capacity ?? user?.weeklyCapacityHours ?? 40)} available`,
+          },
+        ]
+      : []),
   ];
 
   // FR-TSK-29: no tab allowed → My tasks is hidden and its URL is Not found.

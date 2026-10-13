@@ -277,7 +277,13 @@ describe('TC-Q06/Q07: quick activities and their privacy', () => {
     });
     const id = res.body.entry.id;
     const uid = w.member.user._id.toString();
-    for (const who of [w.outsider, w.pm2, w.viewer]) {
+    // Q-70 / AC-56.1: Viewers have no tracker access at all, so they get 403 on every call.
+    expect((await day(w.viewer.agent, '2026-10-13', uid)).status).toBe(403);
+    // Someone else's entry stays "not found" for a Viewer too (scope check runs first).
+    expect((await w.viewer.agent.delete(`/api/v1/tracker/entries/${id}`).set(CSRF)).status).toBe(
+      404,
+    );
+    for (const who of [w.outsider, w.pm2]) {
       expect((await day(who.agent, '2026-10-13', uid)).status).toBe(404);
       expect(
         (await who.agent.patch(`/api/v1/tracker/entries/${id}`).set(CSRF).send({ notes: 'x' }))

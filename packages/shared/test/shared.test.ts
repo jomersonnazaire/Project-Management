@@ -220,7 +220,12 @@ describe('M3.5 task and phase delete messages', () => {
       'This task has 1 time entry, 2 comments and 1 linked issue; remove them first.',
     );
     expect(phaseDeleteBlockedReason(0, 0)).toBeNull();
-    expect(phaseDeleteBlockedReason(1, 4)).toBe('This phase has 1 task; delete or move it first.');
+    expect(phaseDeleteBlockedReason(1, 4)).toBe(
+      "Can't delete: this phase still has 1 activity. Delete it first.",
+    );
+    expect(phaseDeleteBlockedReason(3, 0)).toBe(
+      "Can't delete: this phase still has 3 activities. Delete them first.",
+    );
   });
 });
 

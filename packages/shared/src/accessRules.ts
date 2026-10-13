@@ -247,7 +247,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     tasks: 'V',
     approvals: '',
     time: '',
-    activities: 'VCED',
+    activities: '',
     leave: 'VCED',
     documents: 'V',
     issues: 'V',
@@ -271,6 +271,12 @@ export interface AccessDefaultChange {
   id: string;
   /** Why the default changed, for the audit log. */
   reason: string;
+  /**
+   * Match on the stored value only: every cell still equal to `from` is switched, whether it came
+   * from the seed, a reset or an Admin save (audit trail, updatedBy and version are ignored).
+   * Only cells whose value differs from `from` are left alone.
+   */
+  valueOnly?: boolean;
   cells: {
     role: SystemRole;
     record: RecordType;
@@ -285,6 +291,18 @@ export const ACCESS_DEFAULT_CHANGES: readonly AccessDefaultChange[] = [
     id: '2026-10-09-member-time-delete',
     reason: 'Members can delete their own time entries (doc 11 §6, doc 12 §8 v0.6.8)',
     cells: [{ role: 'MEMBER', record: 'time', action: 'delete', from: false, to: true }],
+  },
+  {
+    id: '2026-10-13-viewer-no-tracker',
+    reason: 'Viewers have no time or activity tracker access (Q-70 option B, Jomerson)',
+    valueOnly: true,
+    cells: (['view', 'create', 'edit', 'delete'] as const).map((action) => ({
+      role: 'VIEWER' as const,
+      record: 'activities' as const,
+      action,
+      from: true,
+      to: false,
+    })),
   },
 ];
 
