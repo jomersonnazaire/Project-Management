@@ -13,6 +13,7 @@ import {
   type TrackerEntryDto,
 } from '@xc8/shared';
 import { useState } from 'react';
+import { LockableButton } from '../../components/LockableButton';
 import { Button, Form, Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import {
@@ -243,18 +244,24 @@ export function DayTimesheet({
           )}
           <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
             {/* FR-ACT-29: Log task time (primary) and Add quick activity replace "+ Add entry". */}
-            {d.can.edit && (
+            {/* M15: on your own submitted or locked day they stay visible, disabled. */}
+            {(d.can.edit || d.own) && (
               <>
-                <Button size="sm" onClick={() => setModal({ kind: 'add', date })}>
+                <LockableButton
+                  locked={!d.can.edit}
+                  size="sm"
+                  onClick={() => setModal({ kind: 'add', date })}
+                >
                   Log task time
-                </Button>
-                <Button
+                </LockableButton>
+                <LockableButton
+                  locked={!d.can.edit}
                   size="sm"
                   variant="outline-primary"
                   onClick={() => setModal({ kind: 'quick', date })}
                 >
                   Add quick activity
-                </Button>
+                </LockableButton>
               </>
             )}
             {d.own && canLeave && (

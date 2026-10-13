@@ -11,6 +11,7 @@ import { useIsCompact } from '../../lib/useMediaQuery';
 import { TIME_TYPE_BADGE } from '../../lib/m3ui';
 import { useConfirm } from '../../components/ConfirmModal';
 import { LockedIcon } from '../../components/LockedIcon';
+import { LockableButton } from '../../components/LockableButton';
 import {
   TrackerEntryModal,
   type TrackerModalMode,
@@ -34,7 +35,6 @@ export function TimePage() {
   // A submitted or locked day: the header buttons are disabled (the modal also guards).
   const todayDay = useTrackerDay(today);
   const todayLocked = Boolean(todayDay.data && !todayDay.data.can.edit);
-  const lockTip = todayLocked ? 'This day is locked' : undefined;
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
@@ -71,21 +71,19 @@ export function TimePage() {
         {weekNav}
         {canTrack && (
           <>
-            <Button
-              disabled={todayLocked}
-              title={lockTip}
+            <LockableButton
+              locked={todayLocked}
               onClick={() => setTrackerModal({ kind: 'add', date: today })}
             >
               Log task time
-            </Button>
-            <Button
+            </LockableButton>
+            <LockableButton
+              locked={todayLocked}
               variant="outline-primary"
-              disabled={todayLocked}
-              title={lockTip}
               onClick={() => setTrackerModal({ kind: 'quick', date: today })}
             >
               Add quick activity
-            </Button>
+            </LockableButton>
           </>
         )}
       </PageHeader>

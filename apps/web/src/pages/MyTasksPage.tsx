@@ -15,6 +15,7 @@ import { Button, Form, Nav } from 'react-bootstrap';
 import { Link, useSearchParams } from 'react-router-dom';
 import { NotFoundPage } from './ErrorPages';
 import { useTrackerDay, useTrackerMutation } from '../api/trackerHooks';
+import { LockableButton } from '../components/LockableButton';
 import { TrackerEntryModal, type TrackerModalMode } from '../components/tracker/TrackerEntryModal';
 import { DayTimesheet, LocationChip } from './tracker/DayTimesheet';
 import { useDocumentRequests, useTimeWeek } from '../api/m3Hooks';
@@ -313,10 +314,12 @@ function TodayPlan({
             <h3 className="h6 mb-0" id="quick-today">
               Quick activities today · {quick.length}
             </h3>
-            {canTime && (
-              <Button size="sm" variant="link" className="ms-auto" onClick={onQuick}>
-                Add quick activity
-              </Button>
+            {(canTime || tracker.own) && (
+              <span className="ms-auto">
+                <LockableButton locked={!canTime} size="sm" variant="link" onClick={onQuick}>
+                  Add quick activity
+                </LockableButton>
+              </span>
             )}
           </div>
           {quick.length > 0 && (
@@ -556,8 +559,10 @@ export function MyTasksPage() {
   return (
     <>
       <PageHeader title="My tasks">
-        {tracker?.can.edit && (
-          <Button
+        {/* M15: today's quick activity; visible but disabled when today is locked. */}
+        {tracker && (tracker.can.edit || tracker.own) && (
+          <LockableButton
+            locked={!tracker.can.edit}
             size="sm"
             aria-label="Add quick activity"
             title="Add quick activity"
@@ -565,7 +570,7 @@ export function MyTasksPage() {
           >
             <i className="bx bx-plus me-1" aria-hidden="true" />
             <span className="btn-collapse-label">Add quick activity</span>
-          </Button>
+          </LockableButton>
         )}
       </PageHeader>
       {denied && (

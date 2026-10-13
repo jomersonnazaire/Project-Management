@@ -321,7 +321,8 @@ describe('Day timesheet (TC-Q10, Q11, Q12)', () => {
       await screen.findByText(/wasn't submitted\. It was locked as it stood at the weekly lock\./),
     ).toBeInTheDocument();
     expect(screen.getAllByText('Not submitted').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Log task time' })).not.toBeInTheDocument();
+    // M15: visible but disabled on a locked day.
+    expect(screen.getByRole('button', { name: 'Log task time' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument();
   });
 

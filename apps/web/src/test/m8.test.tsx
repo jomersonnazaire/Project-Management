@@ -512,9 +512,8 @@ describe('v0.9.11: "Where are you working today? *" in Log task time / Add quick
     );
     renderAt('/time', <App />);
     for (const name of ['Log task time', 'Add quick activity']) {
-      const btn = await screen.findByRole('button', { name });
-      await waitFor(() => expect(btn).toBeDisabled());
-      expect(btn).toHaveAttribute('title', 'This day is locked');
+      await waitFor(() => expect(screen.getByRole('button', { name })).toBeDisabled());
+      expect(screen.getByRole('button', { name })).toHaveAttribute('title', 'This day is locked');
     }
     // v0.9.11: no right-hand Log time card on Time logging.
     expect(screen.queryByRole('heading', { name: 'Log time' })).not.toBeInTheDocument();
@@ -571,5 +570,58 @@ describe('v0.9.11: "Where are you working today? *" in Log task time / Add quick
     expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PUT')).toBe(false);
     const patch = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH')!;
     expect(JSON.parse(String(patch[1]!.body))).not.toHaveProperty('locationId');
+  });
+});
+
+// ---------- M15: locked-day buttons stay visible and disabled everywhere ----------
+describe('M15: on a submitted or locked day the entry buttons are visible but disabled', () => {
+  const locked = () =>
+    trackerDay({
+      date: '2026-10-06',
+      status: 'OPEN',
+      notSubmitted: true,
+      can: { edit: false, submit: false, reopen: false },
+      entries: [],
+    });
+  const expectLocked = (btn: HTMLElement) => {
+    expect(btn).toBeVisible();
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute('aria-disabled', 'true');
+    expect(btn).toHaveAttribute('title', 'This day is locked');
+    // The tooltip needs a wrapper: a disabled button fires no mouse events.
+    expect(btn.parentElement).toHaveAttribute('title', 'This day is locked');
+  };
+
+  for (const width of [1440, 390]) {
+    it(`Day timesheet and the My tasks header at ${width}px`, async () => {
+      screenWidth(width);
+      trackerApi(locked());
+      renderAt('/my-tasks?tab=day&date=2026-10-06', <App />);
+      expectLocked(await screen.findByRole('button', { name: 'Log task time' }));
+      const quick = await screen.findAllByRole('button', { name: 'Add quick activity' });
+      // The Day timesheet button plus the page header's (compact on phones).
+      expect(quick.length).toBeGreaterThanOrEqual(2);
+      quick.forEach(expectLocked);
+    });
+
+    it(`Time logging at ${width}px`, async () => {
+      screenWidth(width);
+      trackerApi(locked(), timeRoute);
+      renderAt('/time', <App />);
+      for (const name of ['Log task time', 'Add quick activity']) {
+        await waitFor(() => expectLocked(screen.getByRole('button', { name })));
+      }
+    });
+  }
+
+  it('an open day keeps the buttons enabled, with no lock tooltip', async () => {
+    screenWidth(390);
+    trackerApi(trackerDay({ entries: [] }));
+    renderAt('/my-tasks?tab=day', <App />);
+    const btn = await screen.findByRole('button', { name: 'Log task time' });
+    expect(btn).toBeEnabled();
+    expect(btn).not.toHaveAttribute('aria-disabled');
+    for (const b of screen.getAllByRole('button', { name: 'Add quick activity' }))
+      expect(b).toBeEnabled();
   });
 });

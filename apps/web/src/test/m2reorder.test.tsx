@@ -371,6 +371,15 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     expect(up).toBeDisabled();
     expect(down).toBeEnabled();
     expect(up.closest('.touch-move')).not.toBeNull();
+    // M15: the same ghost button class as the row Edit and Delete buttons.
+    const ghost = (el: HTMLElement) =>
+      [...el.classList]
+        .filter((c) => c.startsWith('btn'))
+        .sort()
+        .join(' ');
+    const rowEdit = within(up.closest('td')!).getByRole('button', { name: 'Edit Kickoff' });
+    expect(ghost(up)).toBe(ghost(rowEdit));
+    expect(ghost(down)).toBe(ghost(rowEdit));
     // Before Edit and Delete in the same cell.
     const cell = up.closest('td')!;
     const edit = within(cell).getByRole('button', { name: 'Edit Kickoff' });
