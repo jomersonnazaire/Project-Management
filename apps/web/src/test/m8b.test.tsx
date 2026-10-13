@@ -238,7 +238,7 @@ describe('FR-LV-12: leave on the Day timesheet', () => {
     // Leave sits above the entries.
     const rows = screen.getAllByRole('row');
     expect(rows.indexOf(row)).toBeLessThan(rows.indexOf(screen.getByTestId('entry-e1')));
-    const add = screen.getByRole('button', { name: '+ Add entry' });
+    const add = screen.getByRole('button', { name: 'Log task time' });
     const addLeave = screen.getByRole('button', { name: '+ Add leave' });
     expect(add.parentElement).toBe(addLeave.parentElement);
     await userEvent.click(addLeave);

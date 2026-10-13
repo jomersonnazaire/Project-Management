@@ -1,7 +1,8 @@
 import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
-import { AuthProvider } from './auth/AuthContext';
+import { AuthProvider, useAuth } from './auth/AuthContext';
 import { RequireAuth, RequirePermission } from './auth/guards';
 import { AppShell } from './layout/AppShell';
+import { firstAllowedPath } from './layout/nav';
 import { AccessRulesPage } from './pages/AccessRulesPage';
 import { ForbiddenPage, NotFoundPage } from './pages/ErrorPages';
 import { LoginPage } from './pages/LoginPage';
@@ -26,6 +27,7 @@ import { ReportsPage } from './pages/reports/ReportsPage';
 import { WorkloadPage } from './pages/workload/WorkloadPage';
 import { TimesheetReviewPage } from './pages/tracker/DayTimesheet';
 import { useCan } from './auth/useCan';
+import { myTasksTabsFor } from '@xc8/shared';
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
@@ -44,7 +46,12 @@ function ContactsRedirect() {
 /** AC-01.1: land on the Dashboard now that it has shipped (M4); without Reports view, My tasks. */
 function Landing() {
   const dashboard = useCan('reports', 'view');
-  return <Navigate to={dashboard ? '/dashboard' : '/my-tasks'} replace />;
+  const { permissions } = useAuth();
+  // FR-TSK-29: with no My tasks tab allowed, land on the first page the user can open.
+  const fallback = myTasksTabsFor(permissions).length
+    ? '/my-tasks'
+    : (firstAllowedPath(permissions) ?? '/my-tasks');
+  return <Navigate to={dashboard ? '/dashboard' : fallback} replace />;
 }
 
 export function App() {

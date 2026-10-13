@@ -229,8 +229,10 @@ describe('+ Quick activity (TC-Q06)', () => {
   it('needs a title and Activity type, has no Time type and defaults Billable to No', async () => {
     const fetchMock = tracker('MEMBER');
     renderAt('/my-tasks', <App />);
-    await userEvent.click((await screen.findAllByRole('button', { name: '+ Quick activity' }))[0]!);
-    const dialog = await screen.findByRole('dialog', { name: 'Quick activity' });
+    await userEvent.click(
+      (await screen.findAllByRole('button', { name: 'Add quick activity' }))[0]!,
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Add quick activity' });
     expect(
       within(dialog).getByText(
         'Not linked to a project. Only you, your supervisor and Admins can see it.',
@@ -319,7 +321,7 @@ describe('Day timesheet (TC-Q10, Q11, Q12)', () => {
       await screen.findByText(/wasn't submitted\. It was locked as it stood at the weekly lock\./),
     ).toBeInTheDocument();
     expect(screen.getAllByText('Not submitted').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: '+ Add entry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Log task time' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument();
   });
 

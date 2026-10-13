@@ -242,14 +242,20 @@ export function DayTimesheet({
             </div>
           )}
           <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+            {/* FR-ACT-29: Log task time (primary) and Add quick activity replace "+ Add entry". */}
             {d.can.edit && (
-              <Button
-                size="sm"
-                variant="outline-primary"
-                onClick={() => setModal({ kind: 'add', date })}
-              >
-                + Add entry
-              </Button>
+              <>
+                <Button size="sm" onClick={() => setModal({ kind: 'add', date })}>
+                  Log task time
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline-primary"
+                  onClick={() => setModal({ kind: 'quick', date })}
+                >
+                  Add quick activity
+                </Button>
+              </>
             )}
             {d.own && canLeave && (
               <Button size="sm" variant="outline-secondary" onClick={() => setRecordingLeave(true)}>

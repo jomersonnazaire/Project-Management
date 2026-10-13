@@ -1,4 +1,5 @@
 import {
+  QUICK_ACTIVITY_KEY,
   formatHHMM,
   formatTime24,
   PROJECT_TYPE_NOT_SET,
@@ -14,7 +15,7 @@ import { Button, Form, Modal } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
 import { useTimeOptions } from '../../api/m3Hooks';
 import { useProjectTypePreselect } from '../../api/projectTypeHooks';
-import { useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
+import { useLookups, useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
 import { useConfirm } from '../ConfirmModal';
 import { ErrorAlert } from '../Feedback';
 import { DayLocationField, EntryFields } from './EntryFields';
@@ -148,6 +149,14 @@ export function TrackerEntryModal({
       : pre?.projectType && pre.inactiveDefault && !fields.activityTypeId
         ? projectTypeDeadDefaultHint(pre.inactiveDefault, pre.projectType.name)
         : undefined;
+  // FR-ACT-31: Add quick activity preselects the system type Quick Activity (by key, NFR-31).
+  const lists = useLookups();
+  const quickTypeId = lists.data?.activityTypes.find((a) => a.key === QUICK_ACTIVITY_KEY)?.id;
+  const [quickApplied, setQuickApplied] = useState(false);
+  if (mode.kind === 'quick' && quickTypeId && !quickApplied && !activityTouched) {
+    setQuickApplied(true);
+    if (!fields.activityTypeId) setFields((f) => ({ ...f, activityTypeId: quickTypeId }));
+  }
   const [title, setTitle] = useState(editing?.title ?? '');
   const [when, setWhen] = useState<'now' | 'times'>(
     mode.kind === 'add' || mode.kind === 'edit' ? 'times' : 'now',
@@ -276,9 +285,9 @@ export function TrackerEntryModal({
     mode.kind === 'start'
       ? 'Time in'
       : mode.kind === 'quick'
-        ? 'Quick activity'
+        ? 'Add quick activity'
         : mode.kind === 'add'
-          ? `Add entry · ${longDayShort(date)}`
+          ? `Log task time · ${longDayShort(date)}`
           : 'Edit entry';
   const timed = editing ? editing.timed && !editing.running : when === 'times';
 

@@ -13,7 +13,7 @@ import {
 } from '@xc8/shared';
 import { useState, type DragEvent } from 'react';
 import { useEdgeFade } from '../../lib/useEdgeFade';
-import { Button, Dropdown, Form } from 'react-bootstrap';
+import { Button, Dropdown, Form, Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import {
   useContactOptions,
@@ -25,7 +25,7 @@ import { DragHandle } from '../../components/ReorderControls';
 import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
 import { useAuth } from '../../auth/AuthContext';
 import { TaskFormModal } from './TaskFormModal';
-import { useDeletePhase, useProjectPhases } from '../../api/issueHooks';
+import { useDeletePhase, useProjectPhases, useRenamePhase } from '../../api/issueHooks';
 import { ApiError } from '../../api/client';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
@@ -122,7 +122,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
             <Button variant="outline-secondary" size="sm" onClick={() => setAddingTo(ph.name)}>
               + Add activity
             </Button>
-            <PhaseDelete projectId={project.id} phase={ph} />
+            <PhaseControls project={project} phase={ph} />
           </div>
         </div>
       ))}
@@ -344,7 +344,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                     {addLabel}
                   </Button>
                   {ph !== OTHER && infoOf(ph) && (
-                    <PhaseDelete projectId={project.id} phase={infoOf(ph)!} />
+                    <PhaseControls project={project} phase={infoOf(ph)!} />
                   )}
                 </div>
               )}
@@ -371,6 +371,99 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         />
       )}
     </>
+  );
+}
+
+/** FR-PRJ-23: PMs outside Planning see why phase details are locked (tooltip and note). */
+export const PHASE_LOCK_NOTE = 'Phases can be edited only in Planning.';
+
+/**
+ * Phase controls (FR-PRJ-22/23): Edit phase and Delete phase while the phase is editable (Project
+ * PM in Planning, or Admin); otherwise a lock note for planners. "+ Add activity" stays (Q-64).
+ */
+function PhaseControls({ project, phase }: { project: TabProps['project']; phase: PhaseDto }) {
+  const [renaming, setRenaming] = useState(false);
+  if (phase.editable === false) {
+    return (
+      <small
+        className="text-body-secondary ms-2"
+        title={`${PHASE_LOCK_NOTE} You can still add activities.`}
+        data-testid="phase-lock"
+      >
+        <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+        {PHASE_LOCK_NOTE}
+      </small>
+    );
+  }
+  return (
+    <>
+      <Button
+        variant="outline-primary"
+        size="sm"
+        className="ms-2"
+        onClick={() => setRenaming(true)}
+      >
+        ✎ Edit phase
+      </Button>
+      <PhaseDelete projectId={project.id} phase={phase} />
+      {renaming && (
+        <PhaseRenameModal
+          projectId={project.id}
+          name={phase.name}
+          onClose={() => setRenaming(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function PhaseRenameModal({
+  projectId,
+  name,
+  onClose,
+}: {
+  projectId: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(name);
+  const rename = useRenamePhase(projectId);
+  return (
+    <Modal show onHide={onClose} centered aria-labelledby="phase-edit-title">
+      <Form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!value.trim()) return;
+          rename.mutate({ name, newName: value.trim() }, { onSuccess: onClose });
+        }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="phase-edit-title">Phase information</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ErrorAlert error={rename.error} />
+          <Form.Group controlId="phase-name">
+            <Form.Label>Phase name *</Form.Label>
+            <Form.Control
+              value={value}
+              maxLength={120}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </Form.Group>
+          <p className="small text-body-secondary mt-2 mb-0">
+            Editable while the project is in Planning.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={rename.isPending || !value.trim()}>
+            Save phase
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
   );
 }
 

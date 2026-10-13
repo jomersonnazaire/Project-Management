@@ -111,7 +111,7 @@ describe('DR-41: the location question for a past day', () => {
       return undefined;
     });
     renderAt('/my-tasks?tab=day&date=2026-10-07', <App />);
-    await userEvent.click(await screen.findByRole('button', { name: '+ Add entry' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Log task time' }));
     const dialog = await screen.findByRole('dialog');
     await waitFor(() =>
       expect(
@@ -173,8 +173,8 @@ describe('FR-ACT-20: Module is optional free text', () => {
     const fetchMock = trackerApi();
     const user = userEvent.setup();
     renderAt('/my-tasks', <App />);
-    await user.click((await screen.findAllByRole('button', { name: /Quick activity/ }))[0]!);
-    const dialog = await screen.findByRole('dialog', { name: 'Quick activity' });
+    await user.click((await screen.findAllByRole('button', { name: /quick activity/i }))[0]!);
+    const dialog = await screen.findByRole('dialog', { name: 'Add quick activity' });
     const field = within(dialog).getByLabelText('Module (optional)');
     expect(field).toHaveAttribute('placeholder', 'e.g. ADFS Remote');
     expect(field.tagName).toBe('INPUT');

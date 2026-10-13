@@ -1,4 +1,4 @@
-import { TIME_TYPE_SHORT, toDateOnly } from '@xc8/shared';
+import { TIME_TYPE_SHORT, toDateOnly, todayPH } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, ButtonGroup } from 'react-bootstrap';
 import { useTimeMutation, useTimeWeek } from '../../api/m3Hooks';
@@ -11,6 +11,10 @@ import { useIsCompact } from '../../lib/useMediaQuery';
 import { TIME_TYPE_BADGE } from '../../lib/m3ui';
 import { useConfirm } from '../../components/ConfirmModal';
 import { LockedIcon } from '../../components/LockedIcon';
+import {
+  TrackerEntryModal,
+  type TrackerModalMode,
+} from '../../components/tracker/TrackerEntryModal';
 
 const shift = (date: string, days: number) =>
   toDateOnly(new Date(new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000));
@@ -23,6 +27,10 @@ export function TimePage() {
   // Members delete their own entries (doc 11 §6 v0.6.8); the API returns 404 for anyone else's.
   const canDelete = useCan('time', 'delete');
   const [confirm, confirmDialog] = useConfirm();
+  // FR-ACT-29: Log task time and Add quick activity (tracker entries for today, PH time).
+  const canTrack = useCan('activities', 'create');
+  const [trackerModal, setTrackerModal] = useState<TrackerModalMode | null>(null);
+  const today = toDateOnly(todayPH());
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
@@ -55,7 +63,22 @@ export function TimePage() {
 
   return (
     <>
-      <PageHeader title="Time logging">{weekNav}</PageHeader>
+      <PageHeader title="Time logging">
+        {weekNav}
+        {canTrack && (
+          <>
+            <Button onClick={() => setTrackerModal({ kind: 'add', date: today })}>
+              Log task time
+            </Button>
+            <Button
+              variant="outline-primary"
+              onClick={() => setTrackerModal({ kind: 'quick', date: today })}
+            >
+              Add quick activity
+            </Button>
+          </>
+        )}
+      </PageHeader>
       <div className="row g-6">
         <div className="col-lg-8">
           <div className="card">
@@ -161,6 +184,9 @@ export function TimePage() {
         </div>
       </div>
       {confirmDialog}
+      {trackerModal && (
+        <TrackerEntryModal mode={trackerModal} onClose={() => setTrackerModal(null)} />
+      )}
     </>
   );
 }

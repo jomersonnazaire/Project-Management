@@ -18,7 +18,7 @@ import {
 import type { Request } from 'express';
 import type { Types } from 'mongoose';
 import { AUTHENTICATED, perm, type RouteRegistry } from '../access/registry.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { forbidden, notFound } from '../lib/errors.js';
 import { unprocessable } from '../lib/http422.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';

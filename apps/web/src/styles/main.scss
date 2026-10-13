@@ -208,6 +208,10 @@ a:focus-visible,
     td.cell-primary {
       padding-bottom: 0.5rem;
     }
+    // FR-TSK-27: an empty optional field (e.g. Planned) is left out of the phone card.
+    td.cell-omit-empty:empty {
+      display: none;
+    }
     td.cell-actions {
       text-align: start !important;
       white-space: normal !important;

@@ -1,11 +1,4 @@
-import {
-  APP_FOOTER,
-  BRAND_ASSETS,
-  SYSTEM_ROLE_LABELS,
-  hasPermission,
-  type AccessAction,
-  type RecordType,
-} from '@xc8/shared';
+import { APP_FOOTER, BRAND_ASSETS, SYSTEM_ROLE_LABELS } from '@xc8/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -14,71 +7,7 @@ import { BrandLogo } from '../components/BrandLogo';
 import { NotificationBell } from '../components/NotificationBell';
 import { TopbarContext, type TopbarSlots } from '../components/topbar';
 import { RunningTimerPill } from '../components/tracker/RunningTimerPill';
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: string;
-  /** Not built yet in this milestone; shown disabled so the shell matches mockup v0.4. */
-  soon?: boolean;
-  /** Shown when the role has any of these permissions (doc 11; the API enforces them). */
-  any?: [RecordType, AccessAction][];
-}
-
-const MAIN: NavItem[] = [
-  { to: '/my-tasks', label: 'My tasks', icon: 'bx-check' },
-  {
-    to: '/dashboard',
-    label: 'Dashboard',
-    icon: 'bx-grid-alt',
-    any: [['reports', 'view']],
-  },
-  { to: '/projects', label: 'Projects', icon: 'bx-briefcase', any: [['projects', 'view']] },
-  { to: '/board', label: 'Task board', icon: 'bx-columns', any: [['tasks', 'view']] },
-  { to: '/issues', label: 'All issues', icon: 'bx-flag', any: [['issues', 'view']] },
-  { to: '/time', label: 'Time logging', icon: 'bx-time-five', any: [['time', 'view']] },
-  {
-    to: '/dar',
-    label: 'Daily Accomplishment Report',
-    icon: 'bx-envelope',
-    any: [['activities', 'view']],
-  },
-  {
-    to: '/dar/saved',
-    label: 'My saved reports',
-    icon: 'bx-archive',
-    any: [['activities', 'view']],
-  },
-  { to: '/leave', label: 'Leave', icon: 'bx-sun', any: [['leave', 'view']] },
-];
-
-const SETUP: NavItem[] = [
-  {
-    to: '/templates',
-    label: 'Templates',
-    icon: 'bx-book-content',
-    any: [['templates', 'view']],
-  },
-  { to: '/clients', label: 'Clients', icon: 'bx-buildings', any: [['clients', 'view']] },
-  { to: '/workload', label: 'Team & workload', icon: 'bx-group', any: [['workload', 'view']] },
-  { to: '/reports', label: 'Reports', icon: 'bx-bar-chart-alt-2', any: [['reports', 'view']] },
-  {
-    to: '/admin',
-    label: 'Admin',
-    icon: 'bx-cog',
-    any: [
-      ['users', 'view'],
-      ['teams', 'view'],
-      ['settings', 'view'],
-    ],
-  },
-  {
-    to: '/access-rules',
-    label: 'Access rules',
-    icon: 'bx-shield-quarter',
-    any: [['accessRules', 'view']],
-  },
-];
+import { MAIN, SETUP, visibleItems, type NavItem } from './nav';
 
 function initials(name: string) {
   return name
@@ -147,8 +76,8 @@ export function AppShell() {
   }, [menuOpen]);
 
   if (!user) return null;
-  const visible = (items: NavItem[]) =>
-    items.filter((i) => !i.any || i.any.some(([r, a]) => hasPermission(permissions, r, a)));
+  const visible = (items: NavItem[]) => visibleItems(items, permissions);
+  const setupItems = visible(SETUP);
   const isActive = (to: string) =>
     location.pathname === to ||
     (location.pathname.startsWith(`${to}/`) &&
@@ -190,10 +119,13 @@ export function AppShell() {
             {visible(MAIN).map((i) => (
               <MenuItem key={i.to} item={i} active={isActive(i.to)} />
             ))}
-            <li className="menu-header small text-uppercase">
-              <span className="menu-header-text">Setup</span>
-            </li>
-            {visible(SETUP).map((i) => (
+            {/* FR-NAV-01: the Setup group hides when none of its items is allowed. */}
+            {setupItems.length > 0 && (
+              <li className="menu-header small text-uppercase">
+                <span className="menu-header-text">Setup</span>
+              </li>
+            )}
+            {setupItems.map((i) => (
               <MenuItem key={i.to} item={i} active={isActive(i.to)} />
             ))}
           </ul>

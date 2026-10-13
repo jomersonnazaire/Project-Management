@@ -111,6 +111,14 @@ export function LookupsPanel({ kind }: { kind: EditableLookupKind }) {
                   <tr key={i.id} className={i.active ? '' : 'row-inactive'}>
                     <td className="cell-primary fw-medium">
                       {i.name}
+                      {i.system && (
+                        <span
+                          className="badge bg-label-secondary ms-2"
+                          title="Can't be renamed, deactivated or deleted"
+                        >
+                          System type
+                        </span>
+                      )}
                       {!i.active && i.deactivatedAt && (
                         <div className="small fw-normal">
                           Deactivated {shortDate(i.deactivatedAt)}
@@ -124,7 +132,11 @@ export function LookupsPanel({ kind }: { kind: EditableLookupKind }) {
                         {i.active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    {canEdit && (
+                    {canEdit && i.system && (
+                      // FR-ACT-32: no Edit or Deactivate on the system type.
+                      <td className="text-nowrap" />
+                    )}
+                    {canEdit && !i.system && (
                       <td className="text-nowrap">
                         <Button
                           size="sm"
