@@ -296,3 +296,4 @@ Notes: Time in creates a Day timesheet row (FR-ACT-02/10) and the row Time out b
 | Migration | Data migration (exists in the live list, Queen) |
 | Training | Training |
 | Consulting | Client meeting |
+- **Project Type build notes (PR #15, Deven, 2026-10-10):** Project types are governed by the existing `settings` access row (FR-PTY-07). Time in no longer copies the last entry's Activity type; it preselects only from the project type default (FR-PTY-04). The project page's old "Type" field is renamed **"Template type"** so it isn't confused with Project type.

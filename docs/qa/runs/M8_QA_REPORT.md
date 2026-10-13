@@ -50,3 +50,11 @@ Log: /workspace/qa-run/m8/m8_live.log. All PASS live:
 - FR-ACT-21: pre-build entries keep module names (Financials, ADFS Remote). DEF-010 open (restart re-applies migration).
 - FR-ACT-22: modules endpoints 404, activity types/locations 200, no lookup audit events.
 - FR-ACT-10/23: Time in creates day row; bar and row Time out return the same end time; one timer_stopped audit.
+
+## Round 2 (build 5a56782, 01:54-01:57 PHT Oct 10): FAIL, 66 pass / 7 fail
+Log: /workspace/qa-run/m8/m8r2_live.log. DEF-009 CLOSED. Defect numbering (final, supersedes any earlier post):
+- DEF-011 (High): Viewer gets 403 on all Reports routes and exports under the starting grid (permission cache not refreshed after the startup seed); works after the grid is re-saved.
+- DEF-012 (Medium): access rule with Export on and View off is accepted (200); FR-ACL-14 requires refusing it or clearing Export.
+- DEF-013 (Medium): someone else's saved DAR returns a response that differs from a made-up ID (existence leak), and Viewer gets 403 instead of 404 (NFR-25, FR-ACL-17).
+- DEF-014 (Low): Viewer PATCH/DELETE on another user's tracker entry returns 403 instead of 404 (FR-ACT-27).
+Open: DEF-010 (awaiting API restart), TC-T19 (auto-stop audit, tonight), 11 UI checks for UIE.
