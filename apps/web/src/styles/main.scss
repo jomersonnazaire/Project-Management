@@ -222,7 +222,7 @@ a:focus-visible,
       white-space: normal !important;
       padding-top: 0.5rem;
     }
-    // FR-PRJ-20: the Edit pencil and the ⋮ menu sit side by side at the foot of the card.
+    // FR-PRJ-20: row actions sit at the foot of the card.
     td.cell-edit,
     td.cell-edit + td.cell-actions {
       display: inline-block;
@@ -378,6 +378,27 @@ $board-gap: 0.75rem;
   &:active {
     cursor: grabbing;
   }
+}
+
+// DR-49 (mockup v0.9.10): Checklist headings read in sentence case ("Activity", "Est / Act").
+.checklist-table > thead th {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.text-none {
+  text-transform: none !important;
+}
+// DR-49: only the confirm dialog's "Delete phase" button is red.
+.btn.btn-danger-strong {
+  --bs-btn-bg: #b8240a;
+  --bs-btn-border-color: #b8240a;
+  --bs-btn-hover-bg: #9e1f09;
+  --bs-btn-hover-border-color: #9e1f09;
+  --bs-btn-active-bg: #9e1f09;
+  --bs-btn-active-border-color: #9e1f09;
+  background-color: #b8240a;
+  border-color: #b8240a;
+  color: #fff;
 }
 
 // Checklist phase card header: the whole header opens or closes the phase.

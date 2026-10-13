@@ -32,8 +32,8 @@ describe('Boxicons subset (DR-12)', () => {
       used.set(m[1]!, f.slice(src.length));
 
   it('finds the icons the app uses (sanity check of the scan)', () => {
-    expect(used.has('bx-pencil')).toBe(true);
-    expect(used.has('bx-dots-vertical-rounded')).toBe(true);
+    expect(used.has('bx-lock-alt')).toBe(true);
+    expect(used.has('bx-list-check')).toBe(true);
   });
 
   it('every bx-/bxs-/bxl- class used in src has a rule in icons.css', () => {

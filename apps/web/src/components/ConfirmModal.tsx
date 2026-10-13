@@ -8,6 +8,8 @@ export interface ConfirmOptions {
   cancelLabel?: string;
   /** Destructive actions use a red confirm button. */
   danger?: boolean;
+  /** Extra class on the confirm button (e.g. DR-49's #b8240a "Delete phase"). */
+  confirmClassName?: string;
 }
 
 /**
@@ -46,7 +48,11 @@ export function useConfirm(): [(o: ConfirmOptions) => Promise<boolean>, ReactNod
         <Button variant="outline-secondary" onClick={() => close(false)}>
           {opts.cancelLabel ?? 'Cancel'}
         </Button>
-        <Button variant={opts.danger ? 'danger' : 'primary'} onClick={() => close(true)}>
+        <Button
+          variant={opts.danger ? 'danger' : 'primary'}
+          className={opts.confirmClassName}
+          onClick={() => close(true)}
+        >
           {opts.confirmLabel ?? 'OK'}
         </Button>
       </Modal.Footer>

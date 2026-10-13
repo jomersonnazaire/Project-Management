@@ -390,16 +390,27 @@ describe('Delete a task or phase (M3.5)', () => {
     // FR-PRJ-33: a phase with activities opens no dialog; one red line under the header.
     await screen.findByTestId('empty-phase-Go-live');
     const header = screen.getByRole('heading', { name: 'Phase 1' }).closest('.card') as HTMLElement;
-    await userEvent.click(within(header).getByRole('button', { name: 'Delete phase' }));
+    // DR-49: ✎ Edit and 🗑 Delete sit in the phase header as plain ghost buttons.
+    const phaseHead = within(header).getByRole('heading', { name: 'Phase 1' }).parentElement!;
+    const delBtn = within(phaseHead).getByRole('button', { name: 'Delete phase Phase 1' });
+    expect(delBtn).toHaveTextContent('🗑 Delete');
+    expect(delBtn).toHaveClass('btn-outline-secondary');
+    expect(delBtn).not.toHaveClass('btn-outline-danger');
+    expect(within(phaseHead).getByRole('button', { name: 'Edit phase Phase 1' })).toHaveTextContent(
+      '✎ Edit',
+    );
+    await userEvent.click(delBtn);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(within(header).getByTestId('phase-delete-blocked')).toHaveTextContent(
       "Can't delete: this phase still has 1 activity. Delete it first.",
     );
     expect(within(header).getByTestId('phase-delete-blocked')).toHaveStyle({ color: '#b8240a' });
     const empty = await screen.findByTestId('empty-phase-Go-live');
-    await userEvent.click(within(empty).getByRole('button', { name: 'Delete phase' }));
+    await userEvent.click(within(empty).getByRole('button', { name: 'Delete phase Go-live' }));
     const dlg = await screen.findByRole('dialog', { name: 'Delete phase Go-live?' });
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Delete phase' }));
+    const confirmBtn = within(dlg).getByRole('button', { name: 'Delete phase' });
+    expect(confirmBtn).toHaveClass('btn-danger-strong');
+    await userEvent.click(confirmBtn);
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(

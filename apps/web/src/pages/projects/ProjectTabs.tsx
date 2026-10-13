@@ -2,6 +2,7 @@ import {
   BOARD_COLUMNS,
   TASK_STATUS_LABELS,
   TASK_TRANSITIONS,
+  activityInUseMessage,
   effortSummary,
   formatHours,
   moveWithinGroup,
@@ -12,9 +13,9 @@ import {
   type TaskDto,
   type TaskStatus,
 } from '@xc8/shared';
-import { useState, type DragEvent } from 'react';
+import { Fragment, useState, type DragEvent } from 'react';
 import { useEdgeFade } from '../../lib/useEdgeFade';
-import { Button, Dropdown, Form, Modal } from 'react-bootstrap';
+import { Button, Form, Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import {
   useContactOptions,
@@ -33,7 +34,7 @@ import {
   useProjectPhases,
   useRenamePhase,
 } from '../../api/issueHooks';
-import { useTemplate, useTemplates } from '../../api/projectHooks';
+import { useTaskMutation, useTemplate, useTemplates } from '../../api/projectHooks';
 import { ApiError } from '../../api/client';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
@@ -109,6 +110,54 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   const emptyPhases = (phaseInfo.data ?? []).filter(
     (x) => x.taskCount === 0 && !phases.includes(x.name),
   );
+  // DR-49: inline ✎ Edit / 🗑 Delete per row (mockup v0.9.10). Delete refused with ACTIVITY_IN_USE
+  // shows one red line under the row and no dialog; otherwise confirm first.
+  const showActions = showEdit || canPlan;
+  const colCount = 6 + (canPlan ? 1 : 0) + (showActions ? 1 : 0);
+  const delTask = useTaskMutation();
+  const [confirmTask, confirmTaskDialog] = useConfirm();
+  const [rowBlocked, setRowBlocked] = useState<Record<string, string>>({});
+  const setBlockedLine = (id: string, line: string | null) =>
+    setRowBlocked((prev) => {
+      const next = { ...prev };
+      if (line) next[id] = line;
+      else delete next[id];
+      return next;
+    });
+  const deleteTask = async (t: TaskDto) => {
+    setBlockedLine(t.id, null);
+    if ((t.deleteBlockedBy?.length ?? 0) > 0) {
+      setBlockedLine(t.id, activityInUseMessage(t.deleteBlockedBy));
+      return;
+    }
+    if (!t.deletable) {
+      setBlockedLine(t.id, `Can’t delete: ${t.deleteBlockedReason ?? 'this activity is in use.'}`);
+      return;
+    }
+    if (
+      await confirmTask({
+        title: `Delete "${t.name}"?`,
+        body: 'Nothing has been recorded on it yet. This cannot be undone.',
+        confirmLabel: 'Delete',
+        danger: true,
+      })
+    ) {
+      delTask.mutate(
+        { path: `/tasks/${t.id}`, method: 'DELETE' },
+        {
+          onError: (e) => {
+            if (e instanceof ApiError && e.code === 'ACTIVITY_IN_USE') {
+              const by = (e.details as { blockedBy?: TaskDto['deleteBlockedBy'] } | undefined)
+                ?.blockedBy;
+              setBlockedLine(t.id, by?.length ? activityInUseMessage(by) : e.message);
+            } else if (e instanceof Error) {
+              setBlockedLine(t.id, `⚠ ${e.message}`);
+            }
+          },
+        },
+      );
+    }
+  };
   const move = (ph: string, from: number, to: number) => {
     const group = tasks.filter((t) => phaseOf(t) === ph);
     const ids = group.map((t) => t.id);
@@ -216,6 +265,9 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                 ▸
               </span>
               <h3 className="h6 mb-0">{ph}</h3>
+              {canPlan && ph !== OTHER && infoOf(ph) && (
+                <PhaseControls project={project} phase={infoOf(ph)!} />
+              )}
               <span className="small text-body-secondary">
                 {plural(group.length, 'activity', 'activities')} · {done} done
               </span>
@@ -232,7 +284,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
             </div>
             <div id={bodyId} hidden={!open}>
               <div className="table-responsive">
-                <table className="table table-stack-md mb-0">
+                <table className="table table-stack-md mb-0 checklist-table">
                   <thead>
                     <tr>
                       {canPlan && (
@@ -241,17 +293,12 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                         </th>
                       )}
                       <th scope="col">#</th>
-                      <th scope="col">Task</th>
+                      <th scope="col">Activity</th>
                       <th scope="col">Owner</th>
                       <th scope="col">Due</th>
-                      <th scope="col">Est. / actual</th>
+                      <th scope="col">Est / Act</th>
                       <th scope="col">Status</th>
-                      {showEdit && (
-                        <th scope="col" style={{ width: '2.5rem' }}>
-                          <span className="visually-hidden">Edit</span>
-                        </th>
-                      )}
-                      {canPlan && (
+                      {showActions && (
                         <th scope="col">
                           <span className="visually-hidden">Actions</span>
                         </th>
@@ -260,97 +307,89 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                   </thead>
                   <tbody>
                     {group.map((t, i) => (
-                      <tr
-                        key={t.id}
-                        {...dropTargetProps(canPlan, scope, (from) => move(ph, Number(from), i))}
-                      >
-                        {canPlan && (
-                          <td className="text-nowrap" style={{ width: '2rem' }}>
-                            <DragHandle
-                              name={t.name}
-                              index={i}
-                              count={group.length}
-                              disabled={reorder.isPending}
-                              onMove={(to) => move(ph, i, to)}
-                              dragProps={dragHandleProps(canPlan, scope, String(i))}
-                            />
-                          </td>
-                        )}
-                        <td data-label="#">{t.order}</td>
-                        <td className="cell-primary">
-                          <Button
-                            variant="link"
-                            className="p-0 text-start fw-medium"
-                            onClick={() => onOpen(t.id)}
-                          >
-                            {t.name}
-                          </Button>
-                          {t.party === 'CLIENT' && (
-                            <span className="badge bg-label-info ms-2">Client</span>
+                      <Fragment key={t.id}>
+                        <tr
+                          {...dropTargetProps(canPlan, scope, (from) => move(ph, Number(from), i))}
+                        >
+                          {canPlan && (
+                            <td className="text-nowrap" style={{ width: '2rem' }}>
+                              <DragHandle
+                                name={t.name}
+                                index={i}
+                                count={group.length}
+                                disabled={reorder.isPending}
+                                onMove={(to) => move(ph, i, to)}
+                                dragProps={dragHandleProps(canPlan, scope, String(i))}
+                              />
+                            </td>
                           )}
-                        </td>
-                        <td data-label="Owner">{t.owner?.name ?? '–'}</td>
-                        <td data-label="Due" className="text-nowrap">
-                          <DueCell t={t} />
-                        </td>
-                        <td data-label="Est. / actual">
-                          <EstAct est={t.estHours} act={t.actualHours} />
-                        </td>
-                        <td data-label="Status">
-                          <TaskStatusBadge status={t.status} />
-                        </td>
-                        {showEdit && (
-                          <td className="text-end cell-edit" style={{ width: '2.5rem' }}>
-                            {t.can.edit && (
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 text-body"
-                                aria-label="Edit task"
-                                title="Edit task"
-                                onClick={() => editTask(t)}
-                              >
-                                <i className="bx bx-pencil fs-5" aria-hidden="true" />
-                              </Button>
+                          <td data-label="#">{t.order}</td>
+                          <td className="cell-primary">
+                            <Button
+                              variant="link"
+                              className="p-0 text-start fw-medium"
+                              onClick={() => onOpen(t.id)}
+                            >
+                              {t.name}
+                            </Button>
+                            {t.party === 'CLIENT' && (
+                              <span className="badge bg-label-info ms-2">Client</span>
                             )}
                           </td>
-                        )}
-                        {canPlan && (
-                          <td className="text-end cell-actions">
-                            {/* Touch and non-drag alternative to the grip handle (FR-PRJ-18). Same reorder call;
-                                moving to another phase stays in Edit task. */}
-                            <Dropdown align="end">
-                              <Dropdown.Toggle
-                                variant="link"
-                                size="sm"
-                                className="hide-arrow p-0 text-body"
-                                aria-label={`Actions for ${t.name}`}
-                              >
-                                <i
-                                  className="bx bx-dots-vertical-rounded fs-5"
-                                  aria-hidden="true"
-                                />
-                              </Dropdown.Toggle>
-                              <Dropdown.Menu>
-                                <Dropdown.Item
-                                  as="button"
-                                  disabled={i === 0 || reorder.isPending}
-                                  onClick={() => move(ph, i, i - 1)}
-                                >
-                                  Move up
-                                </Dropdown.Item>
-                                <Dropdown.Item
-                                  as="button"
-                                  disabled={i === group.length - 1 || reorder.isPending}
-                                  onClick={() => move(ph, i, i + 1)}
-                                >
-                                  Move down
-                                </Dropdown.Item>
-                              </Dropdown.Menu>
-                            </Dropdown>
+                          <td data-label="Owner">{t.owner?.name ?? '–'}</td>
+                          <td data-label="Due" className="text-nowrap">
+                            <DueCell t={t} />
                           </td>
+                          <td data-label="Est / Act">
+                            <EstAct est={t.estHours} act={t.actualHours} />
+                          </td>
+                          <td data-label="Status">
+                            <TaskStatusBadge status={t.status} sentenceCase />
+                          </td>
+                          {showActions && (
+                            <td className="text-end text-nowrap cell-actions">
+                              {t.can.edit && (
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  title="Edit activity"
+                                  aria-label={`Edit ${t.name}`}
+                                  onClick={() => editTask(t)}
+                                >
+                                  ✎ Edit
+                                </Button>
+                              )}
+                              {canPlan && t.can.plan && (
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  className="ms-1"
+                                  title="Delete activity"
+                                  aria-label={`Delete ${t.name}`}
+                                  disabled={delTask.isPending}
+                                  onClick={() => deleteTask(t)}
+                                >
+                                  🗑 Delete
+                                </Button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                        {rowBlocked[t.id] && (
+                          <tr className="row-blocked">
+                            <td colSpan={colCount}>
+                              <div
+                                className="small"
+                                role="alert"
+                                style={{ color: '#b8240a' }}
+                                data-testid="delete-blocked"
+                              >
+                                {rowBlocked[t.id]}
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </tr>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -365,9 +404,6 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                   >
                     {addLabel}
                   </Button>
-                  {ph !== OTHER && infoOf(ph) && (
-                    <PhaseControls project={project} phase={infoOf(ph)!} />
-                  )}
                 </div>
               )}
             </div>
@@ -375,6 +411,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         );
       })}
       {emptySection}
+      {confirmTaskDialog}
       {editingTask && (
         <TaskFormModal
           project={project}
@@ -652,12 +689,17 @@ function PhaseControls({ project, phase }: { project: TabProps['project']; phase
   return (
     <>
       <Button
-        variant="outline-primary"
+        variant="outline-secondary"
         size="sm"
         className="ms-2"
-        onClick={() => setRenaming(true)}
+        aria-label={`Edit phase ${phase.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setRenaming(true);
+        }}
+        onKeyDown={(e) => e.stopPropagation()}
       >
-        ✎ Edit phase
+        ✎ Edit
       </Button>
       <PhaseDelete projectId={project.id} phase={phase} />
       {renaming && (
@@ -740,10 +782,11 @@ function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto 
     <>
       {confirmDialog}
       <Button
-        variant="outline-danger"
+        variant="outline-secondary"
         size="sm"
-        className="ms-auto"
+        aria-label={`Delete phase ${phase.name}`}
         disabled={del.isPending}
+        onKeyDown={(e) => e.stopPropagation()}
         onClick={async (e) => {
           e.stopPropagation();
           setBlocked(null);
@@ -761,26 +804,27 @@ function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto 
               cancelLabel: 'Cancel',
               confirmLabel: 'Delete phase',
               danger: true,
+              confirmClassName: 'btn-danger-strong',
             })
           ) {
             del.mutate(phase.name);
           }
         }}
       >
-        Delete phase
+        🗑 Delete
       </Button>
       {line && (
         <div
           className="w-100 small"
           role="alert"
-          style={{ color: '#b8240a' }}
+          style={{ color: '#b8240a', order: 99 }}
           data-testid="phase-delete-blocked"
         >
           {line}
         </div>
       )}
       {del.error instanceof ApiError && !serverBlock && (
-        <div className="w-100 small text-danger" role="alert">
+        <div className="w-100 small text-danger" role="alert" style={{ order: 99 }}>
           ⚠ {del.error.message}
         </div>
       )}
