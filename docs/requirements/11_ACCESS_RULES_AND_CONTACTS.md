@@ -1,6 +1,6 @@
 # 11 — Access Rules Module and Client Contacts Changes (Milestone 1.5)
 
-**Status:** v0.4.15 — doc 14 Q-67 to Q-69 resolved; no open questions · v0.4.14 — Planning-stage phase/activity editing and Apply template rights (doc 14 §I) · v0.4.13 — m8-polish access changes approved for build (Jomerson, 2026-10-13) · v0.4.12 (FR-ACL-18 team filter dropped by Jomerson; Q-12 stands) · v0.4.11 (Setup child and My tasks tab permission keys, defaultTab = first allowed, ACTIVITY_IN_USE for Admins too) · v0.4.10 (Lead's m8-polish decisions: Admin exemptions, ACTIVITY_IN_USE, team definition, tab wrap, permission-driven buttons) · v0.4.9 (m8-polish) · v0.4.8 (Reports and Team & workload rows) · v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.4.16 — §6 Reports Export and Team & workload defaults confirmed (Deven, 2026-10-13) · v0.4.15 — doc 14 Q-67 to Q-69 resolved; no open questions · v0.4.14 — Planning-stage phase/activity editing and Apply template rights (doc 14 §I) · v0.4.13 — m8-polish access changes approved for build (Jomerson, 2026-10-13) · v0.4.12 (FR-ACL-18 team filter dropped by Jomerson; Q-12 stands) · v0.4.11 (Setup child and My tasks tab permission keys, defaultTab = first allowed, ACTIVITY_IN_USE for Admins too) · v0.4.10 (Lead's m8-polish decisions: Admin exemptions, ACTIVITY_IN_USE, team definition, tab wrap, permission-driven buttons) · v0.4.9 (m8-polish) · v0.4.8 (Reports and Team & workload rows) · v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson (room, 2026-10-09 2:29 PM); Lean (Milestone 1.5 scope); Queen (safety rules); UIE (mockup v0.5 plan).
 **Decision:** permissions are set **per Access role** (Admin, PM, Member, Viewer), not per Job role (Jomerson, 2026-10-09).
 
@@ -88,10 +88,11 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 | approvals | E | E (own projects) | E (designated reviewer only) | – |
 | time | VCED | VCED | VCED (own entries; Lean, 2026-10-09) | – |
 | documents | VCED | VCED | VC | V |
-| reports | V | V | V | V |
+| reports | V + Export 🔒 | V + Export | V + Export | V + Export |
+| workload | V 🔒 | V | V | V |
 | audit | V | – | – | – |
 
-🔒 = Admin row locked. `accessRules` and `settings` only have View and Edit. Documents defaults follow doc 10's permissions; doc 10 wins if they differ.
+🔒 = Admin row locked (for `reports` and `workload`, the Admin cell is locked: an Admin always has these and can't remove them). `reports` Export and `workload` View confirmed by Deven, 2026-10-13, from `packages/shared/src/accessRules.ts`. `accessRules` and `settings` only have View and Edit. Documents defaults follow doc 10's permissions; doc 10 wins if they differ.
 
 ## 7. Acceptance criteria
 - **AC-33.1** Given an Admin unticks PM's Delete on `clients` and saves, when a PM sends DELETE on a client on their next request, then the API returns 403 and the button is hidden. **(API)**
@@ -99,7 +100,7 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 - **AC-33.3** Granting Member Edit on `projects` still doesn't let a Member edit a project they aren't on (403/404). **(API)**
 - **AC-33.4** Each save creates one audit entry per changed cell with old and new values.
 - **AC-33.5** Two Admins edit at once; the second save gets 409 and a reload prompt.
-- **AC-33.6** "Reset to defaults" restores §6 for that role after confirmation.
+- **AC-33.6** "Reset to defaults" restores §6 for that role after confirmation, including Reports View and Export and Team & workload View (v0.4.16).
 - **AC-34.1** The Admin cells on `users` and `accessRules` are disabled with an explanation, and a direct API attempt to remove them returns 422. **(API)**
 - **AC-35.1** Clients › a client › Contacts tab lists only that client's contacts; adding one there attaches it to that client; the old contacts URL redirects to Clients.
 - **AC-35.2** (M2) A Member opening a client sees only projects they belong to, and the tab count matches; the API list endpoint returns only those projects. **(API)**
@@ -151,7 +152,7 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-ACL-14 | The Access rules grid gets two configurable rows: **Reports** (`reports`) with **View** plus an **Export** checkbox shown under View, and **Team & workload** (`workload`) with **View** only. Create, Edit and Delete show "n/a" on both rows. Turning off Reports View also turns off Export, and Export can't be on without View. (UIE) | Must |
-| FR-ACL-15 | **Starting permissions match each role's access today exactly**, so nobody gains or loses anything until an Admin changes them. They ship as a migration, replacing the fixed role checks in the code. Deven confirms the exact per-role values from the current checks, and this table records them. | Must |
+| FR-ACL-15 | **Starting permissions match each role's access today exactly**, so nobody gains or loses anything until an Admin changes them. They ship as a migration, replacing the fixed role checks in the code. Deven confirms the exact per-role values from the current checks, and this table records them. **Confirmed (Deven, 2026-10-13, `packages/shared/src/accessRules.ts`):** every role starts with Reports View and Export and Team & workload View; Admins always have them and can't remove them (§6). | Must |
 | FR-ACL-16 | The API enforces both rows (403 on `/reports/*`, `?format=csv` exports and `/workload` without the permission), and the menu hides what's not allowed. Changes are audited like every other rule (FR-ACL audit). | Must |
 | FR-ACL-17 | **Saved reports stay private:** the Reports permission covers the shared M4 reports only. It never gives access to another person's saved Daily Accomplishment Reports, Admins included; those stay owner-only (doc 14 FR-DAR-14, 404 to anyone else). (Jomerson, Lean) | Must |
 
