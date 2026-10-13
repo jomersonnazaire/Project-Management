@@ -84,3 +84,5 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 - v0.4.11 / doc 11 (2026-10-13): Setup child items and My tasks tab permission keys (Deven); FR-ACL-19 to 21 and AC-46.4 updated; full open-question list.
 - v1.2.3 (2026-10-13): doc 14: team-only project filter dropped by Jomerson (FR-PRJ-24 to 26, US-49, AC-49.1 to 49.4, EC-85 to 87 struck; IDs not reused); project visibility unchanged; Q-57 to Q-60 withdrawn; mobile on hold.
 - v0.4.12 / doc 11 (2026-10-13): FR-ACL-18 and AC-49.5 dropped; FR-ACL-07 and Q-12 stand; open questions Q-53, Q-55, Q-62, Q-64 to Q-66.
+- v1.2.4 (2026-10-13): doc 14 m8-polish approved for build (Jomerson, "proceed" with defaults): Q-53 yes (all phase fields locked), Q-55 yes (reopens in Planning), Q-62 replace, Q-64 no status lock on activities, Q-65 Quick Activity not billable, Q-66 yes (A-21 decided). No open m8-polish questions. Ships as one combined m8-polish update with the DR-48 fix.
+- v0.4.13 / doc 11 (2026-10-13): m8-polish access changes approved for build; open questions none.

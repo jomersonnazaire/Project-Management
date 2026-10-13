@@ -1,6 +1,6 @@
 # 14 — Microsoft Sign-in, Activity Tracker, Daily Activity Report, Leave, PM View
 
-**Status:** v1.2.3 (team-only project filter dropped by Jomerson: FR-PRJ-24 to 26 struck, Q-57 to Q-60 withdrawn; mobile on hold) · v1.2.2 (per-tab permission keys, defaultTab = first allowed, ACTIVITY_IN_USE applies to Admins, EC-90 custom-type rename, Q-66) · v1.2.1 (Lead's m8-polish decisions: Q-52/54/56/61/63 resolved; Q-64, Q-65 added) · v1.2.0 (m8-polish) · v1.1.1 · v1.0.0 (to v0.9.7: Module free text, Time out button; v0.9.8–v1.0.0: lock rule, reopen 404, M8 feedback, audit NFRs) · v0.9.5 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v1.2.4 — m8-polish approved for build (Jomerson, 2026-10-13); Q-53, 55, 62, 64, 65, 66 resolved; ships with DR-48 fix · v1.2.3 (team-only project filter dropped by Jomerson: FR-PRJ-24 to 26 struck, Q-57 to Q-60 withdrawn; mobile on hold) · v1.2.2 (per-tab permission keys, defaultTab = first allowed, ACTIVITY_IN_USE applies to Admins, EC-90 custom-type rename, Q-66) · v1.2.1 (Lead's m8-polish decisions: Q-52/54/56/61/63 resolved; Q-64, Q-65 added) · v1.2.0 (m8-polish) · v1.1.1 · v1.0.0 (to v0.9.7: Module free text, Time out button; v0.9.8–v1.0.0: lock rule, reopen 404, M8 feedback, audit NFRs) · v0.9.5 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson via Lean (room, 8:19 PM); Deven's and UIE's technical and design points.
 Nothing here is built until Jomerson approves. Items marked **⚑** change an existing design decision.
 
@@ -300,7 +300,7 @@ Notes: Time in creates a Day timesheet row (FR-ACT-02/10) and the row Time out b
 
 ## m8-polish changes (v1.2.1; v1.2.0 Lead/Jomerson, Deven on Quick Activity, 2026-10-13; v1.2.1 Lead's decisions, 2026-10-13)
 
-Six changes for the m8-polish build. Access parts (§A, §D, §E; §C dropped) are mirrored in doc 11 v0.4.12 (FR-ACL-19 to 22; FR-ACL-18 dropped). **Mobile (Flutter) is on hold;** mobile notes below apply when it resumes. Items marked **⚑** change an existing rule. Open questions are in §H; proposed defaults apply until answered.
+Six changes for the m8-polish build. Access parts (§A, §D, §E; §C dropped) are mirrored in doc 11 v0.4.12 (FR-ACL-19 to 22; FR-ACL-18 dropped). **Mobile (Flutter) is on hold;** mobile notes below apply when it resumes. Items marked **⚑** change an existing rule. **Approved for build (Jomerson, 2026-10-13):** all m8-polish questions are resolved (§H). The six changes ship as **one combined m8-polish update together with the DR-48 fix**.
 
 **Definitions (Lead, v1.2.1):**
 - **Project PM** = the project's assigned manager, **or** any user with Access role PM who is on that project's team list.
@@ -313,7 +313,7 @@ Six changes for the m8-polish build. Access parts (§A, §D, §E; §C dropped) a
 |---|---|---|
 | FR-PRJ-21 | **Only the Project PM (see Definitions) and Admins delete checklist activities** (tasks). Delete in the ⋮ menu shows only to them. Others are refused by the API: 404 if the project is outside their scope (NFR-25), or 403 `FORBIDDEN` if they can see the project. **Activity in use (Deven):** if anything is attached, the delete is refused and nothing is changed: **409 `ACTIVITY_IN_USE`** with `details.blockedBy` = an array of one or more of `time`, `evidence`, `documents`, `issues`, **always returned in that fixed order** by the API; clients build the message directly from it without sorting. The UI shows **no confirm dialog** when the activity is blocked; instead one inline message appears under the row as red text (#b8240a, per mockup), worded the same on web and mobile: "Can't delete: this activity has " + the blocked items in fixed order **logged time, evidence files, documents, issues** (only those in `blockedBy`), separated by commas with "and" before the last (no Oxford comma), ending with a full stop. Examples: "Can't delete: this activity has logged time." / "…has logged time and evidence files." / "…has logged time, documents and issues." There is no separate 422 for this case. **`ACTIVITY_IN_USE` applies to Admins too**; the Admin exemption covers only the Planning lock (FR-PRJ-23). Successful deletes are audited; refused deletes are not. Admins can delete an unattached activity at any project status. *(Q-52 resolved.)* | Must |
 | FR-PRJ-22 | **Phase information:** the Project PM can change it only while project status is **Planning** (FR-PRJ-05). **Admins can change it at any status.** Edits are audited. | Must |
-| FR-PRJ-23 | **Phase lock for PMs outside Planning** (Active, On Hold, Completed, Cancelled) covers **phase name, order, dates, and adding or deleting phases**. The controls are hidden for PMs, and the API returns 422 `PROJECT_NOT_PLANNING` with "Phase details can only be changed while the project is in Planning." Admins are exempt *(Q-54 resolved)*. **Adding and editing activities is not locked by status** (FR-PRJ-20 unchanged; Q-64 for Jomerson). Whether other phase fields (for example, description) are locked is Q-53. | Must |
+| FR-PRJ-23 | **Phase lock for PMs outside Planning** (Active, On Hold, Completed, Cancelled) covers **phase name, order, dates, and adding or deleting phases**. The controls are hidden for PMs, and the API returns 422 `PROJECT_NOT_PLANNING` with "Phase details can only be changed while the project is in Planning." Admins are exempt *(Q-54 resolved)*. **Adding and editing activities is not locked by status** (FR-PRJ-20 unchanged; Q-64 resolved). **All other phase fields (for example, description) are locked the same way** (Q-53 resolved). **If a project returns to Planning, PM phase editing reopens** (Q-55 resolved). | Must |
 
 - **US-46** As a Project PM, I want only PMs and Admins to delete checklist activities, so the plan isn't changed by accident.
 - **US-47** As a Project PM, I want to edit phases during Planning, so the plan is right before work starts.
@@ -377,10 +377,10 @@ Six changes for the m8-polish build. Access parts (§A, §D, §E; §C dropped) a
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-ACT-29 | **Time logging** and **My tasks › Day timesheet** get two header buttons: **Log task time** (primary) and **Add quick activity** (secondary). Proposed: they replace "+ Add entry", and the Today tracker's "+ Quick activity" becomes **Add quick activity** (Q-62 open, default replace). | Must |
+| FR-ACT-29 | **Time logging** and **My tasks › Day timesheet** get two header buttons: **Log task time** (primary) and **Add quick activity** (secondary). They **replace** "+ Add entry", and the Today tracker's "+ Quick activity" is replaced by **Add quick activity** (Q-62 resolved). | Must |
 | FR-ACT-30 | **Log task time** opens the manual entry form for a project task. The project picker keeps today's visibility. Activity type preselect follows FR-PTY-04 unchanged. | Must |
 | FR-ACT-31 | **Add quick activity** opens the quick-activity form (FR-ACT-06) with **Activity Type preselected as "Quick Activity"**. The user can change it to another type, and the entry stays a quick activity (no project). This is a system preselect, separate from FR-PTY-04: the project-type default still never applies to quick activities. *(Q-63 resolved, Deven.)* | Must |
-| FR-ACT-32 | **New system Activity type "Quick Activity" (Deven):** fixed key `quick_activity`, seeded once (insert if missing). It **can't be deactivated, renamed or deleted** (API 422 `SYSTEM_ACTIVITY_TYPE`). It can't be a Project type default. In **Setup › Activity types** its row shows a **"System type"** badge and has **no Edit or Deactivate** controls. The **Add quick activity** form shows it preselected. **No backfill or migration** of existing entries *(Q-63 resolved)*. Billable default is Q-65 (proposed: not billable, consistent with FR-ACT-15). | Must |
+| FR-ACT-32 | **New system Activity type "Quick Activity" (Deven):** fixed key `quick_activity`, seeded once (insert if missing). It **can't be deactivated, renamed or deleted** (API 422 `SYSTEM_ACTIVITY_TYPE`). It can't be a Project type default. In **Setup › Activity types** its row shows a **"System type"** badge and has **no Edit or Deactivate** controls. The **Add quick activity** form shows it preselected. **No backfill or migration** of existing entries *(Q-63 resolved)*. Quick Activity entries default to **Billable = No** (editable; Q-65 resolved, consistent with FR-ACT-15). | Must |
 | FR-ACT-33 | **No time logging on future dates:** both buttons, Time in and all entry routes refuse a date after today (Philippine time). The API returns 422 `FUTURE_DATE`, and the date picker disables future dates. The existing guards still apply: 409 `TIMER_RUNNING` (FR-ACT-26, Switch/Cancel prompt), and 422 `DAY_LOCKED` on submitted or locked days for non-Admins, where the buttons are disabled with the FR-ACT-24 tooltip. The overlap, 24-hour cap and On Hold rules are unchanged. | Must |
 
 - **US-52** As a team member, I want one-click buttons to log task time or a quick activity, so logging is fast.
@@ -390,7 +390,7 @@ Six changes for the m8-polish build. Access parts (§A, §D, §E; §C dropped) a
 - **AC-52.4** Given a running timer, when a second start is sent, then 409 `TIMER_RUNNING`. **(API)**
 - **AC-52.5** Given an Admin on Setup › Activity types, then the Quick Activity row shows "System type" with no Edit or Deactivate, and a direct API rename, deactivate or delete returns 422 `SYSTEM_ACTIVITY_TYPE`. **(API)**
 - **AC-52.6** Given tomorrow's date, when any entry is posted, then 422 `FUTURE_DATE`, and the picker doesn't offer the date. **(API)**
-- **EC-90** An Admin-made type already named "Quick Activity" (assumption A-21, Q-66): the system type `quick_activity` is created separately; the existing custom type is kept and automatically renamed **"Quick Activity (custom)"**; its entries are unchanged and not merged (no migration, Deven). Admins can rename or deactivate it as normal. The rename is audited as a System action (NFR-28).
+- **EC-90** An Admin-made type already named "Quick Activity" (decided, A-21; Q-66 resolved): the system type `quick_activity` is created separately; the existing custom type is kept and automatically renamed **"Quick Activity (custom)"**; its entries are unchanged and not merged (no migration, Deven). Admins can rename or deactivate it as normal. The rename is audited as a System action (NFR-28).
 - **EC-91** An older mobile client sends a quick activity without an Activity Type: the current validation applies (400), with no silent default.
 - **EC-92** A timer running at 23:59 can't roll into tomorrow (FR-ACT-04 unchanged, consistent with FUTURE_DATE).
 
@@ -415,22 +415,22 @@ Every rule here is enforced server-side. The Flutter app uses the same API; **mo
 
 **Mobile (on hold):** shows Planned date on cards (omitted when empty), applies the tab fallback and hides My tasks per `/me/permissions`, and offers both logging buttons with the same error codes. The Setup hiding rule is web only.
 
-- **A-21** On seeding, an existing custom type named "Quick Activity" is renamed "Quick Activity (custom)" and kept separate from the system type, with no merge (EC-90; Q-66).
+- **A-21** (Decided, Jomerson 2026-10-13) On seeding, an existing custom type named "Quick Activity" is renamed "Quick Activity (custom)" and kept separate from the system type, with no merge (EC-90; Q-66 resolved).
 - **A-20** Planned date uses the same format as the Due date column on that screen (default; Lead decided only the empty display).
 
 ### H. Open questions (m8-polish)
 
 **Resolved (Lead, Deven, 2026-10-13):** Q-52 (Admins too, at any status), Q-54 (Admins exempt from the phase lock), Q-56 (empty display omitted, per Lead; format matches the Due date column by default, A-20), Q-61 (hide My tasks), Q-63 (type changeable; no backfill or migration; can't be deactivated).
 
-| ID | Question (for Jomerson) | Proposed default |
+**Resolved (Jomerson, "proceed" with proposed defaults, 2026-10-13):**
+
+| ID | Question | Decision |
 |---|---|---|
-| Q-53 | Besides name, order, dates and add/delete, are other phase fields (for example, description) locked for PMs outside Planning? | Yes, all phase fields |
-| Q-55 | If a project goes back to Planning, does PM phase editing reopen? | Yes |
-| Q-57 | ~~Team scope replaces Q-12: PMs no longer see projects they aren't on. Confirm?~~ **Withdrawn 2026-10-13** (team filter dropped by Jomerson; no longer applicable). | — |
-| Q-58 | ~~Viewers (FR-PMV-04, doc 11): only their team's projects everywhere?~~ **Withdrawn 2026-10-13** (team filter dropped by Jomerson; no longer applicable). | — |
-| Q-59 | ~~Do the dashboard, reports, Team & workload and the client Projects tab follow team scope?~~ **Withdrawn 2026-10-13** (team filter dropped by Jomerson; no longer applicable). | — |
-| Q-60 | ~~A user's own past time on a project they've left: listed, with the link disabled?~~ **Withdrawn 2026-10-13** (team filter dropped by Jomerson; no longer applicable). | — |
+| Q-53 | Are other phase fields (for example, description) locked for PMs outside Planning? | Yes, all phase fields |
+| Q-55 | If a project returns to Planning, does PM phase editing reopen? | Yes |
 | Q-62 | Do the new buttons replace "+ Add entry" and the Today tracker's "+ Quick activity"? | Replace |
-| Q-64 | Should adding or editing activities be locked by project status (like phases)? | Not locked |
+| Q-64 | Should adding or editing activities be locked by project status? | No |
 | Q-65 | Is Quick Activity billable by default? | Not billable |
-| Q-66 | If a custom Activity type named "Quick Activity" already exists, is renaming it "Quick Activity (custom)" and keeping it separate (no merge) acceptable? | Yes (A-21) |
+| Q-66 | Rename an existing custom "Quick Activity" type to "Quick Activity (custom)" and keep it separate (no merge)? | Yes (A-21) |
+
+**Withdrawn:** Q-57 to Q-60 (team filter dropped). **Open m8-polish questions: none.**
