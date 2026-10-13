@@ -313,7 +313,7 @@ export const overlapMessage = (other: string, start: string, end: string) =>
   `This overlaps ${other} (${start}–${end}). Adjust the times so they don't overlap.`;
 export const STOP_TIMER_FIRST = 'Stop the running timer before submitting this day.';
 export const DAY_LOCKED = 'This day is locked. Ask your supervisor or an Admin to reopen it.';
-export const DAY_LOCKED_ADMIN = 'This day is past the weekly lock. Only an Admin can reopen it.';
+export const DAY_LOCKED_ADMIN = 'This day is past the day lock. Only an Admin can reopen it.';
 export const AUTO_STOPPED_LABEL = 'Auto-stopped – please check';
 export const NOT_SUBMITTED_LABEL = 'Not submitted';
 export const WHERE_WORKING = 'Where are you working today?';

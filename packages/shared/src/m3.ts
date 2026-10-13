@@ -226,7 +226,7 @@ export interface TimeWeekDto {
    */
   loggedTotal?: number;
   capacity: number;
-  /** Q-09: the Admin-set lock in words, e.g. "Last week's entries lock every Monday at 12:00 PM Philippine time." */
+  /** Q-09: the day lock in words (DAY_LOCK_DESCRIPTION). */
   lockDescription?: string;
 }
 
@@ -242,13 +242,17 @@ export function weekStartOf(d: Date): Date {
 }
 
 /**
- * Q-09 (built as an Admin setting, v0.7.2): the previous week locks every week at `weekday`
- * (0 = Sunday … 6 = Saturday) and `hour` Philippine time. Default: Monday 12:00 PM. There is no
- * approval step. With `enabled` off nothing locks.
+ * Q-09 (Jomerson, v1.3): a day's entries can be edited until the end of the second day after it;
+ * the day locks at 00:00 Asia/Manila (PHT) on the third day (Oct 11 locks at 00:00 PHT on Oct 14,
+ * Oct 13 at 00:00 PHT on Oct 16). After that only an Admin reopening the day allows changes.
+ * The Admin setting keeps `enabled` (off = nothing locks); `weekday` and `hour` are legacy fields
+ * from the old weekly lock and are ignored.
  */
 export interface TimeLockPolicy {
   enabled: boolean;
+  /** Legacy (weekly lock); ignored. */
   weekday: number;
+  /** Legacy (weekly lock); ignored. */
   hour: number;
 }
 export const DEFAULT_TIME_LOCK: TimeLockPolicy = { enabled: true, weekday: 1, hour: 12 };
@@ -266,29 +270,28 @@ export interface TimeLockDto {
   boundary: string | null;
   description: string;
 }
-const WEEKDAY_NAMES = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-];
 export function formatHour12(hour: number): string {
   const h = hour % 12 === 0 ? 12 : hour % 12;
   return `${h}:00 ${hour < 12 ? 'AM' : 'PM'}`;
 }
-/** "Last week locks every Monday at 12:00 PM Philippine time." */
+/** Days after a work date during which it stays editable (Q-09). */
+export const DAY_LOCK_GRACE_DAYS = 2;
+export const DAY_LOCK_DESCRIPTION =
+  "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.";
 export function describeTimeLock(p: TimeLockPolicy): string {
   if (!p.enabled) return 'Time entries never lock.';
-  return `Last week's entries lock every ${WEEKDAY_NAMES[p.weekday]} at ${formatHour12(p.hour)} Philippine time.`;
+  return DAY_LOCK_DESCRIPTION;
+}
+
+/** Q-09: the instant a work date (calendar date at UTC midnight) locks: 00:00 PHT, 3 days later. */
+export function dayLockAt(workDate: Date): Date {
+  return new Date(workDate.getTime() + (DAY_LOCK_GRACE_DAYS + 1) * 86_400_000 - 8 * 3_600_000);
 }
 
 /**
- * FR-TIME-04 / Q-09: returns the first work date that is still open; anything earlier is read-only
- * (except PM/Admin). Weeks run Monday to Sunday. The previous week locks at this week's lock moment
- * (weekday + hour, Philippine time). With locking off, nothing is locked (the epoch is returned).
+ * FR-TIME-04 / Q-09: returns the first work date that is still open; anything earlier is locked
+ * (until an Admin reopens it). That is today's PHT date minus two days. With locking off, nothing
+ * is locked (the epoch is returned).
  */
 export function timeLockBoundary(
   now = new Date(),
@@ -297,10 +300,7 @@ export function timeLockBoundary(
   if (!policy.enabled) return new Date(0);
   const ph = new Date(now.getTime() + 8 * 3_600_000);
   const today = new Date(`${ph.toISOString().slice(0, 10)}T00:00:00.000Z`);
-  const monday = weekStartOf(today);
-  const lockAt =
-    monday.getTime() + ((policy.weekday + 6) % 7) * 86_400_000 + policy.hour * 3_600_000;
-  return ph.getTime() >= lockAt ? monday : new Date(monday.getTime() - 7 * 86_400_000);
+  return new Date(today.getTime() - DAY_LOCK_GRACE_DAYS * 86_400_000);
 }
 
 // ---------- Uploads (FR-EVD-01..08, FR-DOC-13) ----------

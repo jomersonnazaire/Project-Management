@@ -16,7 +16,7 @@ import { lookups } from './trackerHelpers.js';
 
 /**
  * M5 Activity Tracker (doc 14 §2, §10, §12; QA 06 TC-Q01..Q14). "Now" is Wed Oct 14, 2026
- * 10:00 Manila time; the weekly lock (Monday 12:00) has locked last week.
+ * 10:00 Manila time; the Q-09 day lock has locked Oct 11 and earlier.
  */
 useDatabase();
 // Timers run for hours in these tests: keep the test sessions alive meanwhile.
@@ -509,7 +509,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
     const sup = await w.pm.agent.post(url).set(CSRF).send(body);
     expect(sup.status).toBe(403);
     expect(sup.body.error.message).toBe(
-      'This day is past the weekly lock. Only an Admin can reopen it.',
+      'This day is past the day lock. Only an Admin can reopen it.',
     );
     expect((await day(w.pm.agent, '2026-10-09', body.userId)).body.day.can.reopen).toBe(false);
     expect((await day(w.admin.agent, '2026-10-09', body.userId)).body.day.can.reopen).toBe(true);
@@ -649,5 +649,72 @@ describe('FR-ACT-19 (DR-35): deleting your own entries', () => {
     const locked = await del(w.member.agent, b);
     expect(locked.status).toBe(422);
     expect(locked.body.error.code).toBe('DAY_LOCKED');
+  });
+});
+
+describe('Q-09 day lock: 00:00 PHT on the third day', () => {
+  const entry = (l: L, t1: string, date: string, timeIn = '08:00', timeOut = '09:00') => ({
+    ...task(l, t1),
+    date,
+    timeIn,
+    timeOut,
+    dayLocationId: l.onsite,
+  });
+
+  it('Oct 13 is editable at Oct 15 23:59:59 PHT and locked at Oct 16 00:00 PHT', async () => {
+    at('2026-10-15T15:59:59Z'); // Oct 15 23:59:59 PHT
+    const { w, l, t1 } = await setup();
+    expect(
+      (await manual(w.member.agent, entry(l, t1, '2026-10-13', '09:00', '10:00'))).status,
+    ).toBe(201);
+    at('2026-10-15T16:00:00Z'); // Oct 16 00:00 PHT
+    const locked = await manual(w.member.agent, entry(l, t1, '2026-10-13', '10:00', '11:00'));
+    expect(locked.status).toBe(422);
+    expect(locked.body.error.code).toBe('DAY_LOCKED');
+    expect((await day(w.member.agent, '2026-10-13')).body.day).toMatchObject({
+      weekLocked: true,
+      can: { edit: false },
+    });
+    // Oct 14 is still open at that moment.
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-14'))).status).toBe(201);
+  });
+
+  it('Oct 11 locks at 00:00 PHT on Oct 14 (and UTC dates do not decide it)', async () => {
+    at('2026-10-13T15:59:59Z'); // Oct 13 23:59:59 PHT (UTC still Oct 13)
+    const { w, l, t1 } = await setup();
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-11'))).status).toBe(201);
+    // Oct 13 23:59:59 PHT: Oct 13 itself is editable.
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-13'))).status).toBe(201);
+    at('2026-10-13T16:00:00Z'); // Oct 14 00:00 PHT, but Oct 13 in UTC
+    const res = await manual(w.member.agent, entry(l, t1, '2026-10-11', '09:00', '10:00'));
+    expect(res.body.error.code).toBe('DAY_LOCKED');
+  });
+
+  it('PUT /tracker/days/:date/location: FUTURE_DATE first, then DAY_LOCKED, open days save', async () => {
+    at('2026-10-14T02:00:00Z');
+    const { w, l } = await setup();
+    const put = (date: string) =>
+      w.member.agent
+        .put(`/api/v1/tracker/days/${date}/location`)
+        .set(CSRF)
+        .send({ locationId: l.onsite });
+    expect((await put('2026-10-15')).body.error.code).toBe('FUTURE_DATE');
+    const locked = await put('2026-10-11');
+    expect(locked.status).toBe(422);
+    expect(locked.body.error.code).toBe('DAY_LOCKED');
+    expect((await put('2026-10-12')).status).toBe(200);
+  });
+
+  it('only an Admin reopens a locked day; then it is editable again', async () => {
+    at('2026-10-16T02:00:00Z'); // Oct 16 10:00 PHT: Oct 13 is locked.
+    const { w, l, t1 } = await setup();
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-13'))).body.error.code).toBe(
+      'DAY_LOCKED',
+    );
+    const url = '/api/v1/tracker/days/2026-10-13/reopen';
+    const body = { userId: w.member.user._id.toString(), reason: 'Missed site visit' };
+    expect((await w.pm.agent.post(url).set(CSRF).send(body)).status).toBe(403);
+    expect((await w.admin.agent.post(url).set(CSRF).send(body)).status).toBe(200);
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-13'))).status).toBe(201);
   });
 });

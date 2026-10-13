@@ -1,4 +1,4 @@
-import { TIME_TYPE_SHORT, toDateOnly, todayPH } from '@xc8/shared';
+import { DAY_LOCK_DESCRIPTION, TIME_TYPE_SHORT, toDateOnly, todayPH } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, ButtonGroup } from 'react-bootstrap';
 import { useTimeMutation, useTimeWeek } from '../../api/m3Hooks';
@@ -175,9 +175,8 @@ export function TimePage() {
                 </div>
               )}
               <p className="small text-body-secondary mt-3 mb-0">
-                {data.data?.lockDescription ??
-                  "Last week's entries lock every Monday at 12:00 PM Philippine time."}{' '}
-                Ask an Admin to reopen the day if a locked entry needs changing.
+                {data.data?.lockDescription ?? DAY_LOCK_DESCRIPTION} Ask an Admin to reopen the day
+                if a locked entry needs changing.
               </p>
             </div>
           </div>

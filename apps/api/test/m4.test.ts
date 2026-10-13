@@ -384,13 +384,14 @@ describe('Reports (FR-RPT-01..05, AC-22.1, FR-ISS-16)', () => {
 });
 
 describe('Time lock setting (Q-09)', () => {
-  it('defaults to Monday 12:00 PM; an Admin can move or turn it off, which Members feel at once', async () => {
+  it('defaults to the Q-09 day lock; an Admin can turn it off, which Members feel at once', async () => {
     const { w, kickoff } = await setup();
     const get = await w.admin.agent.get('/api/v1/settings/time-lock');
     expect(get.body).toMatchObject({
       policy: { enabled: true, weekday: 1, hour: 12 },
       boundary: '2026-10-19',
-      description: "Last week's entries lock every Monday at 12:00 PM Philippine time.",
+      description:
+        "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
     });
     const fields = await entryFields();
     const log = () =>
@@ -399,13 +400,13 @@ describe('Time lock setting (Q-09)', () => {
         .set(CSRF)
         .send({ taskId: kickoff._id.toString(), workDate: '2026-10-16', hours: 1, ...fields });
     expect((await log()).body.error.code).toBe('DAY_LOCKED');
-    // Thursday 5 PM: last week is still open on Wednesday.
+    // Locking off: nothing locks.
     const put = await w.admin.agent
       .put('/api/v1/settings/time-lock')
       .set(CSRF)
-      .send({ enabled: true, weekday: 4, hour: 17, version: get.body.version });
+      .send({ enabled: false, weekday: 1, hour: 12, version: get.body.version });
     expect(put.status).toBe(200);
-    expect(put.body).toMatchObject({ boundary: '2026-10-12', version: 1 });
+    expect(put.body).toMatchObject({ boundary: null, version: 1 });
     expect((await log()).status).toBe(201);
     // Stale version → 409; PMs (no Edit on settings) → 403.
     const stale = await w.admin.agent

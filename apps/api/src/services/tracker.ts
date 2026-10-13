@@ -213,7 +213,7 @@ export async function lockedDayKeys(pairs: { userId: Id; workDate: Date }[]): Pr
 
 /**
  * FR-ACT-24: the one lock check for every route that creates, edits or deletes an owner's entries
- * (/time and /tracker alike). 422 DAY_LOCKED on a submitted day or past the weekly lock, for
+ * (/time and /tracker alike). 422 DAY_LOCKED on a submitted day or past the day lock (Q-09), for
  * every role; an Admin reopens the day first.
  */
 export async function assertDayEditable(userId: Id, date: Date) {

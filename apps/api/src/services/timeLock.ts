@@ -1,7 +1,7 @@
 import { DEFAULT_TIME_LOCK, timeLockBoundary, type TimeLockPolicy } from '@xc8/shared';
 import { SettingModel } from '../models/index.js';
 
-/** Q-09: the time lock policy is an Admin setting (Admin › Settings); default Monday 12:00 PM PHT. */
+/** Q-09: the time lock policy is an Admin setting (Admin › Settings); Q-09 day lock: a day locks at 00:00 PHT on the third day. */
 export const TIME_LOCK_KEY = 'timeLock';
 
 export async function loadTimeLock(): Promise<{ policy: TimeLockPolicy; version: number }> {

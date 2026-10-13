@@ -22,7 +22,7 @@ const settingSchema = new Schema(
   {
     key: { type: String, required: true, unique: true },
     workingDays: { type: [Number], default: undefined },
-    /** Q-09: `timeLock` key — when last week's entries lock (Admin setting, no approval step). */
+    /** Q-09: `timeLock` key — day lock on/off (Admin setting; weekday/hour are legacy, ignored). */
     timeLock: {
       type: new Schema(
         {

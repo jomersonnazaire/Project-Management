@@ -147,7 +147,7 @@ export function settingsRouter(registry: RouteRegistry) {
     res.json({ workingDays: now.days, version: updated?.version ?? now.version });
   });
 
-  // Q-09: when last week's time entries lock (Admin setting; no approval step).
+  // Q-09: the day lock (a day locks 00:00 PHT on the third day); Admins can turn it off.
   const timeLockDto = async (): Promise<TimeLockDto> => {
     const { policy, version } = await loadTimeLock();
     return {

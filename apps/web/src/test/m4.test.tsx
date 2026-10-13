@@ -417,7 +417,7 @@ describe('Reports (FR-RPT-01..06, FR-ISS-16)', () => {
 });
 
 describe('Admin › Settings › Time entry lock (Q-09)', () => {
-  it('shows the default and saves a new day and time with the version', async () => {
+  it('shows the Q-09 day lock wording and saves the on/off switch with the version', async () => {
     const fetchMock = api('ADMIN', (url, init) => {
       if (url.endsWith('/settings/time-lock') && init?.method === 'PUT')
         return {
@@ -443,20 +443,21 @@ describe('Admin › Settings › Time entry lock (Q-09)', () => {
     });
     renderAt('/admin/settings', <App />);
     expect(
-      await screen.findByText("Last week's entries lock every Monday at 12:00 PM Philippine time."),
+      await screen.findByText(
+        "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
+      ),
     ).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText('Day'), '2');
-    await userEvent.selectOptions(screen.getByLabelText('Time (Philippine time)'), '9');
-    expect(
-      screen.getByText("Last week's entries lock every Tuesday at 9:00 AM Philippine time."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/Monday/)).toBeNull();
+    expect(screen.queryByLabelText('Day')).toBeNull();
+    await userEvent.click(screen.getByRole('switch'));
+    expect(screen.getByText('Time entries never lock.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT');
       expect(JSON.parse(String(call?.[1]?.body))).toEqual({
-        enabled: true,
-        weekday: 2,
-        hour: 9,
+        enabled: false,
+        weekday: 1,
+        hour: 12,
         version: 0,
       });
     });
@@ -559,5 +560,27 @@ describe('EC-68 and linking a message to an issue', () => {
     expect(await within(dialog).findByText(/Linked to/)).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({ version: 7, messageIds: ['m0', 'm1'] });
+  });
+});
+
+describe('Time logging page (Q-09 day lock wording)', () => {
+  it('shows the day lock rule and no Monday 12:00 PM wording', async () => {
+    api('MEMBER', (url) => {
+      if (url.includes('/time?') || url.endsWith('/time'))
+        return { status: 200, body: { items: [], total: 0, capacity: 40 } };
+      return undefined;
+    });
+    renderAt('/time', <App />);
+    expect(
+      await screen.findByText((_, el) =>
+        Boolean(
+          el?.tagName === 'P' &&
+          el.textContent?.startsWith(
+            "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
+          ),
+        ),
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Monday/)).toBeNull();
   });
 });

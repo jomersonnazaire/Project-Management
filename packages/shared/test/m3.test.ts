@@ -14,6 +14,7 @@ import {
   phDateOf,
   scheduleFromOffsets,
   timeLockBoundary,
+  dayLockAt,
   describeTimeLock,
   DEFAULT_TIME_LOCK,
   effortVariance,
@@ -107,32 +108,36 @@ describe('Working days and holidays (FR-CAL-01..05)', () => {
   });
 });
 
-describe('Time lock boundary (FR-TIME-04, Q-09)', () => {
-  it('last week stays open until Monday 12:00 Manila time', () => {
-    // Mon Oct 12, 11:59 Manila → last week (from Oct 5) still open.
-    expect(iso(timeLockBoundary(new Date('2026-10-12T03:59:00Z')))).toBe('2026-10-05');
-    // Mon Oct 12, 12:00 Manila → only this week open.
-    expect(iso(timeLockBoundary(new Date('2026-10-12T04:00:00Z')))).toBe('2026-10-12');
-    expect(iso(timeLockBoundary(new Date('2026-10-14T00:00:00Z')))).toBe('2026-10-12');
+describe('Day lock (FR-TIME-04, Q-09: 00:00 PHT on the third day)', () => {
+  const open = (date: string, now: string) => !(d(date) < timeLockBoundary(new Date(now)));
+  it('Oct 13 is editable through Oct 15 23:59:59 PHT and locks at Oct 16 00:00 PHT', () => {
+    expect(open('2026-10-13', '2026-10-13T15:59:59Z')).toBe(true); // Oct 13 23:59:59 PHT
+    expect(open('2026-10-13', '2026-10-15T15:59:59Z')).toBe(true); // Oct 15 23:59:59 PHT
+    expect(open('2026-10-13', '2026-10-15T16:00:00Z')).toBe(false); // Oct 16 00:00 PHT
+    expect(dayLockAt(d('2026-10-13')).toISOString()).toBe('2026-10-15T16:00:00.000Z');
   });
-});
-
-describe('Time lock as an Admin setting (Q-09, v0.7.2)', () => {
-  it('a Wednesday 5 PM policy keeps last week open until then; off locks nothing', () => {
+  it('Oct 11 locks at 00:00 PHT on Oct 14', () => {
+    expect(open('2026-10-11', '2026-10-13T15:59:59Z')).toBe(true);
+    expect(open('2026-10-11', '2026-10-13T16:00:00Z')).toBe(false);
+    expect(dayLockAt(d('2026-10-11')).toISOString()).toBe('2026-10-13T16:00:00.000Z');
+  });
+  it('uses the Manila date, not UTC: 00:30 PHT is already the next day', () => {
+    // Oct 15 16:30 UTC = Oct 16 00:30 PHT (UTC still says Oct 15).
+    expect(iso(timeLockBoundary(new Date('2026-10-15T16:30:00Z')))).toBe('2026-10-14');
+    // Oct 15 15:59 UTC = Oct 15 23:59 PHT.
+    expect(iso(timeLockBoundary(new Date('2026-10-15T15:59:00Z')))).toBe('2026-10-13');
+    // Across a month/year end.
+    expect(iso(timeLockBoundary(new Date('2026-12-31T16:00:00Z')))).toBe('2026-12-30');
+    expect(iso(timeLockBoundary(new Date('2027-01-01T16:00:00Z')))).toBe('2026-12-31');
+  });
+  it('legacy weekday/hour are ignored; off locks nothing', () => {
     const wed5 = { enabled: true, weekday: 3, hour: 17 };
-    // Wed Oct 14, 16:59 Manila → last week still open.
-    expect(iso(timeLockBoundary(new Date('2026-10-14T08:59:00Z'), wed5))).toBe('2026-10-05');
     expect(iso(timeLockBoundary(new Date('2026-10-14T09:00:00Z'), wed5))).toBe('2026-10-12');
-    // Sunday lock: the Sunday ending the current week.
-    const sun = { enabled: true, weekday: 0, hour: 0 };
-    expect(iso(timeLockBoundary(new Date('2026-10-17T15:59:00Z'), sun))).toBe('2026-10-05');
-    expect(iso(timeLockBoundary(new Date('2026-10-17T16:00:00Z'), sun))).toBe('2026-10-12');
     expect(timeLockBoundary(new Date(), { ...wed5, enabled: false }).getTime()).toBe(0);
   });
-
-  it('describes the policy in words, default Monday 12:00 PM', () => {
+  it('describes the rule in words', () => {
     expect(describeTimeLock(DEFAULT_TIME_LOCK)).toBe(
-      "Last week's entries lock every Monday at 12:00 PM Philippine time.",
+      "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
     );
     expect(describeTimeLock({ enabled: false, weekday: 1, hour: 12 })).toBe(
       'Time entries never lock.',
