@@ -1,6 +1,6 @@
 # 11 — Access Rules Module and Client Contacts Changes (Milestone 1.5)
 
-**Status:** v0.4.16 — §6 Reports Export and Team & workload defaults confirmed (Deven, 2026-10-13) · v0.4.15 — doc 14 Q-67 to Q-69 resolved; no open questions · v0.4.14 — Planning-stage phase/activity editing and Apply template rights (doc 14 §I) · v0.4.13 — m8-polish access changes approved for build (Jomerson, 2026-10-13) · v0.4.12 (FR-ACL-18 team filter dropped by Jomerson; Q-12 stands) · v0.4.11 (Setup child and My tasks tab permission keys, defaultTab = first allowed, ACTIVITY_IN_USE for Admins too) · v0.4.10 (Lead's m8-polish decisions: Admin exemptions, ACTIVITY_IN_USE, team definition, tab wrap, permission-driven buttons) · v0.4.9 (m8-polish) · v0.4.8 (Reports and Team & workload rows) · v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.4.17 — Q-70 open (Viewer access to `time`; default B, no time access, until Jomerson decides); Viewer own-records working rule (Lean, 2026-10-13); §6 `activities`, `leave`, `issues` values pending Deven · v0.4.16 — §6 Reports Export and Team & workload defaults confirmed (Deven, 2026-10-13) · v0.4.15 — doc 14 Q-67 to Q-69 resolved; no open questions · v0.4.14 — Planning-stage phase/activity editing and Apply template rights (doc 14 §I) · v0.4.13 — m8-polish access changes approved for build (Jomerson, 2026-10-13) · v0.4.12 (FR-ACL-18 team filter dropped by Jomerson; Q-12 stands) · v0.4.11 (Setup child and My tasks tab permission keys, defaultTab = first allowed, ACTIVITY_IN_USE for Admins too) · v0.4.10 (Lead's m8-polish decisions: Admin exemptions, ACTIVITY_IN_USE, team definition, tab wrap, permission-driven buttons) · v0.4.9 (m8-polish) · v0.4.8 (Reports and Team & workload rows) · v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson (room, 2026-10-09 2:29 PM); Lean (Milestone 1.5 scope); Queen (safety rules); UIE (mockup v0.5 plan).
 **Decision:** permissions are set **per Access role** (Admin, PM, Member, Viewer), not per Job role (Jomerson, 2026-10-09).
 
@@ -94,6 +94,10 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 
 🔒 = Admin row locked (for `reports` and `workload`, the Admin cell is locked: an Admin always has these and can't remove them). `reports` Export and `workload` View confirmed by Deven, 2026-10-13, from `packages/shared/src/accessRules.ts`. `accessRules` and `settings` only have View and Edit. Documents defaults follow doc 10's permissions; doc 10 wins if they differ.
 
+**Working rule (Lean, 2026-10-13, v0.4.17):** Viewers may view, create, edit and delete **only their own leave and their own tracker entries** (tracker entries subject to Q-70), and get **View only on issues**. Any Viewer access beyond their own records is a defect.
+
+**Pending (v0.4.17):** the per-role values for `activities`, `leave` and `issues` are pending Deven's confirmation from `packages/shared/src/accessRules.ts` and will be added to the table above.
+
 ## 7. Acceptance criteria
 - **AC-33.1** Given an Admin unticks PM's Delete on `clients` and saves, when a PM sends DELETE on a client on their next request, then the API returns 403 and the button is hidden. **(API)**
 - **AC-33.2** Ticking Edit auto-ticks View; unticking View while Edit is on is blocked in the UI, and a direct API payload with Edit without View returns 422. **(API)**
@@ -126,6 +130,7 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 - **A-13** Job roles stay as labels for reporting and workload and don't affect permissions.
 - **Q-26 (resolved, Jomerson 2026-10-09):** only Admins can delete projects; PMs archive their own projects instead. Archive counts as Edit on `projects`.
 - **Q-27 (resolved, Jomerson 2026-10-09):** PMs don't see the access rules screen; only Admin has View on `accessRules` by default.
+- **Q-70 (open, v0.4.17; on Lean's handoff list for Jomerson):** Viewer access to `time` (tracker entries). **Option A:** Viewer gets `time` View, Create, Edit and Delete limited to their own entries, so Today and Day timesheet come back and Viewers log their own day. **Option B:** Viewer keeps no `time` access (as seeded in §6 and live), can't log activities, but can still file their own leave. **Proposed default: B until Jomerson decides.** Option B also needs Viewer `activities` set to **off**; otherwise Viewers can still log their own tracker entries (Deven, 2026-10-13). The live build `2262fed` currently gives Viewer full `activities` access, so under the default (B) this is a **known gap until it's changed, not a defect**.
 - **Q-11 resolved:** PMs can publish templates; publishing follows Edit on `templates`. **Q-12 resolved:** PMs view all projects but edit and archive only their own.
 
 ## 11. Accepted build deviations (Lean, 2026-10-09, PR #2)
@@ -208,6 +213,6 @@ There is no role-specific default tab: `defaultTab` is the first allowed tab in 
 - **AC-46.4** Given an Admin on a Completed project, deleting an activity with nothing attached and editing a phase both succeed; deleting one with logged time returns 409 `ACTIVITY_IN_USE`. **(API)**
 - **EC-93** An Admin removes the last Setup child permission from a role: Setup disappears for those users on their next load (no sign-out needed).
 - **v0.4.14 (doc 14 §I):** in Planning, the Project PM and Admins add, edit and delete phases and activities and can **Apply template** (Edit on `projects`; outside Planning 422 `PROJECT_NOT_PLANNING`). Project PMs and Admins delete unattached activities at any status (`ACTIVITY_IN_USE` still applies); the Planning lock covers phase details only. Others get 403, or 404 outside scope.
-- Open questions: **none** (doc 14 Q-67 to Q-69 resolved by Jomerson, 2026-10-13).
+- Open questions: **Q-70** (Viewer access to `time`, §10; default B until Jomerson decides, v0.4.17). Doc 14 Q-67 to Q-69 resolved by Jomerson, 2026-10-13.
 - Resolved earlier: Q-53, Q-55, Q-62, Q-64, Q-65, Q-66 resolved by Jomerson with the proposed defaults (2026-10-13); Q-57 to Q-60 withdrawn. Phase lock covers all phase fields and reopens if the project returns to Planning; adding or editing activities isn't status-locked.
 - **Approved for build (Jomerson, 2026-10-13);** ships as one combined m8-polish update with the DR-48 fix.
