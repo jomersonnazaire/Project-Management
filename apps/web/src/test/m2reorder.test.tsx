@@ -363,6 +363,32 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     expect(pill).not.toHaveClass('text-uppercase');
   });
 
+  it('DR-49 touch ↑/↓ buttons reorder within a phase, greyed out at the ends', async () => {
+    const fetchMock = checklistApi();
+    renderAt(`/projects/${PID}`, <App />);
+    const up = await screen.findByRole('button', { name: 'Move up Kickoff' });
+    const down = screen.getByRole('button', { name: 'Move down Kickoff' });
+    expect(up).toBeDisabled();
+    expect(down).toBeEnabled();
+    expect(up.closest('.touch-move')).not.toBeNull();
+    // Before Edit and Delete in the same cell.
+    const cell = up.closest('td')!;
+    const edit = within(cell).getByRole('button', { name: 'Edit Kickoff' });
+    expect(up.compareDocumentPosition(edit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Move down Workshops' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move up Configure' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move down Configure' })).toBeDisabled();
+    await userEvent.click(down);
+    await waitFor(() =>
+      expect(calls(fetchMock, '/tasks/reorder')).toEqual([
+        { phase: 'Discovery', taskIds: ['k2', 'k1'] },
+      ]),
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Moved Kickoff to position 2 of 2 in Discovery.',
+    );
+  });
+
   it('DR-49 a refused row Delete shows the red ACTIVITY_IN_USE line under the row, no dialog', async () => {
     const fetchMock = api('PROJECT_MANAGER', (url) => {
       if (url.includes(`/projects/${PID}/tasks`))

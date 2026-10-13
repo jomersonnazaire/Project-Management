@@ -388,6 +388,15 @@ $board-gap: 0.75rem;
 .text-none {
   text-transform: none !important;
 }
+// DR-49: row ↑/↓ buttons show only on narrow or touch screens; desktop uses drag and Alt+↑/↓.
+.touch-move {
+  display: none;
+}
+@media (max-width: 760px), (hover: none), (pointer: coarse) {
+  .touch-move {
+    display: inline;
+  }
+}
 // DR-49: only the confirm dialog's "Delete phase" button is red.
 .btn.btn-danger-strong {
   --bs-btn-bg: #b8240a;

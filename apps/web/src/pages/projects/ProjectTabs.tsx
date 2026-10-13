@@ -348,6 +348,33 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                           </td>
                           {showActions && (
                             <td className="text-end text-nowrap cell-actions">
+                              {/* DR-49: touch / narrow-screen alternative to drag and Alt+↑/↓ (FR-PRJ-18). */}
+                              {canPlan && (
+                                <span className="touch-move">
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    className="me-1"
+                                    aria-label={`Move up ${t.name}`}
+                                    title="Move up"
+                                    disabled={i === 0 || reorder.isPending}
+                                    onClick={() => move(ph, i, i - 1)}
+                                  >
+                                    ↑
+                                  </Button>
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    className="me-1"
+                                    aria-label={`Move down ${t.name}`}
+                                    title="Move down"
+                                    disabled={i === group.length - 1 || reorder.isPending}
+                                    onClick={() => move(ph, i, i + 1)}
+                                  >
+                                    ↓
+                                  </Button>
+                                </span>
+                              )}
                               {t.can.edit && (
                                 <Button
                                   variant="outline-secondary"
