@@ -388,6 +388,19 @@ $board-gap: 0.75rem;
 .text-none {
   text-transform: none !important;
 }
+// v0.9.11: paired form fields (Time in / Time out, Activity type / Time type, Location /
+// Billable) sit side by side above 760px and stack below it.
+.row > .col-pair {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+@media (min-width: 761px) {
+  .row > .col-pair {
+    width: 50%;
+  }
+}
+
 // DR-49: row ↑/↓ buttons show only on narrow or touch screens; desktop uses drag and Alt+↑/↓.
 .touch-move {
   display: none;

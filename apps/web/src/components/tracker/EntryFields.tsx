@@ -8,9 +8,10 @@ import {
   todayPH,
   type TimeType,
 } from '@xc8/shared';
+import type { ReactNode } from 'react';
 import { Form } from 'react-bootstrap';
 import { useLookups } from '../../api/trackerHooks';
-import { whereWorkingQuestion } from '../../lib/format';
+import { longDayShort, whereWorkingQuestion } from '../../lib/format';
 import type { EntryFieldValues } from './entryFieldValues';
 
 /**
@@ -26,6 +27,7 @@ export function EntryFields({
   keep,
   idPrefix,
   hideLocation = false,
+  locationSlot,
   activityHint,
 }: {
   kind: 'TASK' | 'QUICK';
@@ -41,6 +43,8 @@ export function EntryFields({
   idPrefix: string;
   /** DR-30: the entry that sets the day's location doesn't ask for a per-entry one too. */
   hideLocation?: boolean;
+  /** v0.9.11: a field shown in place of the per-entry Location (the required day location). */
+  locationSlot?: ReactNode;
   /** FR-PTY-04: "From project type: X. You can change it." under Activity type. */
   activityHint?: string;
 }) {
@@ -55,7 +59,7 @@ export function EntryFields({
   return (
     <>
       <div className="row g-3 mb-3">
-        <Form.Group className="col-sm-6" controlId={`${idPrefix}-activity`}>
+        <Form.Group className="col-pair" controlId={`${idPrefix}-activity`}>
           <Form.Label>Activity type *</Form.Label>
           <Form.Select
             value={values.activityTypeId}
@@ -77,7 +81,7 @@ export function EntryFields({
           )}
         </Form.Group>
         {kind === 'TASK' && (
-          <Form.Group className="col-sm-6" controlId={`${idPrefix}-type`}>
+          <Form.Group className="col-pair" controlId={`${idPrefix}-type`}>
             <Form.Label>Time type</Form.Label>
             <Form.Select
               value={values.type}
@@ -94,8 +98,9 @@ export function EntryFields({
         )}
       </div>
       <div className="row g-3 mb-3">
-        {!hideLocation && (
-          <Form.Group className="col-sm-6" controlId={`${idPrefix}-location`}>
+        {locationSlot}
+        {!hideLocation && !locationSlot && (
+          <Form.Group className="col-pair" controlId={`${idPrefix}-location`}>
             <Form.Label>Location</Form.Label>
             <Form.Select
               value={values.locationId}
@@ -115,7 +120,7 @@ export function EntryFields({
             <Form.Text>Change for this entry only</Form.Text>
           </Form.Group>
         )}
-        <Form.Group className="col-sm-6">
+        <Form.Group className="col-pair">
           <Form.Label as="div" id={`${idPrefix}-billable-label`}>
             Billable
           </Form.Label>
@@ -222,6 +227,67 @@ export function DayLocationField({
       <Form.Text>
         Every entry {date === today ? 'today' : 'that day'} uses it; you can change one entry later.
       </Form.Text>
+    </Form.Group>
+  );
+}
+
+/**
+ * v0.9.11: the required "Where are you working today? *" on Log task time and Add quick activity.
+ * Prefilled with the day's location; picking another one changes it for the whole day.
+ */
+export function WorkLocationField({
+  date,
+  value,
+  dayLocationId,
+  onChange,
+  error,
+  idPrefix,
+  disabled,
+}: {
+  date: string;
+  value: string;
+  /** The day's current location id, or null when the day has none yet. */
+  dayLocationId: string | null;
+  onChange: (v: string) => void;
+  error?: string;
+  idPrefix: string;
+  disabled?: boolean;
+}) {
+  const lists = useLookups();
+  const today = toDateOnly(todayPH());
+  const changes = Boolean(value && dayLocationId && value !== dayLocationId);
+  return (
+    <Form.Group className="col-pair" controlId={`${idPrefix}-day-location`}>
+      <Form.Label>{whereWorkingQuestion(date, today)} *</Form.Label>
+      <Form.Select
+        value={value}
+        required
+        aria-required="true"
+        disabled={disabled}
+        isInvalid={Boolean(error)}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Choose a location</option>
+        {(lists.data?.locations ?? []).map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name}
+          </option>
+        ))}
+      </Form.Select>
+      <Form.Control.Feedback type="invalid">{error}</Form.Control.Feedback>
+      {changes ? (
+        <Form.Text className="d-block text-body-secondary" data-testid="day-location-change">
+          This changes the location for all of {longDayShort(date)}.
+        </Form.Text>
+      ) : (
+        dayLocationId && (
+          <Form.Text className="d-block" data-testid="day-location-hint">
+            {date === today
+              ? 'From today’s location. Changing it updates the location for all of today’s entries.'
+              : `From ${longDayShort(date)}’s location. Changing it updates the location for all of that day’s entries.`}
+          </Form.Text>
+        )
+      )}
     </Form.Group>
   );
 }

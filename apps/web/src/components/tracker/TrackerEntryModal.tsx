@@ -18,7 +18,7 @@ import { useProjectTypePreselect } from '../../api/projectTypeHooks';
 import { useLookups, useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
 import { useConfirm } from '../ConfirmModal';
 import { ErrorAlert } from '../Feedback';
-import { DayLocationField, EntryFields } from './EntryFields';
+import { EntryFields, WorkLocationField } from './EntryFields';
 import { emptyFields, fieldErrors, fieldsBody, type EntryFieldValues } from './entryFieldValues';
 
 type SaveReq = { path: string; method?: 'POST' | 'PATCH'; body: unknown };
@@ -163,9 +163,20 @@ export function TrackerEntryModal({
   );
   const [timeIn, setTimeIn] = useState(editing?.startAt ? formatTime24(editing.startAt) : '');
   const [timeOut, setTimeOut] = useState(editing?.endAt ? formatTime24(editing.endAt) : '');
-  const [dayLocationId, setDayLocationId] = useState('');
+  // v0.9.11: every new entry asks "Where are you working today? *", prefilled with the day's
+  // location. It is per day only (no per-entry override): a different pick is sent as
+  // dayLocationId, which the API saves on the day after its lock checks.
+  const currentDayLocation = day.data?.location?.id ?? null;
+  // Time in on a task (My tasks) still asks only when the day has no location yet.
+  const asksLocation =
+    mode.kind === 'add' ||
+    mode.kind === 'quick' ||
+    (mode.kind === 'start' && day.isSuccess && !currentDayLocation);
+  const [dayLocationPick, setDayLocationId] = useState<string | null>(null);
+  const dayLocationId = dayLocationPick ?? currentDayLocation ?? '';
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const needsDayLocation = !editing && day.isSuccess && !day.data.location;
+  // FR-ACT-12/13: a submitted or locked day can't take new entries or a location change.
+  const dayLocked = Boolean(day.data && !day.data.can.edit);
   const runningEntry = running.data?.entry;
   const stopsRunning = !editing && when === 'now' && runningEntry;
   const projects = options.data ?? [];
@@ -199,14 +210,14 @@ export function TrackerEntryModal({
       if (!timeOut) next.timeOut = 'Enter the time out.';
       else if (timeIn && timeOut <= timeIn) next.timeOut = 'Time out must be after time in.';
     }
-    if (needsDayLocation && !dayLocationId)
-      next.dayLocationId = 'Choose where you’re working today.';
+    if (asksLocation && !dayLocationId) next.dayLocationId = 'Choose where you’re working today.';
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
     const body: Record<string, unknown> = { ...fieldsBody(fields, kind) };
-    if (needsDayLocation && dayLocationId) {
-      body.dayLocationId = dayLocationId;
+    if (asksLocation) {
+      // The entry inherits the day's location; send it only when it is new or different.
       delete body.locationId;
+      if (dayLocationId && dayLocationId !== currentDayLocation) body.dayLocationId = dayLocationId;
     }
     let req: SaveReq;
     if (editing) {
@@ -393,25 +404,28 @@ export function TrackerEntryModal({
               <Form.Control.Feedback type="invalid">{errors.title}</Form.Control.Feedback>
             </Form.Group>
           )}
-          {needsDayLocation && (
-            <DayLocationField
-              date={date}
-              idPrefix="tracker"
-              value={dayLocationId}
-              error={errors.dayLocationId}
-              onChange={(v) => {
-                setDayLocationId(v);
-                setErrors((x) => ({ ...x, dayLocationId: '' }));
-              }}
-            />
-          )}
           <EntryFields
             kind={kind}
             values={fields}
             onChange={change}
             errors={errors}
             dayLocation={day.data?.location?.name ?? null}
-            hideLocation={needsDayLocation}
+            locationSlot={
+              asksLocation ? (
+                <WorkLocationField
+                  date={date}
+                  idPrefix="tracker"
+                  value={dayLocationId}
+                  dayLocationId={currentDayLocation}
+                  disabled={dayLocked}
+                  error={errors.dayLocationId}
+                  onChange={(v) => {
+                    setDayLocationId(v);
+                    setErrors((x) => ({ ...x, dayLocationId: '' }));
+                  }}
+                />
+              ) : undefined
+            }
             keep={editing ? { activityType: editing.activityType } : undefined}
             activityHint={activityHint}
             idPrefix="tracker"
@@ -441,7 +455,7 @@ export function TrackerEntryModal({
           )}
           {timed && (
             <div className="row g-3 mb-3">
-              <Form.Group className="col-6" controlId="tracker-time-in">
+              <Form.Group className="col-pair" controlId="tracker-time-in">
                 <Form.Label>Time in *</Form.Label>
                 <Form.Control
                   type="time"
@@ -451,7 +465,7 @@ export function TrackerEntryModal({
                 />
                 <Form.Control.Feedback type="invalid">{errors.timeIn}</Form.Control.Feedback>
               </Form.Group>
-              <Form.Group className="col-6" controlId="tracker-time-out">
+              <Form.Group className="col-pair" controlId="tracker-time-out">
                 <Form.Label>Time out *</Form.Label>
                 <Form.Control
                   type="time"
@@ -463,6 +477,11 @@ export function TrackerEntryModal({
               </Form.Group>
               <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
             </div>
+          )}
+          {dayLocked && !editing && (
+            <p className="small text-body-secondary mb-0" role="status" data-testid="day-locked">
+              🔒 This day is submitted or locked, so you can't add entries or change its location.
+            </p>
           )}
           {stopsRunning && !switchPrompt && (
             <p className="small text-body-secondary mb-0" role="status">
@@ -485,7 +504,7 @@ export function TrackerEntryModal({
           <Button variant="outline-secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={save.isPending}>
+          <Button type="submit" disabled={save.isPending || (dayLocked && !editing)}>
             {editing ? 'Save' : when === 'now' ? 'Start timer' : 'Save entry'}
           </Button>
         </Modal.Footer>
