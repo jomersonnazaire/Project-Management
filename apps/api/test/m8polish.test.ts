@@ -12,7 +12,7 @@ import {
 } from '../src/models/index.js';
 import { ensureDefaultLookups, ensureQuickActivityType } from '../src/services/tracker.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
-import { grant, resetRules, world } from './m2helpers.js';
+import { SMALL_TEMPLATE, grant, publishedTemplate, resetRules, world } from './m2helpers.js';
 import { FILES, uploadEvidence } from './m3helpers.js';
 import { lookups } from './trackerHelpers.js';
 
@@ -524,6 +524,74 @@ describe('m8-polish: optional template, add phase, apply template', () => {
     expect(res.body.phasesAdded).toBeGreaterThan(0);
   });
 
+  it('DEF-016: empty template phases are saved and listed; a second apply adds 0 phases', async () => {
+    const w = await world(app);
+    const tpl = await publishedTemplate(w.admin.agent, {
+      ...SMALL_TEMPLATE,
+      name: 'Four phases',
+      phases: [
+        ...(SMALL_TEMPLATE.phases ?? []),
+        { id: 'pc', name: 'Go-live' },
+        { id: 'pd', name: 'Hypercare' },
+      ],
+    });
+    const p = await blank(w);
+    const url = `/api/v1/projects/${p.id}`;
+    const first = await w.pm.agent
+      .post(`${url}/apply-template`)
+      .set(CSRF)
+      .send({ templateId: tpl.id });
+    expect(first.body).toMatchObject({ phasesAdded: 4, phasesMerged: 0, tasksAdded: 3 });
+    const names = (await w.pm.agent.get(`${url}/phases`)).body.items.map(
+      (x: { name: string }) => x.name,
+    );
+    expect(names).toEqual(['Phase A', 'Phase B', 'Go-live', 'Hypercare']);
+    const folders = await FolderModel.countDocuments({ projectId: p.id });
+    const second = await w.pm.agent
+      .post(`${url}/apply-template`)
+      .set(CSRF)
+      .send({ templateId: tpl.id });
+    expect(second.body).toMatchObject({
+      phasesAdded: 0,
+      phasesMerged: 4,
+      tasksAdded: 0,
+      alreadyApplied: true,
+    });
+    expect((await w.pm.agent.get(`${url}/phases`)).body.items).toHaveLength(4);
+    expect(await FolderModel.countDocuments({ projectId: p.id })).toBe(folders);
+    expect(await TaskModel.countDocuments({ projectId: p.id })).toBe(3);
+    // Invariant: added + merged == template phases, with one phase already there (name differs
+    // only by case and spaces).
+    const p2 = await blank(w, { name: 'Blank one phase' });
+    const url2 = `/api/v1/projects/${p2.id}`;
+    await w.pm.agent.post(`${url2}/phases`).set(CSRF).send({ name: ' phase a ' });
+    const mixed = await w.pm.agent
+      .post(`${url2}/apply-template`)
+      .set(CSRF)
+      .send({ templateId: tpl.id });
+    expect(mixed.body).toMatchObject({ phasesAdded: 3, phasesMerged: 1 });
+    expect((await w.pm.agent.get(`${url2}/phases`)).body.items).toHaveLength(4);
+  });
+
+  it('DEF-016: 2-phase template: added + merged == 2 on empty, one-match and second apply', async () => {
+    const w = await world(app);
+    const p = await blank(w);
+    const url = `/api/v1/projects/${p.id}`;
+    const apply = async () =>
+      (await w.pm.agent.post(`${url}/apply-template`).set(CSRF).send({ templateId: w.template.id }))
+        .body as { phasesAdded: number; phasesMerged: number };
+    expect(await apply()).toMatchObject({ phasesAdded: 2, phasesMerged: 0 });
+    expect(await apply()).toMatchObject({ phasesAdded: 0, phasesMerged: 2 });
+    expect((await w.pm.agent.get(`${url}/phases`)).body.items).toHaveLength(2);
+    const p2 = await blank(w, { name: 'One match' });
+    await w.pm.agent.post(`/api/v1/projects/${p2.id}/phases`).set(CSRF).send({ name: 'PHASE B' });
+    const one = await w.pm.agent
+      .post(`/api/v1/projects/${p2.id}/apply-template`)
+      .set(CSRF)
+      .send({ templateId: w.template.id });
+    expect(one.body).toMatchObject({ phasesAdded: 1, phasesMerged: 1 });
+  });
+
   it('applies a template (append only, Q-67), keeps the starting template (Q-68), creates phase folders', async () => {
     const w = await world(app);
     const p = await blank(w);
@@ -597,5 +665,70 @@ describe('m8-polish: optional template, add phase, apply template', () => {
       .send({ templateId: w.template.id });
     expect(np.status).toBe(422);
     expect(np.body.error.code).toBe('PROJECT_NOT_PLANNING');
+  });
+});
+
+describe('Tracked quick activities count toward logged and recorded totals', () => {
+  it('Logged this week (loggedTotal) and Team & workload Recorded include quick activities', async () => {
+    const w = await world(app);
+    for (const [i, h] of [1, 1.5, 1.5].entries()) {
+      await TimeEntryModel.create({
+        userId: w.member.user._id,
+        kind: 'QUICK',
+        title: `Quick ${i}`,
+        workDate: new Date('2026-10-13T00:00:00Z'),
+        hours: h,
+        minutes: h * 60,
+        billable: false,
+      });
+    }
+    const week = await w.member.agent.get('/api/v1/time?week=2026-10-13');
+    expect(week.status).toBe(200);
+    expect(week.body).toMatchObject({ total: 0, loggedTotal: 4, items: [] });
+    const wl = await w.admin.agent.get('/api/v1/workload?week=2026-10-13');
+    expect(wl.status).toBe(200);
+    const row = wl.body.items.find(
+      (r: { person: { id: string } }) => r.person.id === w.member.user._id.toString(),
+    );
+    expect(row.recordedHours).toBe(4);
+    // Project time adds on top.
+    await TimeEntryModel.create({
+      userId: w.member.user._id,
+      projectId: w.project.id,
+      taskId: (await TaskModel.findOne({ projectId: w.project.id }).lean())!._id,
+      workDate: new Date('2026-10-13T00:00:00Z'),
+      hours: 1,
+    });
+    expect((await w.member.agent.get('/api/v1/time?week=2026-10-13')).body).toMatchObject({
+      total: 1,
+      loggedTotal: 5,
+    });
+  });
+});
+
+describe('AC-55.1 (Q-71): task time plus quick activity', () => {
+  it('1h task + 30m quick = 1.5h logged this week and 1.5h recorded', async () => {
+    const w = await world(app);
+    await TimeEntryModel.create({
+      userId: w.member.user._id,
+      projectId: w.project.id,
+      taskId: (await TaskModel.findOne({ projectId: w.project.id }).lean())!._id,
+      workDate: new Date('2026-10-13T00:00:00Z'),
+      hours: 1,
+    });
+    await TimeEntryModel.create({
+      userId: w.member.user._id,
+      kind: 'QUICK',
+      title: 'Standup',
+      workDate: new Date('2026-10-13T00:00:00Z'),
+      hours: 0.5,
+      minutes: 30,
+      billable: false,
+    });
+    expect((await w.member.agent.get('/api/v1/time?week=2026-10-13')).body.loggedTotal).toBe(1.5);
+    const row = (await w.admin.agent.get('/api/v1/workload?week=2026-10-13')).body.items.find(
+      (r: { person: { id: string } }) => r.person.id === w.member.user._id.toString(),
+    );
+    expect(row.recordedHours).toBe(1.5);
   });
 });

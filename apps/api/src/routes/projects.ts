@@ -481,7 +481,6 @@ export function projectsRouter(registry: RouteRegistry) {
     }
     const templatePhases = [...new Set(template.phases.map((ph) => key(ph.name)))];
     const phasesMerged = templatePhases.filter((n) => existing.has(n)).length;
-    const phasesAdded = templatePhases.length - phasesMerged;
     const kept = planned.filter((t) => {
       const pk = t.phase ? key(t.phase) : '';
       if (t.phase && existing.has(pk)) t.phase = existing.get(pk)!;
@@ -518,7 +517,26 @@ export function projectsRouter(registry: RouteRegistry) {
       }
     }
     // EC-97: phase folders follow the phases (FR-DOC-01 naming).
-    await ensureDefaultFolders(project as never);
+    // DEF-016 root cause: a template phase with no activities used to get no task and no folder,
+    // so it never existed and counted as "added" on every apply. New template phases now always
+    // get their phase folder, so a second apply merges every template phase.
+    const newPhaseNames: string[] = [];
+    for (const ph of template.phases) {
+      if (!existing.has(key(ph.name)) && !newPhaseNames.some((x) => key(x) === key(ph.name)))
+        newPhaseNames.push(ph.name);
+    }
+    await ensureDefaultFolders(project as never, newPhaseNames);
+    // Count what really changed: template phases that didn't exist before and exist now, so
+    // phasesAdded + phasesMerged == the template's (distinct) phase count.
+    const after = new Set(
+      [
+        ...(await TaskModel.distinct('phase', { projectId: project._id })),
+        ...(await FolderModel.distinct('phase', { projectId: project._id, kind: 'PHASE' })),
+      ]
+        .filter((n): n is string => typeof n === 'string' && Boolean(n.trim()))
+        .map(key),
+    );
+    const phasesAdded = templatePhases.filter((k) => !existing.has(k) && after.has(k)).length;
     await audit({
       actorId: user._id,
       entityType: 'project',

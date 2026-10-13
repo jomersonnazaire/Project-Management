@@ -162,11 +162,25 @@ export function timeRouter(registry: RouteRegistry) {
       .sort({ workDate: 1, createdAt: 1 })
       .lean()) as EntryDoc[];
     const items = await toDtos(entries);
+    // Tracked time counts toward the logged total: add quick activities (no task).
+    const quick = await TimeEntryModel.aggregate<{ hours: number }>([
+      {
+        $match: {
+          userId: user._id,
+          workDate: { $gte: start, $lte: end },
+          taskId: null,
+          running: { $ne: true },
+        },
+      },
+      { $group: { _id: null, hours: { $sum: '$hours' } } },
+    ]);
+    const total = items.reduce((s, e) => s + e.hours, 0);
     const body: TimeWeekDto = {
       weekStart: toDateOnly(start),
       weekEnd: toDateOnly(end),
       items,
-      total: items.reduce((s, e) => s + e.hours, 0),
+      total,
+      loggedTotal: Math.round((total + (quick[0]?.hours ?? 0)) * 100) / 100,
       capacity: user.weeklyCapacityHours ?? 40,
       lockDescription: describeTimeLock((await loadTimeLock()).policy),
     };

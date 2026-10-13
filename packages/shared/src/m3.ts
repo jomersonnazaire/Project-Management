@@ -218,7 +218,13 @@ export interface TimeWeekDto {
   weekStart: string;
   weekEnd: string;
   items: TimeEntryDto[];
+  /** Project time in `items`. */
   total: number;
+  /**
+   * All tracked time this week, project time plus quick activities (My tasks "Logged this week",
+   * doc 14 FR-ACT-10). m8-polish; older servers omit it.
+   */
+  loggedTotal?: number;
   capacity: number;
   /** Q-09: the Admin-set lock in words, e.g. "Last week's entries lock every Monday at 12:00 PM Philippine time." */
   lockDescription?: string;
