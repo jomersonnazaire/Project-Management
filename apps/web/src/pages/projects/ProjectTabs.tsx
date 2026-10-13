@@ -119,7 +119,11 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   };
 
   const toolbar = (
-    <ChecklistToolbar project={project} hasPhases={phases.length > 0 || emptyPhases.length > 0} />
+    <ChecklistToolbar
+      project={project}
+      tasks={tasks}
+      hasPhases={phases.length > 0 || emptyPhases.length > 0}
+    />
   );
 
   const emptySection = emptyPhases.length > 0 && (
@@ -396,7 +400,15 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
  * Checklist toolbar (FR-PRJ-29..31, doc 14 v1.2.6): the starting-template label, "+ Add phase"
  * (Project PM in Planning, or Admin) and "Apply template" (Planning only), plus the result toast.
  */
-function ChecklistToolbar({ project, hasPhases }: { project: ProjectDto; hasPhases: boolean }) {
+function ChecklistToolbar({
+  project,
+  tasks,
+  hasPhases,
+}: {
+  project: ProjectDto;
+  tasks: TaskDto[];
+  hasPhases: boolean;
+}) {
   const { user } = useAuth();
   const canEditProject = useCan('projects', 'edit');
   const planner = project.can.planTasks && !project.archived && canEditProject;
@@ -407,6 +419,7 @@ function ChecklistToolbar({ project, hasPhases }: { project: ProjectDto; hasPhas
   const [adding, setAdding] = useState(false);
   const [applying, setApplying] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastInfo, setToastInfo] = useState(false);
   return (
     <>
       <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -443,7 +456,7 @@ function ChecklistToolbar({ project, hasPhases }: { project: ProjectDto; hasPhas
         </span>
       </div>
       {toast && (
-        <div className="alert alert-success py-2" role="status">
+        <div className={`alert ${toastInfo ? 'alert-info' : 'alert-success'} py-2`} role="status">
           {toast}
         </div>
       )}
@@ -451,11 +464,13 @@ function ChecklistToolbar({ project, hasPhases }: { project: ProjectDto; hasPhas
       {applying && (
         <ApplyTemplateModal
           project={project}
+          tasks={tasks}
           hasPhases={hasPhases}
           onClose={() => setApplying(false)}
-          onDone={(msg) => {
+          onDone={(msg, info) => {
             setApplying(false);
             setToast(msg);
+            setToastInfo(Boolean(info));
           }}
         />
       )}
@@ -499,14 +514,16 @@ function AddPhaseModal({ projectId, onClose }: { projectId: string; onClose: () 
 
 function ApplyTemplateModal({
   project,
+  tasks,
   hasPhases,
   onClose,
   onDone,
 }: {
   project: ProjectDto;
+  tasks: TaskDto[];
   hasPhases: boolean;
   onClose: () => void;
-  onDone: (toast: string) => void;
+  onDone: (toast: string, info?: boolean) => void;
 }) {
   const templates = useTemplates({ status: 'PUBLISHED' });
   const [id, setId] = useState('');
@@ -522,6 +539,36 @@ function ApplyTemplateModal({
   ];
   const k = tplNames.filter((n) => have.has(n)).length;
   const n = tplNames.length - k;
+  // DEF-016: already applied = every template phase exists and holds an activity with the same
+  // name (trimmed, case-insensitive), so applying again would add nothing.
+  const key = (x: string) => x.trim().toLowerCase();
+  const haveActs = new Set(tasks.map((x) => `${key(x.phase ?? '')}\u0000${key(x.name)}`));
+  const tplPhaseName = new Map((detail.data?.phases ?? []).map((p) => [p.id, p.name]));
+  const alreadyApplied =
+    Boolean(detail.data) &&
+    n === 0 &&
+    (detail.data?.activities ?? []).every((a) =>
+      haveActs.has(`${key(tplPhaseName.get(a.phaseId) ?? '')}\u0000${key(a.name)}`),
+    );
+  if (t && alreadyApplied) {
+    return (
+      <Modal show onHide={onClose} centered aria-labelledby="apply-template-title">
+        <Modal.Header closeButton>
+          <Modal.Title id="apply-template-title">Apply template</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-0" data-testid="apply-already">
+            {t.name} is already applied to this project. Applying it again adds nothing.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    );
+  }
   return (
     <Modal show onHide={onClose} centered aria-labelledby="apply-template-title">
       <Form
@@ -532,7 +579,9 @@ function ApplyTemplateModal({
             { templateId: t.id, templateVersion: t.version },
             {
               onSuccess: (r) =>
-                onDone(applyToast(r.phasesAdded, r.phasesMerged ?? 0, r.template.name)),
+                r.alreadyApplied && r.phasesAdded === 0 && r.tasksAdded === 0
+                  ? onDone(`${r.template.name} is already applied. Nothing new to add.`, true)
+                  : onDone(applyToast(r.phasesAdded, r.phasesMerged ?? 0, r.template.name)),
               onError: () => void templates.refetch(),
             },
           );

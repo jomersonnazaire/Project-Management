@@ -665,7 +665,7 @@ export function MyTasksPage() {
                   <tr>
                     <th scope="col">Task</th>
                     <th scope="col">Project</th>
-                    <th scope="col">My role</th>
+                    <th scope="col">Role</th>
                     {showPlanned && <th scope="col">Planned</th>}
                     <th scope="col">Due</th>
                     <th scope="col">Est. / actual</th>
@@ -684,7 +684,7 @@ export function MyTasksPage() {
                       <td data-label="Project">
                         <Link to={`/projects/${t.project.id}`}>{t.project.name}</Link>
                       </td>
-                      <td data-label="My role">{ROLE_LABELS[t.role]}</td>
+                      <td data-label="Role">{ROLE_LABELS[t.role]}</td>
                       {showPlanned && <PlannedCell t={t} />}
                       <td
                         data-label="Due"

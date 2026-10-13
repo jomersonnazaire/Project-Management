@@ -219,7 +219,7 @@ describe('Q-69: leaving Planning with no phases', () => {
       if (url.endsWith(`/projects/${PID}`))
         return {
           status: 200,
-          body: { project: project({ status: 'PLANNING', taskCount: 0, templateName: null }) },
+          body: { project: project({ status: 'PLANNING', taskCount: 3, templateName: null }) },
         };
       return undefined;
     });
@@ -239,5 +239,123 @@ describe('Q-69: leaving Planning with no phases', () => {
     dlg = await screen.findByRole('dialog', { name: 'Leave Planning with no phases?' });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Move on anyway' }));
     await waitFor(() => expect(posted(m, `/projects/${PID}`, 'PATCH')).toHaveLength(1));
+  });
+});
+
+describe('DEF-016: applying a template that is already applied', () => {
+  const detail = {
+    ...TPL,
+    phases: [{ id: 'a', name: 'Discovery' }],
+    activities: [{ id: 'x', phaseId: 'a', name: 'Kickoff' }],
+    versions: [],
+  };
+  function setup(taskName: string) {
+    return api('PROJECT_MANAGER', (url, init) => {
+      if (url.endsWith('/apply-template') && init?.method === 'POST')
+        return {
+          status: 200,
+          body: {
+            project: project({ status: 'PLANNING' }),
+            template: { id: TPL.id, name: TPL.name, version: 3 },
+            phasesAdded: 0,
+            phasesMerged: 1,
+            tasksAdded: 0,
+            alreadyApplied: true,
+          },
+        };
+      if (url.includes(`/templates/${TPL.id}`)) return { status: 200, body: { template: detail } };
+      if (url.includes('/templates')) return { status: 200, body: { items: [TPL] } };
+      if (url.endsWith(`/projects/${PID}/phases`))
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                name: 'Discovery',
+                taskCount: 1,
+                documentCount: 0,
+                deletable: false,
+                deleteBlockedReason: null,
+                editable: true,
+              },
+            ],
+          },
+        };
+      if (url.includes(`/projects/${PID}/tasks`))
+        return {
+          status: 200,
+          body: { items: [task({ id: 'k1', name: taskName, phase: 'Discovery' })] },
+        };
+      if (url.endsWith(`/projects/${PID}`))
+        return { status: 200, body: { project: project({ status: 'PLANNING' }) } };
+      return undefined;
+    });
+  }
+  async function pick() {
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Apply template' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Apply template' });
+    await screen.findByRole('option', { name: 'ERP rollout · v3' });
+    await userEvent.selectOptions(within(dlg).getByLabelText('Template *'), TPL.id);
+  }
+
+  it('the confirm step says it adds nothing and offers only Close', async () => {
+    setup(' kickoff ');
+    await pick();
+    const dlg = await screen.findByRole('dialog', { name: 'Apply template' });
+    expect(await within(dlg).findByTestId('apply-already')).toHaveTextContent(
+      'ERP rollout is already applied to this project. Applying it again adds nothing.',
+    );
+    expect(
+      within(dlg)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(expect.arrayContaining(['Close']));
+    expect(within(dlg).queryByRole('button', { name: 'Apply template' })).not.toBeInTheDocument();
+  });
+
+  it('fallback: a response that adds nothing shows the neutral info toast', async () => {
+    setup('Renamed kickoff');
+    await pick();
+    const dlg = await screen.findByRole('dialog', { name: 'Apply template' });
+    await within(dlg).findByTestId('apply-confirm');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Apply template' }));
+    const toast = await screen.findByText('ERP rollout is already applied. Nothing new to add.');
+    expect(toast).toHaveClass('alert-info');
+  });
+});
+
+describe('Q-69: the leave-Planning confirm depends on phases, not tasks', () => {
+  it('a project with an empty phase (no tasks) saves without the dialog', async () => {
+    const m = api('PROJECT_MANAGER', (url, init) => {
+      if (url.endsWith(`/projects/${PID}/phases`))
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                name: 'Discovery',
+                taskCount: 0,
+                documentCount: 0,
+                deletable: true,
+                deleteBlockedReason: null,
+                editable: true,
+              },
+            ],
+          },
+        };
+      if (url.endsWith(`/projects/${PID}`) && init?.method === 'PATCH')
+        return { status: 200, body: { project: project({ status: 'ACTIVE', taskCount: 0 }) } };
+      if (url.endsWith(`/projects/${PID}`))
+        return { status: 200, body: { project: project({ status: 'PLANNING', taskCount: 0 }) } };
+      return undefined;
+    });
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    const edit = await screen.findByRole('dialog');
+    await userEvent.selectOptions(within(edit).getByLabelText(/Status/), 'ACTIVE');
+    await userEvent.click(within(edit).getByRole('button', { name: /Save/ }));
+    await waitFor(() => expect(posted(m, `/projects/${PID}`, 'PATCH')).toHaveLength(1));
+    expect(screen.queryByText('Leave Planning with no phases?')).not.toBeInTheDocument();
   });
 });

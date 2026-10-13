@@ -141,7 +141,7 @@ describe('FR-TSK-28..30: My tasks tabs', () => {
 });
 
 describe('FR-TSK-26/27, AC-48.3: Planned column', () => {
-  it('Assigned to me reads Task, Project, My role, Planned, Due, Est. / actual, Status; blank when empty', async () => {
+  it('Assigned to me reads Task, Project, Role, Planned, Due, Est. / actual, Status; blank when empty', async () => {
     api(DEFAULT_ACCESS_RULES.MEMBER, [
       task({}),
       task({ id: 't2', name: 'No plan', plannedStart: null }),
@@ -154,7 +154,7 @@ describe('FR-TSK-26/27, AC-48.3: Planned column', () => {
     expect(headers).toEqual([
       'Task',
       'Project',
-      'My role',
+      'Role',
       'Planned',
       'Due',
       'Est. / actual',

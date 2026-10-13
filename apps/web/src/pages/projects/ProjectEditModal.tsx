@@ -18,6 +18,7 @@ import { usePeople, useUpdateProject } from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { HandoverModal } from '../../components/HandoverModal';
 import { useConfirm } from '../../components/ConfirmModal';
+import { useProjectPhases } from '../../api/issueHooks';
 import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
 
 /**
@@ -65,6 +66,9 @@ export function ProjectEditModal({
       : null;
 
   const [confirm, confirmDialog] = useConfirm();
+  // Q-69: the leave-Planning confirm depends on phases (not tasks); falls back to the task count.
+  const phaseList = useProjectPhases(project.id, project.status === 'PLANNING');
+  const phaseCount = phaseList.data ? phaseList.data.length : project.taskCount;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next: Record<string, string> = {};
@@ -106,7 +110,7 @@ export function ProjectEditModal({
       body.status &&
       project.status === 'PLANNING' &&
       body.status !== 'PLANNING' &&
-      project.taskCount === 0 &&
+      phaseCount === 0 &&
       !(await confirm({
         title: 'Leave Planning with no phases?',
         body: 'This project has no phases or activities yet. Phase details will lock for PMs once it leaves Planning.',
