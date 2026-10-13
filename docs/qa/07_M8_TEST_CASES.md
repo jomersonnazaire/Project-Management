@@ -52,83 +52,90 @@ M8 covers Project types, Jomerson's tracker/leave feedback, Reports and Team & w
 | TC-T26 | Leave a timer running overnight on a QA-only account (no manual stop) | Auto-stops at exactly 23:59 PHT, flagged "Auto-stopped – please check", `autoStopped: true`. No entry spans midnight | TC-Q03, FR-ACT-04, EC-75 |
 | TC-T27 | Member (or PM) opens a locked/submitted day with entries | No Edit or Delete; lock icon with tooltip "Locked. Ask an Admin to reopen this day." API create/edit/delete returns 422 `DAY_LOCKED` | FR-ACT-24 |
 
-## M8 polish (doc 14 v1.2.1, doc 11 v0.4.10, mockup v0.9.3)
-Covers FR-PRJ-21 to 26, FR-TSK-26 to 30, FR-NAV-01/02, FR-ACT-29 to 33, FR-ACL-18 to 21, NFR-30 to 32, EC-81 to 93. Each case is marked **[API]** or **[UI]**. "PM" = the project's assigned manager or a global PM on the project team. "On the team" = the project team list only (PM, members, Viewers); client contacts don't count. ⚑ = depends on an open question (Q-57, Q-58, Q-59, Q-62, Quick Activity billable default); re-check when it is answered. The Lead's and Rich's decisions here override the spec text where the two differ.
+## M8 polish (doc 14 v1.2.2, doc 11 v0.4.11 — not yet on the box (with Rich); mockup v0.9.4)
+Covers FR-PRJ-21 to 26, FR-TSK-26 to 30, FR-NAV-01/02, FR-ACT-29 to 33, FR-ACL-18 to 21, NFR-30 to 32, EC-81 to 93. Each case is marked **[API]** or **[UI]**. "Project PM" = the assigned manager, or an Access-role PM on the project's team list. "On the team" = the team list only (PMs, members, Viewers); client contacts and reviewers not on the list don't count. ⚑ = depends on an open question (Q-53, Q-55, Q-57, Q-58, Q-59, Q-60, Q-62, Q-64, Q-65, Q-66 (EC-90, assumption A-21)); re-check when it's answered. New cases TC-T82 to TC-T88 sit in their topic groups, so IDs are stable but not in strict order.
 
 ### Checklist delete and phase edit (FR-PRJ-21 to 23, FR-ACL-19, EC-81 to 83)
 | ID | Case | Expected | Traces |
 |---|---|---|---|
-| TC-T28 | [UI] Project PM, Member, Viewer, PM of another project and Admin open an activity's ⋮ menu (Planning project, then Active) | Delete shows for the project PM (Planning only) and Admin (any status). Hidden for Member, Viewer and other-project PM | FR-PRJ-21, FR-ACL-19 |
-| TC-T29 | [API] `DELETE /projects/:id/tasks/:taskId` as Member on the team; PM who can view but doesn't manage X; Member not on X | 403 `FORBIDDEN`; 403; 404 (no project name in body) | FR-PRJ-21, AC-46.1, AC-46.2, NFR-25 |
-| TC-T30 | [UI+API] Project PM deletes an activity with nothing recorded (Planning project); Admin deletes one on an Active project | Removed, audit entry written for each. PM delete on an Active project → 422 `PROJECT_NOT_PLANNING` | FR-PRJ-21, AC-46.3 |
-| TC-T31 | [UI+API] PM or Admin tries to delete an activity that has logged time (also try evidence, document, issue) | Blocked with an inline message on the row/dialog (no generic toast); API 422; activity and time stay | FR-PRJ-21, AC-46.3 |
-| TC-T32 | [UI+API] Project PM edits phase name, order, planned dates, description, and adds and removes a phase on a Planning project | All save; each change audited | FR-PRJ-22, AC-47.1 |
-| TC-T33 | [UI+API] Same PM on Active, On Hold, Completed, Cancelled projects: edit name/order/dates, add a phase, remove a phase | No phase Edit/Add/Remove controls; read-only message. `PATCH /projects/:id/phases/:phaseId` (and add/remove) → 422 `PROJECT_NOT_PLANNING` "Phase details can only be changed while the project is in Planning." | FR-PRJ-23, FR-ACL-19 |
-| TC-T34 | [UI+API] PM on an Active project adds a new activity (task) to a phase, and edits a task | Allowed (adding activities and task-level edits aren't locked by phase rules) | FR-PRJ-23, FR-PRJ-20 |
-| TC-T35 | [UI+API] Admin edits phase details, adds and removes phases on Active, On Hold, Completed, Cancelled projects | Saves at any status; audited | FR-PRJ-22, FR-PRJ-23 |
-| TC-T36 | [UI] Status changes Planning → Active (another session) while the PM has a phase form open; PM saves | Save returns 422; form switches to the read-only message; nothing saved | EC-82 |
-| TC-T37 | [API] PM handover mid-session: old PM sends Delete and phase edit; new PM reloads | Old PM 403 (or 404 if no longer on the team); new PM sees the controls after reload | EC-81 |
-| TC-T38 | [UI+API] Project with no PM set (data fix in QA DB) | Only Admin can delete activities and edit phases; project shows the "no PM" flag | EC-83 |
+| TC-T28 | [UI] Project PM, Member, Viewer, PM of another project and Admin open an activity's ⋮ menu on Planning and Active projects | Delete shows for the Project PM and Admin at any status. Hidden for Member, Viewer and other-project PM | FR-PRJ-21, FR-ACL-19 |
+| TC-T29 | [API] `DELETE /projects/:id/tasks/:taskId` as Member on the team; PM who can view X but isn't its Project PM; Member not on X | 403 `FORBIDDEN`; 403; 404 (body doesn't reveal the project). No audit entry for any refused call | FR-PRJ-21, NFR-25 |
+| TC-T30 | [UI+API] Project PM deletes an activity with nothing attached (Planning and Active); Admin does the same on a Completed project | Confirm dialog opens; on confirm the activity is removed and exactly one audit entry is written | FR-PRJ-21, AC-46.4, AC-46.5 |
+| TC-T31 | [UI+API] Delete an activity with logged time, documents and issues attached (seeded in a different order) | 409 `ACTIVITY_IN_USE`, `details.blockedBy: ["time","documents","issues"]` (fixed order). No confirm dialog; nothing changes; no 422; **no audit entry**. One inline red message (#b8240a) under the row, same on web and mobile: "Can't delete: this activity has logged time, documents and issues." | FR-PRJ-21, FR-ACL-19, AC-46.6 |
+| TC-T82 | [UI+API] Delete blocked by logged time only | 409, `blockedBy: ["time"]`; "Can't delete: this activity has logged time." | FR-PRJ-21 |
+| TC-T83 | [UI+API] Delete blocked by evidence only; by documents only; by issues only | 409 with `["evidence"]` / `["documents"]` / `["issues"]`; "Can't delete: this activity has evidence files." / "…has documents." / "…has issues." | FR-PRJ-21 |
+| TC-T84 | [UI+API] Delete blocked by time and evidence | `["time","evidence"]`; "Can't delete: this activity has logged time and evidence files." (no comma before "and") | FR-PRJ-21, AC-46.3 |
+| TC-T85 | [UI+API] Delete blocked by all four | `["time","evidence","documents","issues"]`; "Can't delete: this activity has logged time, evidence files, documents and issues." (no Oxford comma, full stop) | FR-PRJ-21 |
+| TC-T86 | [UI+API] Admin deletes a blocked activity on Planning and on Completed projects; then the blocker is removed and the delete retried | Admin gets the same 409 `ACTIVITY_IN_USE` and message (the Admin exemption covers only the Planning lock); no audit entry. After clearing, confirm dialog opens, delete succeeds, one audit entry | FR-PRJ-21, Deven |
+| TC-T32 | [UI+API] Project PM renames, reorders, redates, adds and deletes a phase on a Planning project | All save; each change audited | FR-PRJ-22, AC-47.1 |
+| TC-T33 | [UI+API] Same PM on Active, On Hold, Completed, Cancelled: rename, reorder, redate, add, delete a phase; edit the phase description | Controls hidden; direct API → 422 `PROJECT_NOT_PLANNING` "Phase details can only be changed while the project is in Planning." Description: expected locked too (proposed) | FR-PRJ-23, AC-47.2, Q-53⚑ |
+| TC-T34 | [UI+API] PM on an Active project adds an activity and edits one | Both allowed (activities aren't locked by status) | FR-PRJ-23, FR-PRJ-20, Q-64⚑ |
+| TC-T35 | [UI+API] Admin renames, redates, adds and deletes phases on Active, On Hold, Completed, Cancelled projects | Saves at any status; audited | FR-ACL-19, AC-47.3 |
+| TC-T36 | [UI] Status changes Planning → Active (another session) while the PM has a phase form open; PM saves | 422; form shows the read-only message; nothing saved | EC-82 |
+| TC-T37 | [API] PM handover, and PM removed from the team, mid-session: old PM sends delete and phase edit; new PM reloads | Old PM 403 (handover, still on team) or 404 (removed); new PM has the controls after reload | EC-81 |
+| TC-T38 | [UI+API] Project with no manager set (QA DB fix) | Team-list PMs and Admins can still delete activities and (in Planning, or any status for Admin) edit phases | EC-83 |
+| TC-T87 | [UI+API] Active project moved back to Planning; PM edits a phase | Expected (proposed): editing reopens and saves | Q-55⚑ |
 
 ### Planned date on My tasks (FR-TSK-26, FR-TSK-27, NFR-30, EC-84)
 | ID | Case | Expected | Traces |
 |---|---|---|---|
 | TC-T39 | [API] `GET /my-tasks?tab=today`, `due`, `assigned` for tasks with and without `plannedStart` | Each item has `plannedStart` as `YYYY-MM-DD` (Philippine date) or `null`. A start of 13 Oct 00:30 PHT (12 Oct UTC) returns `2026-10-13` | NFR-30 |
-| TC-T40 | [UI] Desktop Today, Due, Assigned to me | Planned column after task name, before Due; same short format as Due; no time of day. Not on I'm accountable, To review, Completed | FR-TSK-26, FR-TSK-27 |
-| TC-T41 | [UI] Task with no planned date on each of the three tabs, desktop and phone card | Planned date is omitted (blank cell / no field on the card), not "–" and no "No planned date" text | FR-TSK-27 (Rich: omit) |
-| TC-T42 | [UI] Sort Assigned to me by Planned date ascending and descending | Sorts by date; tasks without a planned date sort last both ways | FR-TSK-26, FR-TSK-27 |
-| TC-T43 | [UI] Task whose planned start is after its due date | Shown as stored, no error; task form validation unchanged | EC-84 |
-| TC-T44 | [UI] Mobile app task cards on the three tabs | Planned date shown when set, omitted when empty, same format | FR-TSK-27 |
+| TC-T40 | [UI] Desktop Today, Due, Assigned to me | Planned column after task name, before Due; exactly the same short format as Due on that screen; no time of day. Not on I'm accountable, To review, Completed | FR-TSK-26, FR-TSK-27 |
+| TC-T41 | [UI] Task with no planned date on the three tabs: table and phone card | Table cell blank; card omits the field (no label, no "–", no placeholder) | FR-TSK-27 |
+| TC-T42 | [UI] Sort Assigned to me by Planned date, ascending and descending | Sorted by date; tasks without one last both ways | FR-TSK-26, FR-TSK-27 |
+| TC-T43 | [UI] Planned start after due date | Shown as stored, no error; validation unchanged | EC-84 |
+| TC-T44 | [UI] Mobile app task cards on the three tabs | Planned date in the Due format when set; omitted when empty | FR-TSK-27 |
 
-### Team-scoped projects (FR-PRJ-24 to 26, FR-ACL-18, EC-85 to 87)
+### Team-scoped projects (FR-PRJ-24 to 26, FR-ACL-18, FR-ACL-20, EC-85 to 87)
 | ID | Case | Expected | Traces |
 |---|---|---|---|
-| TC-T45 | [API] `GET /projects` as PM, Member and Viewer each on 2 of 5 projects; as Admin | Non-Admins get only their 2 (totals, filter counts, pagination only count them); Admin gets all 5 | FR-PRJ-24, FR-ACL-18, Q-57⚑, Q-58⚑ |
-| TC-T46 | [API] Task board endpoint (`GET /tasks/board` or equivalent) for the same users | Same scope as TC-T45 | FR-PRJ-24, Q-57⚑, Q-58⚑ |
-| TC-T47 | [UI+API] Project pickers in Log time (Log task time) and Create task | Only team projects listed for non-Admins; Admin sees all. Posting a time entry or task on a non-team project by ID → 404 | FR-PRJ-24 (Lead) |
-| TC-T48 | [API] Viewer on a project team vs Viewer not on it; client contact for the project | Viewer on team sees it read-only; Viewer not on team gets 404; client contact status doesn't add the project | FR-ACL-18, Q-58⚑ |
-| TC-T49 | [API] Non-team user calls every method on `/projects/:id` and sub-records (checklist, phases, tasks, board, documents, time, issues, conversation) | 404 everywhere; body doesn't reveal name or existence (same as a random ID) | FR-PRJ-25, NFR-25 |
-| TC-T50 | [UI] Non-team user opens a project URL (web and mobile) | Standard Not found page/screen; no project name in title or breadcrumb | FR-PRJ-25 |
-| TC-T51 | [API] Grant a role wider project View in Access rules | Non-Admin scope still team-only (grant can't widen it) | FR-ACL-18 |
-| TC-T52 | [UI] User removed from a team while viewing that project | Next request 404; app returns to Projects list | EC-85 |
-| TC-T53 | [UI] Archived filter as non-Admin | Only archived projects they were on the team of | EC-86 |
-| TC-T54 | [UI] User's own time entries on a project they've left | Still listed in Day timesheet/Time logging; project link opens Not found | EC-87, Q-60⚑ |
-| TC-T55 | [API] Dashboard, reports, Team & workload, client Projects tab as non-Admin | Record actual behaviour; expected (proposed) team scope only, no names of other projects | FR-PRJ-26, Q-57⚑, Q-58⚑, Q-59⚑ |
-| TC-T56 | [UI+API] '+ New project' and '+ Task' for a PM role with Create removed, and a Member role with Create granted | Buttons follow the Create permission, not the role; API 403 without Create | FR-ACL-18 (Rich) |
+| TC-T45 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [API] `GET /projects` as PM, Member and Viewer each on 2 of 5 team lists; Admin on none | Non-Admins get only their 2 (totals, filter counts, pagination in scope); Admin gets all 5 | FR-PRJ-24, AC-49.3, AC-49.5, Q-57⚑, Q-58⚑ |
+| TC-T46 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [API] Task board endpoint for the same users | Same scope as TC-T45 | FR-PRJ-24, Q-57⚑, Q-58⚑ |
+| TC-T47 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [UI+API] Project pickers in Log task time and Create task | Team projects only for non-Admins; Admin all. Posting time or a task to a non-team project ID → 404 | FR-PRJ-24, FR-ACT-30, AC-49.5 |
+| TC-T48 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [API] Viewer on A's team list; Viewer not on it; client contact of A; reviewer not on the list | Only the Viewer on the list sees A (read-only); the others don't, and direct access → 404 | FR-ACL-18, AC-49.4, Q-58⚑ |
+| TC-T49 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [API] Non-team user calls every method on `/projects/:id` and sub-records (checklist, phases, tasks, board, documents, time, issues, conversation) | 404 everywhere; same body as a random ID | FR-PRJ-25, NFR-25 |
+| TC-T50 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [UI] Non-team user opens a project URL (web and mobile) | Standard Not found page/screen; no project name anywhere | FR-PRJ-25 |
+| TC-T51 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [API] Grant a role wider project View in Access rules | Scope still team-only for non-Admins | FR-ACL-18 |
+| TC-T52 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [UI] User removed from the team while viewing that project | Next request 404; app returns to Projects | EC-85 |
+| TC-T53 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [UI] Archived filter as non-Admin | Only archived projects on their team lists | EC-86 |
+| TC-T54 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [UI] User's own past time on a project they've left | Still listed in their timesheet; project link disabled (not clickable); direct URL → 404 | EC-87, Q-60⚑ |
+| TC-T55 | ~~DROPPED Oct 13 (Jomerson: no team-only filter; today's visibility stays)~~ [API] Dashboard, reports, Team & workload, client Projects tab as non-Admin | Record actual behaviour; proposed team scope only, no other project names | FR-PRJ-26, Q-57⚑, Q-58⚑, Q-59⚑ |
+| TC-T56 | [UI+API] '+ New project' and '+ Task' for a PM role with Create removed, and a Member role with Create granted; check `/me/permissions` flags | Buttons follow Create on `projects` / `tasks`, not the role; flags match; API 403 without Create | FR-ACL-20, NFR-32 |
 
 ### Setup hiding (FR-NAV-01, FR-NAV-02, FR-ACL-20, EC-88, EC-93)
 | ID | Case | Expected | Traces |
 |---|---|---|---|
-| TC-T57 | [UI] Web: role with View on only one Setup child (from its Access rules); role with none | First: Setup shows with only that child. Second: whole Setup group (header too) hidden | FR-NAV-01, FR-ACL-20 |
-| TC-T58 | [API] Direct URL/API to a hidden Setup child | 404 (not 403); hiding isn't the control | FR-NAV-02 |
-| TC-T59 | [UI] Admin removes the last Setup child permission from a role; affected user reloads (no sign-out) | Setup disappears on next load; restoring shows it with default expanded state even if it was saved collapsed | EC-93, EC-88, FR-ACL-06 |
-| TC-T60 | [UI] Mobile app for a role with no Setup children | No change required (hiding Setup is web-only); any Setup screens still return 404/403 from the API | FR-NAV-01 (Lead) |
+| TC-T57 | [UI] Web: for each Setup item, a role with only that key: Templates `templates.view`; Clients `clients.view`; Team & workload `workload.view`; Reports `reports.view`; Admin via `users.view`, then `teams.view`, then `settings.view`; Access rules `accessRules.view`. Then a role with none | Setup shows with only the matching item (Admin appears for any one of its three keys). With none of the keys, the whole Setup group (header too) is hidden and `/me/permissions` lists no Setup children | FR-NAV-01, FR-ACL-20, AC-50.3, Deven |
+| TC-T58 | [API] Direct URL/API to each hidden Setup item (e.g. Reports without `reports.view`; Admin with none of `users.view`/`teams.view`/`settings.view`) | 404; hiding isn't the control | FR-NAV-02 |
+| TC-T59 | [UI] Admin removes the last of the Setup keys from a role; user reloads (no sign-out) | Setup disappears on next load; granting any one key back shows it in default expanded state even if saved collapsed | EC-93, EC-88 |
+| TC-T60 | [UI] Mobile app for a role with none of the Setup keys | No Setup change (web only); Setup APIs still refuse | FR-NAV-01, FR-ACL-20 |
 
-### My tasks tabs (FR-TSK-28 to 30, FR-ACL-20, EC-89)
+### My tasks tabs (FR-TSK-28 to 30, FR-ACL-20, NFR-32, EC-89)
 | ID | Case | Expected | Traces |
 |---|---|---|---|
-| TC-T61 | [UI] Role without `time` View opens My tasks (Today denied too via custom role) | Denied tabs hidden; selection moves to the next allowed tab to the right, wrapping round (Lead rule; replaces "first allowed") | FR-TSK-28, FR-ACL-20 |
-| TC-T62 | [UI] Default Viewer opens My tasks | No time features (no Day timesheet, no logging buttons); lands on Due | FR-TSK-28 (Rich) |
-| TC-T63 | [UI] Deep link `?tab=day-timesheet` without `time`; `?tab=to-review` without approvals Edit with only Today allowed (wrap); unknown key | Opens next allowed tab to the right (wrapping), URL replaced (Back doesn't loop), dismissible "You don't have access to that view." | FR-TSK-30 |
-| TC-T64 | [UI] Role with no My tasks tab allowed | My tasks hidden from sidebar (Lead; replaces FR-TSK-29 empty state); sign-in lands elsewhere without error | FR-TSK-29 (Lead), Q-61 |
-| TC-T65 | [UI] Admin removes the user's permission while they're on that tab | Next request 403; page re-selects per TC-T61 | EC-89 |
-| TC-T66 | [API] `GET /api/v1/me/permissions` for Admin, PM, Member, Viewer and a custom role | Returns role, per-record actions (incl. Reports Export), `navigation.setup` children, `myTasksTabs` in display order with `allowed`. Change a rule → next call reflects it | NFR-32, FR-ACL-21 |
+| TC-T61 | [UI+API] Tab order and keys: Today (`tasks.view` **and** `time.view`), Day timesheet (`time.view`), Due, Assigned to me, I'm accountable (`tasks.view`), To review (`approvals.edit`), Completed (`tasks.view`). Roles: `tasks.view`+`time.view`; `tasks.view` only; `time.view`+`approvals.edit`; `time.view` only with Completed selected; `tasks.view` only with Day timesheet selected | Only allowed tabs show. `/me/permissions` `myTasksTabs` (allowed keys, tab order) and `defaultTab`: `[today, day-timesheet, due, assigned, accountable, completed]`/`today`; `[due, assigned, accountable, completed]`/`due`; `[day-timesheet, to-review]`/`day-timesheet`; `[day-timesheet]`/`day-timesheet`. Blocked selections go to the next allowed tab on the right, wrapping: Completed → Day timesheet; Day timesheet → Due | FR-TSK-28, AC-51.2, NFR-32 |
+| TC-T62 | [UI+API] Default Viewer (no `time.view`) opens My tasks without a tab; same Viewer given `time.view`; Viewer with `tasks.view` removed | No special Viewer rule: lands on Due (`defaultTab: "due"`, `myTasksTabs` without `today`/`day-timesheet`); with `time.view` lands on Today (`"today"`); without `tasks.view` and `time.view`, see TC-T64 | FR-TSK-28, AC-51.4 |
+| TC-T63 | [UI] Deep link `?tab=today` with `tasks.view` but no `time.view`; `?tab=day-timesheet` without `time.view`; `?tab=to-review` without `approvals.edit`; unknown key | Next allowed tab on the right (Due; Due; Completed), wrapping; URL replaced (Back doesn't loop); `myTasksTabs` unchanged by the link; notice "You don't have access to that view." | FR-TSK-30, AC-51.1 |
+| TC-T64 | [UI+API] Role with no allowed tab: none of `tasks.view`, `time.view`, `approvals.edit` (web and mobile) | My tasks hidden; its URL shows Not found; sign-in lands on the next page they can open in sidebar order. `/me/permissions` still includes both fields: `defaultTab: null`, `myTasksTabs: []` | FR-TSK-29, AC-51.3, AC-51.5, NFR-32 |
+| TC-T65 | [UI] Admin removes `time.view` while the user (with `tasks.view`) is on Today, then on Day timesheet | Next request 403; Today and Day timesheet both disappear; page moves to the next allowed tab on the right (Due); next `/me/permissions` drops `today` and `day-timesheet` from `myTasksTabs` and returns `defaultTab: "due"` | EC-89 |
+| TC-T66 | [API] `GET /api/v1/me/permissions` for Admin, PM, Member, Viewer (with and without `time.view`), a custom role and a no-tab role | Role, per-record actions (incl. Reports Export), Setup children per TC-T57, New project and + Task flags. `defaultTab` and `myTasksTabs` always present: `myTasksTabs` = allowed tab keys in tab order, `defaultTab` = its first item, or `null` and `[]` when none. Change a rule → next call reflects it | NFR-32, FR-ACL-21 |
 
 ### Log task time and Add quick activity (FR-ACT-29 to 33, NFR-31, EC-90 to 92)
 | ID | Case | Expected | Traces |
 |---|---|---|---|
-| TC-T67 | [UI] Time logging and My tasks › Day timesheet headers; tracker | 'Log task time' (primary) and 'Add quick activity' (secondary). They replace '+ Add entry', and 'Add quick activity' replaces the tracker's '+ Quick activity' | FR-ACT-29, Q-62⚑ |
-| TC-T68 | [UI] Log task time on a Configuration-default project task | Manual entry form, project → task picker; Activity type Configuration, hint "From project type" | FR-ACT-30, AC-52.2 |
-| TC-T69 | [UI] Add quick activity on an unlocked day | Form, no project; Activity type preselected "Quick Activity" (by key); user can change it and save | FR-ACT-31, AC-52.1, EC-91 |
-| TC-T70 | [UI+API] Billable default on a new quick activity | Record value; proposed No (not billable) | FR-ACT-31, Quick Activity billable⚑ |
+| TC-T67 | [UI] Time logging and My tasks › Day timesheet headers; Today tracker | 'Log task time' (primary) and 'Add quick activity' (secondary) replace '+ Add entry'; 'Add quick activity' replaces the tracker's '+ Quick activity' | FR-ACT-29, Q-62⚑ |
+| TC-T68 | [UI] Log task time on a Configuration-default project's task | Manual entry form with project picker (today's visibility); Activity type Configuration | FR-ACT-30, AC-52.2 |
+| TC-T69 | [UI] Add quick activity on today and on an unlocked past day; change type to Training and save | No project; Activity type preselected "Quick Activity"; saves as a quick activity with Training | FR-ACT-31, AC-52.1 |
+| TC-T70 | [UI+API] Billable on a new quick activity | Defaults to No | FR-ACT-32, Q-65⚑ |
 | TC-T71 | [API] `GET /settings/activity-types` | Quick Activity has `key: "quick_activity"`, `system: true`; Admin-made types `key: null` | NFR-31, FR-ACT-32 |
-| TC-T72 | [UI+API] Admin tries to deactivate or delete Quick Activity; tries to set it as a Project type default | Refused, 422 `SYSTEM_ACTIVITY_TYPE`; "System" tag shown. Note: mockup v0.9.3 still shows Deactivate on this row (report as UI defect) | FR-ACT-32 |
-| TC-T73 | [API] Re-run seed migration; DB with an Admin type "quick activity" | One system type only; existing type is linked to the key (no duplicate) | FR-ACT-32, EC-90, Q-63 |
-| TC-T74 | [UI+API] Existing quick activities after release; change a quick entry's type away from Quick Activity | Old entries unchanged (no backfill); changed entry stays a quick activity with no project | Q-63 (Lead), EC-91 |
-| TC-T75 | [API] Old mobile client posts a quick activity with no Activity type | 400 (required), no silent default | EC-92 |
-| TC-T76 | [UI+API] Both buttons with a date in the future | Future dates can't be picked; API refuses future-dated entries | FR-ACT-33 (Lead) |
-| TC-T77 | [UI+API] Timer running, user saves a manual entry via either button overlapping the timer; then picks "start timer" where offered | Manual save doesn't start/stop a timer; overlap rule applies. Start timer shows Switch/Cancel prompt; direct second start → 409 `TIMER_RUNNING` | FR-ACT-33, FR-ACT-26, AC-52.4 |
-| TC-T78 | [UI+API] Member/PM on a submitted or locked day | Both buttons disabled with tooltip "Locked. Ask an Admin to reopen this day."; `POST /tracker/entries` → 422 `DAY_LOCKED`. Admin buttons enabled | FR-ACT-33, AC-52.3, FR-ACT-24 |
-| TC-T79 | [UI] Admin reopens the locked day; Member reloads | Buttons enabled again; entries can be added | FR-ACT-33, FR-ACT-24 |
-| TC-T80 | [UI+API] Entry via either button that pushes the day over 24h, or on an On Hold project task | Refused as today (24h cap, On Hold rule) | FR-ACT-33 |
-| TC-T81 | [UI] Mobile app: both buttons, same preselects and error messages for 409 `TIMER_RUNNING`, 422 `DAY_LOCKED`, 422 `PROJECT_NOT_PLANNING` | Matches web | FR-ACT-29 to 33 |
+| TC-T72 | [UI+API] Admin on Setup › Activity types; API rename, deactivate, delete; set as Project type default | Row shows "System type" badge and no actions (no Edit/Deactivate/Delete). API → 422 `SYSTEM_ACTIVITY_TYPE`; not offered as a project type default | FR-ACT-32, AC-52.5 |
+| TC-T73 | [API] Seed on a DB with an Admin type already named "Quick Activity" (with entries); re-run seeding | A separate system type (`key: "quick_activity"`, `system: true`) is created; the existing type is renamed "Quick Activity (custom)" and keeps its ID, entries and settings (nothing merged or moved). Re-run creates no duplicates and no second rename. The rename is in the audit log as a System action (no user actor). Clean DB: one system type only, no rename logged | FR-ACT-32, EC-90, A-21, Q-66⚑ |
+| TC-T74 | [UI+API] Existing quick activities after release | Unchanged (no backfill) | FR-ACT-32 |
+| TC-T75 | [API] Older mobile client posts a quick activity with no Activity type | 400, no silent default | EC-91 |
+| TC-T76 | [UI+API] Tomorrow's date via both buttons, Time in, `POST/PATCH /tracker/entries` and `/time` | Picker disables future dates; API 422 `FUTURE_DATE`. Today allowed | FR-ACT-33, AC-52.6 |
+| TC-T77 | [UI+API] Timer running: save a manual entry via either button (overlapping and not); then start a second timer | Manual save doesn't start/stop a timer; overlap rule applies. Second start: Switch/Cancel prompt; direct API → 409 `TIMER_RUNNING` | FR-ACT-33, FR-ACT-26, AC-52.4 |
+| TC-T78 | [UI+API] Member/PM on a submitted or locked day; Admin on the same day | Both buttons disabled with "Locked. Ask an Admin to reopen this day."; POST → 422 `DAY_LOCKED`. Admin buttons enabled | FR-ACT-33, AC-52.3, FR-ACT-24 |
+| TC-T79 | [UI] Admin reopens the locked day; Member reloads | Buttons enabled; entries can be added | FR-ACT-33, FR-ACT-24 |
+| TC-T80 | [UI+API] Entry via either button over the 24h cap, or on an On Hold project task | Refused as today | FR-ACT-33 |
+| TC-T81 | [UI+API] Timer running at 23:59 | Auto-stops at 23:59; no entry rolls into tomorrow | EC-92, FR-ACT-04 |
+| TC-T88 | [UI] Mobile app: both buttons, same preselects, disabled future dates, and messages for 409 `TIMER_RUNNING`, 422 `DAY_LOCKED`, 422 `FUTURE_DATE`, 422 `PROJECT_NOT_PLANNING`, 409 `ACTIVITY_IN_USE` | Matches web | FR-ACT-29 to 33, FR-PRJ-21 |
