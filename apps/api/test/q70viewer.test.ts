@@ -28,12 +28,12 @@ afterEach(async () => {
 });
 
 describe('Q-70: Viewer has no time or tracker access', () => {
-  it('defaults: time and activities off, the rest as before', () => {
+  it('defaults: time, activities and leave off, the rest as before', () => {
     const p = defaultPermissions('VIEWER');
     for (const a of ['view', 'create', 'edit', 'delete'] as const) {
       expect(p.time[a]).toBe(false);
       expect(p.activities[a]).toBe(false);
-      expect(p.leave[a]).toBe(true);
+      expect(p.leave[a]).toBe(false); // Q-72
     }
     expect(p.reports.view && p.reports.export).toBe(true);
     expect(p.workload.view).toBe(true);

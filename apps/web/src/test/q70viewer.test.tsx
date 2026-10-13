@@ -23,10 +23,11 @@ describe('AC-56.1: Viewer has no Time or Tracker in the web app', () => {
     expect(myTasksTabsFor(DEFAULT_ACCESS_RULES.MEMBER)).toContain('day-timesheet');
   });
 
-  it('menu hides Time logging and the DAR but keeps Leave', async () => {
+  it('menu hides Time logging and the DAR (and Leave, Q-72)', async () => {
     viewerApi();
     renderAt('/projects', <App />);
-    expect(await screen.findByRole('link', { name: /Leave/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /Projects/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Leave/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Time logging/ })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('link', { name: /Daily Accomplishment Report/ }),

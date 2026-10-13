@@ -248,7 +248,7 @@ const DEFAULT_SPEC: Record<SystemRole, Record<RecordType, string>> = {
     approvals: '',
     time: '',
     activities: '',
-    leave: 'VCED',
+    leave: '',
     documents: 'V',
     issues: 'V',
     conversations: 'V',
@@ -299,6 +299,18 @@ export const ACCESS_DEFAULT_CHANGES: readonly AccessDefaultChange[] = [
     cells: (['view', 'create', 'edit', 'delete'] as const).map((action) => ({
       role: 'VIEWER' as const,
       record: 'activities' as const,
+      action,
+      from: true,
+      to: false,
+    })),
+  },
+  {
+    id: '2026-10-13-viewer-no-leave',
+    reason: 'Viewers have no leave access (Q-72 No, Jomerson)',
+    valueOnly: true,
+    cells: (['view', 'create', 'edit', 'delete'] as const).map((action) => ({
+      role: 'VIEWER' as const,
+      record: 'leave' as const,
       action,
       from: true,
       to: false,
