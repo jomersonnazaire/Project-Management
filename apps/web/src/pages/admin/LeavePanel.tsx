@@ -21,7 +21,7 @@ export function LeavePanel() {
   return (
     <>
       <div className="card mb-6">
-        <div className="card-header d-flex align-items-center">
+        <div className="card-header d-flex flex-wrap align-items-center gap-2">
           <h2 className="h5 mb-0 me-auto">Leave types</h2>
           {canEdit && (
             <Button size="sm" onClick={() => setEditing('new')}>
@@ -397,6 +397,7 @@ function EntitlementRow({
             min={0}
             step={0.5}
             aria-label={`${row.user.name} carry-over`}
+            style={{ minWidth: '4.5rem' }}
             disabled={!canEdit}
             value={carry}
             onChange={(e) => setCarry(e.target.value)}
