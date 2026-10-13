@@ -76,3 +76,5 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 - v1.0.0 (2026-10-10): doc 14 NFR-28 (system auto-stops audited), NFR-29 (audit IP and user agent).
 - v1.1.0 draft (2026-10-10): doc 14 FR-PTY-01 to 07 Project Type with default activity type; Q-50, Q-51.
 - v1.1.1 (2026-10-10): app renamed OpsTrack (FR-DAR-08 footer); nine starting Project types (Q-51); Q-50 yes.
+- v1.2.0 (2026-10-13): doc 14 m8-polish: FR-PRJ-21 to 26 (PM-only checklist delete, Planning-only phase edit, team-scoped Projects list/Task board with 404), FR-TSK-26 to 30 (Planned date column, next allowed My tasks tab), FR-NAV-01/02 (hide empty Setup), FR-ACT-29 to 33 (Log task time / Add quick activity, system "Quick Activity" type), NFR-30 to 32 (plannedStart in payloads, stable `quick_activity` key, `GET /me/permissions`); US-46 to 52, EC-81 to 92; Q-52 to Q-63 open.
+- v0.4.9 / doc 11 (2026-10-13): FR-ACL-18 to 21 mirror m8-polish access rules (team scope supersedes Q-12 pending Q-57 to Q-59; tab/Setup permission mapping; effective permissions endpoint); AC-46.4, AC-49.5, AC-50.3, AC-51.5, EC-93.

@@ -1,6 +1,6 @@
 # 14 — Microsoft Sign-in, Activity Tracker, Daily Activity Report, Leave, PM View
 
-**Status:** v1.0.0 (to v0.9.7: Module free text, Time out button; v0.9.8–v1.0.0: lock rule, reopen 404, M8 feedback, audit NFRs) · v0.9.5 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v1.2.0 (m8-polish: checklist delete/phase edit, Planned date, team-scoped projects, Setup hiding, My tasks tab fallback, quick activity buttons; Q-52 to Q-63 open) · v1.1.1 · v1.0.0 (to v0.9.7: Module free text, Time out button; v0.9.8–v1.0.0: lock rule, reopen 404, M8 feedback, audit NFRs) · v0.9.5 — approved for build (Jomerson, 2026-10-09) — Q-36, Q-37, Q-41, Q-46 decided by Jomerson draft for Jomerson's approval · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson via Lean (room, 8:19 PM); Deven's and UIE's technical and design points.
 Nothing here is built until Jomerson approves. Items marked **⚑** change an existing design decision.
 
@@ -297,3 +297,142 @@ Notes: Time in creates a Day timesheet row (FR-ACT-02/10) and the row Time out b
 | Training | Training |
 | Consulting | Client meeting |
 - **Project Type build notes (PR #15, Deven, 2026-10-10):** Project types are governed by the existing `settings` access row (FR-PTY-07). Time in no longer copies the last entry's Activity type; it preselects only from the project type default (FR-PTY-04). The project page's old "Type" field is renamed **"Template type"** so it isn't confused with Project type.
+
+## m8-polish changes (v1.2.0, Lead/Jomerson; Deven on Quick Activity, 2026-10-13)
+
+Six changes for the m8-polish build. Access parts (§A, §C, §D, §E) are mirrored in doc 11 v0.4.9 (FR-ACL-18 to 21). Items marked **⚑** change an existing rule. Open questions are in §H (Q-52 to Q-63); proposed defaults apply until they're answered.
+
+### A. Project › Checklist: activity delete and Phase editing ⚑
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-PRJ-21 | **Only the project's PM deletes checklist activities** (tasks). The ⋮ menu's Delete shows only for the project's PM (the user set as its manager) and, **proposed, Admins** (Q-52). Members, Viewers and PMs of other projects never see it, and the API refuses them: 404 if the project is outside their scope (NFR-25), 403 `FORBIDDEN` if they can see it. The existing "nothing recorded under it" rule (doc 13 §-phase deletion: no time, evidence, documents, issues) still applies on top and returns 422. Deletes stay audited. | Must |
+| FR-PRJ-22 | **Phase information is editable by the project's PM (and, proposed, Admins, Q-52) only while project status is Planning** (FR-PRJ-05). Phase information means phase name, order, planned dates and description (Q-53 confirms the field list). Edits are audited. | Must |
+| FR-PRJ-23 | **Other statuses (Active, On Hold, Completed, Cancelled): Phase information is read-only (assumed, Q-54)** for everyone including the PM: no Edit control; the API returns 422 `PROJECT_NOT_PLANNING` with "Phase details can only be changed while the project is in Planning." Whether Admins can override, and whether moving the project back to Planning re-opens editing, are Q-54/Q-55. Task-level edits (FR-PRJ-20) are not affected. | Must |
+
+- **US-46** As a project PM, I want only me to delete checklist activities, so the plan isn't changed by accident.
+- **US-47** As a project PM, I want to edit phase details during Planning, so the plan is right before work starts.
+- **AC-46.1** Given a Member on the project, when they open an activity's ⋮ menu, then Delete isn't shown, and a direct `DELETE /projects/:id/tasks/:taskId` returns 403. **(API)**
+- **AC-46.2** Given a PM who doesn't manage project X but can view it, when they send DELETE on X's task, then 403; given a Member not on X, then 404. **(API)**
+- **AC-46.3** Given the project PM and a task with nothing recorded, when they confirm Delete, then the task is removed and an audit entry is written; with time logged under it, then 422 and the task stays.
+- **AC-47.1** Given a Planning project, when its PM edits a phase name and saves, then it saves and is audited.
+- **AC-47.2** Given an Active project, when its PM opens a phase, then fields are read-only, and a direct PATCH returns 422 `PROJECT_NOT_PLANNING`. **(API)**
+- **EC-81** PM handover (doc 11 §12) mid-session: the old PM's next Delete or phase edit returns 403; the new PM gets the controls on next load.
+- **EC-82** Status changes from Planning to Active while a phase form is open: save returns 422 and the form shows the read-only message.
+- **EC-83** Project has no PM set (data issue): only Admins (if Q-52 = yes) can delete; otherwise nobody, and the project is flagged.
+
+### B. My tasks: Planned date column
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-TSK-26 | **Today, Due and Assigned to me** tabs show a **Planned date** column (desktop) / field (phone card), taken from the task's existing `plannedStart` (FR-TSK-23). Placed after the task name and before Due date (UIE to confirm). Sortable on Assigned to me. | Must |
+| FR-TSK-27 | **Format:** same short date format as the Due date column on the same screen; proposed `DD Mon YYYY` (e.g. "13 Oct 2026"), Philippine time (FR-TSK-21), no time of day (Q-56). **Empty value:** "–" (en dash, matching FR-ACT-20 and EC-58), with screen-reader text "No planned date". Empty values sort last. | Must |
+
+- **US-48** As a team member, I want to see each task's planned date in my lists, so I know what to start when.
+- **AC-48.1** Given a task with planned start 2026-10-15, when I open Today, Due or Assigned to me, then its Planned date shows "15 Oct 2026".
+- **AC-48.2** Given a task without planned start, then the column shows "–" and the row sorts last when sorting by Planned date.
+- **EC-84** Planned start after due date (bad data): shown as stored, no error; existing validation is unchanged.
+
+### C. Project scope: Projects list and Task board ⚑
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-PRJ-24 | **Projects list and Task board show only projects where the user is on the project team** (PM or project member, FR-PRJ-06). **Only Admins see all projects.** Applies to PMs, Members and Viewers, enforced by the API list queries, not the UI. Filters, counts and pagination totals only count in-scope projects. | Must |
+| FR-PRJ-25 | **Out-of-scope project URLs return 404** (NFR-25) for every method on the project and its sub-records (checklist, phases, tasks, board, documents, time, issues, conversation). The web shows the standard Not found page; nothing reveals the project's name or existence. | Must |
+| FR-PRJ-26 | **Impact on existing rules (Q-57, Q-58, Q-59 must be confirmed before build):** this replaces doc 11 Q-12 ("PMs view all projects") and the v0.4.8 scope note ("Admin, PM and Viewer see all active projects"), and conflicts with FR-PMV-04 ("Viewers see all read-only"). Proposed: dashboard, reports, Team & workload and client Projects tab (FR-CLI-12) follow the same team scope for non-Admins, so names never leak elsewhere. Until answered, build the list/board scope only behind this rule and flag the rest. | Must |
+
+- **US-49** As a user, I want to see only the projects I'm on, so my lists stay relevant and other clients' work stays private.
+- **AC-49.1** Given a PM on projects A and B only, when they open Projects, then only A and B are listed and the count is 2. **(API)**
+- **AC-49.2** Given the same PM, when they open `/projects/C` or `GET /api/v1/projects/C`, then 404. **(API)**
+- **AC-49.3** Given an Admin on no project teams, when they open Projects, then every project is listed.
+- **AC-49.4** Given a Viewer on no project teams, then the Projects list and Task board show the empty state "You're not on any project teams yet."
+- **EC-85** User removed from a project team while viewing it: the next request returns 404 and the app returns to the Projects list.
+- **EC-86** Archived projects: same scope rule; the Archived filter shows only in-scope ones.
+- **EC-87** A user's existing time entries on a project they've left stay visible in their own Day timesheet/Time logging (FR-ACT-27), but the project name links don't open it (404) — Q-60 confirms.
+
+### D. Sidebar: hide empty Setup group
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-NAV-01 | The sidebar **Setup** group (header and all) is hidden when the user can see none of its child items. Each child shows by its own View permission (doc 11 FR-ACL-18); the group shows if at least one child is visible. | Must |
+| FR-NAV-02 | Visibility is computed from the effective-permissions response (FR-ACL-21), recalculated when permissions change (FR-ACL-06) on next load; hiding is never the control (FR-ACL-08). Direct URLs to hidden children return 404 (undeclared/denied route rule, doc 11 §11). | Must |
+
+- **US-50** As a Member, I don't want to see an empty Setup menu, so the sidebar shows only what I can use.
+- **AC-50.1** Given a role with no View on any Setup child, then no Setup header renders on web or mobile.
+- **AC-50.2** Given an Admin grants that role View on one child, then on the user's next page load Setup shows with only that item.
+- **EC-88** Setup collapsed state saved for a user who then loses all children: group stays hidden; restoring access shows it with its default expanded state.
+
+### E. My tasks: next allowed tab
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-TSK-28 | If the user isn't allowed a My tasks tab (or the module behind it, e.g. `time` for Day timesheet, `approvals` for To review), that tab is hidden, and the page **auto-selects the first allowed tab in display order** (FR-TSK-22: Today, Day timesheet, Due, Assigned to me, I'm accountable, To review, Completed). The mapping of tab → permission is listed in doc 11 FR-ACL-19. | Must |
+| FR-TSK-29 | **None allowed:** My tasks shows an empty state, "You don't have access to any My tasks views. Ask an Admin if you need one." with no tabs; the sidebar entry stays (proposed, Q-61) so sign-in landing doesn't break. | Must |
+| FR-TSK-30 | **Deep links** (e.g. `/my-tasks?tab=day-timesheet`, or a notification link): if the tab is allowed, open it; if not, open the next allowed tab after it in display order (wrapping to the first allowed), replace the URL so Back doesn't loop, and show a dismissible notice "You don't have access to that view." Unknown tab keys are treated the same way. The API for a denied tab still returns 403/404. | Must |
+
+- **US-51** As a user, I want My tasks to open on a tab I can use, so I never land on an error.
+- **AC-51.1** Given a Viewer without `time`, when they open My tasks, then Day timesheet isn't shown and Today is selected.
+- **AC-51.2** Given a user allowed only Completed, then Completed is selected.
+- **AC-51.3** Given no allowed tabs, then the empty state shows and no tab API calls are made.
+- **AC-51.4** Given a deep link to Day timesheet for a user without `time`, then Due (next allowed) opens, the URL updates and the notice shows.
+- **EC-89** Permission removed while on a tab: next request returns 403; the page re-selects per FR-TSK-28.
+
+### F. Log task time and Add quick activity buttons ⚑
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-ACT-29 | **Time logging** and **My tasks › Day timesheet** get two buttons in the page header: **Log task time** (primary) and **Add quick activity** (secondary). They replace/sit beside "+ Add entry" (UIE to decide; Q-62). | Must |
+| FR-ACT-30 | **Log task time** opens the existing manual entry form for a project task (project → task picker, time in/out). Activity type preselect follows FR-PTY-04 unchanged (project type default, else blank). | Must |
+| FR-ACT-31 | **Add quick activity** opens the quick-activity form (FR-ACT-06, no project) with **Activity Type preselected to "Quick Activity"**, changeable by the user (Q-63). This is a deliberate **exception to FR-PTY-04's "nothing preselected for a quick activity"**: FR-PTY-04's no-preselect rule refers to the *project-type* default, which still never applies to quick activities. The "+ Quick activity" on Today (FR-ACT-01) uses the same preselect. | Must |
+| FR-ACT-32 | **New time-entry type "Quick Activity" (Deven):** a fixed, system Activity type with a stable key `quick_activity`, seeded by an idempotent migration. Admins **can't rename, deactivate or delete** it (API 422 `SYSTEM_ACTIVITY_TYPE`); it shows a "System" tag in Admin › Settings › Activity types. It can't be set as a Project type default (FR-PTY-01). Existing quick-activity entries are not changed (FR-PTY-05 principle); whether to backfill is Q-63. Shown in the report's Activity Type column like any other (FR-DAR-09). | Must |
+| FR-ACT-33 | **Existing guards apply to both buttons unchanged:** the dialog is for manual entries with time in/out, so it doesn't start a timer; if the user picks "start timer" (where offered) while one runs, the FR-ACT-26 Switch/Cancel prompt shows and the API returns 409 `TIMER_RUNNING` on a direct second start. On a submitted or locked day the buttons are disabled for non-Admins with the FR-ACT-24 tooltip, and the API returns 422 `DAY_LOCKED`. Overlap (FR-ACT-05/11), 24-hour cap and On Hold rules apply as today. | Must |
+
+- **US-52** As a team member, I want one-click buttons to log task time or a quick activity from my timesheet, so logging is fast.
+- **AC-52.1** Given an unlocked day, when I click Add quick activity, then the form opens with no project and Activity Type = "Quick Activity".
+- **AC-52.2** Given a project whose type defaults to Configuration, when I click Log task time and pick its task, then Activity Type = Configuration with hint "From project type".
+- **AC-52.3** Given a submitted day, then both buttons are disabled for a Member, and `POST /tracker/entries` for that date returns 422 `DAY_LOCKED`. **(API)**
+- **AC-52.4** Given a running timer, when a second timer start is sent, then 409 `TIMER_RUNNING`. **(API)**
+- **AC-52.5** Given an Admin, when they try to rename, deactivate or delete "Quick Activity", then the UI disables it and the API returns 422. **(API)**
+- **EC-90** An Admin had already created a type called "Quick Activity": the migration links it to the system key instead of creating a duplicate (name match, case-insensitive); Deven to confirm (Q-63).
+- **EC-91** User changes Activity Type away from Quick Activity on a quick activity: allowed; the entry stays a quick activity (no project).
+- **EC-92** Mobile client older than this release sends a quick activity without Activity Type: API keeps current validation (required, 400), no silent default.
+
+### G. API impact and mobile notes
+
+The Flutter mobile app uses the same API, so every rule above is enforced server-side and needs no client-only logic.
+
+| ID | Requirement | Priority |
+|---|---|---|
+| NFR-30 | **My tasks list responses include Planned date:** `GET /my-tasks?tab=today|due|assigned` (and their task items) return `plannedStart` as an ISO date `YYYY-MM-DD` (Philippine date) or `null`; clients format it per FR-TSK-27. | Must |
+| NFR-31 | **Quick Activity is a stable value:** Activity types in `GET /settings/activity-types` carry `key` (`quick_activity` for the system type, `null` for Admin-made) and `system: true`. Clients preselect by key, never by name or ID lookup. | Must |
+| NFR-32 | **Effective access endpoint:** `GET /api/v1/me/permissions` returns the user's effective permissions (doc 11 FR-ACL-21) including `navigation.setup` children and `myTasksTabs` in display order with `allowed` flags, so web and mobile hide Setup and pick the next allowed tab without inferring from 403/404. | Must |
+
+**Endpoints affected:**
+- Project list `GET /projects` and Task board `GET /tasks/board` (or equivalent): team-scope filter for non-Admins (FR-PRJ-24); counts and filters in scope.
+- All `/projects/:id/**` routes: 404 outside scope (FR-PRJ-25, shared scope check).
+- Checklist delete `DELETE /projects/:id/tasks/:taskId`: project-PM (+Admin per Q-52) check (FR-PRJ-21).
+- Phase update `PATCH /projects/:id/phases/:phaseId`: Planning-only, 422 `PROJECT_NOT_PLANNING` (FR-PRJ-22/23).
+- My tasks lists: `plannedStart` in payload (NFR-30).
+- Time entries `POST/PATCH /tracker/entries` and `/time`: accept `activityTypeId` of the system Quick Activity type; lock/timer/overlap checks unchanged (FR-ACT-33).
+- Activity types `GET/PATCH/DELETE /settings/activity-types`: `key`, `system`, 422 on system type changes (FR-ACT-32, NFR-31).
+- New `GET /me/permissions` (NFR-32).
+- Dashboard, reports, workload, client Projects tab: pending Q-57 to Q-59.
+
+**Mobile:** Flutter app shows Planned date on task cards (FR-TSK-27), hides Setup and empty tabs from `/me/permissions`, handles 404 project links with its Not found screen, offers both logging buttons with the same preselect and error codes (409 `TIMER_RUNNING`, 422 `DAY_LOCKED`, 422 `PROJECT_NOT_PLANNING`).
+
+### H. Open questions (m8-polish)
+
+| ID | Question | Proposed default |
+|---|---|---|
+| Q-52 | Can Admins also delete checklist activities and edit Phase information, or only the project's PM? | Yes, Admins too |
+| Q-53 | Which fields are "Phase information" (name, order, planned dates, description, others)? | Those four |
+| Q-54 | Outside Planning, is Phase information read-only for everyone, or can Admins still edit it? | Read-only for all |
+| Q-55 | If a project returns to Planning, does phase editing re-open? | Yes |
+| Q-56 | Planned date format: `DD Mon YYYY` as proposed, or the app's existing date format if different? | Match Due date column |
+| Q-57 | Team scope replaces Q-12 (PMs view all projects) — confirm PMs lose view of projects they're not on. | Yes |
+| Q-58 | Viewers: FR-PMV-04 and doc 11 say they see all projects read-only. Do they now see only their team projects? | Only team projects |
+| Q-59 | Do dashboard, reports, Team & workload and client Projects tab follow the same team scope? | Yes |
+| Q-60 | A user's own past time on a project they've left: still listed in their timesheet with the link disabled? | Yes |
+| Q-61 | With no allowed My tasks tabs, keep the sidebar entry with empty state, or hide My tasks and land elsewhere? | Keep, empty state |
+| Q-62 | Do the two buttons replace "+ Add entry" on Day timesheet/Time logging, or sit beside it? | Replace it |
+| Q-63 | Quick Activity type (Deven): can the user change it on a quick activity; backfill existing quick activities; link an existing same-name Admin type? | Changeable; no backfill; link by name |
