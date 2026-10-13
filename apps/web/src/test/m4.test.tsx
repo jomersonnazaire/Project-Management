@@ -239,6 +239,40 @@ describe('Team & workload (FR-WL-01..03)', () => {
   });
 });
 
+describe('AC-55.1 (Q-71): Team & workload Recorded', () => {
+  it('1h task + 30m quick activity (recordedHours 1.5) shows 01:30', async () => {
+    api('ADMIN', (url) =>
+      url.includes('/workload')
+        ? {
+            status: 200,
+            body: {
+              weekStart: '2026-10-12',
+              weekEnd: '2026-10-18',
+              note: 'n',
+              items: [
+                {
+                  person: { id: 'm', name: 'Quick Member', email: 'm@x.example', active: true },
+                  jobRole: 'CONSULTANT',
+                  teams: [],
+                  capacityHours: 40,
+                  assignedHours: 0,
+                  recordedHours: 1.5,
+                  waitingHours: 0,
+                  utilizationPct: 4,
+                  assignedPct: 0,
+                  overAssigned: false,
+                },
+              ],
+            },
+          }
+        : undefined,
+    );
+    renderAt('/workload', <App />);
+    const row = (await screen.findByText('Quick Member')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('01:30')).toBeInTheDocument();
+  });
+});
+
 describe('DR-29: Team & workload for Members', () => {
   it("doesn't ask for /teams and builds the team filter from the rows", async () => {
     const row = (id: string, teams: { id: string; name: string }[]) => ({

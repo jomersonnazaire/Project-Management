@@ -242,6 +242,9 @@ describe('Q-69: leaving Planning with no phases', () => {
   });
 });
 
+let setupShared: (taskName: string, result?: Record<string, unknown>) => unknown;
+let pickShared: () => Promise<void>;
+
 describe('DEF-016: applying a template that is already applied', () => {
   const detail = {
     ...TPL,
@@ -249,7 +252,7 @@ describe('DEF-016: applying a template that is already applied', () => {
     activities: [{ id: 'x', phaseId: 'a', name: 'Kickoff' }],
     versions: [],
   };
-  function setup(taskName: string) {
+  function setup(taskName: string, result: Record<string, unknown> = {}) {
     return api('PROJECT_MANAGER', (url, init) => {
       if (url.endsWith('/apply-template') && init?.method === 'POST')
         return {
@@ -261,6 +264,7 @@ describe('DEF-016: applying a template that is already applied', () => {
             phasesMerged: 1,
             tasksAdded: 0,
             alreadyApplied: true,
+            ...result,
           },
         };
       if (url.includes(`/templates/${TPL.id}`)) return { status: 200, body: { template: detail } };
@@ -291,6 +295,8 @@ describe('DEF-016: applying a template that is already applied', () => {
       return undefined;
     });
   }
+  setupShared = setup;
+  pickShared = () => pick();
   async function pick() {
     renderAt(`/projects/${PID}`, <App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Apply template' }));
@@ -323,6 +329,23 @@ describe('DEF-016: applying a template that is already applied', () => {
     const toast = await screen.findByText('ERP rollout is already applied. Nothing new to add.');
     expect(toast).toHaveClass('alert-info');
   });
+});
+
+describe('apply toast when only activities are added', () => {
+  for (const [n, text] of [
+    [1, 'Added 1 activity from ERP rollout.'],
+    [3, 'Added 3 activities from ERP rollout.'],
+  ] as const) {
+    it(`phasesAdded 0, tasksAdded ${n}: "${text}"`, async () => {
+      setupShared('Renamed kickoff', { tasksAdded: n });
+      await pickShared();
+      const dlg = await screen.findByRole('dialog', { name: 'Apply template' });
+      await within(dlg).findByTestId('apply-confirm');
+      await userEvent.click(within(dlg).getByRole('button', { name: 'Apply template' }));
+      const toast = await screen.findByText(text);
+      expect(toast).toHaveClass('alert-success');
+    });
+  }
 });
 
 describe('Q-69: the leave-Planning confirm depends on phases, not tasks', () => {

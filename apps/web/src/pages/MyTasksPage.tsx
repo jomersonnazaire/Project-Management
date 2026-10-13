@@ -539,7 +539,7 @@ export function MyTasksPage() {
     { label: 'Waiting for my review', value: String(counts?.toReview ?? 0) },
     {
       label: 'Logged this week',
-      value: hoursLabel(week.data?.total ?? 0),
+      value: hoursLabel(week.data?.loggedTotal ?? week.data?.total ?? 0),
       sub: `of ${hoursLabel(week.data?.capacity ?? user?.weeklyCapacityHours ?? 40)} available`,
     },
   ];

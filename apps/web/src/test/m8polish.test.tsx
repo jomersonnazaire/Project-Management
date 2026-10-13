@@ -174,3 +174,46 @@ describe('FR-ACT-29: Time logging buttons', () => {
     expect(screen.getByRole('button', { name: 'Add quick activity' })).toBeInTheDocument();
   });
 });
+
+describe('AC-55.1 (Q-71): Logged this week includes quick activities', () => {
+  it('1h task time + 30m quick activity shows 01:30', async () => {
+    mockApi((url) => {
+      if (url.endsWith('/auth/me'))
+        return { status: 200, body: meBody('MEMBER', DEFAULT_ACCESS_RULES.MEMBER) };
+      if (/\/api\/v1\/time(\?|$)/.test(url))
+        return {
+          status: 200,
+          body: {
+            weekStart: '2026-10-12',
+            weekEnd: '2026-10-18',
+            items: [],
+            total: 1,
+            loggedTotal: 1.5,
+            capacity: 40,
+          },
+        };
+      if (url.includes('/tasks/mine'))
+        return {
+          status: 200,
+          body: {
+            items: [],
+            today: '2026-10-13',
+            holiday: null,
+            counts: {
+              today: 0,
+              due: 0,
+              overdue: 0,
+              dueThisWeek: 0,
+              toReview: 0,
+              assigned: 0,
+              accountable: 0,
+            },
+          },
+        };
+      return { status: 200, body: { items: [] } };
+    });
+    renderAt('/my-tasks', <App />);
+    const card = (await screen.findByText('Logged this week')).closest('.card') as HTMLElement;
+    expect(await within(card).findByText('01:30')).toBeInTheDocument();
+  });
+});

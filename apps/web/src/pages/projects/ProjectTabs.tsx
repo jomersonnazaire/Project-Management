@@ -581,7 +581,9 @@ function ApplyTemplateModal({
               onSuccess: (r) =>
                 r.alreadyApplied && r.phasesAdded === 0 && r.tasksAdded === 0
                   ? onDone(`${r.template.name} is already applied. Nothing new to add.`, true)
-                  : onDone(applyToast(r.phasesAdded, r.phasesMerged ?? 0, r.template.name)),
+                  : onDone(
+                      applyToast(r.phasesAdded, r.phasesMerged ?? 0, r.template.name, r.tasksAdded),
+                    ),
               onError: () => void templates.refetch(),
             },
           );
@@ -787,7 +789,8 @@ function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto 
 }
 
 /** Doc 14 §J: the apply-template result toast. */
-function applyToast(added: number, merged: number, name: string) {
+function applyToast(added: number, merged: number, name: string, tasks = 0) {
+  if (!added && tasks > 0) return `Added ${plural(tasks, 'activity', 'activities')} from ${name}.`;
   if (added && merged)
     return `Added ${plural(added, 'phase')} and merged ${merged} into existing ones from ${name}.`;
   if (merged) return `Merged ${plural(merged, 'phase')} into existing ones from ${name}.`;

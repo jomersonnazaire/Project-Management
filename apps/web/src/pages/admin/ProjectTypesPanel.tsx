@@ -147,7 +147,9 @@ export function ProjectTypesPanel() {
                   const dead = t.defaultActivityType && !t.defaultActivityType.active;
                   return (
                     <tr key={t.id} className={t.active ? '' : 'row-inactive'}>
-                      <td className="cell-primary fw-medium">
+                      <td
+                        className={`cell-primary fw-medium${t.active ? ' ptype-name-active' : ''}`}
+                      >
                         {t.name}
                         {!t.active && t.deactivatedAt && (
                           <div className="small fw-normal">

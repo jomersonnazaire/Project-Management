@@ -52,6 +52,11 @@ $label-pairs: (
 .row-inactive > th {
   color: $text-inactive !important;
 }
+// Admin › Project types: active names in the heading/body-emphasis text colour, not #646e78;
+// inactive rows keep .row-inactive.
+td.ptype-name-active {
+  color: var(--bs-heading-color, #384551);
+}
 .badge.badge-inactive {
   background-color: $secondary-bg-subtle !important;
   color: $text-inactive !important;
