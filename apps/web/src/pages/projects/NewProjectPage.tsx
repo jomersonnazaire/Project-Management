@@ -68,7 +68,6 @@ export function NewProjectPage() {
     if (!code.trim()) next.code = 'Project code is required.';
     else if (!codeCheck.success) next.code = codeCheck.error.issues[0]?.message ?? 'Invalid code.';
     if (!clientId) next.clientId = 'Choose a client.';
-    if (!templateId) next.templateId = 'Choose a template.';
     if (!projectTypeId) next.projectTypeId = PROJECT_TYPE_REQUIRED;
     if (!managerId) next.managerId = 'Choose a project manager.';
     if (!startDate) next.startDate = 'Baseline start is required.';
@@ -91,7 +90,8 @@ export function NewProjectPage() {
         name: name.trim(),
         code: code.trim().toUpperCase(),
         clientId,
-        templateId,
+        // FR-PRJ-27: "None – start blank" sends no template.
+        templateId: templateId || null,
         templateVersion: template?.version,
         projectTypeId,
         managerId,
@@ -105,7 +105,11 @@ export function NewProjectPage() {
           navigate(`/projects/${res.project.id}`, { state: { warnings: res.warnings } }),
         onError: (err) => {
           // A newer version was published while the form was open (EC-11): show the latest.
-          if (err instanceof ApiError && err.code === 'TEMPLATE_CHANGED') void templates.refetch();
+          if (
+            err instanceof ApiError &&
+            (err.code === 'TEMPLATE_CHANGED' || err.code === 'TEMPLATE_NOT_PUBLISHED')
+          )
+            void templates.refetch();
         },
       },
     );
@@ -187,14 +191,14 @@ export function NewProjectPage() {
                 </Form.Control.Feedback>
               </Form.Group>
               <Form.Group className="col-md-6" controlId="prj-template">
-                <Form.Label>Template</Form.Label>
+                <Form.Label>Template (optional)</Form.Label>
                 <Form.Select
                   value={templateId}
                   onChange={(e) => setTemplateId(e.target.value)}
                   isInvalid={Boolean(fieldError('templateId'))}
-                  aria-describedby="prj-template-preview"
+                  aria-describedby="prj-template-help prj-template-preview"
                 >
-                  <option value="">Choose…</option>
+                  <option value="">None – start blank</option>
                   {(templates.data?.items ?? []).map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} · v{t.version} ({TEMPLATE_TYPE_LABELS[t.type]})
@@ -204,6 +208,9 @@ export function NewProjectPage() {
                 <Form.Control.Feedback type="invalid">
                   {fieldError('templateId')}
                 </Form.Control.Feedback>
+                <Form.Text id="prj-template-help" className="d-block">
+                  Pre-fills a standard set of phases and activities. You can change them later.
+                </Form.Text>
                 {preview && (
                   <Form.Text
                     id="prj-template-preview"

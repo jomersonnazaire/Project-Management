@@ -25,7 +25,14 @@ import { DragHandle } from '../../components/ReorderControls';
 import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
 import { useAuth } from '../../auth/AuthContext';
 import { TaskFormModal } from './TaskFormModal';
-import { useDeletePhase, useProjectPhases, useRenamePhase } from '../../api/issueHooks';
+import {
+  useAddPhase,
+  useApplyTemplate,
+  useDeletePhase,
+  useProjectPhases,
+  useRenamePhase,
+} from '../../api/issueHooks';
+import { useTemplates } from '../../api/projectHooks';
 import { ApiError } from '../../api/client';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
@@ -110,6 +117,10 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
     reorder.mutate({ phase: ph === OTHER ? null : ph, taskIds: next });
   };
 
+  const toolbar = (
+    <ChecklistToolbar project={project} hasPhases={phases.length > 0 || emptyPhases.length > 0} />
+  );
+
   const emptySection = emptyPhases.length > 0 && (
     <>
       {emptyPhases.map((ph) => (
@@ -133,6 +144,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
     if (emptySection) {
       return (
         <>
+          {toolbar}
           {emptySection}
           {addingTo !== null && (
             <TaskFormModal
@@ -146,16 +158,21 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         </>
       );
     }
+    // FR-PRJ-29: blank project empty state; the buttons live in the toolbar above.
     return (
-      <EmptyState icon="bx-list-check" title="No tasks yet">
-        {project.can.planTasks
-          ? 'Add the first task with + Add task.'
-          : 'Tasks will show here once the plan is ready.'}
-      </EmptyState>
+      <>
+        {toolbar}
+        <EmptyState icon="bx-list-check" title="No phases yet">
+          {project.can.planTasks
+            ? 'Add your first phase, or apply a template.'
+            : 'Phases will show here once the plan is ready.'}
+        </EmptyState>
+      </>
     );
   }
   return (
     <>
+      {toolbar}
       <p className="small text-body-secondary">
         Estimated {formatHours(summary.estimatedHours)} across{' '}
         {plural(tasks.length - summary.unestimatedCount, 'task')} ·{' '}
@@ -176,7 +193,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         return (
           <div key={ph} className="card mb-4">
             <div
-              className="card-header py-3 d-flex align-items-center gap-2 phase-toggle"
+              className="card-header py-3 d-flex flex-wrap align-items-center gap-2 phase-toggle"
               role="button"
               tabIndex={0}
               aria-expanded={open}
@@ -374,8 +391,190 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   );
 }
 
+/**
+ * Checklist toolbar (FR-PRJ-29..31, doc 14 v1.2.6): the starting-template label, "+ Add phase"
+ * (Project PM in Planning, or Admin) and "Apply template" (Planning only), plus the result toast.
+ */
+function ChecklistToolbar({ project, hasPhases }: { project: ProjectDto; hasPhases: boolean }) {
+  const { user } = useAuth();
+  const canEditProject = useCan('projects', 'edit');
+  const planner = project.can.planTasks && !project.archived && canEditProject;
+  const isAdmin = user?.systemRole === 'ADMIN';
+  const planning = project.status === 'PLANNING';
+  const canAddPhase = planner && (isAdmin || planning);
+  const canApply = planner && planning;
+  const [adding, setAdding] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  return (
+    <>
+      <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <span className="small text-body-secondary" data-testid="started-from">
+          {project.templateName
+            ? `Started from ${project.templateName} v${project.templateVersion}`
+            : 'Started blank'}
+        </span>
+        <span className="ms-auto d-flex flex-wrap gap-2">
+          {canAddPhase && (
+            <Button
+              size="sm"
+              variant={hasPhases ? 'outline-primary' : 'primary'}
+              onClick={() => setAdding(true)}
+            >
+              + Add phase
+            </Button>
+          )}
+          {canApply && (
+            <Button size="sm" variant="outline-secondary" onClick={() => setApplying(true)}>
+              Apply template
+            </Button>
+          )}
+          {planner && !canAddPhase && (
+            <small
+              className="text-body-secondary"
+              title={PHASE_LOCK_NOTE}
+              data-testid="phase-lock-toolbar"
+            >
+              <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+              {PHASE_LOCK_NOTE}
+            </small>
+          )}
+        </span>
+      </div>
+      {toast && (
+        <div className="alert alert-success py-2" role="status">
+          {toast}
+        </div>
+      )}
+      {adding && <AddPhaseModal projectId={project.id} onClose={() => setAdding(false)} />}
+      {applying && (
+        <ApplyTemplateModal
+          project={project}
+          hasPhases={hasPhases}
+          onClose={() => setApplying(false)}
+          onDone={(msg) => {
+            setApplying(false);
+            setToast(msg);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function AddPhaseModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const add = useAddPhase(projectId);
+  return (
+    <Modal show onHide={onClose} centered aria-labelledby="phase-add-title">
+      <Form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) add.mutate(name.trim(), { onSuccess: onClose });
+        }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="phase-add-title">Add phase</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ErrorAlert error={add.error} />
+          <Form.Group controlId="phase-add-name">
+            <Form.Label>Phase name *</Form.Label>
+            <Form.Control value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={add.isPending || !name.trim()}>
+            Add phase
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
+function ApplyTemplateModal({
+  project,
+  hasPhases,
+  onClose,
+  onDone,
+}: {
+  project: ProjectDto;
+  hasPhases: boolean;
+  onClose: () => void;
+  onDone: (toast: string) => void;
+}) {
+  const templates = useTemplates({ status: 'PUBLISHED' });
+  const [id, setId] = useState('');
+  const apply = useApplyTemplate(project.id);
+  const items = (templates.data?.items ?? []).filter((t) => !t.superseded);
+  const t = items.find((x) => x.id === id);
+  return (
+    <Modal show onHide={onClose} centered aria-labelledby="apply-template-title">
+      <Form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!t) return;
+          apply.mutate(
+            { templateId: t.id, templateVersion: t.version },
+            {
+              onSuccess: (r) =>
+                onDone(`Added ${plural(r.phasesAdded, 'phase')} from ${r.template.name}.`),
+              onError: () => void templates.refetch(),
+            },
+          );
+        }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="apply-template-title">Apply template</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ErrorAlert error={apply.error || templates.error} />
+          <Form.Group controlId="apply-template-id">
+            <Form.Label>Template *</Form.Label>
+            <Form.Select value={id} onChange={(e) => setId(e.target.value)}>
+              <option value="">Choose…</option>
+              {items.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name} · v{x.version}
+                </option>
+              ))}
+            </Form.Select>
+            <Form.Text className="d-block">
+              Pre-fills a standard set of phases and activities. You can change them later.
+            </Form.Text>
+          </Form.Group>
+          {t && hasPhases && (
+            <p className="mt-3 mb-0" data-testid="apply-confirm">
+              This adds {plural(t.phaseCount, 'phase')} and{' '}
+              {plural(t.activityCount, 'activity', 'activities')} after your existing ones. Nothing
+              is replaced.
+            </p>
+          )}
+          {t && project.templateName === t.name && (
+            <p className="mt-2 mb-0 text-warning">
+              This template was already applied to this project.
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!t || apply.isPending}>
+            Apply template
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
 /** FR-PRJ-23: PMs outside Planning see why phase details are locked (tooltip and note). */
-export const PHASE_LOCK_NOTE = 'Phases can be edited only in Planning.';
+export const PHASE_LOCK_NOTE = 'Phases can be edited only in Planning';
 
 /**
  * Phase controls (FR-PRJ-22/23): Edit phase and Delete phase while the phase is editable (Project
@@ -385,11 +584,7 @@ function PhaseControls({ project, phase }: { project: TabProps['project']; phase
   const [renaming, setRenaming] = useState(false);
   if (phase.editable === false) {
     return (
-      <small
-        className="text-body-secondary ms-2"
-        title={`${PHASE_LOCK_NOTE} You can still add activities.`}
-        data-testid="phase-lock"
-      >
+      <small className="text-body-secondary ms-2" title={PHASE_LOCK_NOTE} data-testid="phase-lock">
         <i className="bx bx-lock-alt me-1" aria-hidden="true" />
         {PHASE_LOCK_NOTE}
       </small>
