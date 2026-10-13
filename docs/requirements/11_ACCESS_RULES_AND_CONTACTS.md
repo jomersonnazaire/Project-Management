@@ -1,6 +1,6 @@
 # 11 — Access Rules Module and Client Contacts Changes (Milestone 1.5)
 
-**Status:** v0.4.9 (m8-polish: team-scoped projects, checklist/phase rules, Setup and My tasks tab visibility, /me/permissions) · v0.4.8 (Reports and Team & workload rows) · v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.4.12 (FR-ACL-18 team filter dropped by Jomerson; Q-12 stands) · v0.4.11 (Setup child and My tasks tab permission keys, defaultTab = first allowed, ACTIVITY_IN_USE for Admins too) · v0.4.10 (Lead's m8-polish decisions: Admin exemptions, ACTIVITY_IN_USE, team definition, tab wrap, permission-driven buttons) · v0.4.9 (m8-polish) · v0.4.8 (Reports and Team & workload rows) · v0.4.3 — built and passed (PR #2); model approved by Jomerson (four fixed roles; Q-26, Q-27 resolved) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson (room, 2026-10-09 2:29 PM); Lean (Milestone 1.5 scope); Queen (safety rules); UIE (mockup v0.5 plan).
 **Decision:** permissions are set **per Access role** (Admin, PM, Member, Viewer), not per Job role (Jomerson, 2026-10-09).
 
@@ -164,20 +164,46 @@ V = View, C = Create, E = Edit, D = Delete. Scope limits (FR-ACL-07) apply on to
 
 *(From the code, Deven 2026-10-10.)* Fixed scope still applies on top: Admin, PM and Viewer see all active projects; Members see only their own projects, their own time and their own workload row; Viewers can't open the Timesheets tab. Export is its own audited route.
 
-## m8-polish access changes (v0.4.9, Lead/Jomerson, 2026-10-13)
+## m8-polish access changes (v0.4.10; v0.4.9 Lead/Jomerson, v0.4.10 Lead's decisions, 2026-10-13)
 
-Mirrors doc 14 v1.2.0 §A, §C, §D, §E. **⚑ Changes Q-12 and the v0.4.8 scope note** pending Q-57 to Q-59.
+Mirrors doc 14 v1.2.3 §A, §D and §E (see the Definitions there). Project visibility is **unchanged**: FR-ACL-07, Q-12 and the v0.4.8 scope note stand (doc 14 §C dropped 2026-10-13 by Jomerson). Mobile is on hold.
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-ACL-18 | **Fixed scope update (FR-ACL-07):** non-Admins (PM, Member, Viewer) see only projects whose team they're on (PM or member) in the Projects list and Task board; only Admins see all. Out-of-scope project routes return 404 (NFR-25). Not configurable in the grid; a grant can't widen it. Supersedes Q-12's "PMs view all projects" and the §v0.4.8 note "Admin, PM and Viewer see all active projects" for these screens (doc 14 FR-PRJ-24 to 26; Q-57 to Q-59). | Must |
-| FR-ACL-19 | **Checklist and phase rules:** Delete on checklist activities needs Delete on `tasks` **and** being the project's PM (Admins: Q-52). Phase information edit needs Edit on `projects`, being the project's PM (Admins: Q-52), and project status Planning; otherwise 422 `PROJECT_NOT_PLANNING` (doc 14 FR-PRJ-21 to 23). Seeded PM Delete on `tasks` stays; it's narrowed by the PM-of-project scope. | Must |
-| FR-ACL-20 | **Navigation from permissions:** sidebar Setup shows only if at least one child is viewable (`users`, `teams`, `settings`, `accessRules`, `templates`, and other Setup children per the current menu; Deven to list). My tasks tab → permission: Today, Due, Assigned to me, I'm accountable, Completed → View on `tasks`; Day timesheet → View on `time`; To review → Edit on `approvals`. Hidden tabs fall back per doc 14 FR-TSK-28 to 30. | Must |
-| FR-ACL-21 | **Effective permissions endpoint:** `GET /api/v1/me/permissions` returns the caller's role, per-record-type actions (incl. Reports Export), `navigation` (Setup children visible) and `myTasksTabs` (ordered, with `allowed`). Reflects saved rule changes on the next request (FR-ACL-06). Promotes FR-ACL-13's API-only summary to a supported contract for web and Flutter (doc 14 NFR-32). | Must |
+| ~~FR-ACL-18~~ | **Dropped 2026-10-13 by Jomerson** (team-only project filter). Today's visibility stays. | — |
+| FR-ACL-19 | **Checklist and phase rules:** **Project PM** = the assigned manager, or an Access-role PM on the team list. Deleting an activity needs Delete on `tasks` and being the Project PM, or being an Admin. An activity with anything attached is refused for everyone, Admins included, with 409 `ACTIVITY_IN_USE` and `details.blockedBy` (`time`, `evidence`, `documents`, `issues`, always in that order); nothing changes, and the refusal isn't audited (successful deletes are). Phase changes (name, order, dates, add or delete) need Edit on `projects`. Project PMs can make them only in Planning (otherwise 422 `PROJECT_NOT_PLANNING`). **Admins can make them at any status.** | Must |
+| FR-ACL-20 | **Permission-driven UI, not hard-coded roles:** Setup items, **New project** (Create on `projects`) and **+ Task** (Create on `tasks`) follow Access rules. The web sidebar hides Setup when no child is viewable (web only). Keys are listed below (Deven). A tab that isn't allowed selects the next allowed tab to the right (wrapping). If no tab is allowed, My tasks is hidden. | Must |
+| FR-ACL-21 | **Effective permissions endpoint:** `GET /api/v1/me/permissions` returns the role, per-record actions (including Reports Export), Setup children, the New project and + Task flags, and `myTasksTabs` (array of allowed tab keys only, in FR-ACL-20 tab order, `[]` when none) and `defaultTab` (first entry of `myTasksTabs`, or `null` when none). Both fields are always present. It reflects saved changes on the next request (FR-ACL-06). It replaces FR-ACL-13's API-only summary as a supported contract for web and Flutter. | Must |
+| FR-ACL-22 | **Quick Activity** (doc 14 FR-ACT-32) is a system Activity type. Edit on `settings` can't deactivate, rename or delete it (422 `SYSTEM_ACTIVITY_TYPE`). Its Setup row shows a "System type" badge with no Edit or Deactivate. | Must |
 
-- **AC-49.5** Given a PM on project A only, `GET /projects` returns A only, and `GET /projects/B` returns 404. **(API)**
-- **AC-50.3** Given a role with no View on any Setup child, `GET /me/permissions` returns no visible Setup children and the sidebar hides Setup.
-- **AC-51.5** Given a role without View on `time`, `myTasksTabs` marks Day timesheet `allowed: false` and My tasks opens on Today.
-- **AC-46.4** Given a PM of another project, `DELETE` on that project's task returns 403 (visible) or 404 (out of scope). **(API)**
-- **EC-93** Admin removes the last Setup child permission from a role: those users' Setup group disappears on next load (no sign-out).
-- Open questions: doc 14 Q-52, Q-54, Q-57 to Q-59, Q-61.
+**Setup child items and permission keys (Deven; web only, Setup hidden when none visible):**
+
+| Setup item | Shown when the user has |
+|---|---|
+| Templates | `templates.view` |
+| Clients | `clients.view` |
+| Team & workload | `workload.view` |
+| Reports | `reports.view` |
+| Admin | any of `users.view`, `teams.view`, `settings.view` (Admin › Project types uses `settings.view` to see, `settings.edit` to change, as built in PR #15) |
+| Access rules | `accessRules.view` |
+
+**My tasks tabs, in order, with required permission (Deven):**
+
+| # | Tab | Requires |
+|---|---|---|
+| 1 | Today | `tasks.view` **and** `time.view` (Today is the timer and time-logging tab) |
+| 2 | Day timesheet | `time.view` |
+| 3 | Due | `tasks.view` |
+| 4 | Assigned to me | `tasks.view` |
+| 5 | I'm accountable | `tasks.view` |
+| 6 | To review | `approvals.edit` |
+| 7 | Completed | `tasks.view` |
+
+There is no role-specific default tab: `defaultTab` is the first allowed tab in this order. A blocked tab moves to the next allowed tab to the right, wrapping around; if none is allowed, My tasks is hidden.
+
+- ~~AC-49.5~~ Dropped 2026-10-13 by Jomerson.
+- **AC-50.3** Given a role with no View on any Setup child, the web sidebar hides Setup, and `/me/permissions` lists no Setup children.
+- **AC-51.5** Given a role with View on no My tasks tab, `myTasksTabs` is `[]`, `defaultTab` is `null`, and My tasks is hidden.
+- **AC-46.4** Given an Admin on a Completed project, deleting an activity with nothing attached and editing a phase both succeed; deleting one with logged time returns 409 `ACTIVITY_IN_USE`. **(API)**
+- **EC-93** An Admin removes the last Setup child permission from a role: Setup disappears for those users on their next load (no sign-out needed).
+- Open questions (doc 14 §H, for Jomerson): Q-53, Q-55, Q-62, Q-64, Q-65, Q-66. (Q-57 to Q-60 withdrawn.)
