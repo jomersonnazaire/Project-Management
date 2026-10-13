@@ -226,6 +226,8 @@ a:focus-visible,
 
 // --- Tab rows scroll sideways instead of clipping the last tab on phones (DR-05) ---
 .nav-tabs.nav-scrollable {
+  display: flex;
+  max-width: 100%;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
@@ -233,6 +235,7 @@ a:focus-visible,
   -webkit-overflow-scrolling: touch;
   .nav-item {
     flex: 0 0 auto;
+    flex-shrink: 0;
   }
   .nav-link {
     white-space: nowrap;
@@ -696,4 +699,12 @@ $board-gap: 0.75rem;
   .menu-inner-shadow {
     display: none;
   }
+}
+
+// --- Wide tables scroll inside their card instead of widening the page (DR-48) ---
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
