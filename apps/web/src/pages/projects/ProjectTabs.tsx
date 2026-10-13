@@ -5,6 +5,7 @@ import {
   effortSummary,
   formatHours,
   moveWithinGroup,
+  phaseNotEmptyMessage,
   plural,
   type PhaseDto,
   type ProjectDto,
@@ -32,7 +33,7 @@ import {
   useProjectPhases,
   useRenamePhase,
 } from '../../api/issueHooks';
-import { useTemplates } from '../../api/projectHooks';
+import { useTemplate, useTemplates } from '../../api/projectHooks';
 import { ApiError } from '../../api/client';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
@@ -512,6 +513,15 @@ function ApplyTemplateModal({
   const apply = useApplyTemplate(project.id);
   const items = (templates.data?.items ?? []).filter((t) => !t.superseded);
   const t = items.find((x) => x.id === id);
+  // Doc 14 §J: n new and k merged phases, from the template's phases vs the project's.
+  const detail = useTemplate(id || undefined);
+  const phases = useProjectPhases(project.id);
+  const have = new Set((phases.data ?? []).map((p) => p.name.trim().toLowerCase()));
+  const tplNames = [
+    ...new Set((detail.data?.phases ?? []).map((p) => p.name.trim().toLowerCase())),
+  ];
+  const k = tplNames.filter((n) => have.has(n)).length;
+  const n = tplNames.length - k;
   return (
     <Modal show onHide={onClose} centered aria-labelledby="apply-template-title">
       <Form
@@ -522,7 +532,7 @@ function ApplyTemplateModal({
             { templateId: t.id, templateVersion: t.version },
             {
               onSuccess: (r) =>
-                onDone(`Added ${plural(r.phasesAdded, 'phase')} from ${r.template.name}.`),
+                onDone(applyToast(r.phasesAdded, r.phasesMerged ?? 0, r.template.name)),
               onError: () => void templates.refetch(),
             },
           );
@@ -547,11 +557,9 @@ function ApplyTemplateModal({
               Pre-fills a standard set of phases and activities. You can change them later.
             </Form.Text>
           </Form.Group>
-          {t && hasPhases && (
+          {t && hasPhases && detail.data && (
             <p className="mt-3 mb-0" data-testid="apply-confirm">
-              This adds {plural(t.phaseCount, 'phase')} and{' '}
-              {plural(t.activityCount, 'activity', 'activities')} after your existing ones. Nothing
-              is replaced.
+              {applyConfirmText(n, k, t.activityCount)}
             </p>
           )}
           {t && project.templateName === t.name && (
@@ -662,54 +670,95 @@ function PhaseRenameModal({
   );
 }
 
-/** Delete phase: shown when allowed (with a confirm); otherwise disabled with the reason. */
+/**
+ * Delete phase (FR-PRJ-32/33): an empty phase asks to confirm; a phase with activities opens no
+ * dialog and shows one red line under the header instead. Shown only while the phase is editable.
+ */
 function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto }) {
   const [confirm, confirmDialog] = useConfirm();
   const del = useDeletePhase(projectId);
-  if (!phase.deletable && !phase.deleteBlockedReason) return null;
+  const [blocked, setBlocked] = useState<string | null>(null);
+  const serverBlock =
+    del.error instanceof ApiError && del.error.code === 'PHASE_NOT_EMPTY'
+      ? phaseNotEmptyText(
+          (del.error.details as { activityCount?: number } | undefined)?.activityCount,
+        )
+      : null;
+  const line = blocked ?? serverBlock;
   return (
     <>
       {confirmDialog}
-      <span className="d-inline-flex flex-wrap align-items-center gap-2 ms-auto">
-        <Button
-          variant="outline-danger"
-          size="sm"
-          disabled={!phase.deletable || del.isPending}
-          aria-describedby={
-            phase.deletable ? undefined : `phase-blocked-${phase.name.replace(/\W+/g, '-')}`
+      <Button
+        variant="outline-danger"
+        size="sm"
+        className="ms-auto"
+        disabled={del.isPending}
+        onClick={async (e) => {
+          e.stopPropagation();
+          setBlocked(null);
+          if (phase.taskCount > 0) {
+            setBlocked(phaseNotEmptyText(phase.taskCount));
+            return;
           }
-          onClick={async () => {
-            if (
-              await confirm({
-                title: `Delete the phase "${phase.name}"?`,
-                body: 'This cannot be undone.',
-                confirmLabel: 'Delete phase',
-                danger: true,
-              })
-            ) {
-              del.mutate(phase.name);
-            }
-          }}
+          if (!phase.deletable && phase.deleteBlockedReason) {
+            setBlocked(phase.deleteBlockedReason);
+            return;
+          }
+          if (
+            await confirm({
+              title: `Delete phase ${phase.name}?`,
+              cancelLabel: 'Cancel',
+              confirmLabel: 'Delete phase',
+              danger: true,
+            })
+          ) {
+            del.mutate(phase.name);
+          }
+        }}
+      >
+        Delete phase
+      </Button>
+      {line && (
+        <div
+          className="w-100 small"
+          role="alert"
+          style={{ color: '#b8240a' }}
+          data-testid="phase-delete-blocked"
         >
-          Delete phase
-        </Button>
-        {!phase.deletable && (
-          <small
-            className="text-body-secondary"
-            id={`phase-blocked-${phase.name.replace(/\W+/g, '-')}`}
-          >
-            {phase.deleteBlockedReason}
-          </small>
-        )}
-        {del.error instanceof ApiError && (
-          <small className="text-danger" role="alert">
-            ⚠ {del.error.message}
-          </small>
-        )}
-      </span>
+          {line}
+        </div>
+      )}
+      {del.error instanceof ApiError && !serverBlock && (
+        <div className="w-100 small text-danger" role="alert">
+          ⚠ {del.error.message}
+        </div>
+      )}
     </>
   );
 }
+
+/** Doc 14 §J: the apply-template result toast. */
+function applyToast(added: number, merged: number, name: string) {
+  if (added && merged)
+    return `Added ${plural(added, 'phase')} and merged ${merged} into existing ones from ${name}.`;
+  if (merged) return `Merged ${plural(merged, 'phase')} into existing ones from ${name}.`;
+  return `Added ${plural(added, 'phase')} from ${name}.`;
+}
+
+/** Doc 14 §J: the apply-template confirm text (merge clause only when k > 0). */
+function applyConfirmText(n: number, k: number, m: number) {
+  const merge = k
+    ? `, merges ${k} into existing ${k === 1 ? 'phase' : 'phases'} with the same name, and`
+    : ' and';
+  return `This adds ${n} new ${n === 1 ? 'phase' : 'phases'}${merge} adds ${plural(m, 'activity', 'activities')}. Nothing is replaced.`;
+}
+
+/** FR-PRJ-33: the inline "can't delete" line, with or without a count. */
+function phaseNotEmptyText(count: number | undefined) {
+  return typeof count === 'number' ? phaseNotEmptyMessage(count) : PHASE_NOT_EMPTY_NO_COUNT;
+}
+const PHASE_NOT_EMPTY_NO_COUNT =
+  "Can't delete: this phase still has activities. Delete them first.";
 
 /**
  * Kanban board by status (FR-TSK-10). Cards can be dragged, and every card also has a "Move to…"

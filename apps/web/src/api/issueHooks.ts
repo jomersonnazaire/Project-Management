@@ -188,6 +188,7 @@ export function useApplyTemplate(projectId: string) {
       api<{
         template: { id: string; name: string; version: number };
         phasesAdded: number;
+        phasesMerged?: number;
         tasksAdded: number;
         alreadyApplied: boolean;
       }>(`/projects/${projectId}/apply-template`, { method: 'POST', body }),

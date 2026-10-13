@@ -104,6 +104,72 @@ describe('blank project Checklist', () => {
     });
   });
 
+  it('§J: confirm text counts new and merged phases; the toast reports both', async () => {
+    api('PROJECT_MANAGER', (url, init) => {
+      if (url.endsWith('/apply-template') && init?.method === 'POST')
+        return {
+          status: 200,
+          body: {
+            project: project({ status: 'PLANNING' }),
+            template: { id: TPL.id, name: TPL.name, version: 3 },
+            phasesAdded: 1,
+            phasesMerged: 1,
+            tasksAdded: 5,
+            alreadyApplied: false,
+          },
+        };
+      if (url.includes(`/templates/${TPL.id}`))
+        return {
+          status: 200,
+          body: {
+            template: {
+              ...TPL,
+              phases: [
+                { id: 'a', name: 'Discovery' },
+                { id: 'b', name: 'Build' },
+              ],
+              activities: [],
+              versions: [],
+            },
+          },
+        };
+      if (url.includes('/templates')) return { status: 200, body: { items: [TPL] } };
+      if (url.endsWith(`/projects/${PID}/phases`))
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                name: ' discovery ',
+                taskCount: 1,
+                documentCount: 0,
+                deletable: false,
+                deleteBlockedReason: null,
+                editable: true,
+              },
+            ],
+          },
+        };
+      if (url.includes(`/projects/${PID}/tasks`))
+        return { status: 200, body: { items: [task({ id: 'k1', phase: ' discovery ' })] } };
+      if (url.endsWith(`/projects/${PID}`))
+        return { status: 200, body: { project: project({ status: 'PLANNING' }) } };
+      return undefined;
+    });
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Apply template' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Apply template' });
+    await screen.findByRole('option', { name: 'ERP rollout · v3' });
+    await userEvent.selectOptions(within(dlg).getByLabelText('Template *'), TPL.id);
+    expect(await within(dlg).findByTestId('apply-confirm')).toHaveTextContent(
+      'This adds 1 new phase, merges 1 into existing phase with the same name, and adds 5 activities. Nothing is replaced.',
+    );
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Apply template' }));
+    expect(
+      await screen.findByText('Added 1 phase and merged 1 into existing ones from ERP rollout.'),
+    ).toBeInTheDocument();
+  });
+
   it('+ Add phase posts the new phase name', async () => {
     const m = api('PROJECT_MANAGER', (url, init) => {
       if (url.endsWith(`/projects/${PID}/phases`) && init?.method === 'POST')

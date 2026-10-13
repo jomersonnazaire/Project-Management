@@ -355,7 +355,7 @@ describe('Delete a task or phase (M3.5)', () => {
     );
   });
 
-  it('phases: blocked phases show the reason; an empty phase can be deleted after confirming', async () => {
+  it('phases: a phase with activities shows the inline line; an empty phase can be deleted after confirming', async () => {
     const fetchMock = api(
       'PROJECT_MANAGER',
       projectRoutes((url, init) => {
@@ -387,12 +387,18 @@ describe('Delete a task or phase (M3.5)', () => {
       }),
     );
     renderAt(`/projects/${PID}`, <App />);
-    expect(
-      await screen.findByText('This phase has 1 task; delete or move it first.'),
-    ).toBeInTheDocument();
+    // FR-PRJ-33: a phase with activities opens no dialog; one red line under the header.
+    await screen.findByTestId('empty-phase-Go-live');
+    const header = screen.getByRole('heading', { name: 'Phase 1' }).closest('.card') as HTMLElement;
+    await userEvent.click(within(header).getByRole('button', { name: 'Delete phase' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(within(header).getByTestId('phase-delete-blocked')).toHaveTextContent(
+      "Can't delete: this phase still has 1 activity. Delete it first.",
+    );
+    expect(within(header).getByTestId('phase-delete-blocked')).toHaveStyle({ color: '#b8240a' });
     const empty = await screen.findByTestId('empty-phase-Go-live');
     await userEvent.click(within(empty).getByRole('button', { name: 'Delete phase' }));
-    const dlg = await screen.findByRole('dialog', { name: 'Delete the phase "Go-live"?' });
+    const dlg = await screen.findByRole('dialog', { name: 'Delete phase Go-live?' });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Delete phase' }));
     await waitFor(() =>
       expect(
