@@ -176,7 +176,7 @@ describe('Delete a task', () => {
 });
 
 describe('Delete a phase', () => {
-  it('lists phases with counts; a phase with tasks is 409 PHASE_HAS_TASKS', async () => {
+  it('lists phases with counts; a phase with tasks is 409 PHASE_NOT_EMPTY', async () => {
     const w = await world(app);
     const ts = await tasks(w);
     const phase = ts[0]!.phase!;
@@ -186,13 +186,14 @@ describe('Delete a phase', () => {
       name: phase,
       taskCount: n,
       deletable: false,
-      deleteBlockedReason: `This phase has ${n} task${n === 1 ? '' : 's'}; delete or move ${n === 1 ? 'it' : 'them'} first.`,
+      deleteBlockedReason: `Can't delete: this phase still has ${n} ${n === 1 ? 'activity. Delete it first.' : 'activities. Delete them first.'}`,
     });
     const res = await w.pm.agent
       .delete(`${base(w)}/phases?name=${encodeURIComponent(phase)}`)
       .set(CSRF);
     expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('PHASE_HAS_TASKS');
+    expect(res.body.error.code).toBe('PHASE_NOT_EMPTY');
+    expect(res.body.error.details).toMatchObject({ activityCount: n });
   });
 
   it('once its tasks are gone the phase stays (its folder) and can be deleted; documents block it', async () => {

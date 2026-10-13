@@ -431,6 +431,71 @@ describe('m8-polish: optional template, add phase, apply template', () => {
     ).toBe(201);
   });
 
+  it('FR-PRJ-32: a team-list PM renames and deletes phases in Planning; PHASE_NOT_EMPTY blocks Admins too', async () => {
+    const w = await world(app);
+    const p = await blank(w);
+    const url = `/api/v1/projects/${p.id}`;
+    const admin = await signedInAs(app, 'ADMIN');
+    expect((await w.pm2.agent.post(`${url}/phases`).set(CSRF).send({ name: 'Build' })).status).toBe(
+      201,
+    );
+    const rename = await w.pm2.agent
+      .patch(`${url}/phases`)
+      .set(CSRF)
+      .send({ name: 'Build', newName: 'Discovery' });
+    expect(rename.status).toBe(200);
+    const t = await w.pm2.agent
+      .post(`${url}/tasks`)
+      .set(CSRF)
+      .send({ name: 'K', phase: 'Discovery' });
+    expect(t.status).toBe(201);
+    for (const agent of [w.pm2.agent, admin.agent]) {
+      const res = await agent.delete(`${url}/phases`).set(CSRF).send({ name: 'Discovery' });
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('PHASE_NOT_EMPTY');
+      expect(res.body.error.details.activityCount).toBe(1);
+      expect(res.body.error.message).toBe(
+        "Can't delete: this phase still has 1 activity. Delete it first.",
+      );
+    }
+    expect(await ActivityLogModel.exists({ action: 'phase_deleted' })).toBeNull();
+    expect(
+      (await w.pm2.agent.delete(`${url}/phases`).set(CSRF).send({ name: 'Nope' })).status,
+    ).toBe(404);
+    expect(
+      (await w.member.agent.delete(`${url}/phases`).set(CSRF).send({ name: 'Discovery' })).status,
+    ).not.toBe(204);
+    expect((await w.pm2.agent.delete(`/api/v1/tasks/${t.body.task.id}`).set(CSRF)).status).toBe(
+      204,
+    );
+    // Outside Planning the lock applies to PMs only.
+    await ProjectModel.updateOne({ _id: p.id }, { $set: { status: 'ACTIVE' } });
+    const locked = await w.pm2.agent.delete(`${url}/phases`).set(CSRF).send({ name: 'Discovery' });
+    expect(locked.status).toBe(422);
+    expect(locked.body.error.code).toBe('PROJECT_NOT_PLANNING');
+    await ProjectModel.updateOne({ _id: p.id }, { $set: { status: 'PLANNING' } });
+    const ok = await w.pm2.agent.delete(`${url}/phases`).set(CSRF).send({ name: 'Discovery' });
+    expect(ok.status).toBe(204);
+    expect(await FolderModel.exists({ projectId: p.id, kind: 'PHASE' })).toBeNull();
+    expect(await ActivityLogModel.exists({ action: 'phase_deleted' })).not.toBeNull();
+    expect((await w.pm2.agent.get(`${url}/phases`)).body.items).toEqual([]);
+    // Admins delete at any status.
+    await admin.agent.post(`${url}/phases`).set(CSRF).send({ name: 'Late' });
+    await ProjectModel.updateOne({ _id: p.id }, { $set: { status: 'ACTIVE' } });
+    expect((await admin.agent.delete(`${url}/phases?name=Late`).set(CSRF)).status).toBe(204);
+  });
+
+  it('FR-PRJ-21: a team-list PM (not the manager) applies a template', async () => {
+    const w = await world(app);
+    const p = await blank(w);
+    const res = await w.pm2.agent
+      .post(`/api/v1/projects/${p.id}/apply-template`)
+      .set(CSRF)
+      .send({ templateId: w.template.id });
+    expect(res.status).toBe(200);
+    expect(res.body.phasesAdded).toBeGreaterThan(0);
+  });
+
   it('applies a template (append only, Q-67), keeps the starting template (Q-68), creates phase folders', async () => {
     const w = await world(app);
     const p = await blank(w);
@@ -445,7 +510,13 @@ describe('m8-polish: optional template, add phase, apply template', () => {
       .send({ name: 'Mine', phase: 'Own phase' });
     const ok = await w.pm.agent.post(url).set(CSRF).send({ templateId: w.template.id });
     expect(ok.status).toBe(200);
-    expect(ok.body).toMatchObject({ alreadyApplied: false, template: { id: w.template.id } });
+    expect(ok.body).toMatchObject({
+      alreadyApplied: false,
+      phasesMerged: 0,
+      template: { id: w.template.id },
+    });
+    const tplPhases = ok.body.phasesAdded as number;
+    expect(tplPhases).toBeGreaterThan(0);
     expect(ok.body.project.templateId).toBeNull();
     const n = ok.body.tasksAdded as number;
     expect(n).toBeGreaterThan(0);
@@ -459,7 +530,14 @@ describe('m8-polish: optional template, add phase, apply template', () => {
     // EC-95: applying again appends again, flagged as already applied.
     const again = await w.pm.agent.post(url).set(CSRF).send({ templateId: w.template.id });
     expect(again.status).toBe(200);
-    expect(again.body.alreadyApplied).toBe(true);
+    expect(again.body).toMatchObject({
+      alreadyApplied: true,
+      phasesAdded: 0,
+      phasesMerged: tplPhases,
+    });
+    // Merged: no new phases or phase folders.
+    const phaseNames = (await w.pm.agent.get(`/api/v1/projects/${p.id}/phases`)).body.items;
+    expect(phaseNames).toHaveLength(tplPhases + 1);
     expect(await TaskModel.countDocuments({ projectId: p.id })).toBe(2 * n + 1);
     const p2 = await blank(w, { name: 'Blank 3' });
     await ProjectModel.updateOne({ _id: p2.id }, { $set: { status: 'ACTIVE' } });

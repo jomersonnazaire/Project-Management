@@ -1105,10 +1105,13 @@ export interface PhaseDto {
   editable: boolean;
 }
 
+/** FR-PRJ-22 (409 PHASE_NOT_EMPTY): only an empty phase can be deleted. */
+export function phaseNotEmptyMessage(activityCount: number): string {
+  return `Can't delete: this phase still has ${activityCount} ${activityCount === 1 ? 'activity. Delete it first.' : 'activities. Delete them first.'}`;
+}
+
 export function phaseDeleteBlockedReason(taskCount: number, documentCount: number): string | null {
-  if (taskCount > 0) {
-    return `This phase has ${taskCount} task${taskCount === 1 ? '' : 's'}; delete or move ${taskCount === 1 ? 'it' : 'them'} first.`;
-  }
+  if (taskCount > 0) return phaseNotEmptyMessage(taskCount);
   if (documentCount > 0) {
     return `The phase folder has ${documentCount} document${documentCount === 1 ? '' : 's'}; move or remove ${documentCount === 1 ? 'it' : 'them'} first.`;
   }

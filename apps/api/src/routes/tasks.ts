@@ -13,6 +13,7 @@ import {
   parseDateOnly,
   rejectTaskSchema,
   phaseDeleteBlockedReason,
+  phaseNotEmptyMessage,
   activityBlockedBy,
   activityInUseMessage,
   PROJECT_NOT_PLANNING_MESSAGE,
@@ -108,6 +109,11 @@ export function taskCan(
  * A project's phases: task phases in plan order, then phases that only have an evidence folder
  * left (their tasks were deleted). Counts tasks, and documents in the folder and its sub-folders.
  */
+/** Doc 14 §J: phase identity ignores case and leading/trailing spaces. */
+export function phaseKey(name: string) {
+  return name.trim().toLowerCase();
+}
+
 async function projectPhases(projectId: Types.ObjectId, session?: mongoose.ClientSession) {
   const tasks = await TaskModel.find({ projectId })
     .select('phase order')
@@ -593,9 +599,13 @@ export function tasksRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     assertPhaseEdit(user, currentPermissions(req), project);
     const phases = await projectPhases(project._id);
-    if (!phases.some((x) => x.name === input.name)) throw notFound('Phase not found');
+    // Doc 14 §J: phase names match ignoring case and leading/trailing spaces.
+    const src = phases.find((x) => phaseKey(x.name) === phaseKey(input.name));
+    if (!src) throw notFound('Phase not found');
+    input.name = src.name;
+    input.newName = input.newName.trim();
     if (input.newName !== input.name) {
-      if (phases.some((x) => x.name === input.newName)) {
+      if (phases.some((x) => x !== src && phaseKey(x.name) === phaseKey(input.newName))) {
         const msg = `"${input.newName}" already exists.`;
         throw conflictWith(msg, 'DUPLICATE_NAME', [{ path: 'newName', message: msg }]);
       }
@@ -643,7 +653,7 @@ export function tasksRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     assertPhaseEdit(user, currentPermissions(req), project);
     const phases = await projectPhases(project._id);
-    if (phases.some((x) => x.name.toLowerCase() === input.name.toLowerCase())) {
+    if (phases.some((x) => phaseKey(x.name) === phaseKey(input.name))) {
       const msg = `"${input.name}" already exists.`;
       throw conflictWith(msg, 'DUPLICATE_NAME', [{ path: 'name', message: msg }]);
     }
@@ -679,20 +689,29 @@ export function tasksRouter(registry: RouteRegistry) {
     res.status(201).json({ name: input.name });
   });
 
-  p.delete('/:id/phases', perm('tasks', 'delete'), async (req, res) => {
+  p.delete('/:id/phases', perm('projects', 'edit'), async (req, res) => {
     const project = await loadProject(req, 'view');
     // FR-PRJ-23: Admins at any status; the Project PM only in Planning (422 PROJECT_NOT_PLANNING).
     assertPhaseEdit(currentUser(req), currentPermissions(req), project);
-    const name = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+    // FR-PRJ-32: the phase is identified by `name` in the body or the ?name= query.
+    const bodyName = (req.body as { name?: unknown } | undefined)?.name;
+    const raw = typeof bodyName === 'string' ? bodyName : req.query.name;
+    const name = typeof raw === 'string' ? raw.trim() : '';
     if (!name) throw badRequest('Say which phase to delete.');
     const session = await mongoose.startSession();
     let folderIds: Types.ObjectId[] = [];
+    let deleted = name;
     try {
       await session.withTransaction(async () => {
-        const ph = (await projectPhases(project._id, session)).find((x) => x.name === name);
+        const ph = (await projectPhases(project._id, session)).find(
+          (x) => phaseKey(x.name) === phaseKey(name),
+        );
         if (!ph) throw notFound('Phase not found');
+        deleted = ph.name;
         if (ph.taskCount > 0) {
-          throw conflictWith(phaseDeleteBlockedReason(ph.taskCount, 0)!, 'PHASE_HAS_TASKS', {
+          // FR-PRJ-22: 409 PHASE_NOT_EMPTY (taskCount kept for older clients).
+          throw conflictWith(phaseNotEmptyMessage(ph.taskCount), 'PHASE_NOT_EMPTY', {
+            activityCount: ph.taskCount,
             taskCount: ph.taskCount,
           });
         }
@@ -715,7 +734,7 @@ export function tasksRouter(registry: RouteRegistry) {
       entityId: project._id,
       projectId: project._id,
       action: 'phase_deleted',
-      meta: { phase: name, folderIds: folderIds.map(String) },
+      meta: { phase: deleted, folderIds: folderIds.map(String) },
     });
     res.status(204).end();
   });

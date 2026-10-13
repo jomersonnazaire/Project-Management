@@ -55,6 +55,25 @@ describe('DEF-011: seeded access rules apply without a grid save', () => {
   });
 });
 
+describe('DEF-011: an empty access-rules collection', () => {
+  it('a Viewer gets 200 on Reports with no stored rules, and the defaults get seeded', async () => {
+    await AccessRuleModel.deleteMany({});
+    expect(await AccessRuleModel.countDocuments()).toBe(0);
+    const viewer = await signedInAs(app, 'VIEWER');
+    expect((await viewer.agent.get('/api/v1/reports/filters')).status).toBe(200);
+    expect((await viewer.agent.get('/api/v1/reports/project-status')).status).toBe(200);
+    // Requests fall back to the defaults without writing them; the startup seed stores them.
+    await ensureDefaultAccessRules();
+    expect((await viewer.agent.get('/api/v1/reports/project-status')).status).toBe(200);
+    const roles = (await AccessRuleModel.find().lean()).map((d) => d.role).sort();
+    expect(roles).toEqual(['ADMIN', 'MEMBER', 'PROJECT_MANAGER', 'VIEWER']);
+    const viewerDoc = (await AccessRuleModel.findOne({ role: 'VIEWER' }).lean())!;
+    expect((viewerDoc.permissions as unknown as { reports: { view: boolean } }).reports.view).toBe(
+      true,
+    );
+  });
+});
+
 describe('DEF-012: Reports Export needs View', () => {
   it('clears Export when View is off (in the same change or already off)', async () => {
     await ensureDefaultAccessRules();

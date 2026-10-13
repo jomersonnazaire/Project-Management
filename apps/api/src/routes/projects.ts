@@ -27,6 +27,7 @@ import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js'
 import { currentPermissions, currentUser } from '../middleware/auth.js';
 import {
   ActivityLogModel,
+  FolderModel,
   ClientContactModel,
   ClientModel,
   IssueModel,
@@ -54,7 +55,7 @@ import {
   toProjectListItems,
   type ProjectDoc,
 } from '../services/projectService.js';
-import { assertProjectScope, isPlanner, projectScopeFilter } from '../services/scope.js';
+import { assertProjectScope, isProjectPm, projectScopeFilter } from '../services/scope.js';
 import { loadCalendar } from '../services/calendar.js';
 import { stopTimersForProject } from '../services/tracker.js';
 import { ensureDefaultFolders } from './documents.js';
@@ -433,7 +434,8 @@ export function projectsRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const project = await loadProject(req, 'view');
     assertNotArchived(project);
-    if (!isPlanner(user, project)) {
+    // FR-PRJ-21: the Project PM is the assigned manager or a PM on the team list.
+    if (user.systemRole !== 'ADMIN' && !isProjectPm(user, project)) {
       throw forbidden('Only an Admin or this project’s PM can apply a template.');
     }
     if (project.status !== 'PLANNING') {
@@ -454,6 +456,21 @@ export function projectsRouter(registry: RouteRegistry) {
       project.startDate ?? todayPH(),
       await loadCalendar(),
     ).map((t) => ({ ...t, order: t.order + offset }));
+    // FR-PRJ-30 / EC-95: phases are unique per project (case-insensitive); a template phase whose
+    // name already exists merges into it (its activities join the existing phase).
+    const existing = new Map<string, string>();
+    for (const n of [
+      ...(await TaskModel.distinct('phase', { projectId: project._id })),
+      ...(await FolderModel.distinct('phase', { projectId: project._id, kind: 'PHASE' })),
+    ]) {
+      if (typeof n === 'string' && n.trim()) existing.set(n.trim().toLowerCase(), n);
+    }
+    const templatePhases = [...new Set(template.phases.map((ph) => ph.name.trim().toLowerCase()))];
+    const phasesMerged = templatePhases.filter((n) => existing.has(n)).length;
+    for (const t of tasks) {
+      const hit = t.phase ? existing.get(t.phase.trim().toLowerCase()) : undefined;
+      if (hit) t.phase = hit;
+    }
     const alreadyApplied = Boolean(
       project.templateSnapshot?.templateKey === template.templateKey ||
       (await ActivityLogModel.exists({
@@ -475,7 +492,7 @@ export function projectsRouter(registry: RouteRegistry) {
     }
     // EC-97: phase folders follow the phases (FR-DOC-01 naming).
     await ensureDefaultFolders(project as never);
-    const phasesAdded = template.phases.length;
+    const phasesAdded = templatePhases.length - phasesMerged;
     await audit({
       actorId: user._id,
       entityType: 'project',
@@ -488,6 +505,7 @@ export function projectsRouter(registry: RouteRegistry) {
         templateVersion: template.version,
         templateName: template.name,
         phases: phasesAdded,
+        phasesMerged,
         tasks: tasks.length,
       },
     });
@@ -496,6 +514,7 @@ export function projectsRouter(registry: RouteRegistry) {
       project: await toProjectDto(fresh as ProjectDoc, user, currentPermissions(req)),
       template: { id: template._id.toString(), name: template.name, version: template.version },
       phasesAdded,
+      phasesMerged,
       tasksAdded: tasks.length,
       alreadyApplied,
     });
