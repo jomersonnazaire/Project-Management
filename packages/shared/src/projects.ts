@@ -995,6 +995,8 @@ export interface TaskDto {
   deletable: boolean;
   /** Why a planner can't delete it (e.g. "This task has 3 time entries; remove them first."). */
   deleteBlockedReason: string | null;
+  /** m8-polish (FR-PRJ-21): `ACTIVITY_IN_USE` blockers in fixed order; [] when none. */
+  deleteBlockedBy: ActivityBlocker[];
 }
 
 /** What has been recorded under a task; any of these blocks deleting it (doc 12 §8, M3.5). */
@@ -1037,6 +1039,49 @@ export function taskDeleteBlockedReason(c: Partial<TaskRecordCounts>): string | 
   return `This task has ${joinAnd(parts)}; remove ${total === 1 ? 'it' : 'them'} first.`;
 }
 
+/**
+ * Doc 14 FR-PRJ-21 / doc 11 FR-ACL-19: what blocks deleting a checklist activity, always in this
+ * fixed order. The API returns them as `details.blockedBy` with 409 `ACTIVITY_IN_USE`.
+ */
+export const ACTIVITY_BLOCKERS = ['time', 'evidence', 'documents', 'issues'] as const;
+export type ActivityBlocker = (typeof ACTIVITY_BLOCKERS)[number];
+const ACTIVITY_BLOCKER_COUNT: Record<ActivityBlocker, keyof TaskRecordCounts> = {
+  time: 'timeEntries',
+  evidence: 'evidence',
+  documents: 'documents',
+  issues: 'issues',
+};
+const ACTIVITY_BLOCKER_LABELS: Record<ActivityBlocker, string> = {
+  time: 'logged time',
+  evidence: 'evidence files',
+  documents: 'documents',
+  issues: 'issues',
+};
+export function activityBlockedBy(c: Partial<TaskRecordCounts>): ActivityBlocker[] {
+  return ACTIVITY_BLOCKERS.filter((b) => (c[ACTIVITY_BLOCKER_COUNT[b]] ?? 0) > 0);
+}
+/** "Can't delete: this activity has logged time, documents and issues." (no Oxford comma). */
+export function activityInUseMessage(blockedBy: readonly ActivityBlocker[]): string {
+  const parts = ACTIVITY_BLOCKERS.filter((b) => blockedBy.includes(b)).map(
+    (b) => ACTIVITY_BLOCKER_LABELS[b],
+  );
+  return `Can't delete: this activity has ${joinAnd(parts)}.`;
+}
+export interface ActivityInUseDetails {
+  blockedBy: ActivityBlocker[];
+  counts: TaskRecordCounts;
+}
+
+/** FR-PRJ-23: 422 PROJECT_NOT_PLANNING message for PMs outside Planning. */
+export const PROJECT_NOT_PLANNING_MESSAGE =
+  'Phase details can only be changed while the project is in Planning.';
+
+/** PATCH /projects/:id/phases: rename a phase (FR-PRJ-22). */
+export const renamePhaseSchema = z.strictObject({
+  name: z.string().trim().min(1).max(120),
+  newName: z.string().trim().min(1, 'Add a phase name.').max(120),
+});
+
 /** A project phase: the tasks grouped under it, plus its evidence folder (FR-DOC-17). */
 export interface PhaseDto {
   name: string;
@@ -1044,6 +1089,8 @@ export interface PhaseDto {
   documentCount: number;
   deletable: boolean;
   deleteBlockedReason: string | null;
+  /** m8-polish (FR-PRJ-22/23): the caller may edit this phase now (Project PM in Planning, or Admin). */
+  editable: boolean;
 }
 
 export function phaseDeleteBlockedReason(taskCount: number, documentCount: number): string | null {

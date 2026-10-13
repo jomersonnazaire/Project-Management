@@ -557,7 +557,106 @@ export interface AccessRulesDto {
   updatedBy: { id: string; name: string } | null;
 }
 
+// ---------- Setup children and My tasks tabs (doc 11 FR-ACL-20/21, doc 14 FR-NAV-01, FR-TSK-28) ----------
+
+/** Web sidebar Setup items, in order, with the permissions that show them (any of). */
+export const SETUP_ITEMS = [
+  { key: 'templates', any: [['templates', 'view']] },
+  { key: 'clients', any: [['clients', 'view']] },
+  { key: 'workload', any: [['workload', 'view']] },
+  { key: 'reports', any: [['reports', 'view']] },
+  {
+    key: 'admin',
+    any: [
+      ['users', 'view'],
+      ['teams', 'view'],
+      ['settings', 'view'],
+    ],
+  },
+  { key: 'accessRules', any: [['accessRules', 'view']] },
+] as const satisfies readonly {
+  key: string;
+  any: readonly (readonly [RecordType, AccessAction])[];
+}[];
+export type SetupItemKey = (typeof SETUP_ITEMS)[number]['key'];
+
+export function setupItemsFor(grid: PermissionGrid | null | undefined): SetupItemKey[] {
+  return SETUP_ITEMS.filter((i) =>
+    i.any.some(([r, a]) => hasPermission(grid, r as RecordType, a as AccessAction)),
+  ).map((i) => i.key);
+}
+
+/** My tasks tabs in display order with the permissions each needs (all of). */
+export const MY_TASKS_TABS = [
+  {
+    key: 'today',
+    all: [
+      ['tasks', 'view'],
+      ['time', 'view'],
+    ],
+  },
+  { key: 'day-timesheet', all: [['time', 'view']] },
+  { key: 'due', all: [['tasks', 'view']] },
+  { key: 'assigned', all: [['tasks', 'view']] },
+  { key: 'accountable', all: [['tasks', 'view']] },
+  { key: 'review', all: [['approvals', 'edit']] },
+  { key: 'completed', all: [['tasks', 'view']] },
+] as const satisfies readonly {
+  key: string;
+  all: readonly (readonly [RecordType, AccessAction])[];
+}[];
+export type MyTasksTabKey = (typeof MY_TASKS_TABS)[number]['key'];
+export const MY_TASKS_TAB_KEYS = MY_TASKS_TABS.map((t) => t.key) as MyTasksTabKey[];
+
+/** Allowed tab keys in display order; [] when none (My tasks is then hidden). */
+export function myTasksTabsFor(grid: PermissionGrid | null | undefined): MyTasksTabKey[] {
+  return MY_TASKS_TABS.filter((t) =>
+    t.all.every(([r, a]) => hasPermission(grid, r as RecordType, a as AccessAction)),
+  ).map((t) => t.key);
+}
+
+/**
+ * FR-TSK-28/30: the wanted tab if allowed, else the next allowed tab to its right, wrapping.
+ * Unknown keys start from the beginning. Null when no tab is allowed.
+ */
+export function resolveMyTasksTab(
+  wanted: string | null | undefined,
+  allowed: readonly MyTasksTabKey[],
+): MyTasksTabKey | null {
+  if (!allowed.length) return null;
+  if (wanted && (allowed as readonly string[]).includes(wanted)) return wanted as MyTasksTabKey;
+  const idx = MY_TASKS_TAB_KEYS.indexOf(wanted as MyTasksTabKey);
+  if (idx < 0) return allowed[0]!;
+  for (let i = 1; i <= MY_TASKS_TAB_KEYS.length; i++) {
+    const k = MY_TASKS_TAB_KEYS[(idx + i) % MY_TASKS_TAB_KEYS.length]!;
+    if (allowed.includes(k)) return k;
+  }
+  return allowed[0]!;
+}
+
 export interface MyPermissionsDto {
   role: SystemRole;
   permissions: PermissionGrid;
+  /** m8-polish (FR-ACL-21): visible web Setup children, in sidebar order ([] = Setup hidden). */
+  setupItems: SetupItemKey[];
+  /** New project button (Create on projects) and + Task (Create on tasks). */
+  canCreateProject: boolean;
+  canCreateTask: boolean;
+  /** Allowed My tasks tabs in order; always present, [] when none. */
+  myTasksTabs: MyTasksTabKey[];
+  /** First of myTasksTabs, or null (My tasks hidden). Always present. */
+  defaultTab: MyTasksTabKey | null;
+}
+
+export function myPermissionsSummary(role: SystemRole, grid: PermissionGrid): MyPermissionsDto {
+  const myTasksTabs = myTasksTabsFor(grid);
+  return {
+    role,
+    permissions: grid,
+    setupItems: setupItemsFor(grid),
+    canCreateProject: hasPermission(grid, 'projects', 'create'),
+    canCreateTask: hasPermission(grid, 'tasks', 'create'),
+    myTasksTabs,
+    defaultTab: myTasksTabs[0] ?? null,
+  };
 }

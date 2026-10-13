@@ -28,6 +28,7 @@ async function tasks(w: W, agent = w.pm.agent) {
     phase: string | null;
     deletable: boolean;
     deleteBlockedReason: string | null;
+    deleteBlockedBy?: string[];
   }[];
 }
 const del = (agent: W['pm']['agent'], id: string) => agent.delete(`/api/v1/tasks/${id}`).set(CSRF);
@@ -63,9 +64,9 @@ describe('Delete a task', () => {
     let res = await del(w.pm.agent, t!.id);
     expect(res.status).toBe(409);
     expect(res.body.error).toMatchObject({
-      code: 'TASK_HAS_RECORDS',
-      message: 'This task has 3 time entries; remove them first.',
-      details: { counts: { timeEntries: 3 } },
+      code: 'ACTIVITY_IN_USE',
+      message: "Can't delete: this activity has logged time.",
+      details: { blockedBy: ['time'], counts: { timeEntries: 3 } },
     });
     await TaskModel.updateOne(
       { _id: t!.id },
@@ -86,14 +87,22 @@ describe('Delete a task', () => {
       hidden: { by: w.pm.user._id, at: new Date(), reason: 'Wrong task' },
     });
     res = await del(w.pm.agent, t!.id);
-    expect(res.body.error.message).toBe(
-      'This task has 3 time entries, 1 follow-up and 1 comment; remove them first.',
-    );
-    const row = (await tasks(w)).find((x) => x.id === t!.id)!;
+    expect(res.body.error.message).toBe("Can't delete: this activity has logged time.");
+    let row = (await tasks(w)).find((x) => x.id === t!.id)!;
     expect(row.deletable).toBe(false);
+    expect(row.deleteBlockedBy).toEqual(['time']);
+    expect(row.deleteBlockedReason).toBe(res.body.error.message);
+    // Without time, follow-ups and comments still block (TASK_HAS_RECORDS, unchanged).
+    await TimeEntryModel.deleteMany({ taskId: t!.id });
+    res = await del(w.pm.agent, t!.id);
+    expect(res.body.error).toMatchObject({
+      code: 'TASK_HAS_RECORDS',
+      message: 'This task has 1 follow-up and 1 comment; remove them first.',
+    });
+    row = (await tasks(w)).find((x) => x.id === t!.id)!;
+    expect(row.deleteBlockedBy).toEqual([]);
     expect(row.deleteBlockedReason).toBe(res.body.error.message);
     // Clean up everything: now it can go.
-    await TimeEntryModel.deleteMany({ taskId: t!.id });
     await TaskModel.updateOne({ _id: t!.id }, { $set: { followUps: [] } });
     await MessageModel.deleteMany({ taskId: t!.id, hidden: null });
     expect((await del(w.pm.agent, t!.id)).status).toBe(204);
@@ -105,7 +114,7 @@ describe('Delete a task', () => {
     const ev = await uploadEvidence(w.pm.agent, t!.id, 'UAT_signoff.pdf', FILES.pdf());
     expect(ev.status).toBe(201);
     const res = await del(w.pm.agent, t!.id);
-    expect(res.body.error.message).toBe('This task has 1 evidence file; remove it first.');
+    expect(res.body.error.message).toBe("Can't delete: this activity has evidence files.");
     const issue = await w.pm.agent
       .post(`${base(w)}/issues`)
       .set(CSRF)
@@ -119,15 +128,16 @@ describe('Delete a task', () => {
     expect(issue.status).toBe(201);
     const r2 = await del(w.pm.agent, u!.id);
     expect(r2.body.error).toMatchObject({
-      code: 'TASK_HAS_RECORDS',
-      message: 'This task has 1 linked issue; remove it first.',
+      code: 'ACTIVITY_IN_USE',
+      message: "Can't delete: this activity has issues.",
+      details: { blockedBy: ['issues'] },
     });
     // A document filed against the task (not as evidence) blocks it as well.
     const doc = (await DocumentModel.findOne({ taskId: t!.id }).lean())!;
     await DocumentModel.updateOne({ _id: doc._id }, { $set: { source: 'DOCUMENT' } });
     await TaskModel.updateOne({ _id: t!.id }, { $set: { evidence: [] } });
     expect((await del(w.pm.agent, t!.id)).body.error.message).toBe(
-      'This task has 1 document; remove it first.',
+      "Can't delete: this activity has documents.",
     );
   });
 
@@ -152,11 +162,11 @@ describe('Delete a task', () => {
     expect((await del(w.pm.agent, t!.id)).status).toBe(403);
   });
 
-  it('Completed projects keep their plan: 422 PROJECT_COMPLETED; archived projects: 409', async () => {
+  it('FR-PRJ-21 v1.2.5: unattached tasks delete at any status (Completed too); archived projects: 409', async () => {
     const w = await world(app);
-    const [t] = await tasks(w);
+    const [t, u] = await tasks(w);
     await ProjectModel.updateOne({ _id: w.project.id }, { $set: { status: 'COMPLETED' } });
-    expect((await del(w.pm.agent, t!.id)).body.error.code).toBe('PROJECT_COMPLETED');
+    expect((await del(w.pm.agent, u!.id)).status).toBe(204);
     await ProjectModel.updateOne(
       { _id: w.project.id },
       { $set: { status: 'IN_PROGRESS', archived: true } },

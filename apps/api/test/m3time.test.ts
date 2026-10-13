@@ -71,7 +71,9 @@ describe('FR-TIME-01/02/07: logging', () => {
     const { w, t1, t2 } = await setup();
     for (const hours of [0, 0.1, 24.25])
       expect((await log(w.member.agent, t1, '2026-10-13', hours)).status, `${hours}`).toBe(400);
-    expect((await log(w.member.agent, t1, '2026-10-15', 1)).status).toBe(400);
+    const fut = await log(w.member.agent, t1, '2026-10-15', 1);
+    expect(fut.status).toBe(422);
+    expect(fut.body.error.code).toBe('FUTURE_DATE');
     expect((await log(w.member.agent, t1, '2026-10-13', 20)).status).toBe(201);
     const over = await log(w.member.agent, t2, '2026-10-13', 4.25);
     expect(over.status).toBe(422);
@@ -134,8 +136,9 @@ describe('FR-TIME-04/06: weekly lock and own entries', () => {
     const del = await w.pm.agent.delete(`/api/v1/tasks/${t1}`).set(CSRF);
     expect(del.status).toBe(409);
     expect(del.body.error).toMatchObject({
-      code: 'TASK_HAS_RECORDS',
-      message: 'This task has 1 time entry; remove it first.',
+      code: 'ACTIVITY_IN_USE',
+      message: "Can't delete: this activity has logged time.",
+      details: { blockedBy: ['time'] },
     });
   });
 });

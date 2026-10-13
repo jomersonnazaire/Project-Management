@@ -3,6 +3,7 @@ import {
   changePasswordSchema,
   inviteTokenSchema,
   loginSchema,
+  myPermissionsSummary,
   setupPasswordSchema,
   type SystemRole,
 } from '@xc8/shared';
@@ -177,9 +178,12 @@ export function authRouter(
     res.json({ user: toUserDto(currentUser(req)), permissions: currentPermissions(req) });
   });
 
-  /** Read-only summary of the caller's own role's permissions (FR-ACL-13). */
+  /**
+   * Effective permissions (FR-ACL-13, FR-ACL-21 / NFR-32): role and grid as before, plus Setup
+   * children, create flags, `myTasksTabs` ([] when none) and `defaultTab` (null when none).
+   */
   router.get('/me/permissions', AUTHENTICATED, (req, res) => {
-    res.json({ role: currentRole(req), permissions: currentPermissions(req) });
+    res.json(myPermissionsSummary(currentRole(req), currentPermissions(req)));
   });
 
   /**

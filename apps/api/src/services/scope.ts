@@ -90,6 +90,18 @@ export function isPlanner(user: ScopeUser, project: ProjectLike): boolean {
 }
 
 /**
+ * Doc 14 Definitions / doc 11 FR-ACL-19: the Project PM is the assigned manager, or any user with
+ * Access role PM on the project's team list. Admins aren't Project PMs (they have their own rule).
+ */
+export function isProjectPm(user: ScopeUser, project: ProjectLike): boolean {
+  if (role(user) !== 'PROJECT_MANAGER') return false;
+  return (
+    (project.managerId?.equals(user._id) ?? false) ||
+    (project.memberIds ?? []).some((id) => id.equals(user._id))
+  );
+}
+
+/**
  * Who may add people to a project's members from the task form (FR-PRJ-19, DEF-003): Admins and
  * PMs who may edit the project (Q-12 scope), with Edit on projects in the access rules.
  */
