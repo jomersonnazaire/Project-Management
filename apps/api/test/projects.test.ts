@@ -31,7 +31,8 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
       plannedEndDate: '2026-12-18',
       templateId: template.id,
     };
-    for (const field of Object.keys(base)) {
+    // FR-PRJ-27 (doc 14 v1.2.6): the template is optional; everything else stays required.
+    for (const field of Object.keys(base).filter((f) => f !== 'templateId')) {
       const body: Record<string, unknown> = { ...base };
       delete body[field];
       const res = await admin.agent.post('/api/v1/projects').set(CSRF).send(body);

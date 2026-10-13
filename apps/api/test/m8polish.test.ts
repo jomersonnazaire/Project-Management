@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
+  FolderModel,
   LookupModel,
   MigrationModel,
   ProjectModel,
@@ -361,5 +362,112 @@ describe('FR-ACT-32/33: Quick Activity system type and FUTURE_DATE', () => {
     });
     expect(ft.status).toBe(422);
     expect(ft.body.error.code).toBe('FUTURE_DATE');
+  });
+});
+
+describe('m8-polish: optional template, add phase, apply template', () => {
+  async function blank(w: W, extra: object = {}) {
+    const res = await w.pm.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        name: 'Blank P',
+        projectTypeId: (await ProjectModel.findById(
+          w.project.id,
+        ).lean())!.projectTypeId!.toString(),
+        clientId: w.acme.client.id,
+        managerId: w.pm.user._id.toString(),
+        memberIds: [w.pm2.user._id.toString()],
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        ...extra,
+      });
+    expect(res.status).toBe(201);
+    return res.body.project as { id: string; templateId: string | null };
+  }
+
+  it('creates a project with no template (omitted or null): empty plan', async () => {
+    const w = await world(app);
+    const p = await blank(w);
+    expect(p.templateId).toBeNull();
+    expect(await TaskModel.countDocuments({ projectId: p.id })).toBe(0);
+    const p2 = await blank(w, { name: 'Blank 2', templateId: null });
+    expect(await TaskModel.countDocuments({ projectId: p2.id })).toBe(0);
+  });
+
+  it('a team-list PM adds a phase and activities in Planning, then applies nothing twice', async () => {
+    const w = await world(app);
+    const p = await blank(w);
+    const url = `/api/v1/projects/${p.id}`;
+    // pm2 is on the team list (not the manager): a Project PM.
+    const add = await w.pm2.agent.post(`${url}/phases`).set(CSRF).send({ name: 'Discovery' });
+    expect(add.status).toBe(201);
+    expect(
+      (await w.pm2.agent.post(`${url}/phases`).set(CSRF).send({ name: 'discovery' })).status,
+    ).toBe(409);
+    const phases = (await w.pm2.agent.get(`${url}/phases`)).body.items;
+    expect(phases).toEqual([expect.objectContaining({ name: 'Discovery', editable: true })]);
+    const t = await w.pm2.agent
+      .post(`${url}/tasks`)
+      .set(CSRF)
+      .send({ name: 'Kickoff', phase: 'Discovery' });
+    expect(t.status).toBe(201);
+    const edit = await w.pm2.agent
+      .patch(`/api/v1/tasks/${t.body.task.id}`)
+      .set(CSRF)
+      .send({ name: 'Kickoff call', version: t.body.task.version });
+    expect(edit.status).toBe(200);
+    // Members can't add phases.
+    expect(
+      (await w.member.agent.post(`${url}/phases`).set(CSRF).send({ name: 'X' })).status,
+    ).not.toBe(201);
+    // Outside Planning: adding a phase is locked, adding an activity isn't.
+    await ProjectModel.updateOne({ _id: p.id }, { $set: { status: 'ACTIVE' } });
+    const locked = await w.pm2.agent.post(`${url}/phases`).set(CSRF).send({ name: 'Later' });
+    expect(locked.body.error.code).toBe('PROJECT_NOT_PLANNING');
+    expect(
+      (await w.pm2.agent.post(`${url}/tasks`).set(CSRF).send({ name: 'More', phase: 'Discovery' }))
+        .status,
+    ).toBe(201);
+  });
+
+  it('applies a template (append only, Q-67), keeps the starting template (Q-68), creates phase folders', async () => {
+    const w = await world(app);
+    const p = await blank(w);
+    const url = `/api/v1/projects/${p.id}/apply-template`;
+    expect(
+      (await w.member.agent.post(url).set(CSRF).send({ templateId: w.template.id })).status,
+    ).toBe(404);
+    // An existing hand-made phase and activity come first.
+    await w.pm.agent
+      .post(`/api/v1/projects/${p.id}/tasks`)
+      .set(CSRF)
+      .send({ name: 'Mine', phase: 'Own phase' });
+    const ok = await w.pm.agent.post(url).set(CSRF).send({ templateId: w.template.id });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ alreadyApplied: false, template: { id: w.template.id } });
+    expect(ok.body.project.templateId).toBeNull();
+    const n = ok.body.tasksAdded as number;
+    expect(n).toBeGreaterThan(0);
+    const all = await TaskModel.find({ projectId: p.id }).sort({ order: 1 }).lean();
+    expect(all).toHaveLength(n + 1);
+    expect(all[0]!.name).toBe('Mine');
+    expect(await FolderModel.countDocuments({ projectId: p.id, kind: 'PHASE' })).toBeGreaterThan(1);
+    expect(
+      await ActivityLogModel.exists({ entityId: p.id, action: 'template_applied' }),
+    ).not.toBeNull();
+    // EC-95: applying again appends again, flagged as already applied.
+    const again = await w.pm.agent.post(url).set(CSRF).send({ templateId: w.template.id });
+    expect(again.status).toBe(200);
+    expect(again.body.alreadyApplied).toBe(true);
+    expect(await TaskModel.countDocuments({ projectId: p.id })).toBe(2 * n + 1);
+    const p2 = await blank(w, { name: 'Blank 3' });
+    await ProjectModel.updateOne({ _id: p2.id }, { $set: { status: 'ACTIVE' } });
+    const np = await w.admin.agent
+      .post(`/api/v1/projects/${p2.id}/apply-template`)
+      .set(CSRF)
+      .send({ templateId: w.template.id });
+    expect(np.status).toBe(422);
+    expect(np.body.error.code).toBe('PROJECT_NOT_PLANNING');
   });
 });

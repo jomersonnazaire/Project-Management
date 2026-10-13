@@ -635,7 +635,8 @@ export const createProjectSchema = z
     startDate: dateOnlySchema('Baseline start'),
     plannedEndDate: dateOnlySchema('Baseline end'),
     description: optionalText(4000),
-    templateId: objectId,
+    /** Optional (m8-polish, FR-PRJ-27): omitted or null creates a blank project (no phases/tasks). */
+    templateId: objectId.nullable().optional(),
     /** The template version shown in the preview (EC-11): a newer version answers 409. */
     templateVersion: z.number().int().min(1).optional(),
     memberIds: z.array(objectId).max(200).default([]),
@@ -1075,6 +1076,17 @@ export interface ActivityInUseDetails {
 /** FR-PRJ-23: 422 PROJECT_NOT_PLANNING message for PMs outside Planning. */
 export const PROJECT_NOT_PLANNING_MESSAGE =
   'Phase details can only be changed while the project is in Planning.';
+
+/** POST /projects/:id/phases: add a phase (FR-PRJ-22). */
+export const createPhaseSchema = z.strictObject({
+  name: z.string().trim().min(1, 'Add a phase name.').max(120),
+});
+
+/** POST /projects/:id/apply-template: pre-fill a Planning project from a published template. */
+export const applyTemplateSchema = z.strictObject({
+  templateId: z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.'),
+  templateVersion: z.number().int().min(1).optional(),
+});
 
 /** PATCH /projects/:id/phases: rename a phase (FR-PRJ-22). */
 export const renamePhaseSchema = z.strictObject({

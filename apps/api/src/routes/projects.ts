@@ -4,6 +4,7 @@ import {
   type SystemRole,
   PROJECT_FILTERS,
   createProjectSchema,
+  applyTemplateSchema,
   issuePrefix,
   parseDateOnly,
   projectContactSchema,
@@ -53,9 +54,10 @@ import {
   toProjectListItems,
   type ProjectDoc,
 } from '../services/projectService.js';
-import { assertProjectScope, projectScopeFilter } from '../services/scope.js';
+import { assertProjectScope, isPlanner, projectScopeFilter } from '../services/scope.js';
 import { loadCalendar } from '../services/calendar.js';
 import { stopTimersForProject } from '../services/tracker.js';
+import { ensureDefaultFolders } from './documents.js';
 
 /**
  * Projects (FR-PRJ-01..13, doc 11 FR-PRJ-11..13). The central gate checks `projects.*`; these
@@ -103,6 +105,31 @@ export function assertPlanOpen(project: { status?: string | null }) {
       'PROJECT_COMPLETED',
     );
   }
+}
+
+/** EC-94 wording for a template that was unpublished, archived or deactivated meanwhile. */
+export const TEMPLATE_UNAVAILABLE =
+  'This template is no longer available. Choose another or start blank.';
+
+/** A Published, current template (FR-TPL-05/10), else 422 / 409 TEMPLATE_CHANGED (EC-11). */
+async function assertUsableTemplate(templateId: string, version?: number) {
+  const template = await TemplateModel.findById(templateId).lean();
+  if (!template || template.status !== 'PUBLISHED') {
+    throw unprocessable(TEMPLATE_UNAVAILABLE, 'TEMPLATE_NOT_PUBLISHED');
+  }
+  if (template.superseded || (version && version !== template.version)) {
+    const current = await TemplateModel.findOne({
+      templateKey: template.templateKey,
+      status: 'PUBLISHED',
+      superseded: { $ne: true },
+    }).lean();
+    throw conflictWith(
+      'This template has a newer version. Review the preview again.',
+      'TEMPLATE_CHANGED',
+      { templateId: current?._id.toString() ?? null, version: current?.version ?? null },
+    );
+  }
+  return template;
 }
 
 /** Refreshes stored health once a day so "overdue" follows the calendar (NFR-13). */
@@ -280,32 +307,15 @@ export function projectsRouter(registry: RouteRegistry) {
     // FR-PTY-02: a new project picks an active project type.
     const projectType = await assertProjectType(input.projectTypeId, null);
 
-    const template = await TemplateModel.findById(input.templateId).lean();
-    if (!template || template.status !== 'PUBLISHED') {
-      throw unprocessable('Choose a published template.', 'TEMPLATE_NOT_PUBLISHED');
-    }
-    if (
-      template.superseded ||
-      (input.templateVersion && input.templateVersion !== template.version)
-    ) {
-      const current = await TemplateModel.findOne({
-        templateKey: template.templateKey,
-        status: 'PUBLISHED',
-        superseded: { $ne: true },
-      }).lean();
-      throw conflictWith(
-        'This template has a newer version. Review the preview again.',
-        'TEMPLATE_CHANGED',
-        {
-          templateId: current?._id.toString() ?? null,
-          version: current?.version ?? null,
-        },
-      );
-    }
+    // FR-PRJ-27: the template is optional; without one the project starts blank (no phases/tasks).
+    const template = input.templateId
+      ? await assertUsableTemplate(input.templateId, input.templateVersion)
+      : null;
 
     // DR-23: the code is the issue ID prefix; unique ignoring case. Suggested when left out.
     const code =
-      input.code ?? (await uniqueCode(issuePrefix(client.name, input.type ?? template.type)));
+      input.code ??
+      (await uniqueCode(issuePrefix(client.name, input.type ?? template?.type ?? null)));
     if (input.code) await assertCodeFree(code);
 
     const start = parseDateOnly(input.startDate);
@@ -316,7 +326,7 @@ export function projectsRouter(registry: RouteRegistry) {
       (id) => new Types.ObjectId(id),
     );
     // FR-CAL-02/03: dates use the calendar as it is now (working days + holidays).
-    const tasks = buildPlanTasks(template, projectId, start, await loadCalendar());
+    const tasks = template ? buildPlanTasks(template, projectId, start, await loadCalendar()) : [];
 
     const session = await mongoose.startSession();
     try {
@@ -330,19 +340,21 @@ export function projectsRouter(registry: RouteRegistry) {
               clientId: client._id,
               managerId,
               memberIds,
-              type: input.type ?? template.type,
+              type: input.type ?? template?.type ?? null,
               projectTypeId: projectType,
               description: input.description || null,
               status: 'PLANNING',
               startDate: start,
               plannedEndDate: end,
-              templateSnapshot: {
-                templateId: template._id,
-                templateKey: template.templateKey,
-                version: template.version,
-                name: template.name,
-                copy: { phases: template.phases, activities: template.activities },
-              },
+              templateSnapshot: template
+                ? {
+                    templateId: template._id,
+                    templateKey: template.templateKey,
+                    version: template.version,
+                    name: template.name,
+                    copy: { phases: template.phases, activities: template.activities },
+                  }
+                : null,
               createdBy: user._id,
             },
           ],
@@ -364,8 +376,8 @@ export function projectsRouter(registry: RouteRegistry) {
       projectId,
       action: 'project_created',
       meta: {
-        templateId: template._id.toString(),
-        templateVersion: template.version,
+        templateId: template?._id.toString() ?? null,
+        templateVersion: template?.version ?? null,
         tasks: tasks.length,
         projectTypeId: projectType.toString(),
       },
@@ -407,6 +419,85 @@ export function projectsRouter(registry: RouteRegistry) {
     res.status(201).json({
       project: await toProjectDto(project as ProjectDoc, user, currentPermissions(req)),
       warnings,
+    });
+  });
+
+  /**
+   * FR-PRJ-29/30 (doc 14 v1.2.6): apply a published template to a project in Planning. Admins or
+   * the Project PM. Its phases and activities are APPENDED after the existing ones (Q-67: append
+   * only, never replace); dependencies stay within the applied set (EC-99). The project keeps its
+   * starting template (Q-68): a later application only writes an audit entry.
+   */
+  r.post('/:id/apply-template', perm('projects', 'edit'), async (req, res) => {
+    const input = parseBody(applyTemplateSchema, req);
+    const user = currentUser(req);
+    const project = await loadProject(req, 'view');
+    assertNotArchived(project);
+    if (!isPlanner(user, project)) {
+      throw forbidden('Only an Admin or this project’s PM can apply a template.');
+    }
+    if (project.status !== 'PLANNING') {
+      throw unprocessable(
+        'A template can only be applied while the project is in Planning.',
+        'PROJECT_NOT_PLANNING',
+      );
+    }
+    const template = await assertUsableTemplate(input.templateId, input.templateVersion);
+    const last = await TaskModel.findOne({ projectId: project._id })
+      .sort({ order: -1 })
+      .select('order')
+      .lean();
+    const offset = last?.order ?? 0;
+    const tasks = buildPlanTasks(
+      template,
+      project._id,
+      project.startDate ?? todayPH(),
+      await loadCalendar(),
+    ).map((t) => ({ ...t, order: t.order + offset }));
+    const alreadyApplied = Boolean(
+      project.templateSnapshot?.templateKey === template.templateKey ||
+      (await ActivityLogModel.exists({
+        entityId: project._id,
+        action: 'template_applied',
+        'meta.templateKey': template.templateKey,
+      })),
+    );
+    if (tasks.length) {
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await TaskModel.insertMany(tasks, { session });
+          await recomputeProject(project._id, session);
+        });
+      } finally {
+        await session.endSession();
+      }
+    }
+    // EC-97: phase folders follow the phases (FR-DOC-01 naming).
+    await ensureDefaultFolders(project as never);
+    const phasesAdded = template.phases.length;
+    await audit({
+      actorId: user._id,
+      entityType: 'project',
+      entityId: project._id,
+      projectId: project._id,
+      action: 'template_applied',
+      meta: {
+        templateId: template._id.toString(),
+        templateKey: template.templateKey,
+        templateVersion: template.version,
+        templateName: template.name,
+        phases: phasesAdded,
+        tasks: tasks.length,
+      },
+    });
+    const fresh = await ProjectModel.findById(project._id).lean();
+    res.json({
+      project: await toProjectDto(fresh as ProjectDoc, user, currentPermissions(req)),
+      template: { id: template._id.toString(), name: template.name, version: template.version },
+      phasesAdded,
+      tasksAdded: tasks.length,
+      alreadyApplied,
     });
   });
 

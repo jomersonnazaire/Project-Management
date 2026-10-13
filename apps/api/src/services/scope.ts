@@ -86,7 +86,11 @@ export function assertProjectScope(
  */
 export function isPlanner(user: ScopeUser, project: ProjectLike): boolean {
   const r = role(user);
-  return r === 'ADMIN' || (r === 'PROJECT_MANAGER' && canEditProjectScope(user, project));
+  // m8-polish (doc 14 Definitions, FR-PRJ-31): a PM on the project's team list is a Project PM too.
+  return (
+    r === 'ADMIN' ||
+    (r === 'PROJECT_MANAGER' && (canEditProjectScope(user, project) || isProjectPm(user, project)))
+  );
 }
 
 /**

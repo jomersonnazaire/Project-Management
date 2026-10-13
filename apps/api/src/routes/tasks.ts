@@ -17,6 +17,7 @@ import {
   activityInUseMessage,
   PROJECT_NOT_PLANNING_MESSAGE,
   renamePhaseSchema,
+  createPhaseSchema,
   taskDeleteBlockedReason,
   todaySection,
   workingDaysSince,
@@ -633,6 +634,49 @@ export function tasksRouter(registry: RouteRegistry) {
       });
     }
     res.json({ name: input.newName });
+  });
+
+  // m8-polish: add an (empty) phase; it shows on the Checklist and gets its evidence folder.
+  p.post('/:id/phases', perm('projects', 'edit'), async (req, res) => {
+    const input = parseBody(createPhaseSchema, req);
+    const project = await loadProject(req, 'view');
+    const user = currentUser(req);
+    assertPhaseEdit(user, currentPermissions(req), project);
+    const phases = await projectPhases(project._id);
+    if (phases.some((x) => x.name.toLowerCase() === input.name.toLowerCase())) {
+      const msg = `"${input.name}" already exists.`;
+      throw conflictWith(msg, 'DUPLICATE_NAME', [{ path: 'name', message: msg }]);
+    }
+    let name = input.name;
+    for (
+      let n = 2;
+      await FolderModel.exists({
+        projectId: project._id,
+        parentId: null,
+        nameKey: name.trim().toLowerCase(),
+      });
+      n++
+    ) {
+      name = `${input.name} (${n})`;
+    }
+    await FolderModel.create({
+      projectId: project._id,
+      name,
+      nameKey: name.trim().toLowerCase(),
+      parentId: null,
+      kind: 'PHASE',
+      phase: input.name,
+      order: phases.length + 1,
+    });
+    await audit({
+      actorId: user._id,
+      entityType: 'project',
+      entityId: project._id,
+      projectId: project._id,
+      action: 'phase_created',
+      changes: [{ field: 'name', old: null, new: input.name }],
+    });
+    res.status(201).json({ name: input.name });
   });
 
   p.delete('/:id/phases', perm('tasks', 'delete'), async (req, res) => {
