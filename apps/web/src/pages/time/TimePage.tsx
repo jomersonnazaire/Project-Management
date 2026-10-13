@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button, ButtonGroup } from 'react-bootstrap';
 import { useTimeMutation, useTimeWeek } from '../../api/m3Hooks';
 import { useCan } from '../../auth/useCan';
+import { useTrackerDay } from '../../api/trackerHooks';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { hoursLabel, shortDate, weekRangeShort } from '../../lib/format';
@@ -30,6 +31,10 @@ export function TimePage() {
   const canTrack = useCan('activities', 'create');
   const [trackerModal, setTrackerModal] = useState<TrackerModalMode | null>(null);
   const today = toDateOnly(todayPH());
+  // A submitted or locked day: the header buttons are disabled (the modal also guards).
+  const todayDay = useTrackerDay(today);
+  const todayLocked = Boolean(todayDay.data && !todayDay.data.can.edit);
+  const lockTip = todayLocked ? 'This day is locked' : undefined;
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
@@ -66,11 +71,17 @@ export function TimePage() {
         {weekNav}
         {canTrack && (
           <>
-            <Button onClick={() => setTrackerModal({ kind: 'add', date: today })}>
+            <Button
+              disabled={todayLocked}
+              title={lockTip}
+              onClick={() => setTrackerModal({ kind: 'add', date: today })}
+            >
               Log task time
             </Button>
             <Button
               variant="outline-primary"
+              disabled={todayLocked}
+              title={lockTip}
               onClick={() => setTrackerModal({ kind: 'quick', date: today })}
             >
               Add quick activity

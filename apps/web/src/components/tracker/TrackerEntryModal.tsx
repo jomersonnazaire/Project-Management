@@ -169,6 +169,7 @@ export function TrackerEntryModal({
   const currentDayLocation = day.data?.location?.id ?? null;
   // Time in on a task (My tasks) still asks only when the day has no location yet.
   const asksLocation =
+    mode.kind === 'edit' ||
     mode.kind === 'add' ||
     mode.kind === 'quick' ||
     (mode.kind === 'start' && day.isSuccess && !currentDayLocation);
@@ -214,10 +215,16 @@ export function TrackerEntryModal({
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
     const body: Record<string, unknown> = { ...fieldsBody(fields, kind) };
-    if (asksLocation) {
+    if (editing) {
+      // The per-entry field is hidden, but a stored override is left untouched: the DAR (view,
+      // saved copies and export) reads each entry's effective location.
+      delete body.locationId;
+    } else if (asksLocation) {
       // The entry inherits the day's location; send it only when it is new or different.
       delete body.locationId;
-      if (dayLocationId && dayLocationId !== currentDayLocation) body.dayLocationId = dayLocationId;
+      // No day location yet: it rides on the save. A change to an existing one goes through the
+      // day header's endpoint first (see send), so the day_location_set audit is written.
+      if (dayLocationId && !currentDayLocation) body.dayLocationId = dayLocationId;
     }
     let req: SaveReq;
     if (editing) {
@@ -243,7 +250,7 @@ export function TrackerEntryModal({
         return;
       }
     }
-    send(req);
+    void send(req);
   };
 
   const [switchPrompt, setSwitchPrompt] = useState<{
@@ -255,13 +262,31 @@ export function TrackerEntryModal({
     if (!switchPrompt) return;
     const { id, req } = switchPrompt;
     setSwitchPrompt(null);
-    send({ ...req, body: { ...(req.body as object), switchFrom: id } });
+    void send({ ...req, body: { ...(req.body as object), switchFrom: id } });
   };
 
   // Half-day leave (FR-LV-06, TC-S09): a warning the user can confirm; a full day is refused.
   const [leaveWarning, setLeaveWarning] = useState<{ message: string; req: SaveReq } | null>(null);
-  const send = (req: SaveReq) => {
+  const dayLoc = useTrackerMutation();
+  const send = async (req: SaveReq) => {
     setLeaveWarning(null);
+    if (
+      asksLocation &&
+      (currentDayLocation || editing) &&
+      dayLocationId &&
+      dayLocationId !== currentDayLocation
+    ) {
+      try {
+        // The same call as the day header's Change button (writes day_location_set).
+        await dayLoc.mutateAsync({
+          path: `/days/${date}/location`,
+          method: 'PUT',
+          body: { locationId: dayLocationId },
+        });
+      } catch {
+        return; // e.g. DAY_LOCKED: the banner shows it and the entry isn't saved.
+      }
+    }
     save.mutate(req, {
       onSuccess: onClose,
       onError: (err) => {
@@ -331,13 +356,13 @@ export function TrackerEntryModal({
               role="alert"
             >
               <span className="me-auto">{leaveWarning.message}</span>
-              <Button size="sm" variant="warning" onClick={() => send(leaveWarning.req)}>
+              <Button size="sm" variant="warning" onClick={() => void send(leaveWarning.req)}>
                 Log time anyway
               </Button>
             </div>
           ) : (
             <ErrorAlert
-              error={bannerError(save.error, mode.kind === 'add') ?? remove.error}
+              error={dayLoc.error ?? bannerError(save.error, mode.kind === 'add') ?? remove.error}
               action
             />
           )}
@@ -504,7 +529,10 @@ export function TrackerEntryModal({
           <Button variant="outline-secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={save.isPending || (dayLocked && !editing)}>
+          <Button
+            type="submit"
+            disabled={save.isPending || dayLoc.isPending || (dayLocked && !editing)}
+          >
             {editing ? 'Save' : when === 'now' ? 'Start timer' : 'Save entry'}
           </Button>
         </Modal.Footer>
