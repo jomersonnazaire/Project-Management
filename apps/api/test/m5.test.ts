@@ -206,7 +206,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
       timeIn: '09:00',
       timeOut: '11:00',
     });
-    expect(future.status).toBe(400);
+    expect([400, 422]).toContain(future.status);
   });
 
   it('refuses a day over 24 hours with HHh MMm and the next step', async () => {

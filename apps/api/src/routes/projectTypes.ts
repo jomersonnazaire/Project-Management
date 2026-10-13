@@ -83,6 +83,13 @@ async function assertActivityType(id: string) {
       { path: 'defaultActivityTypeId', message: 'Choose an active activity type.' },
     ]);
   }
+  // FR-ACT-32: Quick Activity can't be a Project type default.
+  if (doc.system) {
+    const msg = "Quick Activity can't be a project type default.";
+    throw unprocessable(msg, 'INVALID_ACTIVITY_TYPE', [
+      { path: 'defaultActivityTypeId', message: msg },
+    ]);
+  }
   return doc;
 }
 

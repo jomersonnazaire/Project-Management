@@ -108,11 +108,10 @@ async function toDtos(entries: EntryDoc[]): Promise<TimeEntryDto[]> {
 /** Checks the work date and the 24 h/day cap for `userId` (excluding `ignoreId`). */
 async function assertDateAndCap(user: ScopeUser, workDate: Date, hours: number, ignoreId?: Id) {
   if (workDate > todayPH()) {
-    throw badRequest(
-      "Work date can't be in the future.",
-      [{ path: 'workDate', message: "Work date can't be in the future." }],
-      'VALIDATION_ERROR',
-    );
+    // FR-ACT-33: 422 FUTURE_DATE (was 400 VALIDATION_ERROR before m8-polish).
+    throw unprocessable("Work date can't be in the future.", 'FUTURE_DATE', [
+      { path: 'workDate', message: "Work date can't be in the future." },
+    ]);
   }
   // FR-ACT-24: the one shared lock rule (submitted day, or past the weekly lock and not reopened).
   await assertDayEditable(user._id, workDate);

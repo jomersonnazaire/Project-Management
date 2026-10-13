@@ -2,6 +2,9 @@ import {
   DAY_LOCKED,
   DEFAULT_LOOKUPS,
   EDITABLE_LOOKUP_KINDS,
+  QUICK_ACTIVITY_CUSTOM_NAME,
+  QUICK_ACTIVITY_KEY,
+  QUICK_ACTIVITY_NAME,
   autoStopAt,
   dailyCapMessage,
   formatTime12,
@@ -79,8 +82,59 @@ export async function ensureDefaultLookups(logger?: Logger): Promise<number> {
       { upsert: true },
     ).catch(() => undefined);
   }
+  seeded += await ensureQuickActivityType(logger);
   if (seeded) logger?.info({ seeded }, 'Seeded tracker lists');
   return seeded;
+}
+
+/**
+ * Doc 14 FR-ACT-32 / EC-90: the system Activity type `quick_activity`, inserted if missing
+ * (idempotent). An Admin-made type already named "Quick Activity" is kept, renamed to
+ * "Quick Activity (custom)" and audited as a System action; its entries are untouched.
+ */
+export async function ensureQuickActivityType(logger?: Logger): Promise<number> {
+  const kind = 'ACTIVITY_TYPE';
+  if (await LookupModel.exists({ kind, key: QUICK_ACTIVITY_KEY })) return 0;
+  const nameKey = QUICK_ACTIVITY_NAME.toLowerCase();
+  const custom = await LookupModel.findOne({ kind, nameKey, key: { $ne: QUICK_ACTIVITY_KEY } });
+  if (custom) {
+    let name = QUICK_ACTIVITY_CUSTOM_NAME;
+    for (let i = 2; await LookupModel.exists({ kind, nameKey: name.toLowerCase() }); i++) {
+      name = `${QUICK_ACTIVITY_CUSTOM_NAME} ${i}`;
+    }
+    const old = custom.name;
+    custom.name = name;
+    custom.nameKey = name.toLowerCase();
+    await custom.save();
+    await audit({
+      actorId: null,
+      entityType: 'lookup',
+      entityId: custom._id,
+      action: 'lookup_updated',
+      changes: [{ field: 'name', old, new: name }],
+      meta: { kind, system: true, reason: 'EC-90 Quick Activity system type' },
+    });
+    logger?.info({ id: custom._id.toString(), name }, 'Renamed custom Quick Activity type');
+  }
+  const last = await LookupModel.findOne({ kind }).sort({ order: -1 }).select('order').lean();
+  const res = await LookupModel.updateOne(
+    { kind, key: QUICK_ACTIVITY_KEY },
+    {
+      $setOnInsert: {
+        system: true,
+        name: QUICK_ACTIVITY_NAME,
+        nameKey,
+        order: (last?.order ?? 0) + 1,
+        active: true,
+      },
+    },
+    { upsert: true },
+  ).catch((e: unknown) => {
+    // A parallel instance inserted it first.
+    if ((e as { code?: number }).code === 11000) return { upsertedCount: 0 };
+    throw e;
+  });
+  return res.upsertedCount;
 }
 
 /** Checks a lookup id for a new value: it must exist, be of `kind` and be active. */
