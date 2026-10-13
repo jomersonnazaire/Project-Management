@@ -91,7 +91,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | FR-TIME-01 | Time entry: user (self), project*, task*, work date*, hours* (0.25–24, step 0.25), type (Execution, Waiting on client/external, Rework), notes. | BR-06, BR-07 | Must |
 | FR-TIME-02 | Users can only log time to tasks in projects they're a member of (server). | BR-12 | Must |
 | FR-TIME-03 | Total hours per user per day can't exceed 24 (server). | BR-06 | Must |
-| FR-TIME-04 | Work date can't be in the future; entries older than the lock period (default: previous week after Monday 12:00, see Q-09) are read-only except by PM/Admin. | BR-06 | Must |
+| FR-TIME-04 | Work date can't be in the future; entries are read-only once the work date is locked: a day stays editable until the end of the second day after its work date and locks at 00:00 Philippine time on the third day (Oct 13 locks Oct 16, 00:00 PHT) (Q-09 decided by Jomerson, 2026-10-13, 9:15 PM SGT; was: previous week after Monday 12:00). Example: Oct 13 is editable on Oct 14 and 15 and locked from Oct 16, 00:00 PHT. Only Admins change locked entries (doc 14 FR-ACT-24, FR-ACT-36). | BR-06 | Must |
 | FR-TIME-05 | Weekly view (week selector) of my entries with totals and utilization vs capacity. | BR-06 | Must |
 | FR-TIME-06 | Users edit/delete their own unlocked entries; all edits audited. | BR-11 | Must |
 | FR-TIME-07 | Task actual hours = sum of all time entries on the task (all types); reports also show by type. | BR-06, BR-07 | Must |

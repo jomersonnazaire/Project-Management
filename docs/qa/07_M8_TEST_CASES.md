@@ -139,3 +139,88 @@ Covers FR-PRJ-21 to 26, FR-TSK-26 to 30, FR-NAV-01/02, FR-ACT-29 to 33, FR-ACL-1
 | TC-T80 | [UI+API] Entry via either button over the 24h cap, or on an On Hold project task | Refused as today | FR-ACT-33 |
 | TC-T81 | [UI+API] Timer running at 23:59 | Auto-stops at 23:59; no entry rolls into tomorrow | EC-92, FR-ACT-04 |
 | TC-T88 | [UI] Mobile app: both buttons, same preselects, disabled future dates, and messages for 409 `TIMER_RUNNING`, 422 `DAY_LOCKED`, 422 `FUTURE_DATE`, 422 `PROJECT_NOT_PLANNING`, 409 `ACTIVITY_IN_USE` | Matches web | FR-ACT-29 to 33, FR-PRJ-21 |
+
+## M8 polish, part 2 (doc 14 v1.2.24): FR-PRJ-27 to 34, Q-71, Q-70 B / Q-72, AC-52.8
+The expected results use doc 14's wording. Status comes from the QA logs in `/workspace/qa-run/regress` on the box. "Not evidenced" means no log line covers the case. API parts and UI parts are marked separately where only one was run.
+
+### Optional template and blank projects (FR-PRJ-27 to 31)
+| ID | Case | Expected | Traces | Status |
+|---|---|---|---|---|
+| TC-T89 | New project with Template "None – start blank" and all required fields, including Project type | Project is created with no phases; the Checklist shows "No phases yet" with "+ Add phase" and "Apply template" | AC-53.1, FR-PRJ-27, FR-PRJ-29 | API Pass (m8c_live3 TC-M8C-07: no phases, no tasks); UI not evidenced |
+| TC-T90 | New project without a Project type | Refused with the Project type field error, with or without a template | AC-53.2 | API Pass (TC-M8C-07: no projectTypeId gives 4xx) |
+| TC-T91 | Edit and republish template T after creating a project from it; rename one of the project's activities | Project's phases and activities are unchanged; T is unchanged | AC-53.3, FR-PRJ-28 | Not evidenced |
+| TC-T92 | Apply "SAP B1 Implementation" (3 phases) to a Planning project with 2 phases; then with one name matching; then single "Build" onto "Build" | 5 phases (existing first), `phasesAdded: 3, phasesMerged: 0`, toast "Added 3 phases from SAP B1 Implementation."; then 4 phases, `phasesAdded: 2, phasesMerged: 1`, toast "Added 2 phases and merged 1 into existing ones from SAP B1 Implementation."; then "Merged 1 phase into existing ones from SAP B1 Implementation." Audited | AC-53.4 | Not evidenced with these exact counts (merge and audit seen in TC-M8C-08 and DEF016-e) |
+| TC-T93 | PM deletes a template-created phase and an unattached activity on Planning; deletes an activity with logged time | Both removed; the activity with time gives 409 `ACTIVITY_IN_USE` | AC-53.5 | API Pass (TC-M8C-05, TC-M8C-06) |
+| TC-T94 | Active project: Apply template, phase edit by the PM, add an activity | "Apply template" not shown; direct apply 422 `PROJECT_NOT_PLANNING`; PM phase edits refused; adding an activity still succeeds | AC-53.6, FR-PRJ-31 | API Pass for apply and phase edits (TC-M8C-06/08); add activity and UI not evidenced |
+| TC-T95 | Member or Viewer on a Planning project: empty-state buttons; direct add phase, apply template or delete | Buttons not shown; 403 (or 404 outside scope) | AC-53.7, EC-98 | API Pass (viewer and outsider POST phase and apply refused, TC-M8C-06/08); UI not evidenced |
+| TC-T96 | Checklist label for a project from "SAP B1 Implementation" v3, and for a blank project | "Started from SAP B1 Implementation v3"; "Started blank"; the template's "projects using it" count and the dashboard column include it | AC-53.8, FR-PRJ-28 | Not evidenced |
+| TC-T97 | Planning project with no phases set to Active | "Leave Planning with no phases?" dialog; "Stay in Planning" keeps the status; "Move on anyway" changes it | AC-53.9, EC-96 | Not evidenced |
+| TC-T98 | Reapply an unchanged applied template; reapply after deleting one template activity; after renaming one | Confirm "SAP B1 Implementation is already applied to this project. Applying it again adds nothing." with only "Close"; `phasesAdded: 0, tasksAdded: 0, alreadyApplied: true`, `phasesMerged` = phase count, info toast. Delete case: only that activity restored (`tasksAdded: 1`), "Added 1 activity from SAP B1 Implementation." Rename case: renamed activity stays and the original is added back | AC-53.10, EC-108 | API Pass (def016_2.log DEF016-b/c/d, 26/0); UI toasts not evidenced |
+| TC-T99 | Apply the same template twice | No duplicate phases; `phasesAdded: 0`, `tasksAdded: 0`, `phasesMerged` = template phase count, `alreadyApplied: true`; on first apply `phasesAdded` + `phasesMerged` = template phase count | EC-95 | API Pass (DEF016-a/b) |
+| TC-T100 | Template with empty phases: first and second apply | First apply creates every phase, including empty ones; second apply `phasesAdded: 0`, `phasesMerged` = phase count, nothing changes | EC-110 | API Pass (DEF016-e "phase count equals template's", DEF016-b) |
+
+### Phase delete (FR-PRJ-32 to 34)
+| ID | Case | Expected | Traces | Status |
+|---|---|---|---|---|
+| TC-T101 | PM deletes empty phase "Testing" on Planning; Cancel; Delete phase | Dialog "Delete phase Testing?" with "Cancel" and "Delete phase"; delete removes it and writes an audit entry; Cancel changes nothing | AC-54.1, FR-PRJ-33 | API Pass (204, `phase_deleted` audited, TC-M8C-06); dialog not evidenced |
+| TC-T102 | Team-list PM (not the manager) deletes an empty phase on Planning | Deleted | AC-54.2 | Not evidenced for phases (the team-list PM task delete passed, TC-M8C-05) |
+| TC-T103 | PM deletes phase "Build" with 4 activities | 409 `PHASE_NOT_EMPTY`, `details.activityCount: 4`; no dialog; "Can't delete: this phase still has 4 activities. Delete them first." in #b8240a | AC-54.3 | API Pass (409 + activityCount, TC-M8C-06; count of 4 not specifically used); UI not evidenced |
+| TC-T104 | PM on an Active project | Delete hidden behind "Phases can be edited only in Planning"; direct DELETE 422 `PROJECT_NOT_PLANNING` | AC-54.4, FR-PRJ-34 | Partly: PM POST/PATCH phase on Active gave 422 (TC-M8C-06); DELETE and tooltip not evidenced |
+| TC-T105 | Admin deletes an empty phase on Active, On Hold, Completed, Cancelled | Deleted and audited; phases editable; no lock tooltip | AC-54.5, FR-PRJ-34 | Pass on Active (TC-M8C-06); other statuses and UI not evidenced |
+| TC-T106 | Admin deletes a phase with activities | 409 `PHASE_NOT_EMPTY`, same inline line | AC-54.6 | API Pass (TC-M8C-06) |
+| TC-T107 | Member or Viewer: Delete phase | Not shown; direct request 403 (404 outside scope) | AC-54.7 | Not evidenced for DELETE (POST phase refused for both, TC-M8C-06) |
+| TC-T108 | Empty phase "Design" with documents in its folder; then the documents are deleted | 409 `PHASE_HAS_DOCUMENTS`, nothing changes, no audit, "Can't delete: this phase still has documents in its folder. Delete them first."; after the documents are removed, 204 and `phase_deleted` | AC-54.8, EC-107 | Not evidenced |
+| TC-T109 | Delete the last phase | Empty state "No phases yet"; "Apply template" only in Planning | EC-100 | Not evidenced |
+| TC-T110 | Delete a phase that a template created | The "Started from {template} v{version}" label is unchanged | EC-101 | Not evidenced |
+| TC-T111 | Activity added by someone else after the page loaded, then delete | 409 `PHASE_NOT_EMPTY`; inline line instead of deleting | EC-102 | Not evidenced |
+| TC-T112 | 409 without a usable `activityCount` | "Can't delete: this phase still has activities. Delete them first." | EC-103 | Not evidenced |
+| TC-T113 | Add or rename a phase to a used name; apply template with a same-name phase | 409 `DUPLICATE_NAME`, nothing changes; apply merges | EC-104 | API Pass (TC-M8C-06 duplicate and rename 409) |
+| TC-T114 | Status leaves Planning while the PM's delete dialog is open | "Delete phase" returns 422 `PROJECT_NOT_PLANNING`; the dialog closes; Delete is hidden behind the lock tooltip | EC-105 | Not evidenced |
+| TC-T115 | " planning " vs "Planning"; "BUILD " vs "Build"; delete "build" | Merge counted in `phasesMerged`; 409 `DUPLICATE_NAME`; deletes "Build" | EC-106 | API Pass (TC-M8C-06 ' planning ' 409; DEF016-e fuzzy names) |
+
+### Weekly totals (Q-71 kept, FR-ACT-34)
+| ID | Case | Expected | Traces | Status |
+|---|---|---|---|---|
+| TC-T116 | 1h of project task time and 30m of quick activity this week; then a leave day with no other time | "Logged this week" 01:30 and Team & workload Recorded 01:30; leave adds 0 to both | AC-55.1 | Not evidenced with these figures (quick activities counted: ac551.log) |
+| TC-T117 | Week with only quick activities | Both show the quick-activity total, not 00:00 / 0h | EC-109 | Pass (ac551.log: qa.member `loggedTotal 4`, `recordedHours 4`) |
+
+### Viewer access (Q-70 B, Q-72, FR-ACT-35)
+| ID | Case | Expected | Traces | Status |
+|---|---|---|---|---|
+| TC-T118 | Viewer opens the app and calls `/time`, `/tracker/*`, `/dar/*`, `/leave` | Time logging, DAR and Leave hidden; no Day timesheet tab or "Logged this week"; no Time in/out; `activities` and `leave` all false; 403 `FORBIDDEN` (other user's entry still 404 first); "You don't have access to this page". Admin, PM and Member unchanged | AC-56.1 | Pass (q70b.log on d233083 for time/tracker/DAR; q72.log 6/0 on 8fdb005 for leave) |
+| TC-T119 | Viewer with time or tracker entries from before the change | Can't see them; entries kept | EC-111 | Covered by Deven's automated test only (qa.viewer could not sign in) |
+| TC-T120 | `POST /access-rules/VIEWER/reset`; partly Admin-changed Viewer row | Cells at the old default turned off; Admin-changed cells left; nothing deleted | EC-112 | Pass (q70b.log activities all false; q72.log "reset keeps leave+activities off") |
+| TC-T121 | Viewer with existing leave records | Hidden from the Viewer and kept; Admins and the Viewer's direct supervisor see them; anyone else 404 | EC-113 | Covered by an automated test only |
+
+### Locked-day buttons (AC-52.8, fdbeecb)
+| ID | Case | Expected | Traces | Status |
+|---|---|---|---|---|
+| TC-T122 | Day timesheet and Time logging on a locked viewed day; My tasks quick-activity buttons (incl. compact "+" at 390); ↑↓ reorder buttons | Buttons follow the viewed day: disabled (never hidden) with "This day is locked" at every width. My tasks follows today's lock state. ↑↓ styled like the row Edit/Delete | AC-52.8 | Pass (UIE design pass, `/workspace/review/m16`) |
+
+## Q-09 2-day lock (FR-ACT-36, AC-52.7): Pending build
+| ID | Case | Expected | Traces | Status |
+|---|---|---|---|---|
+| TC-T123 | Member edits an Oct 11 entry at 23:59 PHT on Oct 13 | Succeeds (day still editable) | FR-ACT-36, AC-52.7 | Pending build |
+| TC-T124 | Same edit/create/delete at 00:00 PHT on Oct 14 via `/time` and `/tracker/entries` | 422 `DAY_LOCKED`; day flagged "Not submitted" | FR-ACT-36, FR-ACT-13 | Pending build |
+| TC-T125 | Open the locked day in the UI | Buttons disabled with "This day is locked" | AC-52.8 | Pending build |
+| TC-T126 | Time logging page wording | No "Monday 12:00 PM" text anywhere | FR-ACT-36 | Pending build |
+| TC-T127 | Admin reopens the locked day; Member edits | Edit allowed; audit record for the reopen | FR-ACT-24, FR-ACT-36 | Pending build |
+| TC-T128 | Device time zone set to something other than PHT (e.g. UTC, US) around the boundary | The lock follows PHT (Asia/Manila), not the device time zone | FR-ACT-36 | Pending build |
+
+## Client portal (pending contract build)
+Outline only (doc 15, doc 11 v0.4.23). Invites are on hold (Q-84).
+| ID | Case | Expected | Status |
+|---|---|---|---|
+| TC-CP01 | 5 failed sign-ins for one portal account | Account locked out for 15 minutes | Pending build |
+| TC-CP02 | 20 failed sign-ins from one IP within 15 minutes | 429 `TOO_MANY_ATTEMPTS` (per IP) | Pending build |
+| TC-CP03 | Set a password shorter than 12 characters | Refused; at least 12 characters needed | Pending build |
+| TC-CP04 | Staff token on portal routes; portal token on staff routes | 401 both ways | Pending build |
+| TC-CP05 | Portal user requests a project, issue or document outside their scope | 404 | Pending build |
+| TC-CP06 | Portal responses | Only the fields in doc 15's response field lists; nothing extra | Pending build |
+| TC-CP07 | Staff names in portal responses and screens | Staff show as "Xceler8" | Pending build |
+| TC-CP08 | Revoke, deactivate, move or re-invite a portal contact | Their existing sessions end | Pending build |
+| TC-CP09 | CLOSED issues: resolved first vs closed without resolving | `resolvedAt` only when the issue was resolved first | Pending build |
+| TC-CP10 | Portal user opens an archived document | 422 `DOCUMENT_ARCHIVED` | Pending build |
+| TC-CP11 | Portal access controls as Admin, project PM, co-PM, Member, Viewer | Only Admins, the PM and co-PMs get the controls | Pending build |
+| TC-CP12 | Invite UI and API | Invites hidden/off (Q-84) | Pending build |
+| TC-CP13 | Invite hold UI (mockup v0.9.15): Contacts list; turn portal access on | Portal access shows only as Off or Active; no Invite or Resend invite button; turning access on shows "Client invites are on hold until email is set up." | Pending build |

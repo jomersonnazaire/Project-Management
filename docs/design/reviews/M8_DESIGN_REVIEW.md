@@ -207,3 +207,38 @@ Still unverified (data was lacking; not failures):
 Open decisions for Jomerson:
 - **Q-70:** Viewer access (what a Viewer can see and do).
 - **Q-71:** should weekly totals include quick activities? They do on 46541f2. If not, use the fallback labels: card "Task time this week" with the hint "Quick activities and leave not included.", and the Workload column "Task time recorded".
+
+## Oct 13, 2026 — DR-49, location field, Viewer, client portal
+
+Screenshots: `/workspace/review/m13`, `m15`, `m16`, `m17`, `m18`, `m19`.
+
+### DR-49 (Checklist phase card)
+Didn't match the design. Fix: header ghost buttons, no red outline, inline row Edit and Delete, "Activity" and "Est / Act" headings, "To do", and a footer with only "+ Add activity". **Passed on 335d289.** (`m13/`)
+
+### Mockup v0.9.11
+- Location field in the shared entry modal: per-day, required, prefilled, with hint, change line and error wording.
+- Full-width Time logging page.
+- Checklist ↑↓ buttons.
+- Paired fields stack below 760px.
+
+### 109912c screen check
+- **PASS:** location field and wording, 390 fit, edit modal day field, full-width Time logging page, Viewer task panel (no Time in or out). (`m15/`)
+- **FAIL:** locked-day buttons were hidden or enabled. Fix went into **fdbeecb**.
+
+### fdbeecb
+- **AC-52.8 PASS.** Locked-day buttons are visible, disabled, and show "This day is locked" at 1440 and 390. (`m17/`, `m18/`)
+- My tasks follows today; Day timesheet follows the viewed day (Lean confirmed).
+- ↑↓ buttons match the row Edit and Delete style exactly; the outlined style is accepted.
+
+### Q-72 Viewer screens (8fdb005)
+**PASS.** No Leave, Time logging or DAR in the menu. `/leave` shows the styled "You don't have access to this page". My tasks has no leave widgets. (`m16/`)
+
+### Known gap
+Older entries with their own location may show a different location in the DAR than the day field shows. No data migration was done (Lean's call).
+
+### Pending — Q-09 build after 00:41
+- Time logging wording should become: "You can edit a day's entries until the end of the second day after it. For example, Oct 11 locks at 12:00 AM PHT on Oct 14." Remove the Monday 12:00 PM text.
+- Also check the Time logging header's locked state.
+
+### Client portal
+Mockups v0.9.12–v0.9.14 are in `docs/design/mockup`, with `docs/design/CLIENT_PORTAL_UI.md`. Copy-link invite is pending Jomerson's Q-84. (`m17/`, `m19/`)
