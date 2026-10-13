@@ -106,7 +106,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | FR-DASH-04 | Upcoming milestones (next 30 days): milestone-type tasks or tasks flagged as milestone. | BR-08 | Should |
 | FR-DASH-05 | AI insights panel is a visible "Phase 2" placeholder only. | BR-14 | Could |
 | FR-DASH-06 | Dashboard data respects visibility: PM/Admin/Viewer see all; Members see their projects. | BR-12 | Must |
-| FR-WL-01 | Team & workload table for a selected week: person, job role, team, assigned hours (remaining estimates of tasks due that week), recorded hours, utilization. | BR-08 | Must |
+| FR-WL-01 | Team & workload table for a selected week: person, job role, team, assigned hours (remaining estimates of tasks due that week), recorded hours, utilization. *(Weekly Recorded includes quick activities — doc 14 FR-ACT-34 / Q-71.)* | BR-08 | Must |
 | FR-WL-02 | Utilization = recorded working hours ÷ available hours (capacity) × 100. Assigned load % shown separately and flagged > 100%. | BR-08, BR-13 | Must |
 | FR-WL-03 | Workload view shows waiting time separately and carries the note that hours aren't a performance score. | BR-13 | Must |
 | FR-RPT-01 | Effort variance report per task/project: estimated, actual, variance (act − est), overrun % ((act − est) ÷ est × 100; "No estimate" when est = 0). | BR-06 | Must |
