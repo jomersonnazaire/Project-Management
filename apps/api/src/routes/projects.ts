@@ -434,7 +434,9 @@ export function projectsRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const project = await loadProject(req, 'view');
     assertNotArchived(project);
-    // FR-PRJ-21: the Project PM is the assigned manager or a PM on the team list.
+    // FR-PRJ-21: the Project PM is the assigned manager or a PM on the team list; DEF-015: other
+    // PMs get 404 (NFR-25).
+    if (user.systemRole === 'PROJECT_MANAGER' && !isProjectPm(user, project)) throw notFound();
     if (user.systemRole !== 'ADMIN' && !isProjectPm(user, project)) {
       throw forbidden('Only an Admin or this project’s PM can apply a template.');
     }
@@ -450,27 +452,52 @@ export function projectsRouter(registry: RouteRegistry) {
       .select('order')
       .lean();
     const offset = last?.order ?? 0;
-    const tasks = buildPlanTasks(
+    const planned = buildPlanTasks(
       template,
       project._id,
       project.startDate ?? todayPH(),
       await loadCalendar(),
-    ).map((t) => ({ ...t, order: t.order + offset }));
-    // FR-PRJ-30 / EC-95: phases are unique per project (case-insensitive); a template phase whose
-    // name already exists merges into it (its activities join the existing phase).
+    );
+    // FR-PRJ-30 / EC-95 / EC-106: phases are unique per project (trimmed, case-insensitive); a
+    // template phase whose name already exists merges into it. DEF-016: inside a merged phase a
+    // template activity is added only when that phase has no activity with the same name
+    // (trimmed, case-insensitive), so a second apply adds nothing and a deleted one comes back.
+    const key = (n: string) => n.trim().toLowerCase();
+    const existingTasks = await TaskModel.find({ projectId: project._id })
+      .select('phase name')
+      .lean();
     const existing = new Map<string, string>();
     for (const n of [
-      ...(await TaskModel.distinct('phase', { projectId: project._id })),
+      ...existingTasks.map((t) => t.phase),
       ...(await FolderModel.distinct('phase', { projectId: project._id, kind: 'PHASE' })),
     ]) {
-      if (typeof n === 'string' && n.trim()) existing.set(n.trim().toLowerCase(), n);
+      if (typeof n === 'string' && n.trim() && !existing.has(key(n))) existing.set(key(n), n);
     }
-    const templatePhases = [...new Set(template.phases.map((ph) => ph.name.trim().toLowerCase()))];
+    const namesByPhase = new Map<string, Set<string>>();
+    for (const t of existingTasks) {
+      const pk = t.phase ? key(t.phase) : '';
+      if (!namesByPhase.has(pk)) namesByPhase.set(pk, new Set());
+      namesByPhase.get(pk)!.add(key(t.name));
+    }
+    const templatePhases = [...new Set(template.phases.map((ph) => key(ph.name)))];
     const phasesMerged = templatePhases.filter((n) => existing.has(n)).length;
-    for (const t of tasks) {
-      const hit = t.phase ? existing.get(t.phase.trim().toLowerCase()) : undefined;
-      if (hit) t.phase = hit;
-    }
+    const phasesAdded = templatePhases.length - phasesMerged;
+    const kept = planned.filter((t) => {
+      const pk = t.phase ? key(t.phase) : '';
+      if (t.phase && existing.has(pk)) t.phase = existing.get(pk)!;
+      const seen = namesByPhase.get(pk);
+      if (seen?.has(key(t.name))) return false;
+      if (!namesByPhase.has(pk)) namesByPhase.set(pk, new Set());
+      namesByPhase.get(pk)!.add(key(t.name));
+      return true;
+    });
+    // Dependencies only within the added set (EC-99); orders follow the existing plan.
+    const keptIds = new Set(kept.map((t) => String(t._id)));
+    const tasks = kept.map((t, i) => ({
+      ...t,
+      order: offset + i + 1,
+      dependsOn: (t.dependsOn ?? []).filter((d) => keptIds.has(String(d))),
+    }));
     const alreadyApplied = Boolean(
       project.templateSnapshot?.templateKey === template.templateKey ||
       (await ActivityLogModel.exists({
@@ -492,7 +519,6 @@ export function projectsRouter(registry: RouteRegistry) {
     }
     // EC-97: phase folders follow the phases (FR-DOC-01 naming).
     await ensureDefaultFolders(project as never);
-    const phasesAdded = templatePhases.length - phasesMerged;
     await audit({
       actorId: user._id,
       entityType: 'project',

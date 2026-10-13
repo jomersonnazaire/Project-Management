@@ -173,8 +173,17 @@ function phaseEditableNow(user: ScopeUser, perms: PermissionGrid, project: Proje
   );
 }
 
+/**
+ * DEF-015 (NFR-25): a PM who is neither the manager nor on the team list gets 404 on project-PM
+ * actions, the same as anyone outside the project.
+ */
+export function assertNotOutsidePm(user: ScopeUser, project: ProjectDoc) {
+  if (user.systemRole === 'PROJECT_MANAGER' && !isProjectPm(user, project)) throw notFound();
+}
+
 function assertPhaseEdit(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
   assertNotArchived(project);
+  assertNotOutsidePm(user, project);
   if (!mayManagePhases(user, perms, project)) {
     throw forbidden('Only an Admin or this project’s PM can change its phases.');
   }
@@ -1380,6 +1389,7 @@ export function tasksRouter(registry: RouteRegistry) {
   r.delete('/:id', perm('tasks', 'delete'), async (req, res) => {
     const { task, project } = await loadTask(req);
     assertNotArchived(project);
+    assertNotOutsidePm(currentUser(req), project);
     // FR-PRJ-21 (v1.2.5): unattached activities can be deleted at any status (no Completed lock).
     if (!canDeleteTasks(currentUser(req), currentPermissions(req), project)) {
       throw forbidden('Only an Admin or this project’s PM can delete its tasks.');

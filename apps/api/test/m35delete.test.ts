@@ -141,10 +141,10 @@ describe('Delete a task', () => {
     );
   });
 
-  it('only Admins and the project’s own PM: another PM, Members and Viewers get 403', async () => {
+  it('only Admins and the project’s own PM: another PM gets 404 (DEF-015), Members and Viewers 403', async () => {
     const w = await world(app);
     const [t] = await tasks(w);
-    expect((await del(w.pm2.agent, t!.id)).status).toBe(403);
+    expect((await del(w.pm2.agent, t!.id)).status).toBe(404);
     expect((await del(w.member.agent, t!.id)).status).toBe(403);
     expect((await del(w.viewer.agent, t!.id)).status).toBe(403);
     expect((await tasks(w, w.member.agent))[0]).toMatchObject({

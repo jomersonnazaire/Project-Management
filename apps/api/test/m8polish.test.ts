@@ -51,10 +51,13 @@ const time = (w: W, taskId: string) =>
   });
 
 describe('FR-PRJ-21: activity delete (Project PM or Admin; ACTIVITY_IN_USE)', () => {
-  it('a PM on the team list may delete; a PM who only views the project gets 403; Members 403', async () => {
+  it('a PM on the team list may delete; a PM outside the project gets 404 (DEF-015); Members 403', async () => {
     const w = await world(app);
     const [a, b] = await tasks(w);
-    expect((await del(w.pm2.agent, a!.id)).status).toBe(403);
+    // DEF-015 (NFR-25): a PM neither manager nor on the team list gets 404 with the same body.
+    const outside = await del(w.pm2.agent, a!.id);
+    expect(outside.status).toBe(404);
+    expect(outside.body.error.code).toBe('NOT_FOUND');
     expect((await del(w.member.agent, a!.id)).status).toBe(403);
     await ProjectModel.updateOne({ _id: w.project.id }, { $push: { memberIds: w.pm2.user._id } });
     expect((await tasks(w, w.pm2.agent))[0]!.deletable).toBe(true);
@@ -168,7 +171,7 @@ describe('FR-PRJ-22/23: phase editing (PMs only in Planning)', () => {
     ).toBe(200);
   });
 
-  it('other PMs and Members get 403; duplicate name 409; unknown phase 404', async () => {
+  it('other PMs get 404 (DEF-015), Members 403; duplicate name 409; unknown phase 404', async () => {
     const w = await world(app);
     const all = await tasks(w);
     const names = [...new Set(all.map((t) => t.phase).filter(Boolean))] as string[];
@@ -177,7 +180,32 @@ describe('FR-PRJ-22/23: phase editing (PMs only in Planning)', () => {
         .patch(`${base(w)}/phases`)
         .set(CSRF)
         .send(body);
-    expect((await send(w.pm2.agent, { name: names[0], newName: 'Z' })).status).toBe(403);
+    expect((await send(w.pm2.agent, { name: names[0], newName: 'Z' })).status).toBe(404);
+    expect(
+      (
+        await w.pm2.agent
+          .post(`${base(w)}/phases`)
+          .set(CSRF)
+          .send({ name: 'New one' })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await w.pm2.agent
+          .delete(`${base(w)}/phases`)
+          .set(CSRF)
+          .send({ name: names[0] })
+      ).status,
+    ).toBe(404);
+    await ProjectModel.updateOne({ _id: w.project.id }, { $set: { status: 'PLANNING' } });
+    expect(
+      (
+        await w.pm2.agent
+          .post(`${base(w)}/apply-template`)
+          .set(CSRF)
+          .send({ templateId: w.template.id })
+      ).status,
+    ).toBe(404);
     expect((await send(w.member.agent, { name: names[0], newName: 'Z' })).status).toBe(403);
     expect((await send(w.pm.agent, { name: 'Nope', newName: 'Z' })).status).toBe(404);
     if (names.length > 1) {
@@ -527,18 +555,40 @@ describe('m8-polish: optional template, add phase, apply template', () => {
     expect(
       await ActivityLogModel.exists({ entityId: p.id, action: 'template_applied' }),
     ).not.toBeNull();
-    // EC-95: applying again appends again, flagged as already applied.
+    // EC-95 / DEF-016: applying again adds nothing; no new phases, tasks or folders.
+    const folders = await FolderModel.countDocuments({ projectId: p.id });
     const again = await w.pm.agent.post(url).set(CSRF).send({ templateId: w.template.id });
     expect(again.status).toBe(200);
     expect(again.body).toMatchObject({
       alreadyApplied: true,
       phasesAdded: 0,
       phasesMerged: tplPhases,
+      tasksAdded: 0,
     });
-    // Merged: no new phases or phase folders.
-    const phaseNames = (await w.pm.agent.get(`/api/v1/projects/${p.id}/phases`)).body.items;
-    expect(phaseNames).toHaveLength(tplPhases + 1);
-    expect(await TaskModel.countDocuments({ projectId: p.id })).toBe(2 * n + 1);
+    expect(await TaskModel.countDocuments({ projectId: p.id })).toBe(n + 1);
+    expect(await FolderModel.countDocuments({ projectId: p.id })).toBe(folders);
+    expect((await w.pm.agent.get(`/api/v1/projects/${p.id}/phases`)).body.items).toHaveLength(
+      tplPhases + 1,
+    );
+    // A deleted activity comes back on reapply; a renamed one counts as different.
+    const tpl = await TaskModel.find({ projectId: p.id, name: { $ne: 'Mine' } })
+      .sort({ order: 1 })
+      .lean();
+    await TaskModel.deleteOne({ _id: tpl[0]!._id });
+    await TaskModel.updateOne({ _id: tpl[1]!._id }, { $set: { name: `  ${tpl[1]!.name} (mine)` } });
+    // Case and outer spaces don't make a new activity.
+    await TaskModel.updateOne(
+      { _id: tpl[2]!._id },
+      { $set: { name: ` ${tpl[2]!.name.toUpperCase()} ` } },
+    );
+    const third = await w.pm.agent.post(url).set(CSRF).send({ templateId: w.template.id });
+    expect(third.body).toMatchObject({ phasesAdded: 0, tasksAdded: 2 });
+    const back = await TaskModel.find({
+      projectId: p.id,
+      name: { $in: [tpl[0]!.name, tpl[1]!.name] },
+    }).lean();
+    expect(back.map((t) => t.phase).sort()).toEqual([tpl[0]!.phase, tpl[1]!.phase].sort());
+    expect(await TaskModel.countDocuments({ projectId: p.id })).toBe(n + 2);
     const p2 = await blank(w, { name: 'Blank 3' });
     await ProjectModel.updateOne({ _id: p2.id }, { $set: { status: 'ACTIVE' } });
     const np = await w.admin.agent
