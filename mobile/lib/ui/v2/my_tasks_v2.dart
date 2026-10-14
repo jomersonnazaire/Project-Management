@@ -7,6 +7,7 @@ import '../../data/ph_time.dart';
 import '../../data/tracker_models.dart';
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
+import '../../data/access.dart' show resolveMyTasksTab;
 import '../widgets/common.dart';
 import 'day_timesheet.dart';
 import 'entry_sheet.dart';
@@ -22,15 +23,54 @@ const myTaskTabs = [
 ];
 
 /// My tasks (01–02): 7 scrollable tabs. "Day timesheet" embeds the same DayTimesheetBody as the tab.
-class MyTasksV2Screen extends ConsumerStatefulWidget {
+/// Tabs follow GET /auth/me/permissions `myTasksTabs` (FR-ACL-21): e.g. a Viewer has no Today
+/// or Day timesheet tab. A deep link to a hidden tab opens the next allowed one.
+class MyTasksV2Screen extends ConsumerWidget {
   const MyTasksV2Screen({super.key, this.initialTab});
   final String? initialTab;
   @override
-  ConsumerState<MyTasksV2Screen> createState() => _MyTasksV2ScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final allowed = ref.watch(myTasksTabsProvider);
+    if (allowed == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final tabs = [
+      for (final t in myTaskTabs)
+        if (allowed.contains(t.$1)) t,
+    ];
+    if (tabs.isEmpty) {
+      return Scaffold(
+        key: const Key('myTasksScreen'),
+        appBar: AppBar(title: const Text('My tasks')),
+        body: const Center(child: Text("You don't have access to My tasks.")),
+      );
+    }
+    return _MyTasksTabs(
+      key: ValueKey(allowed.join(',')),
+      tabs: tabs,
+      initialTab: resolveMyTasksTab(initialTab, allowed),
+      wanted: initialTab,
+    );
+  }
 }
 
-class _MyTasksV2ScreenState extends ConsumerState<MyTasksV2Screen>
+class _MyTasksTabs extends ConsumerStatefulWidget {
+  const _MyTasksTabs({
+    super.key,
+    required this.tabs,
+    this.initialTab,
+    this.wanted,
+  });
+  final List<(String, String)> tabs;
+  final String? initialTab;
+  final String? wanted;
+  @override
+  ConsumerState<_MyTasksTabs> createState() => _MyTasksV2ScreenState();
+}
+
+class _MyTasksV2ScreenState extends ConsumerState<_MyTasksTabs>
     with SingleTickerProviderStateMixin {
+  List<(String, String)> get myTaskTabs => widget.tabs;
   late final TabController _tabs = TabController(
     length: myTaskTabs.length,
     vsync: this,
@@ -49,9 +89,9 @@ class _MyTasksV2ScreenState extends ConsumerState<MyTasksV2Screen>
   }
 
   @override
-  void didUpdateWidget(MyTasksV2Screen old) {
+  void didUpdateWidget(_MyTasksTabs old) {
     super.didUpdateWidget(old);
-    if (widget.initialTab != old.initialTab && widget.initialTab != null) {
+    if (widget.wanted != old.wanted && widget.initialTab != null) {
       _tabs.index = _index(widget.initialTab);
     }
   }

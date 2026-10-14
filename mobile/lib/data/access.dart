@@ -131,3 +131,43 @@ PermissionGrid parsePermissions(Object? body) {
 /// hasPermission(grid, record, action): false when not loaded or missing.
 bool hasPermission(PermissionGrid? grid, String record, String action) =>
     grid?[record]?[action] == true;
+
+/// FR-ACL-21 (m8-polish MY_TASKS_TABS): My tasks tabs and the permissions each needs, in order.
+/// Mobile keys; the API's `day-timesheet` is `day` here.
+const myTasksTabRules = <(String, List<(String, String)>)>[
+  ('today', [('tasks', 'view'), ('time', 'view')]),
+  ('day', [('time', 'view')]),
+  ('due', [('tasks', 'view')]),
+  ('assigned', [('tasks', 'view')]),
+  ('accountable', [('tasks', 'view')]),
+  ('review', [('approvals', 'edit')]),
+  ('completed', [('tasks', 'view')]),
+];
+
+/// Allowed tab keys in display order; [] when none (My tasks is then hidden).
+List<String> myTasksTabsFor(PermissionGrid? grid) => [
+  for (final (k, need) in myTasksTabRules)
+    if (need.every((n) => hasPermission(grid, n.$1, n.$2))) k,
+];
+
+/// `myTasksTabs` from GET /auth/me/permissions (API keys mapped to mobile keys), or null.
+List<String>? parseMyTasksTabs(Object? body) {
+  final l = body is Map ? body['myTasksTabs'] : null;
+  if (l is! List) return null;
+  return [for (final k in l) k == 'day-timesheet' ? 'day' : '$k'];
+}
+
+/// resolveMyTasksTab: the wanted tab if allowed, else the next allowed one to its right
+/// (wrapping); unknown keys start at the first allowed tab. Null when none is allowed.
+String? resolveMyTasksTab(String? wanted, List<String> allowed) {
+  if (allowed.isEmpty) return null;
+  if (wanted != null && allowed.contains(wanted)) return wanted;
+  final keys = [for (final r in myTasksTabRules) r.$1];
+  final idx = keys.indexOf(wanted ?? '');
+  if (idx < 0) return allowed.first;
+  for (var i = 1; i <= keys.length; i++) {
+    final k = keys[(idx + i) % keys.length];
+    if (allowed.contains(k)) return k;
+  }
+  return allowed.first;
+}

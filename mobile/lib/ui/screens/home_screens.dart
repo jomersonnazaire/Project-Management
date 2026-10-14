@@ -97,12 +97,13 @@ class HomeScreen extends ConsumerWidget {
                             sc.forReview.container,
                             sc.forReview.onContainer,
                           ),
-                          KpiCard(
-                            'Hours this week',
-                            fmtHours(d.hours),
-                            sc.inProgress.container,
-                            sc.inProgress.onContainer,
-                          ),
+                          if (d.hours != null && canW(ref, 'time', 'view'))
+                            KpiCard(
+                              'Logged this week',
+                              fmtHours(d.hours!),
+                              sc.inProgress.container,
+                              sc.inProgress.onContainer,
+                            ),
                         ],
                       ),
                     ),
@@ -492,25 +493,29 @@ class MoreScreen extends ConsumerWidget {
           Card(
             child: Column(
               children: [
-                ListTile(
-                  key: const Key('moreDar'),
-                  leading: const Icon(Icons.summarize_outlined),
-                  title: const Text('Daily Accomplishment Report'),
-                  onTap: () => context.push('/dar'),
-                ),
-                ListTile(
-                  key: const Key('moreSavedReports'),
-                  leading: const Icon(Icons.bookmarks_outlined),
-                  title: const Text('My saved reports'),
-                  onTap: () => context.push('/dar/saved'),
-                ),
-                ListTile(
-                  key: const Key('moreLeave'),
-                  leading: const Icon(Icons.beach_access_outlined),
-                  title: const Text('Leave'),
-                  onTap: () => context.push('/leave'),
-                ),
-                if ((ref.watch(trackerPeopleProvider).value?.length ?? 0) > 1)
+                if (canW(ref, 'activities', 'view'))
+                  ListTile(
+                    key: const Key('moreDar'),
+                    leading: const Icon(Icons.summarize_outlined),
+                    title: const Text('Daily Accomplishment Report'),
+                    onTap: () => context.push('/dar'),
+                  ),
+                if (canW(ref, 'activities', 'view'))
+                  ListTile(
+                    key: const Key('moreSavedReports'),
+                    leading: const Icon(Icons.bookmarks_outlined),
+                    title: const Text('My saved reports'),
+                    onTap: () => context.push('/dar/saved'),
+                  ),
+                if (canW(ref, 'leave', 'view'))
+                  ListTile(
+                    key: const Key('moreLeave'),
+                    leading: const Icon(Icons.beach_access_outlined),
+                    title: const Text('Leave'),
+                    onTap: () => context.push('/leave'),
+                  ),
+                if (canW(ref, 'activities', 'view') &&
+                    (ref.watch(trackerPeopleProvider).value?.length ?? 0) > 1)
                   ListTile(
                     key: const Key('moreTimesheetReview'),
                     leading: const Icon(Icons.fact_check_outlined),

@@ -78,13 +78,29 @@ final projectAdminRepositoryProvider = Provider<ProjectAdminRepository>(
 
 /// GET /auth/me/permissions → {record: {action: bool}}, parsed strictly. Demo: the m8-polish
 /// default rules for the demo user's role.
+/// Raw GET /auth/me/permissions (null in demo mode or signed out).
+final permissionsBodyProvider = FutureProvider<Map<String, dynamic>?>((
+  ref,
+) async {
+  final u = await ref.watch(authProvider.future);
+  if (u == null || AppConfig.demoMode) return null;
+  return ref.watch(apiClientProvider).get('/auth/me/permissions');
+});
+
 final permissionsProvider = FutureProvider<PermissionGrid>((ref) async {
   final u = await ref.watch(authProvider.future);
   if (u == null) return const {};
   if (AppConfig.demoMode) return defaultPermissions(u.systemRole);
-  return parsePermissions(
-    await ref.watch(apiClientProvider).get('/auth/me/permissions'),
-  );
+  return parsePermissions(await ref.watch(permissionsBodyProvider.future));
+});
+
+/// FR-ACL-21: allowed My tasks tabs (server `myTasksTabs`, else the same rule locally).
+/// Null while permissions load.
+final myTasksTabsProvider = Provider<List<String>?>((ref) {
+  final grid = ref.watch(permissionsProvider).value;
+  if (grid == null) return null;
+  return parseMyTasksTabs(ref.watch(permissionsBodyProvider).value) ??
+      myTasksTabsFor(grid);
 });
 
 /// useCan(record, action). False while permissions load, so write controls never flash on.

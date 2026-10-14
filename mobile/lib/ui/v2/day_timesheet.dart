@@ -15,6 +15,12 @@ import '../../state/p2_providers.dart';
 import 'entry_sheet.dart';
 
 /// Day timesheet tab: the same widget/state as My tasks › Day timesheet, with Day | Hours list inside.
+/// Q-09 (M8) copy, mirrors packages/shared DAY_LOCK_DESCRIPTION.
+const dayLockDescription =
+    "You can edit a day's entries until the end of the second day after it. "
+    'For example, Oct 13 locks at 12:00 AM PHT on Oct 16.';
+const dayLockedTooltip = 'This day is locked';
+
 class DayTimesheetScreen extends ConsumerWidget {
   const DayTimesheetScreen({super.key});
   @override
@@ -184,6 +190,12 @@ class DayView extends ConsumerWidget {
                 ..sort((a, b) => a.running ? -1 : (b.running ? 1 : 0));
               final short = shortDate(day.date);
               final isToday = day.date == today;
+              final lockedOwn =
+                  day.own &&
+                  !day.canEdit &&
+                  day.weekLocked &&
+                  day.status != DayStatus.submitted &&
+                  canW(ref, 'activities', 'create');
               return RefreshIndicator(
                 onRefresh: () async => invalidateTracker(ref),
                 child: SingleChildScrollView(
@@ -209,6 +221,15 @@ class DayView extends ConsumerWidget {
                             label: day.location?.name ?? 'Location not set',
                             colors: sc.inProgress,
                           ),
+                          if (lockedOwn)
+                            const Tooltip(
+                              message: dayLockedTooltip,
+                              child: TextButton(
+                                key: Key('changeLocation'),
+                                onPressed: null,
+                                child: Text('Change'),
+                              ),
+                            ),
                           if (day.canEdit && day.own)
                             TextButton(
                               key: const Key('changeLocation'),
@@ -246,14 +267,42 @@ class DayView extends ConsumerWidget {
                           key: const Key('lockedBanner'),
                           colors: sc.todo,
                           text:
-                              "🔒 $short wasn't submitted. It was locked as it stood at the weekly lock.",
+                              "🔒 $short wasn't submitted. It locked as it stood. $dayLockDescription",
                         ),
                       if (day.own &&
-                          (day.canEdit || day.canSubmit || day.canReopen))
+                          (lockedOwn ||
+                              day.canEdit ||
+                              day.canSubmit ||
+                              day.canReopen))
                         Wrap(
                           spacing: Space.s,
                           runSpacing: Space.s,
                           children: [
+                            // Q-09: on a locked day the buttons stay visible but disabled.
+                            if (lockedOwn) ...[
+                              Tooltip(
+                                message: dayLockedTooltip,
+                                child: OutlinedButton.icon(
+                                  key: const Key('addEntry'),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Add entry'),
+                                  onPressed: null,
+                                ),
+                              ),
+                              Tooltip(
+                                message: dayLockedTooltip,
+                                child: FilledButton(
+                                  key: const Key('submitDay'),
+                                  style: FilledButton.styleFrom(
+                                    minimumSize: const Size(0, 40),
+                                  ),
+                                  onPressed: null,
+                                  child: Text(
+                                    isToday ? 'Submit day' : 'Submit $short',
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (day.canEdit)
                               OutlinedButton.icon(
                                 key: const Key('addEntry'),
@@ -332,7 +381,7 @@ class DayView extends ConsumerWidget {
                         _Banner(
                           colors: sc.todo,
                           icon: Icons.lock_outline,
-                          text: 'Locked. Ask an Admin to reopen this day.',
+                          text: 'This day is locked. Ask your supervisor or an Admin to reopen it.',
                         ),
                       const SizedBox(height: Space.m),
                       for (final l in day.leaveRows)

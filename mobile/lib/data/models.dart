@@ -342,10 +342,16 @@ class TimeWeek {
     required this.entries,
     required this.total,
     this.capacity = 40,
+    this.loggedTotal,
   });
   final DateTime weekStart;
   final List<TimeEntry> entries;
   final double total, capacity;
+
+  /// M8: all hours logged this week (task time + tracker), from `GET /time` `loggedTotal`.
+  /// Older APIs omit it; fall back to [total].
+  final double? loggedTotal;
+  double get logged => loggedTotal ?? total;
 }
 
 class LoggableProject {

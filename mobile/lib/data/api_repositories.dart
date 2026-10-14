@@ -176,6 +176,7 @@ class ApiTimeRepository implements TimeRepository {
       entries: _items(b).map(TimeEntry.fromJson).toList(),
       total: (b['total'] as num? ?? 0).toDouble(),
       capacity: (b['capacity'] as num? ?? 40).toDouble(),
+      loggedTotal: (b['loggedTotal'] as num?)?.toDouble(),
     );
   }
 

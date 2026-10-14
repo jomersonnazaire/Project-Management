@@ -266,8 +266,11 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
     try {
       // Changing the day's location goes through PUT /tracker/days/:date/location first (it
       // writes the audit). If that fails (e.g. DAY_LOCKED) the entry is not saved.
-      final current =
-          ref.read(dayTimesheetProvider((_date, null))).value?.location?.id;
+      final current = ref
+          .read(dayTimesheetProvider((_date, null)))
+          .value
+          ?.location
+          ?.id;
       if (!_edit && current != null && _dayLocation != current) {
         await repo.setDayLocation(_date, _dayLocation!);
       }

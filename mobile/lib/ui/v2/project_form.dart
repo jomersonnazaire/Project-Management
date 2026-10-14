@@ -164,7 +164,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
 
   Map<String, String> _validate(List<ProjectTypeInfo> types) {
     final e = <String, String>{};
-    if (!_edit && _template == null) e['templateId'] = 'Choose a template.';
+    // M8: template is optional on create (phases can be added or applied later).
     if (_name.text.trim().isEmpty) e['name'] = 'Project name is required.';
     if (_code.text.trim().isEmpty) {
       e['code'] = 'Project code is required.';
@@ -337,7 +337,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                 if (!_edit) ...[
                   dd(
                     'projectTemplateField',
-                    'Template *',
+                    'Template (optional)',
                     'templateId',
                     _template,
                     _templates,
