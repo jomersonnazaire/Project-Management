@@ -1,6 +1,6 @@
 # 16 — M8 changes for the mobile team
 
-**Status:** v0.1 handoff (2026-10-13, SGT) · **For:** OpsTrack mobile team (mobile work on hold) · **Sources:** pm-app `m8-polish` git history and diffs; docs 03, 09, 11, 14, 15; `design/reviews/M8_DESIGN_REVIEW.md`.
+**Status:** v0.2 (2026-10-14, SGT; v0.1 handoff 2026-10-13) · **For:** OpsTrack mobile team (mobile work on hold) · **Sources:** pm-app `m8-polish` git history and diffs; docs 03, 09, 11, 14, 15; `design/reviews/M8_DESIGN_REVIEW.md`.
 
 All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, message, details? } }`.
 
@@ -12,6 +12,7 @@ All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, mess
 | **LIVE API (not yet on main)** | Deployed to the live API App Service from `m8-polish` but not merged to `main`. Any m8-polish API change deployed this week runs on the API App Service even though `main` doesn't have it yet. |
 | **PREVIEW** | On `origin/m8-polish` (head `fdbeecb`) and the preview, not merged to `main` (36 commits ahead of `origin/main`). |
 | **PLANNED** | Decided or specified, not built. |
+| **Pending deploy** | Committed on `m8-polish` but not yet on the live API. |
 
 ## 1. API endpoints added or changed
 
@@ -24,7 +25,7 @@ All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, mess
 | `POST /tracker/stop` | LIVE | `{ entryId }` (idempotent) | unchanged | The server sets the end time and works out the minutes. |
 | `PATCH /tracker/entries/:id`, `DELETE /tracker/entries/:id` | LIVE | unchanged | unchanged | 422 `DAY_LOCKED` on a locked day. DEF-014 (`0a26965`, LIVE API (not yet on main)): 404 when the caller can't view the owner; 403 `VIEW_ONLY` when they can view it but don't own it. The web edit modal no longer sends `locationId` (PREVIEW). |
 | `POST /tracker/days/:date/submit` | LIVE | `{ locationId? }` | `{ day }` | 422 `DAY_LOCKED` past the lock; 422 `TIMER_RUNNING` with a running timer. |
-| `POST /tracker/days/:date/reopen` | LIVE | `{ userId, reason }` | `{ day }` | 403 `ADMIN_ONLY` past the lock for non-Admins (weekly lock today; Q-09 rule in §3 once built); 403 `NOT_SUPERVISOR`; 404 when outside scope; 422 `NOT_LOCKED`. |
+| `POST /tracker/days/:date/reopen` | LIVE | `{ userId, reason }` | `{ day }` | 403 `ADMIN_ONLY` past the lock for non-Admins (Q-09 day lock, see §3); 403 `NOT_SUPERVISOR`; 404 when outside scope; 422 `NOT_LOCKED`. |
 | Tracker and time writes with a future date | LIVE API (not yet on main) (`4126af4`) | — | — | Was 400 `VALIDATION_ERROR`, now **422 `FUTURE_DATE`** (`details[].path` = `date` or `workDate`). **Exception:** a future `timeOut` on `POST`/`PATCH /tracker/entries` still returns 400 `VALIDATION_ERROR` on `timeOut`. |
 | `GET /time` | LIVE API (not yet on main) (`8130425`) | unchanged | adds `loggedTotal` (task time + quick activities, hours to 2 dp) | Additive. `total` and `items` unchanged. Leave not included. |
 | `GET /lookups` options | LIVE API (not yet on main) | — | each option adds `key` (`string \| null`) and `system` (bool) | Additive. System type `quick_activity` ("Quick Activity") is seeded. |
@@ -36,6 +37,12 @@ All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, mess
 - `TimeEntry.locationId` is an optional per-entry override.
 - The effective location is `entry.locationId ?? day.locationId ?? null` (`services/tracker.ts`). The DAR view, saved copies and export all read the effective location.
 - The web modal now edits only the day location. Overrides already stored on entries are kept (not cleared). **Known gap:** older entries with their own location can show a different location in the DAR than the day field shows. No data migration was done (Lean's call).
+
+### Settings
+
+| Endpoint | Status | Request | Response | Notes |
+|---|---|---|---|---|
+| `GET /settings/time-lock`, `PUT /settings/time-lock` | Pending deploy (`c96c8da`; live API not updated yet) | PUT body `{ enabled, version }`; extra old fields (`weekday`, `hour`) are ignored | `policy: { enabled: true }` when the setting was never saved or is null | The old `weekday` and `hour` fields are removed from the response, the PUT body and storage. A never-saved setting means the lock is ON (doc 14 FR-ACT-36, v1.2.25). |
 
 ### Permissions and access
 
@@ -52,7 +59,7 @@ All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, mess
 | `POST /projects/:id/apply-template` | LIVE API (not yet on main) | `{ templateId, templateVersion? }` | Response includes `phasesAdded`, `phasesMerged`, `tasksAdded`, `alreadyApplied`. 422 `PROJECT_NOT_PLANNING`, 422 `TEMPLATE_NOT_PUBLISHED`, 409 `TEMPLATE_CHANGED`; 404 for PMs not on the project; 403 otherwise. |
 | `POST /projects/:id/phases` | LIVE API (not yet on main) | `{ name }` | 409 `DUPLICATE_NAME`, 422 `PROJECT_NOT_PLANNING`. |
 | `PATCH /projects/:id/phases` | LIVE API (not yet on main) | `{ name, newName }` | 409 `DUPLICATE_NAME` (`details` path `newName`); names match trimmed and case-insensitive. |
-| `DELETE /projects/:id/phases` | LIVE API (not yet on main) | unchanged | New: 409 `PHASE_NOT_EMPTY` with `details: { activityCount, taskCount }` (replaces `PHASE_HAS_TASKS`), and the permission changed from `tasks.delete` to `projects.edit` (Admin or the project's PM). Unchanged (already on main): 409 `PHASE_HAS_DOCUMENTS`. 204 on success. |
+| `DELETE /projects/:id/phases` | LIVE API (not yet on main) | unchanged | New: 409 `PHASE_NOT_EMPTY` with `details: { activityCount, taskCount }` (replaces `PHASE_HAS_TASKS`), and the permission changed from `tasks.delete` to `projects.edit` (Admin or the project's PM). Unchanged (already on main): 409 `PHASE_HAS_DOCUMENTS`. 204 on success. Note: `activityCount` equals `taskCount` by design (doc 14 §J). |
 | Activity delete in the Project PM view | LIVE API (not yet on main) | — | 409 `ACTIVITY_IN_USE` (applies to Admins too). |
 | Project create | LIVE API (not yet on main) | template now optional | Only 422 is `INVALID_CLIENT`. (`INVALID_ACTIVITY_TYPE` belongs to Project Type create/update and is already on main.) |
 
@@ -70,16 +77,18 @@ All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, mess
 | Module in Add entry is an optional free-text box ("Module (optional)"), up to 100 characters (`MODULE_MAX = 100`), not a dropdown (FR-ACT-20). | LIVE |
 | The running row in the Day timesheet has a "■ Time out" button (own entries only). It calls `POST /tracker/stop`, and the server sets the end time and works out the minutes. Other people see a "Running" badge. | LIVE |
 | A running timer auto-stops at 23:59 PHT and is flagged "Auto-stopped – please check". | LIVE (QA passed Oct 13 night run: TC-Q03, TC-T19) |
+| 2-day time lock (Q-09): a day can be edited until the end of the second day after it and locks at 00:00 PHT on the third day; changes after that need an Admin reopen. Locked writes return 422 `DAY_LOCKED`. | LIVE (live API since Oct 14 08:30 SGT, `98a6354`) |
 | My tasks tab order: Day timesheet comes right after Today (FR-TSK-22). | LIVE |
 | Disabled locked-day buttons show the tooltip "This day is locked" (`LockableButton`, which also sets `aria-disabled`). | PREVIEW (`fdbeecb`) |
 | Q-71 weekly totals: "Logged this week" (`GET /time` `loggedTotal`) and Team & workload Recorded (`recordedHours`) include quick activities and exclude leave. | API: LIVE API (not yet on main) (`8130425`); screens: PREVIEW (`3010d57`) |
 
-## 3. Planned (not built)
+## 3. Day lock and planned items
 
-### Q-09 day lock (decided 2026-10-13 by Jomerson)
+### Q-09 day lock (decided 2026-10-13 by Jomerson) — LIVE
+- **LIVE** on the live API since 2026-10-14 08:30 SGT (`98a6354`).
 - Rule: a day's entries can be edited until the end of the second day after it, and it locks at 00:00 PHT on the third day. For example, Oct 11 locks at 00:00 PHT on Oct 14.
-- After that, changes need an **Admin reopen**.
-- This replaces the Admin-set weekly lock (default Monday 12:00 PM PHT). The code today still uses the weekly boundary (`currentLockBoundary`, `weekLocked`). Expect `DAY_LOCKED` to fire earlier once this ships, and the `ADMIN_ONLY` reopen rule to follow the new boundary.
+- After that, changes need an **Admin reopen**. Locked writes return 422 `DAY_LOCKED`; the `ADMIN_ONLY` reopen rule follows the same boundary.
+- This replaces the Admin-set weekly lock (default Monday 12:00 PM PHT). The Admin setting is now a single on/off switch (see §1 Settings, pending deploy).
 - No approval step.
 - Page text (UIE's approved wording, replaces the Monday 12:00 PM text): "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16."
 
@@ -99,4 +108,10 @@ All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, mess
 - Show locked-day actions as disabled, not hidden. Quick actions follow today.
 - Read `myTasksTabs` / `defaultTab`. Hide time, activities and leave for Viewers (expect 403).
 - Tolerate the new additive fields (`loggedTotal`, lookup `key`/`system`).
-- Plan for the Q-09 lock boundary change.
+- Use the Q-09 day lock boundary (LIVE). Expect `GET /settings/time-lock` to return only `policy.enabled` once `c96c8da` is deployed.
+
+## Change log
+| Version | Date (SGT) | Change |
+|---|---|---|
+| v0.2 | 2026-10-14 | Auto-stop marked LIVE (QA passed Oct 13 night run: TC-Q03, TC-T19); `PHASE_NOT_EMPTY` note: `activityCount` equals `taskCount` by design (doc 14 §J); 2-day time lock moved from PLANNED to LIVE (`98a6354`, live since 08:30 SGT); new `GET`/`PUT /settings/time-lock` change (`policy: { enabled: true }` default, `weekday`/`hour` removed; `c96c8da`, pending deploy). |
+| v0.1 | 2026-10-13 | Handoff. |
