@@ -1,4 +1,6 @@
 import '../../state/v2_providers.dart';
+import '../../data/phases.dart';
+import '../v2/phases_ui.dart';
 import '../v2/project_form.dart';
 import '../../state/p2_providers.dart';
 import '../v2/dependencies.dart';
@@ -31,7 +33,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     return Scaffold(
       key: const Key('projectsScreen'),
       appBar: AppBar(title: const Text('Projects')),
-      floatingActionButton: canW(ref, 'projects', 'create')
+      floatingActionButton: canCreateProjectW(ref)
           ? FloatingActionButton.extended(
               key: const Key('newProjectFab'),
               onPressed: () => context.push('/projects/new'),
@@ -222,7 +224,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       floatingActionButton:
           _tab == ProjectTab.checklist &&
               project.hasValue &&
-              canPlanTasks(ref, project.requireValue)
+              canPlanTasks(ref, project.requireValue) &&
+              canCreateTaskW(ref)
           ? FloatingActionButton(
               key: const Key('newTaskFab'),
               tooltip: 'New task',
@@ -353,20 +356,97 @@ class ChecklistView extends ConsumerWidget {
     value: ref.watch(projectTasksProvider(projectId)),
     onRetry: () => ref.invalidate(projectTasksProvider(projectId)),
     data: (tasks) {
-      final phases = <String, List<Task>>{};
+      final project = ref.watch(projectProvider(projectId)).value;
+      // GET /projects/:id/phases (includes empty phases); older APIs: from the tasks.
+      final info = ref.watch(phasesProvider(projectId)).value ?? const [];
+      final phases = <String, List<Task>>{
+        for (final ph in info) ph.name: <Task>[],
+      };
       for (final t in tasks) {
         phases.putIfAbsent(t.phase ?? 'Unphased', () => []).add(t);
+      }
+      final editable = project != null && canEditPhases(ref, project, info);
+      if (phases.isEmpty && project != null) {
+        return NoPhasesView(project: project, canEdit: editable);
       }
       return ListView(
         key: const Key('checklist'),
         padding: const EdgeInsets.only(bottom: 96),
         children: [
+          if (editable)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.s),
+                child: Wrap(
+                  spacing: Space.s,
+                  children: [
+                    TextButton.icon(
+                      key: const Key('addPhase'),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add phase'),
+                      onPressed: () =>
+                          showPhaseNameSheet(context, ref, projectId),
+                    ),
+                    if (project.status == ProjectStatus.planning)
+                      TextButton(
+                        key: const Key('applyTemplate'),
+                        onPressed: () =>
+                            showApplyTemplateSheet(context, ref, projectId),
+                        child: const Text('Apply template'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           for (final (i, e) in phases.entries.indexed)
             ExpansionTile(
+              key: Key('phase_${e.key}'),
               initiallyExpanded: i < 2,
               title: Text(e.key),
-              trailing: Text(
-                '${e.value.where((t) => t.status == TaskStatus.done).length}/${e.value.length}',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${e.value.where((t) => t.status == TaskStatus.done).length}/${e.value.length}',
+                  ),
+                  if (editable && e.key != 'Unphased')
+                    PopupMenuButton<String>(
+                      key: Key('phaseMenu_${e.key}'),
+                      onSelected: (v) {
+                        final ph = info.firstWhere(
+                          (x) => x.name == e.key,
+                          orElse: () => PhaseInfo(
+                            name: e.key,
+                            taskCount: e.value.length,
+                            deletable: e.value.isEmpty,
+                          ),
+                        );
+                        if (v == 'rename') {
+                          showPhaseNameSheet(
+                            context,
+                            ref,
+                            projectId,
+                            rename: e.key,
+                          );
+                        } else {
+                          deletePhase(context, ref, projectId, ph);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          key: Key('renamePhase'),
+                          value: 'rename',
+                          child: Text('Rename phase'),
+                        ),
+                        PopupMenuItem(
+                          key: Key('deletePhase'),
+                          value: 'delete',
+                          child: Text('Delete phase'),
+                        ),
+                      ],
+                    ),
+                ],
               ),
               children: [
                 for (final t in e.value)

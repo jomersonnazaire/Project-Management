@@ -552,3 +552,21 @@ const darFromAfterTo = '"From" must be on or before "To".';
   }
   return null;
 }
+
+/// GET /settings/time-lock. New shape (c96c8da, Q-09): `{policy: {enabled, version}}` or
+/// `{enabled, version}`. Old shape: `{policy: {weekday, hour, ...}}` = weekly lock, i.e. on.
+class TimeLockPolicy {
+  const TimeLockPolicy({required this.enabled, this.legacyWeekly = false});
+  final bool enabled;
+
+  /// True when the API still returns the old weekly `{weekday, hour}` policy.
+  final bool legacyWeekly;
+
+  factory TimeLockPolicy.fromJson(Map<String, dynamic>? body) {
+    final p = body?['policy'] is Map ? body!['policy'] as Map : body;
+    if (p == null) return const TimeLockPolicy(enabled: true);
+    final e = p['enabled'];
+    final legacy = p.containsKey('weekday') || p.containsKey('hour');
+    return TimeLockPolicy(enabled: e is bool ? e : true, legacyWeekly: legacy);
+  }
+}

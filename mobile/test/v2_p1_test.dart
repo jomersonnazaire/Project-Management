@@ -224,7 +224,14 @@ void main() {
             '${(w.key! as ValueKey).value}'.startsWith('rowTimeOut_'),
       );
       expect(running, findsOneWidget);
+      await t.ensureVisible(running);
+      await t.pumpAndSettle();
       await t.tap(running);
+      await t.pumpAndSettle();
+      await t.drag(
+        find.byKey(const Key('dayTimesheet')),
+        const Offset(0, 2000),
+      );
       await t.pumpAndSettle();
       expect(
         t.widget<FilledButton>(find.byKey(const Key('submitDay'))).onPressed,
@@ -306,7 +313,7 @@ void main() {
         c.read(selectedDayProvider.notifier).set(DateTime(2026, 10, 10));
         await t.pumpAndSettle();
         await tapKey(t, 'addEntry');
-        expect(find.text('Add entry'), findsWidgets);
+        expect(find.text('Log task time'), findsWidgets);
         await tapKey(t, 'entrySave');
         expect(find.text('Choose a task or Quick activity.'), findsOneWidget);
         expect(find.text('Enter the time in.'), findsOneWidget);

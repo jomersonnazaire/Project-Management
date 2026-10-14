@@ -282,10 +282,19 @@ class DayView extends ConsumerWidget {
                             if (lockedOwn) ...[
                               Tooltip(
                                 message: dayLockedTooltip,
-                                child: OutlinedButton.icon(
+                                child: FilledButton.icon(
                                   key: const Key('addEntry'),
                                   icon: const Icon(Icons.add, size: 18),
-                                  label: const Text('Add entry'),
+                                  label: const Text('Log task time'),
+                                  onPressed: null,
+                                ),
+                              ),
+                              Tooltip(
+                                message: dayLockedTooltip,
+                                child: OutlinedButton.icon(
+                                  key: const Key('addQuickActivity'),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Add quick activity'),
                                   onPressed: null,
                                 ),
                               ),
@@ -303,11 +312,15 @@ class DayView extends ConsumerWidget {
                                 ),
                               ),
                             ],
-                            if (day.canEdit)
-                              OutlinedButton.icon(
+                            // D10: "Log task time" (primary) + "Add quick activity".
+                            if (day.canEdit) ...[
+                              FilledButton.icon(
                                 key: const Key('addEntry'),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 40),
+                                ),
                                 icon: const Icon(Icons.add, size: 18),
-                                label: const Text('Add entry'),
+                                label: const Text('Log task time'),
                                 onPressed: () async {
                                   if (await showEntrySheet(
                                     context,
@@ -318,6 +331,21 @@ class DayView extends ConsumerWidget {
                                   }
                                 },
                               ),
+                              OutlinedButton.icon(
+                                key: const Key('addQuickActivity'),
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text('Add quick activity'),
+                                onPressed: () async {
+                                  if (await showEntrySheet(
+                                    context,
+                                    mode: EntryMode.quick,
+                                    date: day.date,
+                                  )) {
+                                    invalidateTracker(ref);
+                                  }
+                                },
+                              ),
+                            ],
                             if (day.own && canW(ref, 'leave', 'create'))
                               OutlinedButton.icon(
                                 key: const Key('addLeave'),
@@ -384,6 +412,17 @@ class DayView extends ConsumerWidget {
                           text: 'This day is locked. Ask your supervisor or an Admin to reopen it.',
                         ),
                       const SizedBox(height: Space.m),
+                      if (day.own)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: Space.s),
+                          child: Text(
+                            ref.watch(timeLockProvider).value?.enabled == false
+                                ? 'Time entries never lock.'
+                                : dayLockDescription,
+                            key: const Key('dayLockNote'),
+                            style: t.bodySmall,
+                          ),
+                        ),
                       for (final l in day.leaveRows)
                         Card(
                           key: Key('leaveRow_${l.id}'),

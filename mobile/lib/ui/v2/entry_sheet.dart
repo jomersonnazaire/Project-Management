@@ -177,8 +177,8 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
 
   String get _titleText => switch (widget.mode) {
     EntryMode.timeIn => 'Time in',
-    EntryMode.quick => 'Quick activity',
-    EntryMode.add => 'Add entry',
+    EntryMode.quick => 'Add quick activity',
+    EntryMode.add => 'Log task time',
     EntryMode.edit => 'Edit entry',
   };
 

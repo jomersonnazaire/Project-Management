@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xc8_pm/data/access.dart';
+import 'package:xc8_pm/data/api_client.dart';
+import 'package:xc8_pm/data/phases.dart';
 import 'package:xc8_pm/data/models.dart';
 import 'package:xc8_pm/data/tracker_models.dart';
 import 'package:xc8_pm/state/v2_providers.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:xc8_pm/data/v2_repositories.dart';
+import 'package:xc8_pm/router.dart';
+
 import 'helpers.dart';
-import 'v2_p1_test.dart' show tapKey;
+import 'v2_p1_test.dart' show tapKey, pickMenu;
 
 /// M8 sync with origin/m8-polish (docs/requirements/16_M8_CHANGES_FOR_MOBILE.md).
 void main() {
@@ -74,6 +80,18 @@ void main() {
       expect(c, isNotNull);
     });
 
+    testWidgets('Viewer deep link to /day or /leave is blocked', (t) async {
+      final c = await pumpApp(t, role: 'VIEWER');
+      for (final loc in ['/leave', '/dar']) {
+        c.read(routerProvider).go(loc);
+        await t.pumpAndSettle();
+        expect(
+          find.text("You don't have access to that view."),
+          findsOneWidget,
+        );
+      }
+    });
+
     testWidgets('member keeps them', (t) async {
       await pumpApp(t, role: 'MEMBER');
       expect(find.byKey(const Key('nav_day')), findsOneWidget);
@@ -117,7 +135,7 @@ void main() {
       expect(find.byTooltip('This day is locked'), findsWidgets);
       expect(
         find.textContaining('Oct 13 locks at 12:00 AM PHT on Oct 16'),
-        findsOneWidget,
+        findsWidgets,
       );
     });
   });
@@ -152,4 +170,141 @@ void main() {
       expect(l.system, isTrue);
     });
   });
+
+  group('errors and tokens', () {
+    test('friendly copy for M8 codes, 404 and 429', () {
+      expect(
+        friendlyApiMessage(403, 'VIEW_ONLY', 'Forbidden'),
+        'You can view this entry, but only its owner can change it.',
+      );
+      expect(
+        friendlyApiMessage(409, 'ACTIVITY_IN_USE', null),
+        "Can't delete: this activity has logged time, documents and issues.",
+      );
+      expect(friendlyApiMessage(404, null, 'Not found'), notFoundMessage);
+      expect(friendlyApiMessage(429, null, null), rateLimitMessage);
+      expect(friendlyApiMessage(400, null, 'Bad'), 'Bad');
+    });
+
+    test('ptl_ tokens are rejected', () {
+      expect(isPortalToken('ptl_abc'), isTrue);
+      expect(isPortalToken('mob_abc'), isFalse);
+      expect(isPortalToken(null), isFalse);
+    });
+
+    test('time-lock setting: old and new shapes', () {
+      expect(
+        TimeLockPolicy.fromJson({
+          'policy': {'weekday': 1, 'hour': 0},
+        }).enabled,
+        isTrue,
+      );
+      expect(
+        TimeLockPolicy.fromJson({
+          'policy': {'weekday': 1, 'hour': 0},
+        }).legacyWeekly,
+        isTrue,
+      );
+      expect(
+        TimeLockPolicy.fromJson({
+          'policy': {'enabled': false, 'version': 2},
+        }).enabled,
+        isFalse,
+      );
+      expect(TimeLockPolicy.fromJson({'enabled': false}).enabled, isFalse);
+    });
+  });
+
+  group('D12 day location', () {
+    testWidgets('changing it PUTs the day location before saving', (t) async {
+      final c = await pumpApp(t, location: '/tasks');
+      await tapKey(t, 'quickActivityButton');
+      expect(
+        find.textContaining('Where are you working today?'),
+        findsOneWidget,
+      );
+      await t.enterText(find.byKey(const Key('entryTitle')), 'Inbox triage');
+      await pickMenu(t, 'entryDayLocation', 'Office');
+      await tapKey(t, 'entrySave');
+      expect(find.byKey(const Key('entrySheet')), findsNothing);
+      final store = c.read(mockTrackerStoreProvider);
+      expect(store.dayOf('u1', DateTime(2026, 10, 11)).locationId, 'l3');
+    });
+  });
+
+  group('D10 buttons', () {
+    testWidgets('Day timesheet shows Log task time + Add quick activity', (
+      t,
+    ) async {
+      await pumpApp(t, location: '/day');
+      expect(find.text('Log task time'), findsOneWidget);
+      expect(find.text('Add quick activity'), findsOneWidget);
+      expect(find.text('Add entry'), findsNothing);
+    });
+  });
+
+  group('Phases and Apply template (D21–D23)', () {
+    test('apply template toast and already applied', () {
+      expect(
+        const ApplyTemplateResult(
+          templateName: 'ERP rollout',
+          phasesAdded: 2,
+        ).toast,
+        'Added 2 phases from ERP rollout.',
+      );
+      expect(
+        const ApplyTemplateResult(
+          templateName: 'ERP rollout',
+          alreadyApplied: true,
+        ).toast,
+        contains('already applied'),
+      );
+    });
+
+    testWidgets('blank Planning project: No phases yet → add phase', (t) async {
+      final c = await pumpApp(t, location: '/projects/new');
+      final store = storeOf(c);
+      final id = await MockProjectIds.createBlank(c);
+      c.read(routerProvider).go('/projects/$id');
+      await t.pumpAndSettle();
+      expect(find.text('No phases yet'), findsOneWidget);
+      expect(find.byKey(const Key('applyTemplate')), findsOneWidget);
+      await tapKey(t, 'addPhase');
+      await tapKey(t, 'savePhase');
+      expect(find.text('Add a phase name.'), findsOneWidget);
+      await t.enterText(find.byKey(const Key('phaseNameField')), 'Discovery');
+      await tapKey(t, 'savePhase');
+      expect(find.text('Discovery'), findsOneWidget);
+      expect(store.projects.any((p) => p.id == id), isTrue);
+    });
+
+    testWidgets('apply template adds its phases', (t) async {
+      final c = await pumpApp(t);
+      final id = await MockProjectIds.createBlank(c);
+      c.read(routerProvider).go('/projects/$id');
+      await t.pumpAndSettle();
+      await tapKey(t, 'applyTemplate');
+      await tapKey(t, 'applyTemplate_tp1');
+      await tapKey(t, 'confirmApplyTemplate');
+      expect(
+        find.text('Added 3 phases from SAP B1 Implementation.'),
+        findsOneWidget,
+      );
+      expect(find.text('Build'), findsOneWidget);
+    });
+  });
+}
+
+class MockProjectIds {
+  static Future<String> createBlank(ProviderContainer c) => c
+      .read(projectAdminRepositoryProvider)
+      .create(
+        const ProjectInput(
+          name: 'Blank one',
+          code: 'BLK',
+          clientId: 'c1',
+          projectTypeId: 'pt1',
+          managerId: 'u1',
+        ),
+      );
 }

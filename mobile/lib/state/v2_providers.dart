@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/phases.dart';
 import '../data/access.dart';
 import '../data/models.dart' show Project, ProjectStatus;
 export '../data/access.dart' show PermissionGrid;
@@ -68,6 +69,17 @@ final darRepositoryProvider = Provider<DarRepository>(
     () => MockDarRepository(ref.watch(mockTrackerStoreProvider)),
   ),
 );
+final phaseRepositoryProvider = Provider<PhaseRepository>(
+  (ref) => _pick<PhaseRepository>(
+    ref,
+    () => ApiPhaseRepository(ref.watch(apiClientProvider)),
+    () => MockPhaseRepository(ref.watch(mockStoreProvider)),
+  ),
+);
+final phasesProvider = FutureProvider.family<List<PhaseInfo>, String>(
+  (ref, id) => ref.watch(phaseRepositoryProvider).phases(id),
+);
+
 final projectAdminRepositoryProvider = Provider<ProjectAdminRepository>(
   (ref) => _pick<ProjectAdminRepository>(
     ref,
@@ -102,6 +114,19 @@ final myTasksTabsProvider = Provider<List<String>?>((ref) {
   return parseMyTasksTabs(ref.watch(permissionsBodyProvider).value) ??
       myTasksTabsFor(grid);
 });
+
+/// D7: `canCreateProject` / `canCreateTask` from /auth/me/permissions, else the grid.
+bool canCreateProjectW(WidgetRef ref) {
+  final v = ref.watch(permissionsBodyProvider).value?['canCreateProject'];
+  return v is bool
+      ? v && canW(ref, 'projects', 'create')
+      : canW(ref, 'projects', 'create');
+}
+
+bool canCreateTaskW(WidgetRef ref) {
+  final v = ref.watch(permissionsBodyProvider).value?['canCreateTask'];
+  return v is bool ? v : true;
+}
 
 /// useCan(record, action). False while permissions load, so write controls never flash on.
 bool can(Ref ref, String record, String action) =>
@@ -169,6 +194,19 @@ final dayTimesheetProvider =
     FutureProvider.family<TrackerDay, (DateTime, String?)>(
       (ref, a) => ref.watch(trackerRepositoryProvider).day(a.$1, userId: a.$2),
     );
+
+/// Time-lock setting (either shape). Null when unknown (demo, 403, older API).
+final timeLockProvider = FutureProvider<TimeLockPolicy?>((ref) async {
+  if (AppConfig.demoMode) return const TimeLockPolicy(enabled: true);
+  try {
+    return TimeLockPolicy.fromJson(
+      await ref.watch(apiClientProvider).get('/settings/time-lock'),
+    );
+  } catch (_) {
+    return null;
+  }
+});
+
 final runningProvider = FutureProvider<Running>(
   (ref) => ref.watch(trackerRepositoryProvider).running(),
 );
