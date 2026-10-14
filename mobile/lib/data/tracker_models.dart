@@ -8,11 +8,22 @@ IdName? _ref(Object? v) =>
 DateTime? _inst(Object? v) => v is String ? DateTime.tryParse(v) : null;
 
 class Lookup {
-  const Lookup(this.id, this.name);
+  const Lookup(this.id, this.name, {this.key, this.system = false});
   final String id, name;
-  factory Lookup.fromJson(Map<String, dynamic> j) =>
-      Lookup('${j['id']}', '${j['name']}');
+
+  /// Stable key for system values (`quick_activity`), else null (m8-polish, additive).
+  final String? key;
+  final bool system;
+  factory Lookup.fromJson(Map<String, dynamic> j) => Lookup(
+    '${j['id']}',
+    '${j['name']}',
+    key: j['key'] as String?,
+    system: j['system'] == true,
+  );
 }
+
+/// FR-ACT-32: the system Activity type preselected by Add quick activity.
+const quickActivityKey = 'quick_activity';
 
 class Lookups {
   const Lookups({required this.activityTypes, required this.locations});
@@ -249,7 +260,9 @@ class EntryDraft {
     if (!update && taskId != null) 'taskId': taskId,
     if (title != null) 'title': title,
     'activityTypeId': activityTypeId,
-    'locationId': locationId,
+    // Per-entry location is no longer edited (the day location is); an update never sends it,
+    // so overrides already stored on entries are kept.
+    if (!update && locationId != null) 'locationId': locationId,
     if (!update && dayLocationId != null) 'dayLocationId': dayLocationId,
     'billable': ?billable,
     if (type != null) 'type': type!.api,

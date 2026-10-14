@@ -31,6 +31,7 @@ class MockTrackerStore {
     Lookup('a5', 'Testing / UAT'),
     Lookup('a6', 'Development'),
     Lookup('a7', 'Internal meeting'),
+    Lookup('aq', 'Quick Activity', key: quickActivityKey, system: true),
     Lookup('a8', 'Client meeting'),
     Lookup('a9', 'Pre-sales'),
     Lookup('a10', 'Admin work'),

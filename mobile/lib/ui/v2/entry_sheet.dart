@@ -111,7 +111,7 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
   final _remarks = TextEditingController();
   bool _timer = true;
   TimeOfDay? _in, _out;
-  String? _dayLocation, _activity, _location;
+  String? _dayLocation, _activity;
   TimeType _type = TimeType.execution;
   bool? _billable;
   String? _hint;
@@ -134,7 +134,6 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
       _module.text = e.module ?? '';
       _remarks.text = e.notes ?? '';
       _activity = e.activityType?.id;
-      _location = e.locationOverridden ? e.location?.id : null;
       _billable = e.billable;
       _type = e.type ?? TimeType.execution;
       _timer = false;
@@ -241,7 +240,7 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
       taskId: _isQuick ? null : _target,
       title: _isQuick ? _title.text.trim() : null,
       activityTypeId: _activity!,
-      locationId: _location,
+      locationId: null,
       dayLocationId: _dayLocation,
       billable: _billable ?? !_isQuick,
       type: _isQuick ? null : _type,
@@ -265,6 +264,13 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
     setState(() => _busy = true);
     final repo = ref.read(trackerRepositoryProvider);
     try {
+      // Changing the day's location goes through PUT /tracker/days/:date/location first (it
+      // writes the audit). If that fails (e.g. DAY_LOCKED) the entry is not saved.
+      final current =
+          ref.read(dayTimesheetProvider((_date, null))).value?.location?.id;
+      if (!_edit && current != null && _dayLocation != current) {
+        await repo.setDayLocation(_date, _dayLocation!);
+      }
       String? switchFrom;
       if (!_edit && _timer) {
         // Ask before starting when a timer is already running (FR-ACT-26).
@@ -333,6 +339,13 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
       if (!mounted) return;
       setState(() {
         _errors = {...e.fields};
+        // 422 FUTURE_DATE reports `date` or `workDate`.
+        final dateErr = _errors.remove('workDate') ?? _errors.remove('date');
+        if (dateErr != null || e.code == 'FUTURE_DATE') {
+          _errors.clear();
+          _error = e.message;
+          return;
+        }
         if (e.code == 'LOCATION_NEEDED') {
           _errors['dayLocationId'] = 'Choose where you’re working today.';
         }
@@ -387,9 +400,18 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
     final options =
         ref.watch(timeOptionsProvider).value ?? const <LoggableProject>[];
     final day = ref.watch(dayTimesheetProvider((_date, null))).value;
-    final needsDayLocation =
-        !_edit && day != null && day.location == null && day.entries.isEmpty;
-    final todaysLocation = day?.location?.name;
+    // Doc 16 §2: "Where are you working today? *" is required on every new entry, prefilled
+    // with the day location; another value changes the whole day (PUT …/location).
+    final needsDayLocation = !_edit && day != null;
+    if (needsDayLocation && _dayLocation == null && day.location != null) {
+      _dayLocation = day.location!.id;
+    }
+    if (_isQuick && _activity == null && lookups != null) {
+      _activity = lookups.activityTypes
+          .where((a) => a.key == quickActivityKey)
+          .firstOrNull
+          ?.id;
+    }
     final manual = _edit
         ? (widget.entry!.timed && !widget.entry!.running)
         : !_timer;
@@ -558,9 +580,9 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
               DropdownMenu<String>(
                 key: const Key('entryDayLocation'),
                 expandedInsets: EdgeInsets.zero,
+                initialSelection: _dayLocation,
                 label: Text('${whereWorkingQuestion(_date, _today)} *'),
                 errorText: _errors['dayLocationId'],
-                initialSelection: _dayLocation,
                 dropdownMenuEntries: [
                   for (final l in lookups?.locations ?? const <Lookup>[])
                     DropdownMenuEntry(value: l.id, label: l.name),
@@ -616,28 +638,6 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
                     setState(() => _type = v ?? TimeType.execution),
               ),
             ],
-            gap(),
-            KeyedSubtree(
-              key: const Key('entryLocation'),
-              child: DropdownMenu<String?>(
-                key: ValueKey('entryLocation_$todaysLocation'),
-                expandedInsets: EdgeInsets.zero,
-                label: const Text('Location'),
-                helperText: 'Change for this entry only',
-                initialSelection: _location,
-                dropdownMenuEntries: [
-                  DropdownMenuEntry<String?>(
-                    value: null,
-                    label: todaysLocation == null
-                        ? "Day's location"
-                        : "Today's location ($todaysLocation)",
-                  ),
-                  for (final l in lookups?.locations ?? const <Lookup>[])
-                    DropdownMenuEntry<String?>(value: l.id, label: l.name),
-                ],
-                onSelected: (v) => setState(() => _location = v),
-              ),
-            ),
             gap(),
             Text('Billable', style: t.labelLarge),
             const SizedBox(height: Space.xs),

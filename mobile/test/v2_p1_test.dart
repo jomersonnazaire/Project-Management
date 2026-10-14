@@ -158,12 +158,13 @@ void main() {
       },
     );
 
-    testWidgets('quick activity requires a title and activity type', (t) async {
+    testWidgets('quick activity requires a title; Quick Activity type preselected', (t) async {
       await pumpApp(t, location: '/tasks');
       await tapKey(t, 'quickActivityButton');
       await tapKey(t, 'entrySave');
       expect(find.text('Add a title.'), findsOneWidget);
-      expect(find.text('Choose an activity type.'), findsOneWidget);
+      expect(find.text('Choose an activity type.'), findsNothing);
+      expect(find.byKey(const ValueKey('entryActivityType_aq')), findsOneWidget);
       await t.enterText(find.byKey(const Key('entryTitle')), 'Inbox triage');
       await pickMenu(t, 'entryActivityType', 'Integration');
       await tapKey(t, 'entrySave');
