@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xc8_pm/data/access.dart';
@@ -246,6 +248,69 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets(
+      'retest B1: first sheet with late lookups shows the day location',
+      (t) async {
+        final gate = Completer<void>();
+        final c = await pumpApp(
+          t,
+          location: '/day',
+          overrides: [
+            lookupsProvider.overrideWith((ref) async {
+              await gate.future;
+              return ref.watch(trackerRepositoryProvider).lookups();
+            }),
+          ],
+        );
+        await tapKey(t, 'addQuickActivity');
+        gate.complete();
+        await t.pumpAndSettle();
+        final field = t.widget<TextField>(
+          find.descendant(
+            of: find.byKey(const Key('entryDayLocation')),
+            matching: find.byType(TextField),
+          ),
+        );
+        expect(field.controller?.text, 'Onsite');
+        expect(c, isNotNull);
+      },
+    );
+
+    testWidgets('retest B13: already applied template shows the web copy', (
+      t,
+    ) async {
+      final c = await pumpApp(t);
+      final id = await MockProjectIds.createBlank(c);
+      await c.read(phaseRepositoryProvider).applyTemplate(id, 'tp1');
+      c.read(routerProvider).go('/projects/$id');
+      await t.pumpAndSettle();
+      await tapKey(t, 'applyTemplate');
+      await tapKey(t, 'applyTemplate_tp1');
+      expect(
+        find.text(
+          'SAP B1 Implementation is already applied to this project. Applying it again adds nothing.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        t
+            .widget<FilledButton>(find.byKey(const Key('confirmApplyTemplate')))
+            .onPressed,
+        isNull,
+      );
+    });
+
+    test('alreadyApplied needs every template activity', () {
+      const p = TemplatePreview(
+        phases: ['Build'],
+        activityCount: 1,
+        activities: [('Build', 'Configure')],
+      );
+      expect(p.alreadyApplied(['build '], [('Build', 'configure')]), isTrue);
+      expect(p.alreadyApplied(['Build'], []), isFalse);
+      expect(p.alreadyApplied([], [('Build', 'Configure')]), isFalse);
     });
 
     testWidgets('B3: ?tab=day-timesheet opens the Day timesheet tab', (

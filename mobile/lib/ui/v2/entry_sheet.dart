@@ -583,7 +583,11 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
               // QA B1: rebuild when the day (and its location) loads, since
               // initialSelection only applies on the first build.
               KeyedSubtree(
-                key: ValueKey('dayLoc_${_dayLocation ?? ''}'),
+                // Retest B1: also rebuild when the location list arrives (lookups load late on
+                // the first sheet of a session).
+                key: ValueKey(
+                  'dayLoc_${_dayLocation ?? ''}_${lookups?.locations.length ?? -1}',
+                ),
                 child: DropdownMenu<String>(
                   key: const Key('entryDayLocation'),
                   expandedInsets: EdgeInsets.zero,

@@ -260,7 +260,13 @@ Future<void> showApplyTemplateSheet(
   if (!context.mounted) return;
   String? picked;
   String? preview;
+  var already = false;
   var busy = false;
+  final tasks = [
+    for (final t
+        in ref.read(projectTasksProvider(projectId)).value ?? const <Task>[])
+      (t.phase, t.name),
+  ];
   final existing = [
     for (final p
         in ref.read(phasesProvider(projectId)).value ?? const <PhaseInfo>[])
@@ -294,6 +300,7 @@ Future<void> showApplyTemplateSheet(
                   setS(() {
                     picked = v;
                     preview = null;
+                    already = false;
                   });
                   if (v == null) return;
                   try {
@@ -301,7 +308,16 @@ Future<void> showApplyTemplateSheet(
                         .read(phaseRepositoryProvider)
                         .templatePreview(v);
                     if (picked == v) {
-                      setS(() => preview = p.confirmText(existing));
+                      setS(() {
+                        already = p.alreadyApplied(existing, tasks);
+                        final name = templates
+                            .firstWhere((t) => t.id == v)
+                            .name;
+                        // Retest B13: same copy as the web (DEF-016).
+                        preview = already
+                            ? '$name is already applied to this project. Applying it again adds nothing.'
+                            : p.confirmText(existing);
+                      });
                     }
                   } catch (_) {}
                 },
@@ -327,7 +343,7 @@ Future<void> showApplyTemplateSheet(
               const SizedBox(height: Space.s),
               FilledButton(
                 key: const Key('confirmApplyTemplate'),
-                onPressed: picked == null || busy
+                onPressed: picked == null || busy || already
                     ? null
                     : () async {
                         setS(() => busy = true);

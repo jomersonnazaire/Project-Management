@@ -58,9 +58,29 @@ class ApplyTemplateResult {
 
 /// Template content for the Apply template preview (GET /templates/:id).
 class TemplatePreview {
-  const TemplatePreview({required this.phases, required this.activityCount});
+  const TemplatePreview({
+    required this.phases,
+    required this.activityCount,
+    this.activities = const [],
+  });
   final List<String> phases;
   final int activityCount;
+
+  /// (phase name, activity name) per template activity.
+  final List<(String, String)> activities;
+
+  /// DEF-016 (web ProjectTabs): already applied = every template phase exists and holds an
+  /// activity with the same name (trimmed, case-insensitive).
+  bool alreadyApplied(
+    Iterable<String> existingPhases,
+    Iterable<(String?, String)> projectTasks,
+  ) {
+    String k(String? x) => (x ?? '').trim().toLowerCase();
+    final have = {for (final e in existingPhases) k(e)};
+    if (phases.any((p) => !have.contains(k(p)))) return false;
+    final acts = {for (final t in projectTasks) '${k(t.$1)}\u0000${k(t.$2)}'};
+    return activities.every((a) => acts.contains('${k(a.$1)}\u0000${k(a.$2)}'));
+  }
 
   /// D22 confirm text against the project's current phases (names match ignoring case/spaces).
   String confirmText(Iterable<String> existing) {
@@ -96,7 +116,15 @@ class ApiPhaseRepository implements PhaseRepository {
   Future<TemplatePreview> templatePreview(String templateId) async {
     final b = await api.get('/templates/$templateId');
     final t = (b['template'] as Map?) ?? b;
+    final phaseName = {
+      for (final p in (t['phases'] as List? ?? const []))
+        '${(p as Map)['id']}': '${p['name']}',
+    };
     return TemplatePreview(
+      activities: [
+        for (final a in (t['activities'] as List? ?? const []))
+          (phaseName['${(a as Map)['phaseId']}'] ?? '', '${a['name']}'),
+      ],
       phases: [
         for (final p in (t['phases'] as List? ?? const []))
           '${(p as Map)['name']}',
