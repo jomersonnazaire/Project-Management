@@ -388,11 +388,12 @@ describe('Time lock setting (Q-09)', () => {
     const { w, kickoff } = await setup();
     const get = await w.admin.agent.get('/api/v1/settings/time-lock');
     expect(get.body).toMatchObject({
-      policy: { enabled: true, weekday: 1, hour: 12 },
+      policy: { enabled: true },
       boundary: '2026-10-19',
       description:
         "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
     });
+    expect(get.body.policy).toEqual({ enabled: true });
     const fields = await entryFields();
     const log = () =>
       w.member.agent
@@ -404,24 +405,68 @@ describe('Time lock setting (Q-09)', () => {
     const put = await w.admin.agent
       .put('/api/v1/settings/time-lock')
       .set(CSRF)
-      .send({ enabled: false, weekday: 1, hour: 12, version: get.body.version });
+      .send({ enabled: false, version: get.body.version });
     expect(put.status).toBe(200);
     expect(put.body).toMatchObject({ boundary: null, version: 1 });
+    expect(put.body.policy).toEqual({ enabled: false });
+    const stored = await SettingModel.findOne({ key: 'timeLock' }).lean();
+    expect(stored?.timeLock).toEqual({ enabled: false });
     expect((await log()).status).toBe(201);
     // Stale version → 409; PMs (no Edit on settings) → 403.
     const stale = await w.admin.agent
       .put('/api/v1/settings/time-lock')
       .set(CSRF)
-      .send({ enabled: false, weekday: 1, hour: 12, version: 0 });
+      .send({ enabled: false, version: 0 });
     expect(stale.status).toBe(409);
     expect(
       (
         await w.pm.agent
           .put('/api/v1/settings/time-lock')
           .set(CSRF)
-          .send({ enabled: false, weekday: 1, hour: 12, version: 1 })
+          .send({ enabled: false, version: 1 })
       ).status,
     ).toBe(403);
+  });
+});
+
+describe('Time lock: never saved, null and legacy (Q-09)', () => {
+  it('never saved: GET returns enabled true with no weekday or hour', async () => {
+    const { w } = await setup();
+    await SettingModel.deleteMany({ key: 'timeLock' });
+    const get = await w.admin.agent.get('/api/v1/settings/time-lock');
+    expect(get.status).toBe(200);
+    expect(get.body.policy).toEqual({ enabled: true });
+    expect(get.body.policy).not.toHaveProperty('weekday');
+    expect(get.body.policy).not.toHaveProperty('hour');
+    expect(get.body.boundary).toBe('2026-10-19');
+  });
+  it('a stored null enabled (with legacy fields) reads and enforces as ON', async () => {
+    const { w, kickoff } = await setup();
+    await SettingModel.collection.updateOne(
+      { key: 'timeLock' },
+      { $set: { timeLock: { enabled: null, weekday: 1, hour: 12 }, version: 3 } },
+      { upsert: true },
+    );
+    const get = await w.admin.agent.get('/api/v1/settings/time-lock');
+    expect(get.body.policy).toEqual({ enabled: true });
+    expect(get.body.version).toBe(3);
+    const fields = await entryFields();
+    const res = await w.member.agent
+      .post('/api/v1/time')
+      .set(CSRF)
+      .send({ taskId: kickoff._id.toString(), workDate: '2026-10-16', hours: 1, ...fields });
+    expect(res.body.error.code).toBe('DAY_LOCKED');
+  });
+  it('PUT from an old client with weekday/hour is accepted and stores only enabled', async () => {
+    const { w } = await setup();
+    const put = await w.admin.agent
+      .put('/api/v1/settings/time-lock')
+      .set(CSRF)
+      .send({ enabled: true, weekday: 2, hour: 9, version: 0 });
+    expect(put.status).toBe(200);
+    expect(put.body.policy).toEqual({ enabled: true });
+    const stored = await SettingModel.findOne({ key: 'timeLock' }).lean();
+    expect(stored?.timeLock).toEqual({ enabled: true });
   });
 });
 

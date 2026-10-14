@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { describeTimeLock, type TimeLockPolicy } from '@xc8/shared';
+import { describeTimeLock, normalizeTimeLock, type TimeLockPolicy } from '@xc8/shared';
 import { saveErrorMessage } from '../../api/client';
 import { useSaveTimeLock, useTimeLock } from '../../api/m4Hooks';
 import { useCan } from '../../auth/useCan';
@@ -18,8 +18,10 @@ export function TimeLockCard() {
   // Local edits over the saved policy; cleared after a save.
   const [edit, setForm] = useState<TimeLockPolicy | null>(null);
   const [saved, setSaved] = useState(false);
-  const form = edit ?? q.data?.policy ?? null;
-  const dirty = form && q.data && JSON.stringify(form) !== JSON.stringify(q.data.policy);
+  // Never saved / null `enabled` shows ON; only `enabled` is kept (no legacy weekday/hour).
+  const savedPolicy = q.data ? normalizeTimeLock(q.data.policy) : null;
+  const form = edit ?? savedPolicy;
+  const dirty = form && savedPolicy && form.enabled !== savedPolicy.enabled;
   return (
     <div className="card mb-6">
       <div className="card-body">
@@ -37,7 +39,7 @@ export function TimeLockCard() {
               e.preventDefault();
               setSaved(false);
               save.mutate(
-                { ...form, version: q.data!.version },
+                { enabled: form.enabled, version: q.data!.version },
                 {
                   onSuccess: () => {
                     setForm(null);
@@ -55,7 +57,7 @@ export function TimeLockCard() {
                 role="switch"
                 checked={form.enabled}
                 disabled={!canEdit}
-                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+                onChange={(e) => setForm({ enabled: e.target.checked })}
               />
               <label className="form-check-label" htmlFor="tl-enabled">
                 Lock days after two days

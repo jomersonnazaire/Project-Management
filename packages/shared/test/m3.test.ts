@@ -17,6 +17,8 @@ import {
   dayLockAt,
   describeTimeLock,
   DEFAULT_TIME_LOCK,
+  normalizeTimeLock,
+  timeLockSchema,
   effortVariance,
   formatSignedHours,
   formatOverrun,
@@ -130,8 +132,16 @@ describe('Day lock (FR-TIME-04, Q-09: 00:00 PHT on the third day)', () => {
     expect(iso(timeLockBoundary(new Date('2026-12-31T16:00:00Z')))).toBe('2026-12-30');
     expect(iso(timeLockBoundary(new Date('2027-01-01T16:00:00Z')))).toBe('2026-12-31');
   });
-  it('legacy weekday/hour are ignored; off locks nothing', () => {
-    const wed5 = { enabled: true, weekday: 3, hour: 17 };
+  it('null/missing enabled means ON; legacy fields are stripped; off locks nothing', () => {
+    expect(normalizeTimeLock(undefined)).toEqual({ enabled: true });
+    expect(normalizeTimeLock({ enabled: null })).toEqual({ enabled: true });
+    expect(normalizeTimeLock({ enabled: false })).toEqual({ enabled: false });
+    expect(timeLockSchema.parse({ enabled: false, weekday: 1, hour: 12, version: 2 })).toEqual({
+      enabled: false,
+      version: 2,
+    });
+    expect(iso(timeLockBoundary(new Date('2026-10-14T09:00:00Z'), null))).toBe('2026-10-12');
+    const wed5 = { enabled: true };
     expect(iso(timeLockBoundary(new Date('2026-10-14T09:00:00Z'), wed5))).toBe('2026-10-12');
     expect(timeLockBoundary(new Date(), { ...wed5, enabled: false }).getTime()).toBe(0);
   });
@@ -139,9 +149,7 @@ describe('Day lock (FR-TIME-04, Q-09: 00:00 PHT on the third day)', () => {
     expect(describeTimeLock(DEFAULT_TIME_LOCK)).toBe(
       "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
     );
-    expect(describeTimeLock({ enabled: false, weekday: 1, hour: 12 })).toBe(
-      'Time entries never lock.',
-    );
+    expect(describeTimeLock({ enabled: false })).toBe('Time entries never lock.');
   });
 });
 

@@ -153,7 +153,7 @@ export function settingsRouter(registry: RouteRegistry) {
     return {
       policy,
       version,
-      boundary: policy.enabled ? toDateOnly(timeLockBoundary(new Date(), policy)) : null,
+      boundary: policy.enabled !== false ? toDateOnly(timeLockBoundary(new Date(), policy)) : null,
       description: describeTimeLock(policy),
     };
   };
@@ -169,7 +169,7 @@ export function settingsRouter(registry: RouteRegistry) {
         'VERSION_CONFLICT',
       );
     }
-    const policy = { enabled: input.enabled, weekday: input.weekday, hour: input.hour };
+    const policy = { enabled: input.enabled };
     await SettingModel.findOneAndUpdate(
       { key: TIME_LOCK_KEY, version: input.version },
       { $set: { timeLock: policy, updatedBy: currentUser(req)._id }, $inc: { version: 1 } },

@@ -423,7 +423,7 @@ describe('Admin › Settings › Time entry lock (Q-09)', () => {
         return {
           status: 200,
           body: {
-            policy: { enabled: true, weekday: 2, hour: 9 },
+            policy: { enabled: false },
             version: 1,
             boundary: null,
             description: '',
@@ -433,7 +433,7 @@ describe('Admin › Settings › Time entry lock (Q-09)', () => {
         return {
           status: 200,
           body: {
-            policy: { enabled: true, weekday: 1, hour: 12 },
+            policy: { enabled: true },
             version: 0,
             boundary: '2026-10-19',
             description: '',
@@ -456,11 +456,34 @@ describe('Admin › Settings › Time entry lock (Q-09)', () => {
       const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT');
       expect(JSON.parse(String(call?.[1]?.body))).toEqual({
         enabled: false,
-        weekday: 1,
-        hour: 12,
         version: 0,
       });
     });
+  });
+});
+
+describe('Admin › Settings › Time entry lock: never saved', () => {
+  it('shows the switch ON when enabled is null (never saved)', async () => {
+    api('ADMIN', (url) =>
+      url.endsWith('/settings/time-lock')
+        ? {
+            status: 200,
+            body: {
+              policy: { enabled: null },
+              version: 0,
+              boundary: '2026-10-19',
+              description: '',
+            },
+          }
+        : undefined,
+    );
+    renderAt('/admin/settings', <App />);
+    expect(await screen.findByRole('switch')).toBeChecked();
+    expect(
+      screen.getByText(
+        "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 

@@ -245,21 +245,22 @@ export function weekStartOf(d: Date): Date {
  * Q-09 (Jomerson, v1.3): a day's entries can be edited until the end of the second day after it;
  * the day locks at 00:00 Asia/Manila (PHT) on the third day (Oct 11 locks at 00:00 PHT on Oct 14,
  * Oct 13 at 00:00 PHT on Oct 16). After that only an Admin reopening the day allows changes.
- * The Admin setting keeps `enabled` (off = nothing locks); `weekday` and `hour` are legacy fields
- * from the old weekly lock and are ignored.
+ * The Admin setting is just `enabled` (off = nothing locks). A never-saved or null `enabled`
+ * means ON. The old weekly-lock `weekday` / `hour` fields are gone; extra fields sent by old
+ * clients are ignored (stripped by the schema).
  */
 export interface TimeLockPolicy {
   enabled: boolean;
-  /** Legacy (weekly lock); ignored. */
-  weekday: number;
-  /** Legacy (weekly lock); ignored. */
-  hour: number;
 }
-export const DEFAULT_TIME_LOCK: TimeLockPolicy = { enabled: true, weekday: 1, hour: 12 };
+export const DEFAULT_TIME_LOCK: TimeLockPolicy = { enabled: true };
+/** Never-saved, null or missing `enabled` → ON; legacy fields are dropped. */
+export function normalizeTimeLock(
+  t: { enabled?: boolean | null } | null | undefined,
+): TimeLockPolicy {
+  return { enabled: t?.enabled !== false };
+}
 export const timeLockSchema = z.object({
   enabled: z.boolean(),
-  weekday: z.number().int().min(0).max(6),
-  hour: z.number().int().min(0).max(23),
   version: z.number().int().min(0),
 });
 export type TimeLockInput = z.infer<typeof timeLockSchema>;
@@ -278,8 +279,8 @@ export function formatHour12(hour: number): string {
 export const DAY_LOCK_GRACE_DAYS = 2;
 export const DAY_LOCK_DESCRIPTION =
   "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.";
-export function describeTimeLock(p: TimeLockPolicy): string {
-  if (!p.enabled) return 'Time entries never lock.';
+export function describeTimeLock(p: Partial<TimeLockPolicy> | null | undefined): string {
+  if (p?.enabled === false) return 'Time entries never lock.';
   return DAY_LOCK_DESCRIPTION;
 }
 
@@ -295,9 +296,9 @@ export function dayLockAt(workDate: Date): Date {
  */
 export function timeLockBoundary(
   now = new Date(),
-  policy: TimeLockPolicy = DEFAULT_TIME_LOCK,
+  policy: Partial<TimeLockPolicy> | null | undefined = DEFAULT_TIME_LOCK,
 ): Date {
-  if (!policy.enabled) return new Date(0);
+  if (policy?.enabled === false) return new Date(0);
   const ph = new Date(now.getTime() + 8 * 3_600_000);
   const today = new Date(`${ph.toISOString().slice(0, 10)}T00:00:00.000Z`);
   return new Date(today.getTime() - DAY_LOCK_GRACE_DAYS * 86_400_000);
