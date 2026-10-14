@@ -100,7 +100,7 @@ class HomeScreen extends ConsumerWidget {
                           if (d.hours != null && canW(ref, 'time', 'view'))
                             KpiCard(
                               'Logged this week',
-                              fmtHours(d.hours!),
+                              formatHHMM(d.hours! * 60),
                               sc.inProgress.container,
                               sc.inProgress.onContainer,
                             ),

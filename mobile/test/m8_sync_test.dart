@@ -232,6 +232,154 @@ void main() {
     });
   });
 
+  group('QA PR #21', () {
+    testWidgets('B1/B8: quick activity location prefilled + helper', (t) async {
+      await pumpApp(t, location: '/day');
+      await tapKey(t, 'addQuickActivity');
+      final menu = t.widget<DropdownMenu<String>>(
+        find.byKey(const Key('entryDayLocation')),
+      );
+      expect(menu.initialSelection, 'l1');
+      expect(
+        find.text(
+          'From today’s location. Changing it updates the location for all of today’s entries.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('B3: ?tab=day-timesheet opens the Day timesheet tab', (
+      t,
+    ) async {
+      await pumpApp(t, location: '/tasks?tab=day-timesheet');
+      expect(find.byKey(const Key('noTabAccessNotice')), findsNothing);
+      expect(find.byKey(const Key('dayTimesheet')), findsOneWidget);
+    });
+
+    testWidgets('B6: no weekly-lock wording on the Day timesheet', (t) async {
+      await pumpApp(t, location: '/day');
+      expect(find.textContaining('weekly lock'), findsNothing);
+      await t.ensureVisible(find.byKey(const Key('submitDay')));
+      await t.pumpAndSettle();
+      await tapKey(t, 'submitDay');
+      expect(find.textContaining('weekly lock'), findsNothing);
+      expect(find.textContaining('Before the day lock'), findsOneWidget);
+    });
+
+    testWidgets(
+      'B4/B10: non-empty phase shows inline reason; empty → Delete phase',
+      (t) async {
+        final c = await pumpApp(t);
+        final id = await MockProjectIds.createBlank(c);
+        final repo = c.read(phaseRepositoryProvider);
+        await repo.add(id, 'Cutover');
+        c.read(routerProvider).go('/projects/$id');
+        await t.pumpAndSettle();
+        expect(find.text('Started blank'), findsOneWidget);
+        await tapKey(t, 'phaseMenu_Cutover');
+        await t.tap(find.text('Delete phase').last);
+        await t.pumpAndSettle();
+        expect(find.text('Delete phase Cutover?'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('confirmDeletePhase')),
+            matching: find.text('Delete phase'),
+          ),
+          findsOneWidget,
+        );
+        await tapKey(t, 'confirmDeletePhase');
+        expect(find.text('No phases yet'), findsOneWidget);
+      },
+    );
+
+    testWidgets('B4: phase with activities → inline red line, no SnackBar', (
+      t,
+    ) async {
+      final c = await pumpApp(t);
+      final id = await MockProjectIds.createBlank(c);
+      storeOf(c).tasks.add(
+        Task(
+          id: 'tq1',
+          projectId: id,
+          name: 'Cutover rehearsal',
+          status: TaskStatus.todo,
+          phase: 'Cutover',
+        ),
+      );
+      c.read(routerProvider).go('/projects/$id');
+      await t.pumpAndSettle();
+      await tapKey(t, 'phaseMenu_Cutover');
+      await t.tap(find.text('Delete phase').last);
+      await t.pumpAndSettle();
+      expect(
+        find.text(
+          "Can't delete: this phase still has 1 activity. Delete it first.",
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('phaseDeleteError')), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('B5/B7: apply template preview; empty state goes away', (
+      t,
+    ) async {
+      final c = await pumpApp(t);
+      final id = await MockProjectIds.createBlank(c);
+      c.read(routerProvider).go('/projects/$id');
+      await t.pumpAndSettle();
+      await tapKey(t, 'addPhase');
+      await t.enterText(find.byKey(const Key('phaseNameField')), 'Build');
+      await tapKey(t, 'savePhase');
+      expect(find.text('No phases yet'), findsNothing);
+      await tapKey(t, 'applyTemplate');
+      await tapKey(t, 'applyTemplate_tp1');
+      expect(
+        find.text(
+          'This adds 2 new phases, merges 1 into an existing phase with the same name, and adds 0 activities. Nothing is replaced.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('B9: New project template None – start blank + helper', (
+      t,
+    ) async {
+      await pumpApp(t, location: '/projects/new');
+      expect(find.text('None – start blank'), findsWidgets);
+      expect(
+        find.text(
+          'Pre-fills a standard set of phases and activities. You can change them later.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    test('B11: FUTURE_DATE uses the server message', () {
+      expect(
+        friendlyApiMessage(422, 'FUTURE_DATE', "Date can't be in the future."),
+        "Date can't be in the future.",
+      );
+    });
+
+    test('K1: Started from label', () {
+      expect(
+        storeLabel('SAP B1 Implementation', 3),
+        'Started from SAP B1 Implementation v3',
+      );
+    });
+
+    testWidgets('K2: Day timesheet picker disables future dates', (t) async {
+      await pumpApp(t, location: '/day');
+      await tapKey(t, 'pickDate');
+      final picker = t.widget<CalendarDatePicker>(
+        find.byType(CalendarDatePicker),
+      );
+      expect(picker.selectableDayPredicate!(DateTime(2026, 10, 12)), isFalse);
+      expect(picker.selectableDayPredicate!(DateTime(2026, 10, 11)), isTrue);
+    });
+  });
+
   group('D10 buttons', () {
     testWidgets('Day timesheet shows Log task time + Add quick activity', (
       t,
@@ -295,6 +443,8 @@ void main() {
   });
 }
 
+void qaGroup() {}
+
 class MockProjectIds {
   static Future<String> createBlank(ProviderContainer c) => c
       .read(projectAdminRepositoryProvider)
@@ -308,3 +458,13 @@ class MockProjectIds {
         ),
       );
 }
+
+String storeLabel(String name, int v) => Project(
+  id: 'x',
+  name: 'x',
+  clientName: '',
+  status: ProjectStatus.planning,
+  progress: 0,
+  templateName: name,
+  templateVersion: v,
+).startedFrom;

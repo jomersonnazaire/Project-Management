@@ -406,6 +406,7 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
       initialDate: _day,
       firstDate: DateTime(_today.year - 1),
       lastDate: _today, // no future dates
+      selectableDayPredicate: (d) => !d.isAfter(_today),
     );
     if (d != null) _selectDay(d);
   }

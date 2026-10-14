@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models.dart';
 import '../../data/ph_time.dart';
 import '../../data/tracker_models.dart';
+import '../../state/providers.dart' show timeWeekProvider;
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../../data/access.dart' show resolveMyTasksTab, myTasksTabRules;
@@ -49,13 +50,17 @@ class MyTasksV2Screen extends ConsumerWidget {
       key: ValueKey(allowed.join(',')),
       tabs: tabs,
       initialTab: resolveMyTasksTab(
-        initialTab ?? _defaultTab(ref.watch(permissionsBodyProvider).value),
+        _alias(initialTab) ??
+            _defaultTab(ref.watch(permissionsBodyProvider).value),
         allowed,
       ),
-      wanted: initialTab,
+      wanted: _alias(initialTab),
     );
   }
 }
+
+/// QA B3: the API/web key `day-timesheet` is the mobile `day` tab.
+String? _alias(String? k) => k == 'day-timesheet' ? 'day' : k;
 
 /// D7 `defaultTab` (API key; `day-timesheet` → `day`).
 String? _defaultTab(Map<String, dynamic>? body) {
@@ -224,7 +229,16 @@ class _TaskTab extends ConsumerWidget {
                 'due' => 'Nothing due today',
                 _ => 'No tasks here right now.',
               };
-        final logged = week.value?.fold<int>(0, (a, e) => a + e.minutes) ?? 0;
+        // D16 (QA B2): loggedTotal from GET /time (tasks + quick activities).
+        final today = ref.watch(todayPhProvider);
+        final tw = ref
+            .watch(
+              timeWeekProvider(DateTime(today.year, today.month, today.day)),
+            )
+            .value;
+        final logged = tw != null
+            ? (tw.logged * 60).round()
+            : week.value?.fold<int>(0, (a, e) => a + e.minutes) ?? 0;
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(myTasksV2Provider),
           child: ListView(

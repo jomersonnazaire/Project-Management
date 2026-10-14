@@ -580,20 +580,27 @@ class _TrackerEntrySheetState extends ConsumerState<TrackerEntrySheet> {
             ],
             if (needsDayLocation) ...[
               gap(),
-              DropdownMenu<String>(
-                key: const Key('entryDayLocation'),
-                expandedInsets: EdgeInsets.zero,
-                initialSelection: _dayLocation,
-                label: Text('${whereWorkingQuestion(_date, _today)} *'),
-                errorText: _errors['dayLocationId'],
-                dropdownMenuEntries: [
-                  for (final l in lookups?.locations ?? const <Lookup>[])
-                    DropdownMenuEntry(value: l.id, label: l.name),
-                ],
-                onSelected: (v) => setState(() {
-                  _dayLocation = v;
-                  _errors.remove('dayLocationId');
-                }),
+              // QA B1: rebuild when the day (and its location) loads, since
+              // initialSelection only applies on the first build.
+              KeyedSubtree(
+                key: ValueKey('dayLoc_${_dayLocation ?? ''}'),
+                child: DropdownMenu<String>(
+                  key: const Key('entryDayLocation'),
+                  expandedInsets: EdgeInsets.zero,
+                  initialSelection: _dayLocation,
+                  label: Text('${whereWorkingQuestion(_date, _today)} *'),
+                  hintText: 'Choose a location',
+                  helperText: dayLocationHelper(_date, _today),
+                  errorText: _errors['dayLocationId'],
+                  dropdownMenuEntries: [
+                    for (final l in lookups?.locations ?? const <Lookup>[])
+                      DropdownMenuEntry(value: l.id, label: l.name),
+                  ],
+                  onSelected: (v) => setState(() {
+                    _dayLocation = v;
+                    _errors.remove('dayLocationId');
+                  }),
+                ),
               ),
             ],
             gap(),
@@ -778,3 +785,8 @@ Future<void> timeOut(
     if (context.mounted) showError(context, e);
   }
 }
+
+/// D12 helper (QA B8).
+String dayLocationHelper(DateTime date, DateTime today) => date == today
+    ? 'From today’s location. Changing it updates the location for all of today’s entries.'
+    : 'From this day’s location. Changing it updates the location for all of its entries.';

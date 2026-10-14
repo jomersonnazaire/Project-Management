@@ -124,7 +124,16 @@ class Project {
     this.code,
     this.can,
     this.archived = false,
+    this.templateName,
+    this.templateVersion,
   });
+
+  /// D20: "Started from {template} v{n}" / "Started blank".
+  final String? templateName;
+  final int? templateVersion;
+  String get startedFrom => templateName == null
+      ? 'Started blank'
+      : 'Started from $templateName${templateVersion == null ? '' : ' v$templateVersion'}';
   final bool archived;
 
   /// Server `can` flags (edit, planTasks, activity…); null in demo data.
@@ -147,6 +156,8 @@ class Project {
   final int taskCount;
 
   factory Project.fromJson(Map<String, dynamic> j) => Project(
+    templateName: j['templateName'] as String?,
+    templateVersion: (j['templateVersion'] as num?)?.toInt(),
     id: j['id'] as String,
     name: j['name'] as String? ?? '',
     clientName: j['clientName'] as String? ?? '',

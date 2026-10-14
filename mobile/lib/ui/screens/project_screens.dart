@@ -399,11 +399,24 @@ class ChecklistView extends ConsumerWidget {
                 ),
               ),
             ),
+          if (project != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.m, 0),
+              child: Text(
+                project.startedFrom,
+                key: const Key('startedFrom'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           for (final (i, e) in phases.entries.indexed)
             ExpansionTile(
               key: Key('phase_${e.key}'),
               initiallyExpanded: i < 2,
               title: Text(e.key),
+              subtitle: switch (phaseDeleteErrorFor(ref, projectId, e.key)) {
+                final m? => PhaseInlineError(m),
+                null => null,
+              },
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

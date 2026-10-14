@@ -335,13 +335,24 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                     ),
                   ),
                 if (!_edit) ...[
-                  dd(
-                    'projectTemplateField',
-                    'Template (optional)',
-                    'templateId',
-                    _template,
-                    _templates,
-                    (v) => setState(() => _template = v),
+                  DropdownMenu<String>(
+                    key: const Key('projectTemplateField'),
+                    expandedInsets: EdgeInsets.zero,
+                    label: const Text('Template (optional)'),
+                    helperText: 'Pre-fills a standard set of phases and activities. You can change them later.',
+                    errorText: _errors['templateId'],
+                    initialSelection: _template ?? '',
+                    dropdownMenuEntries: [
+                      const DropdownMenuEntry(
+                        value: '',
+                        label: 'None – start blank',
+                      ),
+                      for (final i in _templates)
+                        DropdownMenuEntry(value: i.id, label: i.name),
+                    ],
+                    onSelected: (v) => setState(
+                      () => _template = (v == null || v.isEmpty) ? null : v,
+                    ),
                   ),
                   gap(),
                 ],

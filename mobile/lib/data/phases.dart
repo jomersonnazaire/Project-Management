@@ -56,7 +56,27 @@ class ApplyTemplateResult {
   }
 }
 
+/// Template content for the Apply template preview (GET /templates/:id).
+class TemplatePreview {
+  const TemplatePreview({required this.phases, required this.activityCount});
+  final List<String> phases;
+  final int activityCount;
+
+  /// D22 confirm text against the project's current phases (names match ignoring case/spaces).
+  String confirmText(Iterable<String> existing) {
+    final have = {for (final e in existing) e.trim().toLowerCase()};
+    final names = {for (final p in phases) p.trim().toLowerCase()};
+    final m = names.where(have.contains).length;
+    final n = names.length - m;
+    String c(int v, String one, String many) => '$v ${v == 1 ? one : many}';
+    return 'This adds ${c(n, 'new phase', 'new phases')}, merges '
+        '${c(m, 'into an existing phase', 'into existing phases')} with the same name, and adds '
+        '${c(activityCount, 'activity', 'activities')}. Nothing is replaced.';
+  }
+}
+
 abstract interface class PhaseRepository {
+  Future<TemplatePreview> templatePreview(String templateId);
   Future<List<PhaseInfo>> phases(String projectId);
   Future<void> add(String projectId, String name);
   Future<void> rename(String projectId, String name, String newName);
@@ -71,6 +91,19 @@ abstract interface class PhaseRepository {
 class ApiPhaseRepository implements PhaseRepository {
   ApiPhaseRepository(this.api);
   final ApiClient api;
+
+  @override
+  Future<TemplatePreview> templatePreview(String templateId) async {
+    final b = await api.get('/templates/$templateId');
+    final t = (b['template'] as Map?) ?? b;
+    return TemplatePreview(
+      phases: [
+        for (final p in (t['phases'] as List? ?? const []))
+          '${(p as Map)['name']}',
+      ],
+      activityCount: (t['activities'] as List? ?? const []).length,
+    );
+  }
 
   @override
   Future<List<PhaseInfo>> phases(String projectId) async {
@@ -136,6 +169,13 @@ class MockPhaseRepository implements PhaseRepository {
   };
 
   String _k(String s) => s.trim().toLowerCase();
+
+  @override
+  Future<TemplatePreview> templatePreview(String templateId) async =>
+      TemplatePreview(
+        phases: templatePhases[templateId] ?? const [],
+        activityCount: 0,
+      );
 
   Project _project(String id) => store.projects.firstWhere(
     (p) => p.id == id,

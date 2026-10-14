@@ -394,7 +394,7 @@ class MockTrackerRepository implements TrackerRepository {
   static const _dayLocked =
       'This day is locked. Ask your supervisor or an Admin to reopen it.';
   static const _dayLockedAdmin =
-      'This day is past the weekly lock. Only an Admin can reopen it.';
+      'This day is past the day lock. Only an Admin can reopen it.';
 
   void _validate(EntryDraft d) {
     final f = <String, String>{};
@@ -1024,6 +1024,11 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
         managerId: p.managerId,
         startDate: p.startDate,
         code: p.code,
+        templateName: (await templates())
+            .where((t) => t.id == p.templateId)
+            .firstOrNull
+            ?.name,
+        templateVersion: p.templateId == null ? null : p.templateVersion,
       ),
     );
     if (p.memberIds != null) {

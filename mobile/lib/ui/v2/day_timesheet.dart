@@ -132,6 +132,7 @@ class DayView extends ConsumerWidget {
         initialDate: date,
         firstDate: DateTime(today.year - 1),
         lastDate: today,
+        selectableDayPredicate: (d) => !d.isAfter(today),
       );
       if (d != null) ref.read(selectedDayProvider.notifier).set(d);
     }
@@ -508,8 +509,8 @@ class DayView extends ConsumerWidget {
                       ),
                       const SizedBox(height: Space.s),
                       Text(
-                        'Submit day locks the day’s entries; before the weekly lock your supervisor or an Admin can '
-                        'reopen it with a reason. After the weekly lock only an Admin can reopen a day.',
+                        'Submit day locks the day’s entries; before the day lock your supervisor or an Admin can '
+                        'reopen it with a reason. After the day lock only an Admin can reopen a day.',
                         style: t.bodySmall,
                       ),
                       if (day.own &&

@@ -253,7 +253,7 @@ const apiCodeMessages = <String, String>{
   'TEMPLATE_CHANGED':
       'This template has a newer version. Review the preview again.',
   'DUPLICATE_NAME': 'A phase with this name already exists.',
-  'FUTURE_DATE': "You can't log time for a future date.",
+  'FUTURE_DATE': "Date can't be in the future.",
 };
 
 /// 404 copy: DEF-015 (a PM not on the project) and DEF-014 (an entry you can't view).
@@ -265,7 +265,7 @@ const rateLimitMessage =
 String friendlyApiMessage(int status, String? code, String? serverMsg) {
   if (code != null && apiCodeMessages.containsKey(code)) {
     // Keep a specific server message (e.g. PHASE_NOT_EMPTY counts) when present.
-    return code == 'VIEW_ONLY' || code == 'FUTURE_DATE' || serverMsg == null
+    return code == 'VIEW_ONLY' || serverMsg == null
         ? apiCodeMessages[code]!
         : serverMsg;
   }

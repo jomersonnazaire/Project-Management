@@ -17,10 +17,45 @@ bool canEditPhases(WidgetRef ref, Project p, List<PhaseInfo> phases) {
   return u.isAdmin || p.status == ProjectStatus.planning;
 }
 
-void _refresh(WidgetRef ref, String projectId) {
-  ref.invalidate(phasesProvider(projectId));
+/// QA B7: wait for the fresh phase list so "No phases yet" never lingers.
+Future<void> _refresh(WidgetRef ref, String projectId) async {
   ref.invalidate(projectTasksProvider(projectId));
   ref.invalidate(projectProvider(projectId));
+  try {
+    ref.invalidate(phasesProvider(projectId));
+    await ref.read(phasesProvider(projectId).future);
+  } catch (_) {}
+}
+
+/// QA B4 (x7): the "Can't delete" reason shown inline under the phase header.
+class PhaseDeleteError extends Notifier<(String, String, String)?> {
+  @override
+  (String, String, String)? build() => null;
+  void set((String, String, String)? v) => state = v;
+}
+
+/// (projectId, phase, message) or null.
+final phaseDeleteErrorProvider =
+    NotifierProvider<PhaseDeleteError, (String, String, String)?>(
+      PhaseDeleteError.new,
+    );
+
+String? phaseDeleteErrorFor(WidgetRef ref, String projectId, String phase) {
+  final e = ref.watch(phaseDeleteErrorProvider);
+  return e != null && e.$1 == projectId && e.$2 == phase ? e.$3 : null;
+}
+
+/// Inline red line (#b8240a).
+class PhaseInlineError extends StatelessWidget {
+  const PhaseInlineError(this.text, {super.key});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    key: const Key('phaseDeleteError'),
+    style: Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: const Color(0xFFB8240A)),
+  );
 }
 
 /// "No phases yet" (design x5).
@@ -140,7 +175,7 @@ Future<void> showPhaseNameSheet(
                         } else {
                           await repo.rename(projectId, rename, n);
                         }
-                        _refresh(ref, projectId);
+                        await _refresh(ref, projectId);
                         if (ctx.mounted) Navigator.pop(ctx);
                       } on ApiException catch (e) {
                         setS(() {
@@ -168,12 +203,15 @@ Future<void> deletePhase(
   String projectId,
   PhaseInfo ph,
 ) async {
+  final err = ref.read(phaseDeleteErrorProvider.notifier);
+  err.set(null);
   if (!ph.deletable) {
-    showError(
-      context,
+    err.set((
+      projectId,
+      ph.name,
       ph.deleteBlockedReason ??
-          "Can't delete: this phase still has ${ph.taskCount} activities. Delete them first.",
-    );
+          "Can't delete: this phase still has ${ph.taskCount} ${ph.taskCount == 1 ? 'activity. Delete it first.' : 'activities. Delete them first.'}",
+    ));
     return;
   }
   final ok = await showDialog<bool>(
@@ -192,7 +230,7 @@ Future<void> deletePhase(
             minimumSize: const Size(0, 40),
           ),
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Delete'),
+          child: const Text('Delete phase'),
         ),
       ],
     ),
@@ -200,7 +238,13 @@ Future<void> deletePhase(
   if (ok != true) return;
   try {
     await ref.read(phaseRepositoryProvider).delete(projectId, ph.name);
-    _refresh(ref, projectId);
+    await _refresh(ref, projectId);
+  } on ApiException catch (e) {
+    if (e.code == 'PHASE_NOT_EMPTY' || e.code == 'PHASE_HAS_DOCUMENTS') {
+      err.set((projectId, ph.name, e.message));
+    } else if (context.mounted) {
+      showError(context, e);
+    }
   } catch (e) {
     if (context.mounted) showError(context, e);
   }
@@ -215,7 +259,13 @@ Future<void> showApplyTemplateSheet(
   final templates = await ref.read(projectAdminRepositoryProvider).templates();
   if (!context.mounted) return;
   String? picked;
+  String? preview;
   var busy = false;
+  final existing = [
+    for (final p
+        in ref.read(phasesProvider(projectId)).value ?? const <PhaseInfo>[])
+      p.name,
+  ];
   final msg = await showModalBottomSheet<String>(
     context: context,
     useRootNavigator: true,
@@ -240,7 +290,21 @@ Future<void> showApplyTemplateSheet(
               const SizedBox(height: Space.m),
               RadioGroup<String>(
                 groupValue: picked,
-                onChanged: (v) => setS(() => picked = v),
+                onChanged: (v) async {
+                  setS(() {
+                    picked = v;
+                    preview = null;
+                  });
+                  if (v == null) return;
+                  try {
+                    final p = await ref
+                        .read(phaseRepositoryProvider)
+                        .templatePreview(v);
+                    if (picked == v) {
+                      setS(() => preview = p.confirmText(existing));
+                    }
+                  } catch (_) {}
+                },
                 child: Column(
                   children: [
                     for (final t in templates)
@@ -255,6 +319,11 @@ Future<void> showApplyTemplateSheet(
                   ],
                 ),
               ),
+              if (preview != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: Space.s),
+                  child: Text(preview!, key: const Key('applyTemplatePreview')),
+                ),
               const SizedBox(height: Space.s),
               FilledButton(
                 key: const Key('confirmApplyTemplate'),
