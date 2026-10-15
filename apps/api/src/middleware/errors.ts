@@ -53,7 +53,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
               name: err.name,
               message: err.message,
               stack: err.stack,
-              cause: (err as any).cause,
+              cause: (err as { cause?: unknown }).cause,
             }
           : err;
       console.error('[TEST] 500 Error:', JSON.stringify(errDetails, null, 2));
