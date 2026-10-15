@@ -18,7 +18,7 @@ import {
 import type { Request } from 'express';
 import type { Types } from 'mongoose';
 import { AUTHENTICATED, perm, type RouteRegistry } from '../access/registry.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
+import { forbidden, notFound } from '../lib/errors.js';
 import { unprocessable } from '../lib/http422.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
@@ -108,11 +108,10 @@ async function toDtos(entries: EntryDoc[]): Promise<TimeEntryDto[]> {
 /** Checks the work date and the 24 h/day cap for `userId` (excluding `ignoreId`). */
 async function assertDateAndCap(user: ScopeUser, workDate: Date, hours: number, ignoreId?: Id) {
   if (workDate > todayPH()) {
-    throw badRequest(
-      "Work date can't be in the future.",
-      [{ path: 'workDate', message: "Work date can't be in the future." }],
-      'VALIDATION_ERROR',
-    );
+    // FR-ACT-33: 422 FUTURE_DATE (was 400 VALIDATION_ERROR before m8-polish).
+    throw unprocessable("Work date can't be in the future.", 'FUTURE_DATE', [
+      { path: 'workDate', message: "Work date can't be in the future." },
+    ]);
   }
   // FR-ACT-24: the one shared lock rule (submitted day, or past the weekly lock and not reopened).
   await assertDayEditable(user._id, workDate);
@@ -163,11 +162,25 @@ export function timeRouter(registry: RouteRegistry) {
       .sort({ workDate: 1, createdAt: 1 })
       .lean()) as EntryDoc[];
     const items = await toDtos(entries);
+    // Tracked time counts toward the logged total: add quick activities (no task).
+    const quick = await TimeEntryModel.aggregate<{ hours: number }>([
+      {
+        $match: {
+          userId: user._id,
+          workDate: { $gte: start, $lte: end },
+          taskId: null,
+          running: { $ne: true },
+        },
+      },
+      { $group: { _id: null, hours: { $sum: '$hours' } } },
+    ]);
+    const total = items.reduce((s, e) => s + e.hours, 0);
     const body: TimeWeekDto = {
       weekStart: toDateOnly(start),
       weekEnd: toDateOnly(end),
       items,
-      total: items.reduce((s, e) => s + e.hours, 0),
+      total,
+      loggedTotal: Math.round((total + (quick[0]?.hours ?? 0)) * 100) / 100,
       capacity: user.weeklyCapacityHours ?? 40,
       lockDescription: describeTimeLock((await loadTimeLock()).policy),
     };

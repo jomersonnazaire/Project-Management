@@ -239,6 +239,40 @@ describe('Team & workload (FR-WL-01..03)', () => {
   });
 });
 
+describe('AC-55.1 (Q-71): Team & workload Recorded', () => {
+  it('1h task + 30m quick activity (recordedHours 1.5) shows 01:30', async () => {
+    api('ADMIN', (url) =>
+      url.includes('/workload')
+        ? {
+            status: 200,
+            body: {
+              weekStart: '2026-10-12',
+              weekEnd: '2026-10-18',
+              note: 'n',
+              items: [
+                {
+                  person: { id: 'm', name: 'Quick Member', email: 'm@x.example', active: true },
+                  jobRole: 'CONSULTANT',
+                  teams: [],
+                  capacityHours: 40,
+                  assignedHours: 0,
+                  recordedHours: 1.5,
+                  waitingHours: 0,
+                  utilizationPct: 4,
+                  assignedPct: 0,
+                  overAssigned: false,
+                },
+              ],
+            },
+          }
+        : undefined,
+    );
+    renderAt('/workload', <App />);
+    const row = (await screen.findByText('Quick Member')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('01:30')).toBeInTheDocument();
+  });
+});
+
 describe('DR-29: Team & workload for Members', () => {
   it("doesn't ask for /teams and builds the team filter from the rows", async () => {
     const row = (id: string, teams: { id: string; name: string }[]) => ({
@@ -383,13 +417,13 @@ describe('Reports (FR-RPT-01..06, FR-ISS-16)', () => {
 });
 
 describe('Admin › Settings › Time entry lock (Q-09)', () => {
-  it('shows the default and saves a new day and time with the version', async () => {
+  it('shows the Q-09 day lock wording and saves the on/off switch with the version', async () => {
     const fetchMock = api('ADMIN', (url, init) => {
       if (url.endsWith('/settings/time-lock') && init?.method === 'PUT')
         return {
           status: 200,
           body: {
-            policy: { enabled: true, weekday: 2, hour: 9 },
+            policy: { enabled: false },
             version: 1,
             boundary: null,
             description: '',
@@ -399,7 +433,7 @@ describe('Admin › Settings › Time entry lock (Q-09)', () => {
         return {
           status: 200,
           body: {
-            policy: { enabled: true, weekday: 1, hour: 12 },
+            policy: { enabled: true },
             version: 0,
             boundary: '2026-10-19',
             description: '',
@@ -409,23 +443,47 @@ describe('Admin › Settings › Time entry lock (Q-09)', () => {
     });
     renderAt('/admin/settings', <App />);
     expect(
-      await screen.findByText("Last week's entries lock every Monday at 12:00 PM Philippine time."),
+      await screen.findByText(
+        "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
+      ),
     ).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText('Day'), '2');
-    await userEvent.selectOptions(screen.getByLabelText('Time (Philippine time)'), '9');
-    expect(
-      screen.getByText("Last week's entries lock every Tuesday at 9:00 AM Philippine time."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/Monday/)).toBeNull();
+    expect(screen.queryByLabelText('Day')).toBeNull();
+    await userEvent.click(screen.getByRole('switch'));
+    expect(screen.getByText('Time entries never lock.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT');
       expect(JSON.parse(String(call?.[1]?.body))).toEqual({
-        enabled: true,
-        weekday: 2,
-        hour: 9,
+        enabled: false,
         version: 0,
       });
     });
+  });
+});
+
+describe('Admin › Settings › Time entry lock: never saved', () => {
+  it('shows the switch ON when enabled is null (never saved)', async () => {
+    api('ADMIN', (url) =>
+      url.endsWith('/settings/time-lock')
+        ? {
+            status: 200,
+            body: {
+              policy: { enabled: null },
+              version: 0,
+              boundary: '2026-10-19',
+              description: '',
+            },
+          }
+        : undefined,
+    );
+    renderAt('/admin/settings', <App />);
+    expect(await screen.findByRole('switch')).toBeChecked();
+    expect(
+      screen.getByText(
+        "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 
@@ -525,5 +583,27 @@ describe('EC-68 and linking a message to an issue', () => {
     expect(await within(dialog).findByText(/Linked to/)).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({ version: 7, messageIds: ['m0', 'm1'] });
+  });
+});
+
+describe('Time logging page (Q-09 day lock wording)', () => {
+  it('shows the day lock rule and no Monday 12:00 PM wording', async () => {
+    api('MEMBER', (url) => {
+      if (url.includes('/time?') || url.endsWith('/time'))
+        return { status: 200, body: { items: [], total: 0, capacity: 40 } };
+      return undefined;
+    });
+    renderAt('/time', <App />);
+    expect(
+      await screen.findByText((_, el) =>
+        Boolean(
+          el?.tagName === 'P' &&
+          el.textContent?.startsWith(
+            "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
+          ),
+        ),
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Monday/)).toBeNull();
   });
 });

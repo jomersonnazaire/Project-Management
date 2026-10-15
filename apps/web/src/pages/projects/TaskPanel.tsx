@@ -1,5 +1,6 @@
 import {
   PARTY_LABELS,
+  activityInUseMessage,
   hasPermission,
   isIssueOpen,
   PRIORITY_LABELS,
@@ -176,12 +177,25 @@ export function TaskPanel({
                 </div>
               )}
 
-              {!archived && !t.deletable && t.deleteBlockedReason && (
-                <p className="small text-body-secondary mt-n2 mb-4" data-testid="delete-blocked">
-                  <i className="bx bx-lock-alt me-1" aria-hidden="true" />
-                  Can’t delete: {t.deleteBlockedReason}
+              {/* FR-PRJ-21: ACTIVITY_IN_USE shows one red line, no confirm dialog. */}
+              {!archived && !t.deletable && (t.deleteBlockedBy?.length ?? 0) > 0 && (
+                <p
+                  className="small mt-n2 mb-4"
+                  style={{ color: '#b8240a' }}
+                  data-testid="delete-blocked"
+                >
+                  {activityInUseMessage(t.deleteBlockedBy)}
                 </p>
               )}
+              {!archived &&
+                !t.deletable &&
+                !(t.deleteBlockedBy?.length ?? 0) &&
+                t.deleteBlockedReason && (
+                  <p className="small text-body-secondary mt-n2 mb-4" data-testid="delete-blocked">
+                    <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+                    Can’t delete: {t.deleteBlockedReason}
+                  </p>
+                )}
 
               {t.blockerReason && t.status === 'BLOCKED' && (
                 <div className="alert alert-danger py-2">

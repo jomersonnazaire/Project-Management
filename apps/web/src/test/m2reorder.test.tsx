@@ -111,6 +111,8 @@ async function savedActivities(fetchMock: ReturnType<typeof templateApi>) {
 }
 
 const rowOf = (name: string) => screen.getByText(name).closest('tr')!;
+/** DR-49: a row's "✎ Edit" button (aria "Edit <activity>"), not the phase header's. */
+const ROW_EDIT = /^Edit (?!phase |project$)/;
 
 describe('Template editor: "+ Add activity to Phase N" (FR-TPL-12, AC-37.1)', () => {
   it('creates the activity in that phase with no phase picker, at the end of the phase', async () => {
@@ -340,20 +342,52 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     ).toBeInTheDocument();
   });
 
-  it('FR-PRJ-18 each row’s ⋮ menu has Move up / Move down, greyed out at the ends of a phase', async () => {
+  it('DR-49 row actions are inline ✎ Edit / 🗑 Delete ghost buttons (no ⋮ menu)', async () => {
+    checklistApi();
+    renderAt(`/projects/${PID}`, <App />);
+    await screen.findByText('Kickoff');
+    expect(screen.queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument();
+    const row = rowOf('Kickoff');
+    const edit = within(row).getByRole('button', { name: 'Edit Kickoff' });
+    const del = within(row).getByRole('button', { name: 'Delete Kickoff' });
+    expect(edit).toHaveTextContent('✎ Edit');
+    expect(del).toHaveTextContent('🗑 Delete');
+    expect(edit).toHaveClass('btn-outline-secondary');
+    expect(del).toHaveClass('btn-outline-secondary');
+    expect(edit.closest('td')).toBe(del.closest('td'));
+    // DR-49: sentence-case headings and status pill.
+    const table = row.closest('table')!;
+    expect(within(table).getByRole('columnheader', { name: 'Activity' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Est / Act' })).toBeInTheDocument();
+    const pill = within(rowOf('Workshops')).getByText('To do');
+    expect(pill).not.toHaveClass('text-uppercase');
+  });
+
+  it('DR-49 touch ↑/↓ buttons reorder within a phase, greyed out at the ends', async () => {
     const fetchMock = checklistApi();
     renderAt(`/projects/${PID}`, <App />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Kickoff' }));
-    expect(await screen.findByRole('button', { name: 'Move up' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    expect(screen.getByRole('button', { name: 'Move down' })).not.toHaveAttribute('aria-disabled');
-    // A greyed-out item does nothing.
-    await userEvent.click(screen.getByRole('button', { name: 'Move up' }));
-    expect(calls(fetchMock, '/tasks/reorder')).toEqual([]);
-    await userEvent.click(screen.getByRole('button', { name: 'Actions for Kickoff' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Move down' }));
+    const up = await screen.findByRole('button', { name: 'Move up Kickoff' });
+    const down = screen.getByRole('button', { name: 'Move down Kickoff' });
+    expect(up).toBeDisabled();
+    expect(down).toBeEnabled();
+    expect(up.closest('.touch-move')).not.toBeNull();
+    // M15: the same ghost button class as the row Edit and Delete buttons.
+    const ghost = (el: HTMLElement) =>
+      [...el.classList]
+        .filter((c) => c.startsWith('btn'))
+        .sort()
+        .join(' ');
+    const rowEdit = within(up.closest('td')!).getByRole('button', { name: 'Edit Kickoff' });
+    expect(ghost(up)).toBe(ghost(rowEdit));
+    expect(ghost(down)).toBe(ghost(rowEdit));
+    // Before Edit and Delete in the same cell.
+    const cell = up.closest('td')!;
+    const edit = within(cell).getByRole('button', { name: 'Edit Kickoff' });
+    expect(up.compareDocumentPosition(edit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Move down Workshops' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move up Configure' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move down Configure' })).toBeDisabled();
+    await userEvent.click(down);
     await waitFor(() =>
       expect(calls(fetchMock, '/tasks/reorder')).toEqual([
         { phase: 'Discovery', taskIds: ['k2', 'k1'] },
@@ -364,43 +398,57 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     );
   });
 
-  it('FR-PRJ-18 Move up on the last row of a phase; a single-row phase has both greyed out', async () => {
-    const fetchMock = checklistApi();
+  it('DR-49 a refused row Delete shows the red ACTIVITY_IN_USE line under the row, no dialog', async () => {
+    const fetchMock = api('PROJECT_MANAGER', (url) => {
+      if (url.includes(`/projects/${PID}/tasks`))
+        return {
+          status: 200,
+          body: {
+            items: tasks.map((t) =>
+              t.id === 'k1'
+                ? {
+                    ...t,
+                    deletable: false,
+                    deleteBlockedBy: ['time'] as TaskDto['deleteBlockedBy'],
+                  }
+                : t.id === 'k2'
+                  ? { ...t, deletable: true, deleteBlockedBy: [] }
+                  : t,
+            ),
+          },
+        };
+      if (url.endsWith(`/projects/${PID}`)) return { status: 200, body: { project: project() } };
+      if (url.includes('/tasks/k2')) return { status: 204, body: null };
+      return undefined;
+    });
     renderAt(`/projects/${PID}`, <App />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Actions for Extra' }));
-    expect(await screen.findByRole('button', { name: 'Move down' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Move up' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete Kickoff' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const line = screen.getByTestId('delete-blocked');
+    expect(line).toHaveStyle({ color: '#b8240a' });
+    expect(line.closest('tr')!.previousElementSibling).toBe(rowOf('Kickoff'));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Workshops' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Delete "Workshops"?' });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
     await waitFor(() =>
-      expect(calls(fetchMock, '/tasks/reorder')).toEqual([{ phase: null, taskIds: ['k5', 'k4'] }]),
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Actions for Configure' }));
-    const menu = screen.getByRole('button', { name: 'Actions for Configure' }).parentElement!;
-    expect(within(menu).getByRole('button', { name: 'Move up' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    expect(within(menu).getByRole('button', { name: 'Move down' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
+      expect(
+        fetchMock.mock.calls.some(
+          ([u, i]) => String(u).includes('/tasks/k2') && i?.method === 'DELETE',
+        ),
+      ).toBe(true),
     );
   });
 
-  it('FR-PRJ-20 planners get an always-visible pencil "Edit task" on every row, opening the task form', async () => {
+  it('FR-PRJ-20 planners get an always-visible "✎ Edit" on every row, opening the task form', async () => {
     checklistApi();
     renderAt(`/projects/${PID}`, <App />);
     await screen.findByText('Kickoff');
-    const pencils = screen.getAllByRole('button', { name: 'Edit task' });
-    expect(pencils).toHaveLength(tasks.length);
-    expect(pencils[0]).toHaveAttribute('title', 'Edit task');
-    // Its own cell, just before the ⋮ menu cell.
-    const cell = within(rowOf('Kickoff')).getByRole('button', { name: 'Edit task' }).closest('td')!;
-    expect(cell.nextElementSibling).toContainElement(
-      screen.getByRole('button', { name: 'Actions for Kickoff' }),
+    const edits = screen.getAllByRole('button', { name: ROW_EDIT });
+    expect(edits).toHaveLength(tasks.length);
+    expect(edits[0]).toHaveAttribute('title', 'Edit activity');
+    await userEvent.click(
+      within(rowOf('Workshops')).getByRole('button', { name: 'Edit Workshops' }),
     );
-    await userEvent.click(within(rowOf('Workshops')).getByRole('button', { name: 'Edit task' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('heading', { name: 'Edit task' })).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Task name')).toHaveValue('Workshops');
@@ -432,9 +480,11 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     memberApi('MEMBER', tasks.map(mine));
     const { unmount, router } = renderAt(`/projects/${PID}`, <App />);
     await screen.findByText('Kickoff');
-    expect(screen.getAllByRole('button', { name: 'Edit task' })).toHaveLength(1);
-    expect(within(rowOf('Workshops')).getByRole('button', { name: 'Edit task' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: ROW_EDIT })).toHaveLength(1);
+    expect(
+      within(rowOf('Workshops')).getByRole('button', { name: 'Edit Workshops' }),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument();
     // No plan rights: the pencil opens the task panel (status, evidence, notes), not the plan form.
     vi.stubGlobal('matchMedia', () => ({
       matches: false,
@@ -443,7 +493,9 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
       addListener: () => {},
       removeListener: () => {},
     }));
-    await userEvent.click(within(rowOf('Workshops')).getByRole('button', { name: 'Edit task' }));
+    await userEvent.click(
+      within(rowOf('Workshops')).getByRole('button', { name: 'Edit Workshops' }),
+    );
     await waitFor(() => expect(router.state.location.search).toBe('?task=k2'));
     expect(screen.queryByLabelText('Task name')).not.toBeInTheDocument();
     unmount();
@@ -458,7 +510,7 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
     );
     renderAt(`/projects/${PID}`, <App />);
     await screen.findByText('Kickoff');
-    expect(screen.queryByRole('button', { name: 'Edit task' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: ROW_EDIT })).not.toBeInTheDocument();
   });
 
   it('"+ Add activity to Phase N" adds a task in that phase with no phase picker', async () => {

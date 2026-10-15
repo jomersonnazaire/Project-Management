@@ -111,7 +111,7 @@ describe('DR-41: the location question for a past day', () => {
       return undefined;
     });
     renderAt('/my-tasks?tab=day&date=2026-10-07', <App />);
-    await userEvent.click(await screen.findByRole('button', { name: '+ Add entry' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Log task time' }));
     const dialog = await screen.findByRole('dialog');
     await waitFor(() =>
       expect(
@@ -119,7 +119,11 @@ describe('DR-41: the location question for a past day', () => {
       ).toBeInTheDocument(),
     );
     expect(within(dialog).queryByText(/working today/)).not.toBeInTheDocument();
-    expect(within(dialog).getByText(/Every entry that day uses it/)).toBeInTheDocument();
+    // v0.9.11: no day location yet, so no prefill and no hint; it is required.
+    expect(within(dialog).getByLabelText('Where were you working on Wed, Oct 7? *')).toHaveValue(
+      '',
+    );
+    expect(within(dialog).queryByTestId('day-location-hint')).not.toBeInTheDocument();
   });
 });
 
@@ -173,8 +177,8 @@ describe('FR-ACT-20: Module is optional free text', () => {
     const fetchMock = trackerApi();
     const user = userEvent.setup();
     renderAt('/my-tasks', <App />);
-    await user.click((await screen.findAllByRole('button', { name: /Quick activity/ }))[0]!);
-    const dialog = await screen.findByRole('dialog', { name: 'Quick activity' });
+    await user.click((await screen.findAllByRole('button', { name: /quick activity/i }))[0]!);
+    const dialog = await screen.findByRole('dialog', { name: 'Add quick activity' });
     const field = within(dialog).getByLabelText('Module (optional)');
     expect(field).toHaveAttribute('placeholder', 'e.g. ADFS Remote');
     expect(field.tagName).toBe('INPUT');
@@ -386,5 +390,238 @@ describe('FR-ACT-24: locked rows show a lock, not Edit or Delete', () => {
       within(row).getByRole('img', { name: 'Locked. Ask an Admin to reopen this day.' }),
     ).toBeInTheDocument();
     expect(within(row).queryByRole('button', { name: /Edit/ })).toBeNull();
+  });
+});
+
+// ---------- Mockup v0.9.11: required work location in the tracker modal ----------
+describe('v0.9.11: "Where are you working today? *" in Log task time / Add quick activity', () => {
+  beforeEach(() => screenWidth(1440));
+  const LABEL = /^Where (are|were|will) you (be )?working/;
+  const posted = (fetchMock: ReturnType<typeof trackerApi>, path: string) =>
+    fetchMock.mock.calls
+      .filter(([u, i]) => String(u).includes(path) && i?.method === 'POST')
+      .map(([, i]) => JSON.parse(String(i!.body)) as Record<string, unknown>);
+  const openQuick = async () => {
+    const user = userEvent.setup();
+    renderAt('/my-tasks', <App />);
+    await user.click((await screen.findAllByRole('button', { name: /quick activity/i }))[0]!);
+    const dialog = await screen.findByRole('dialog', { name: 'Add quick activity' });
+    await waitFor(() => expect(within(dialog).getByLabelText(LABEL)).toHaveValue('loc2'));
+    return { user, dialog };
+  };
+
+  it('prefills the day location; the same pick sends no dayLocationId', async () => {
+    const fetchMock = trackerApi();
+    const { user, dialog } = await openQuick();
+    expect(within(dialog).getByLabelText(LABEL)).toBeRequired();
+    expect(within(dialog).getByTestId('day-location-hint')).toHaveTextContent(
+      /location\. Changing it updates the location for all of/,
+    );
+    // No per-entry Location override any more.
+    expect(within(dialog).queryByLabelText('Location')).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Title *'), 'Stand-up');
+    await user.selectOptions(within(dialog).getByLabelText('Activity type *'), 'Internal meeting');
+    await user.click(within(dialog).getByRole('button', { name: 'Start timer' }));
+    await waitFor(() => expect(posted(fetchMock, '/tracker/start')).toHaveLength(1));
+    const body = posted(fetchMock, '/tracker/start')[0]!;
+    expect(body).not.toHaveProperty('dayLocationId');
+    expect(body).not.toHaveProperty('locationId');
+  });
+
+  it('a different pick shows the whole-day line and sends dayLocationId', async () => {
+    const fetchMock = trackerApi();
+    const { user, dialog } = await openQuick();
+    await user.selectOptions(within(dialog).getByLabelText(LABEL), 'loc1');
+    expect(within(dialog).queryByTestId('day-location-hint')).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId('day-location-change')).toHaveTextContent(
+      /^This changes the location for all of .+\.$/,
+    );
+    expect(within(dialog).getByTestId('day-location-change')).toHaveClass('text-body-secondary');
+    await user.type(within(dialog).getByLabelText('Title *'), 'Stand-up');
+    await user.selectOptions(within(dialog).getByLabelText('Activity type *'), 'Internal meeting');
+    await user.click(within(dialog).getByRole('button', { name: 'Start timer' }));
+    await waitFor(() => expect(posted(fetchMock, '/tracker/start')).toHaveLength(1));
+    // The day header's endpoint first (audit), then the entry without dayLocationId.
+    const order = fetchMock.mock.calls
+      .filter(([, i]) => i?.method === 'PUT' || i?.method === 'POST')
+      .map(([u, i]) => `${i!.method} ${String(u).replace(/^.*\/api\/v1/, '')}`);
+    expect(order.indexOf('PUT /tracker/days/2026-10-09/location')).toBeGreaterThan(-1);
+    expect(order.indexOf('PUT /tracker/days/2026-10-09/location')).toBeLessThan(
+      order.findIndex((x) => x.startsWith('POST /tracker/start')),
+    );
+    const put = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT')!;
+    expect(JSON.parse(String(put[1]!.body))).toEqual({ locationId: 'loc1' });
+    expect(posted(fetchMock, '/tracker/start')[0]).not.toHaveProperty('dayLocationId');
+    expect(posted(fetchMock, '/tracker/start')[0]).not.toHaveProperty('locationId');
+  });
+
+  it('a failed day-location change (DAY_LOCKED) shows the error and saves nothing', async () => {
+    const fetchMock = trackerApi(trackerDay(), (url, init) =>
+      init?.method === 'PUT' && url.includes('/location')
+        ? {
+            status: 422,
+            body: { error: { code: 'DAY_LOCKED', message: 'This day is locked.' } },
+          }
+        : undefined,
+    );
+    const { user, dialog } = await openQuick();
+    await user.selectOptions(within(dialog).getByLabelText(LABEL), 'loc1');
+    await user.type(within(dialog).getByLabelText('Title *'), 'Stand-up');
+    await user.selectOptions(within(dialog).getByLabelText('Activity type *'), 'Internal meeting');
+    await user.click(within(dialog).getByRole('button', { name: 'Start timer' }));
+    expect(await within(dialog).findByText(/This day is locked\./)).toBeInTheDocument();
+    expect(posted(fetchMock, '/tracker/start')).toEqual([]);
+    expect(screen.getByRole('dialog', { name: 'Add quick activity' })).toBeInTheDocument();
+  });
+
+  it('a day with no location still sends dayLocationId on the save (no PUT)', async () => {
+    const fetchMock = trackerApi(trackerDay({ location: null }));
+    const user = userEvent.setup();
+    renderAt('/my-tasks', <App />);
+    await user.click((await screen.findAllByRole('button', { name: /quick activity/i }))[0]!);
+    const dialog = await screen.findByRole('dialog', { name: 'Add quick activity' });
+    await user.selectOptions(await within(dialog).findByLabelText(LABEL), 'loc3');
+    await user.type(within(dialog).getByLabelText('Title *'), 'Stand-up');
+    await user.selectOptions(within(dialog).getByLabelText('Activity type *'), 'Internal meeting');
+    await user.click(within(dialog).getByRole('button', { name: 'Start timer' }));
+    await waitFor(() => expect(posted(fetchMock, '/tracker/start')).toHaveLength(1));
+    expect(posted(fetchMock, '/tracker/start')[0]).toMatchObject({ dayLocationId: 'loc3' });
+    expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PUT')).toBe(false);
+  });
+
+  it('a day with no location leaves it blank and required', async () => {
+    const fetchMock = trackerApi(trackerDay({ location: null }));
+    const user = userEvent.setup();
+    renderAt('/my-tasks', <App />);
+    await user.click((await screen.findAllByRole('button', { name: /quick activity/i }))[0]!);
+    const dialog = await screen.findByRole('dialog', { name: 'Add quick activity' });
+    const field = await within(dialog).findByLabelText(LABEL);
+    expect(field).toHaveValue('');
+    expect(within(dialog).queryByTestId('day-location-hint')).not.toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText('Title *'), 'Stand-up');
+    await user.selectOptions(within(dialog).getByLabelText('Activity type *'), 'Internal meeting');
+    await user.click(within(dialog).getByRole('button', { name: 'Start timer' }));
+    expect(within(dialog).getByText('Choose where you’re working today.')).toBeInTheDocument();
+    expect(posted(fetchMock, '/tracker/start')).toEqual([]);
+  });
+
+  it('a submitted or locked day disables the Time logging header buttons ("This day is locked")', async () => {
+    trackerApi(
+      trackerDay({ status: 'SUBMITTED', can: { edit: false, submit: false, reopen: false } }),
+      timeRoute,
+    );
+    renderAt('/time', <App />);
+    for (const name of ['Log task time', 'Add quick activity']) {
+      await waitFor(() => expect(screen.getByRole('button', { name })).toBeDisabled());
+      expect(screen.getByRole('button', { name })).toHaveAttribute('title', 'This day is locked');
+    }
+    // v0.9.11: no right-hand Log time card on Time logging.
+    expect(screen.queryByRole('heading', { name: 'Log time' })).not.toBeInTheDocument();
+  });
+
+  it('Edit entry shows the day field (no per-entry Location); a change PUTs the day; a stored override is left untouched', async () => {
+    const overridden = entry({
+      location: { id: 'loc1', name: 'Onsite' },
+      locationOverridden: true,
+    });
+    const fetchMock = trackerApi(trackerDay({ entries: [overridden] }), (url, init) =>
+      init?.method === 'PUT' || init?.method === 'PATCH'
+        ? { status: 200, body: { entry: overridden, day: trackerDay() } }
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderAt('/my-tasks?tab=day', <App />);
+    await user.click(await screen.findByRole('button', { name: 'Edit Prepare UAT scripts' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit entry' });
+    expect(within(dialog).queryByLabelText('Location')).not.toBeInTheDocument();
+    const field = within(dialog).getByLabelText(LABEL);
+    expect(field).toHaveValue('loc2');
+    expect(within(dialog).getByTestId('day-location-hint')).toBeInTheDocument();
+    await user.selectOptions(field, 'loc3');
+    expect(within(dialog).getByTestId('day-location-change')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PATCH')).toBe(true),
+    );
+    const writes = fetchMock.mock.calls.filter(
+      ([, i]) => i?.method === 'PUT' || i?.method === 'PATCH',
+    );
+    expect(String(writes[0]![0])).toContain('/tracker/days/2026-10-09/location');
+    expect(JSON.parse(String(writes[0]![1]!.body))).toEqual({ locationId: 'loc3' });
+    expect(String(writes[1]![0])).toContain('/tracker/entries/e1');
+    const patch = JSON.parse(String(writes[1]![1]!.body)) as Record<string, unknown>;
+    expect(patch).not.toHaveProperty('locationId');
+    expect(patch).not.toHaveProperty('dayLocationId');
+  });
+
+  it('Edit entry with no override and no change sends no PUT and no locationId', async () => {
+    const fetchMock = trackerApi(trackerDay(), (url, init) =>
+      init?.method === 'PATCH' ? { status: 200, body: { entry: entry() } } : undefined,
+    );
+    const user = userEvent.setup();
+    renderAt('/my-tasks?tab=day', <App />);
+    await user.click(await screen.findByRole('button', { name: 'Edit Prepare UAT scripts' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit entry' });
+    await waitFor(() => expect(within(dialog).getByLabelText(LABEL)).toHaveValue('loc2'));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PATCH')).toBe(true),
+    );
+    expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PUT')).toBe(false);
+    const patch = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH')!;
+    expect(JSON.parse(String(patch[1]!.body))).not.toHaveProperty('locationId');
+  });
+});
+
+// ---------- M15: locked-day buttons stay visible and disabled everywhere ----------
+describe('M15: on a submitted or locked day the entry buttons are visible but disabled', () => {
+  const locked = () =>
+    trackerDay({
+      date: '2026-10-06',
+      status: 'OPEN',
+      notSubmitted: true,
+      can: { edit: false, submit: false, reopen: false },
+      entries: [],
+    });
+  const expectLocked = (btn: HTMLElement) => {
+    expect(btn).toBeVisible();
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute('aria-disabled', 'true');
+    expect(btn).toHaveAttribute('title', 'This day is locked');
+    // The tooltip needs a wrapper: a disabled button fires no mouse events.
+    expect(btn.parentElement).toHaveAttribute('title', 'This day is locked');
+  };
+
+  for (const width of [1440, 390]) {
+    it(`Day timesheet and the My tasks header at ${width}px`, async () => {
+      screenWidth(width);
+      trackerApi(locked());
+      renderAt('/my-tasks?tab=day&date=2026-10-06', <App />);
+      expectLocked(await screen.findByRole('button', { name: 'Log task time' }));
+      const quick = await screen.findAllByRole('button', { name: 'Add quick activity' });
+      // The Day timesheet button plus the page header's (compact on phones).
+      expect(quick.length).toBeGreaterThanOrEqual(2);
+      quick.forEach(expectLocked);
+    });
+
+    it(`Time logging at ${width}px`, async () => {
+      screenWidth(width);
+      trackerApi(locked(), timeRoute);
+      renderAt('/time', <App />);
+      for (const name of ['Log task time', 'Add quick activity']) {
+        await waitFor(() => expectLocked(screen.getByRole('button', { name })));
+      }
+    });
+  }
+
+  it('an open day keeps the buttons enabled, with no lock tooltip', async () => {
+    screenWidth(390);
+    trackerApi(trackerDay({ entries: [] }));
+    renderAt('/my-tasks?tab=day', <App />);
+    const btn = await screen.findByRole('button', { name: 'Log task time' });
+    expect(btn).toBeEnabled();
+    expect(btn).not.toHaveAttribute('aria-disabled');
+    for (const b of screen.getAllByRole('button', { name: 'Add quick activity' }))
+      expect(b).toBeEnabled();
   });
 });

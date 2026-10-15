@@ -13,6 +13,12 @@ import {
   parseDateOnly,
   rejectTaskSchema,
   phaseDeleteBlockedReason,
+  phaseNotEmptyMessage,
+  activityBlockedBy,
+  activityInUseMessage,
+  PROJECT_NOT_PLANNING_MESSAGE,
+  renamePhaseSchema,
+  createPhaseSchema,
   taskDeleteBlockedReason,
   todaySection,
   workingDaysSince,
@@ -59,6 +65,7 @@ import {
   canAddProjectMembers,
   canEditProjectScope,
   isPlanner,
+  isProjectPm,
   projectScopeFilter,
   type ScopeUser,
 } from '../services/scope.js';
@@ -102,6 +109,11 @@ export function taskCan(
  * A project's phases: task phases in plan order, then phases that only have an evidence folder
  * left (their tasks were deleted). Counts tasks, and documents in the folder and its sub-folders.
  */
+/** Doc 14 §J: phase identity ignores case and leading/trailing spaces. */
+export function phaseKey(name: string) {
+  return name.trim().toLowerCase();
+}
+
 async function projectPhases(projectId: Types.ObjectId, session?: mongoose.ClientSession) {
   const tasks = await TaskModel.find({ projectId })
     .select('phase order')
@@ -138,14 +150,46 @@ async function projectPhases(projectId: Types.ObjectId, session?: mongoose.Clien
   return out;
 }
 
-/** Admins and the project's PM, with Delete on Tasks, on a project that is still open. */
+/**
+ * Doc 14 FR-PRJ-21 (v1.2.5) / doc 11 FR-ACL-19: Admins, and the Project PM (manager, or a PM on
+ * the team list) with Delete on Tasks, delete unattached activities at any project status.
+ */
 export function canDeleteTasks(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  if (project.archived || !perms.tasks.delete) return false;
+  return user.systemRole === 'ADMIN' || isProjectPm(user, project);
+}
+
+/** FR-PRJ-22/23: Admins or the Project PM, with Edit on Projects, may change phases. */
+function mayManagePhases(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  if (project.archived || !perms.projects.edit) return false;
+  return user.systemRole === 'ADMIN' || isProjectPm(user, project);
+}
+
+/** FR-PRJ-23 (Q-53/Q-55): PMs change phase details only while the project is in Planning. */
+function phaseEditableNow(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
   return (
-    !project.archived &&
-    project.status !== 'COMPLETED' &&
-    perms.tasks.delete &&
-    isPlanner(user, project)
+    mayManagePhases(user, perms, project) &&
+    (user.systemRole === 'ADMIN' || project.status === 'PLANNING')
   );
+}
+
+/**
+ * DEF-015 (NFR-25): a PM who is neither the manager nor on the team list gets 404 on project-PM
+ * actions, the same as anyone outside the project.
+ */
+export function assertNotOutsidePm(user: ScopeUser, project: ProjectDoc) {
+  if (user.systemRole === 'PROJECT_MANAGER' && !isProjectPm(user, project)) throw notFound();
+}
+
+function assertPhaseEdit(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  assertNotArchived(project);
+  assertNotOutsidePm(user, project);
+  if (!mayManagePhases(user, perms, project)) {
+    throw forbidden('Only an Admin or this project’s PM can change its phases.');
+  }
+  if (!phaseEditableNow(user, perms, project)) {
+    throw unprocessable(PROJECT_NOT_PLANNING_MESSAGE, 'PROJECT_NOT_PLANNING');
+  }
 }
 
 async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): Promise<TaskDto[]> {
@@ -185,7 +229,13 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
   const records = mayDelete ? await taskRecordCounts(tasks.map((t) => t._id)) : null;
   return tasks.map((t) => {
     const status = t.status as TaskStatus;
-    const blocked = records ? taskDeleteBlockedReason(records.get(t._id.toString()) ?? {}) : null;
+    const rc = records?.get(t._id.toString()) ?? {};
+    const blockedBy = records ? activityBlockedBy(rc) : [];
+    const blocked = !records
+      ? null
+      : blockedBy.length
+        ? activityInUseMessage(blockedBy)
+        : taskDeleteBlockedReason(rc);
     const overdue = isOverdue({ status, dueDate: t.dueDate }, today);
     return {
       id: t._id.toString(),
@@ -247,6 +297,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
       can: taskCan(user, perms, project, t),
       deletable: mayDelete && !blocked,
       deleteBlockedReason: blocked,
+      deleteBlockedBy: blockedBy,
     };
   });
 }
@@ -533,7 +584,7 @@ export function tasksRouter(registry: RouteRegistry) {
   // M3.5: phases (task groups plus their evidence folder). Planners delete an empty phase.
   p.get('/:id/phases', perm('tasks', 'view'), async (req, res) => {
     const project = await loadProject(req, 'view');
-    const mayDelete = canDeleteTasks(currentUser(req), currentPermissions(req), project);
+    const editable = phaseEditableNow(currentUser(req), currentPermissions(req), project);
     const phases = await projectPhases(project._id);
     res.json({
       items: phases.map((ph): PhaseDto => {
@@ -542,30 +593,134 @@ export function tasksRouter(registry: RouteRegistry) {
           name: ph.name,
           taskCount: ph.taskCount,
           documentCount: ph.documentCount,
-          deletable: mayDelete && !reason,
-          deleteBlockedReason: mayDelete ? reason : null,
+          deletable: editable && !reason,
+          deleteBlockedReason: editable ? reason : null,
+          editable,
         };
       }),
     });
   });
 
-  p.delete('/:id/phases', perm('tasks', 'delete'), async (req, res) => {
+  // FR-PRJ-22/23: rename a phase (its tasks and evidence folder follow). PMs only in Planning.
+  p.patch('/:id/phases', perm('projects', 'edit'), async (req, res) => {
+    const input = parseBody(renamePhaseSchema, req);
     const project = await loadProject(req, 'view');
-    assertNotArchived(project);
-    assertPlanOpen(project);
-    if (!canDeleteTasks(currentUser(req), currentPermissions(req), project)) {
-      throw forbidden('Only an Admin or this project’s PM can delete its phases.');
+    const user = currentUser(req);
+    assertPhaseEdit(user, currentPermissions(req), project);
+    const phases = await projectPhases(project._id);
+    // Doc 14 §J: phase names match ignoring case and leading/trailing spaces.
+    const src = phases.find((x) => phaseKey(x.name) === phaseKey(input.name));
+    if (!src) throw notFound('Phase not found');
+    input.name = src.name;
+    input.newName = input.newName.trim();
+    if (input.newName !== input.name) {
+      if (phases.some((x) => x !== src && phaseKey(x.name) === phaseKey(input.newName))) {
+        const msg = `"${input.newName}" already exists.`;
+        throw conflictWith(msg, 'DUPLICATE_NAME', [{ path: 'newName', message: msg }]);
+      }
+      await TaskModel.updateMany(
+        { projectId: project._id, phase: input.name },
+        { $set: { phase: input.newName }, $inc: { version: 1 } },
+      );
+      const folders = await FolderModel.find({
+        projectId: project._id,
+        kind: 'PHASE',
+        phase: input.name,
+      });
+      for (const f of folders) {
+        f.phase = input.newName;
+        // Keep a custom folder name; rename the default one when the new name is free.
+        const key = input.newName.trim().toLowerCase();
+        const taken = await FolderModel.exists({
+          projectId: project._id,
+          parentId: f.parentId ?? null,
+          nameKey: key,
+          _id: { $ne: f._id },
+        });
+        if (f.name === input.name && !taken) {
+          f.name = input.newName;
+          f.nameKey = key;
+        }
+        await f.save();
+      }
+      await audit({
+        actorId: user._id,
+        entityType: 'project',
+        entityId: project._id,
+        projectId: project._id,
+        action: 'phase_updated',
+        changes: [{ field: 'name', old: input.name, new: input.newName }],
+      });
     }
-    const name = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+    res.json({ name: input.newName });
+  });
+
+  // m8-polish: add an (empty) phase; it shows on the Checklist and gets its evidence folder.
+  p.post('/:id/phases', perm('projects', 'edit'), async (req, res) => {
+    const input = parseBody(createPhaseSchema, req);
+    const project = await loadProject(req, 'view');
+    const user = currentUser(req);
+    assertPhaseEdit(user, currentPermissions(req), project);
+    const phases = await projectPhases(project._id);
+    if (phases.some((x) => phaseKey(x.name) === phaseKey(input.name))) {
+      const msg = `"${input.name}" already exists.`;
+      throw conflictWith(msg, 'DUPLICATE_NAME', [{ path: 'name', message: msg }]);
+    }
+    let name = input.name;
+    for (
+      let n = 2;
+      await FolderModel.exists({
+        projectId: project._id,
+        parentId: null,
+        nameKey: name.trim().toLowerCase(),
+      });
+      n++
+    ) {
+      name = `${input.name} (${n})`;
+    }
+    await FolderModel.create({
+      projectId: project._id,
+      name,
+      nameKey: name.trim().toLowerCase(),
+      parentId: null,
+      kind: 'PHASE',
+      phase: input.name,
+      order: phases.length + 1,
+    });
+    await audit({
+      actorId: user._id,
+      entityType: 'project',
+      entityId: project._id,
+      projectId: project._id,
+      action: 'phase_created',
+      changes: [{ field: 'name', old: null, new: input.name }],
+    });
+    res.status(201).json({ name: input.name });
+  });
+
+  p.delete('/:id/phases', perm('projects', 'edit'), async (req, res) => {
+    const project = await loadProject(req, 'view');
+    // FR-PRJ-23: Admins at any status; the Project PM only in Planning (422 PROJECT_NOT_PLANNING).
+    assertPhaseEdit(currentUser(req), currentPermissions(req), project);
+    // FR-PRJ-32: the phase is identified by `name` in the body or the ?name= query.
+    const bodyName = (req.body as { name?: unknown } | undefined)?.name;
+    const raw = typeof bodyName === 'string' ? bodyName : req.query.name;
+    const name = typeof raw === 'string' ? raw.trim() : '';
     if (!name) throw badRequest('Say which phase to delete.');
     const session = await mongoose.startSession();
     let folderIds: Types.ObjectId[] = [];
+    let deleted = name;
     try {
       await session.withTransaction(async () => {
-        const ph = (await projectPhases(project._id, session)).find((x) => x.name === name);
+        const ph = (await projectPhases(project._id, session)).find(
+          (x) => phaseKey(x.name) === phaseKey(name),
+        );
         if (!ph) throw notFound('Phase not found');
+        deleted = ph.name;
         if (ph.taskCount > 0) {
-          throw conflictWith(phaseDeleteBlockedReason(ph.taskCount, 0)!, 'PHASE_HAS_TASKS', {
+          // FR-PRJ-22: 409 PHASE_NOT_EMPTY (taskCount kept for older clients).
+          throw conflictWith(phaseNotEmptyMessage(ph.taskCount), 'PHASE_NOT_EMPTY', {
+            activityCount: ph.taskCount,
             taskCount: ph.taskCount,
           });
         }
@@ -588,7 +743,7 @@ export function tasksRouter(registry: RouteRegistry) {
       entityId: project._id,
       projectId: project._id,
       action: 'phase_deleted',
-      meta: { phase: name, folderIds: folderIds.map(String) },
+      meta: { phase: deleted, folderIds: folderIds.map(String) },
     });
     res.status(204).end();
   });
@@ -1234,7 +1389,8 @@ export function tasksRouter(registry: RouteRegistry) {
   r.delete('/:id', perm('tasks', 'delete'), async (req, res) => {
     const { task, project } = await loadTask(req);
     assertNotArchived(project);
-    assertPlanOpen(project);
+    assertNotOutsidePm(currentUser(req), project);
+    // FR-PRJ-21 (v1.2.5): unattached activities can be deleted at any status (no Completed lock).
     if (!canDeleteTasks(currentUser(req), currentPermissions(req), project)) {
       throw forbidden('Only an Admin or this project’s PM can delete its tasks.');
     }
@@ -1243,6 +1399,16 @@ export function tasksRouter(registry: RouteRegistry) {
     try {
       await session.withTransaction(async () => {
         counts = (await taskRecordCounts([task._id], session)).get(task._id.toString());
+        // FR-PRJ-21: time, evidence, documents, issues → 409 ACTIVITY_IN_USE (Admins too). Nothing
+        // is changed or audited.
+        const blockedBy = activityBlockedBy(counts ?? {});
+        if (blockedBy.length) {
+          throw conflictWith(activityInUseMessage(blockedBy), 'ACTIVITY_IN_USE', {
+            blockedBy,
+            counts,
+          });
+        }
+        // Other records (follow-ups, comments, subtasks) still block as before (M3.5).
         const reason = taskDeleteBlockedReason(counts ?? {});
         if (reason) throw conflictWith(reason, 'TASK_HAS_RECORDS', { counts });
         await TaskModel.updateMany(

@@ -22,13 +22,15 @@ const settingSchema = new Schema(
   {
     key: { type: String, required: true, unique: true },
     workingDays: { type: [Number], default: undefined },
-    /** Q-09: `timeLock` key — when last week's entries lock (Admin setting, no approval step). */
+    /** Q-09: `timeLock` key — day lock on/off (Admin setting; null/missing enabled = ON). */
     timeLock: {
       type: new Schema(
         {
-          enabled: { type: Boolean, required: true },
-          weekday: { type: Number, min: 0, max: 6, required: true },
-          hour: { type: Number, min: 0, max: 23, required: true },
+          // Null/missing `enabled` reads as ON (normalizeTimeLock). New writes store only `enabled`.
+          enabled: { type: Boolean, default: null },
+          // Legacy weekly-lock fields: kept optional so old documents still load; never written.
+          weekday: { type: Number, min: 0, max: 6 },
+          hour: { type: Number, min: 0, max: 23 },
         },
         { _id: false },
       ),

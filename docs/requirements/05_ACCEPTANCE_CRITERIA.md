@@ -9,7 +9,6 @@ Given/When/Then. Each `AC-xx.y` maps to `US-xx`. "API" criteria must be verified
 - **AC-01.4** Given a deactivated user, when they sign in with correct credentials, then access is denied.
 - **AC-01.5b** Given an active session older than 12 hours, the next request returns 401 and the user must sign in again.
 - **AC-01.5** Given a session idle for more than 30 minutes, when the user acts, then they're redirected to sign-in and no data is returned by the API (401).
-- **AC-01.5m** (mobile exception, FR-AUTH-03) Given a mobile app session, each request or refresh extends its expiry to 3 days from now; after more than 3 days without activity the next request returns 401 and the app shows sign-in. AC-01.5b's 12-hour cap doesn't apply unless `MOBILE_SESSION_MAX_DAYS` is set. A request from a browser (Origin/Referer/Cookie/Sec-Fetch-*) can't obtain or use a mobile token (403 `MOBILE_ONLY` / 401). While offline the app stays signed in and shows Disconnected + Retry; the server decides once it's reachable.
 - **AC-01.6 (API)** Given any client contact's email, when used on any auth endpoint, then the response is the same failure as an unknown user.
 
 ## US-02 Manage users
@@ -107,6 +106,7 @@ Given/When/Then. Each `AC-xx.y` maps to `US-xx`. "API" criteria must be verified
 - **AC-18.4 (API)** Logging to a task in a project the user isn't a member of returns 403.
 - **AC-18.5** After saving, the task's actual hours and variance update everywhere it's shown.
 - **AC-18.6** Time can't be logged to Cancelled tasks or to On Hold, Completed, or Cancelled projects (API refuses too).
+- **AC-18.7 (API)** Day lock (Q-09, 2026-10-13, 9:15 PM SGT): given work date Oct 13, a Member can create, edit and delete entries for it on Oct 14 and Oct 15 (Philippine time); from Oct 16, 00:00 PHT, the same requests return 422 `DAY_LOCKED` (FR-TIME-04, doc 14 FR-ACT-36).
 
 ## US-19 Weekly timesheet
 - **AC-19.1** The week selector shows entries for Mon–Sun with total hours and "of Xh available (Y% utilization)".

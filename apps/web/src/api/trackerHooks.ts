@@ -13,7 +13,8 @@ import { api, qs } from './client';
 /** Data hooks for Milestone 5: the Activity tracker (doc 14 §2) and its Admin lists. */
 
 export interface LookupOptions {
-  activityTypes: Ref[];
+  /** `key`/`system` since m8-polish (NFR-31): Quick Activity is `quick_activity`. */
+  activityTypes: (Ref & { key?: string | null; system?: boolean })[];
   locations: Ref[];
 }
 

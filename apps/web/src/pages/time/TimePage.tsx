@@ -1,21 +1,26 @@
-import { TIME_TYPE_SHORT, toDateOnly } from '@xc8/shared';
+import { DAY_LOCK_DESCRIPTION, TIME_TYPE_SHORT, toDateOnly, todayPH } from '@xc8/shared';
 import { useState } from 'react';
 import { Button, ButtonGroup } from 'react-bootstrap';
 import { useTimeMutation, useTimeWeek } from '../../api/m3Hooks';
 import { useCan } from '../../auth/useCan';
+import { useTrackerDay } from '../../api/trackerHooks';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
-import { TimeEntryForm } from '../../components/TimeEntryForm';
 import { hoursLabel, shortDate, weekRangeShort } from '../../lib/format';
 import { useIsCompact } from '../../lib/useMediaQuery';
 import { TIME_TYPE_BADGE } from '../../lib/m3ui';
 import { useConfirm } from '../../components/ConfirmModal';
 import { LockedIcon } from '../../components/LockedIcon';
+import { LockableButton } from '../../components/LockableButton';
+import {
+  TrackerEntryModal,
+  type TrackerModalMode,
+} from '../../components/tracker/TrackerEntryModal';
 
 const shift = (date: string, days: number) =>
   toDateOnly(new Date(new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000));
 
-/** Time logging (FR-TIME-01..06): my entries for one week, with the Log time form beside them. */
+/** Time logging (FR-TIME-01..06): my entries for one week, full width (v0.9.11: Log task time / Add quick activity in the header). */
 export function TimePage() {
   const [week, setWeek] = useState<string | undefined>(undefined);
   const data = useTimeWeek(week);
@@ -23,6 +28,13 @@ export function TimePage() {
   // Members delete their own entries (doc 11 §6 v0.6.8); the API returns 404 for anyone else's.
   const canDelete = useCan('time', 'delete');
   const [confirm, confirmDialog] = useConfirm();
+  // FR-ACT-29: Log task time and Add quick activity (tracker entries for today, PH time).
+  const canTrack = useCan('activities', 'create');
+  const [trackerModal, setTrackerModal] = useState<TrackerModalMode | null>(null);
+  const today = toDateOnly(todayPH());
+  // A submitted or locked day: the header buttons are disabled (the modal also guards).
+  const todayDay = useTrackerDay(today);
+  const todayLocked = Boolean(todayDay.data && !todayDay.data.can.edit);
   const w = data.data;
   const pct = w && w.capacity ? Math.round((w.total / w.capacity) * 100) : 0;
 
@@ -55,9 +67,28 @@ export function TimePage() {
 
   return (
     <>
-      <PageHeader title="Time logging">{weekNav}</PageHeader>
+      <PageHeader title="Time logging">
+        {weekNav}
+        {canTrack && (
+          <>
+            <LockableButton
+              locked={todayLocked}
+              onClick={() => setTrackerModal({ kind: 'add', date: today })}
+            >
+              Log task time
+            </LockableButton>
+            <LockableButton
+              locked={todayLocked}
+              variant="outline-primary"
+              onClick={() => setTrackerModal({ kind: 'quick', date: today })}
+            >
+              Add quick activity
+            </LockableButton>
+          </>
+        )}
+      </PageHeader>
       <div className="row g-6">
-        <div className="col-lg-8">
+        <div className="col-12">
           <div className="card">
             <div className="card-body">
               <h2 className="h5">My entries this week</h2>
@@ -144,23 +175,17 @@ export function TimePage() {
                 </div>
               )}
               <p className="small text-body-secondary mt-3 mb-0">
-                {data.data?.lockDescription ??
-                  "Last week's entries lock every Monday at 12:00 PM Philippine time."}{' '}
-                Ask an Admin to reopen the day if a locked entry needs changing.
+                {data.data?.lockDescription ?? DAY_LOCK_DESCRIPTION} Ask an Admin to reopen the day
+                if a locked entry needs changing.
               </p>
-            </div>
-          </div>
-        </div>
-        <div className="col-lg-4">
-          <div className="card">
-            <div className="card-body">
-              <h2 className="h5">Log time</h2>
-              <TimeEntryForm />
             </div>
           </div>
         </div>
       </div>
       {confirmDialog}
+      {trackerModal && (
+        <TrackerEntryModal mode={trackerModal} onClose={() => setTrackerModal(null)} />
+      )}
     </>
   );
 }

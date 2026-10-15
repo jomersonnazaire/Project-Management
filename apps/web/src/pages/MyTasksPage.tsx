@@ -5,13 +5,17 @@ import {
   ageTone,
   formatHHMM,
   formatTime12,
+  myTasksTabsFor,
+  resolveMyTasksTab,
   type MyTaskDto,
   type TrackerDayDto,
 } from '@xc8/shared';
 import { useEffect, useState } from 'react';
 import { Button, Form, Nav } from 'react-bootstrap';
 import { Link, useSearchParams } from 'react-router-dom';
+import { NotFoundPage } from './ErrorPages';
 import { useTrackerDay, useTrackerMutation } from '../api/trackerHooks';
+import { LockableButton } from '../components/LockableButton';
 import { TrackerEntryModal, type TrackerModalMode } from '../components/tracker/TrackerEntryModal';
 import { DayTimesheet, LocationChip } from './tracker/DayTimesheet';
 import { useDocumentRequests, useTimeWeek } from '../api/m3Hooks';
@@ -28,7 +32,7 @@ import { hoursLabel, longDay, shortDate } from '../lib/format';
 const VIEWS = [
   { key: 'today', label: 'Today' },
   // FR-TSK-22 (doc 14 update): Day timesheet sits right after Today.
-  { key: 'day', label: 'Day timesheet' },
+  { key: 'day-timesheet', label: 'Day timesheet' },
   { key: 'due', label: 'Due' },
   { key: 'assigned', label: 'Assigned to me' },
   { key: 'accountable', label: "I'm accountable" },
@@ -43,6 +47,25 @@ const ROLE_LABELS = {
 } as const;
 
 const AGE_BADGE = { none: 'bg-label-secondary', amber: 'bg-label-warning', red: 'bg-label-danger' };
+
+/**
+ * FR-TSK-26/27, AC-48.3: Planned date, same format as Due, blank cell when empty and left out of
+ * the phone card. One component so the column is easy to move (UIE placement: before Due).
+ */
+function PlannedCell({ t }: { t: MyTaskDto }) {
+  return (
+    <td
+      data-label="Planned"
+      className="text-nowrap cell-omit-empty"
+      data-testid={`planned-cell-${t.id}`}
+    >
+      {t.plannedStart ? shortDate(t.plannedStart) : null}
+    </td>
+  );
+}
+
+/** Legacy deep-link aliases (e.g. notifications sent before m8-polish used ?tab=day). */
+const TAB_ALIASES: Record<string, string> = { day: 'day-timesheet' };
 
 function TaskCell({ t }: { t: MyTaskDto }) {
   return (
@@ -179,7 +202,7 @@ function TodayPlan({
       </div>
       {items.length === 0 ? (
         <EmptyState icon="bx-sun" title="Nothing planned for today">
-          {tracker && 'Use + Quick activity to time non-project work. '}
+          {tracker && 'Use Add quick activity to time non-project work. '}
           No aging tasks either.{' '}
           <Button variant="link" className="p-0 align-baseline" onClick={onShowDue}>
             Check what’s due
@@ -291,10 +314,12 @@ function TodayPlan({
             <h3 className="h6 mb-0" id="quick-today">
               Quick activities today · {quick.length}
             </h3>
-            {canTime && (
-              <Button size="sm" variant="link" className="ms-auto" onClick={onQuick}>
-                + Quick activity
-              </Button>
+            {(canTime || tracker.own) && (
+              <span className="ms-auto">
+                <LockableButton locked={!canTime} size="sm" variant="link" onClick={onQuick}>
+                  Add quick activity
+                </LockableButton>
+              </span>
             )}
           </div>
           {quick.length > 0 && (
@@ -381,6 +406,7 @@ function DueList({
             <thead>
               <tr>
                 <th scope="col">Task</th>
+                <th scope="col">Planned</th>
                 <th scope="col">Due</th>
                 <th scope="col">Status</th>
                 <th scope="col">
@@ -400,6 +426,7 @@ function DueList({
                       {t.phase && ` · ${t.phase}`}
                     </div>
                   </td>
+                  <PlannedCell t={t} />
                   <td
                     data-label="Due"
                     className={`text-nowrap ${t.overdue ? 'text-danger fw-semibold' : ''}`}
@@ -448,13 +475,39 @@ function DueList({
 /** My tasks: the sign-in landing page (FR-TSK-13, FR-TSK-20..25, AC-17.1, AC-TODAY-1..5). */
 export function MyTasksPage() {
   const { user, permissions } = useAuth();
-  const [params] = useSearchParams();
-  const [view, setView] = useState<string>(params.get('tab') === 'day' ? 'day' : 'today');
+  const [params, setParams] = useSearchParams();
+  // FR-TSK-28..30: tabs by permission; a blocked or unknown tab opens the next allowed one.
+  const allowed = myTasksTabsFor(permissions);
+  const rawTab = params.get('tab');
+  const wantedTab = rawTab ? (TAB_ALIASES[rawTab] ?? rawTab) : null;
+  const [picked, setView] = useState<string | null>(null);
+  // FR-TSK-30: a deep link to a tab that isn't allowed shows a notice once.
+  const [denied, setDenied] = useState(
+    () => Boolean(rawTab) && resolveMyTasksTab(wantedTab, allowed) !== wantedTab,
+  );
+  const view = resolveMyTasksTab(picked ?? wantedTab, allowed) ?? 'today';
+  useEffect(() => {
+    if (!rawTab) return;
+    const target = resolveMyTasksTab(wantedTab, allowed);
+    if (target && target !== rawTab) {
+      // Replace the URL so Back doesn't loop.
+      setParams(
+        (p) => {
+          const n = new URLSearchParams(p);
+          n.set('tab', target);
+          return n;
+        },
+        { replace: true },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawTab, allowed.join(',')]);
+  const showPlanned = view === 'assigned';
   const hasTracker = Boolean(permissions?.activities?.view);
   const [trackerModal, setTrackerModal] = useState<TrackerModalMode | null>(null);
   const [q, setQ] = useState('');
   const [logging, setLogging] = useState<MyTaskDto | null>(null);
-  const mine = useMyTasks(view === 'day' ? 'today' : view, q || undefined);
+  const mine = useMyTasks(view === 'day-timesheet' ? 'today' : view, q || undefined);
   const todayKey = mine.data?.today ?? '';
   const trackerDay = useTrackerDay(todayKey, undefined, hasTracker);
   const tracker = hasTracker && todayKey ? trackerDay.data : undefined;
@@ -467,7 +520,9 @@ export function MyTasksPage() {
     });
   // FR-DOC-26: documents requested from me (overdue ones in red), shown with the Today tab.
   const requests = useDocumentRequests('mine', useCan('documents', 'view'));
-  const week = useTimeWeek();
+  // Q-70: no time access (e.g. Viewers) → no week query and no 'Logged this week' card.
+  const canViewTime = Boolean(permissions?.time?.view);
+  const week = useTimeWeek(undefined, canViewTime);
   const counts = mine.data?.counts;
   const items = mine.data?.items ?? [];
   const holiday = mine.data?.holiday;
@@ -487,28 +542,42 @@ export function MyTasksPage() {
     { label: 'Overdue', value: String(counts?.overdue ?? 0) },
     { label: 'Due this week', value: String(counts?.dueThisWeek ?? 0) },
     { label: 'Waiting for my review', value: String(counts?.toReview ?? 0) },
-    {
-      label: 'Logged this week',
-      value: hoursLabel(week.data?.total ?? 0),
-      sub: `of ${hoursLabel(week.data?.capacity ?? user?.weeklyCapacityHours ?? 40)} available`,
-    },
+    ...(canViewTime
+      ? [
+          {
+            label: 'Logged this week',
+            value: hoursLabel(week.data?.loggedTotal ?? week.data?.total ?? 0),
+            sub: `of ${hoursLabel(week.data?.capacity ?? user?.weeklyCapacityHours ?? 40)} available`,
+          },
+        ]
+      : []),
   ];
+
+  // FR-TSK-29: no tab allowed → My tasks is hidden and its URL is Not found.
+  if (!allowed.length) return <NotFoundPage />;
 
   return (
     <>
       <PageHeader title="My tasks">
-        {tracker?.can.edit && (
-          <Button
+        {/* M15: today's quick activity; visible but disabled when today is locked. */}
+        {tracker && (tracker.can.edit || tracker.own) && (
+          <LockableButton
+            locked={!tracker.can.edit}
             size="sm"
-            aria-label="Quick activity"
-            title="Quick activity"
+            aria-label="Add quick activity"
+            title="Add quick activity"
             onClick={() => setTrackerModal({ kind: 'quick', date: todayKey })}
           >
             <i className="bx bx-plus me-1" aria-hidden="true" />
-            <span className="btn-collapse-label">Quick activity</span>
-          </Button>
+            <span className="btn-collapse-label">Add quick activity</span>
+          </LockableButton>
         )}
       </PageHeader>
+      {denied && (
+        <div className="alert alert-warning" role="status">
+          You don't have access to that view.
+        </div>
+      )}
       {holiday && (
         <div className="alert alert-info" role="status">
           <i className="bx bx-calendar me-2" aria-hidden="true" />
@@ -532,8 +601,15 @@ export function MyTasksPage() {
       <div className="card">
         <div className="card-body">
           <div className="d-flex flex-wrap align-items-center gap-3 mb-4">
-            <Nav variant="pills" activeKey={view} onSelect={(k) => setView(k ?? 'today')}>
-              {VIEWS.filter((v) => v.key !== 'day' || hasTracker).map((v) => (
+            <Nav
+              variant="pills"
+              activeKey={view}
+              onSelect={(k) => {
+                setDenied(false);
+                setView(k ?? 'today');
+              }}
+            >
+              {VIEWS.filter((v) => (allowed as string[]).includes(v.key)).map((v) => (
                 <Nav.Item key={v.key}>
                   <Nav.Link eventKey={v.key} as="button">
                     {v.label}
@@ -582,7 +658,7 @@ export function MyTasksPage() {
               />
               {requestsSection}
             </>
-          ) : view === 'day' ? (
+          ) : view === 'day-timesheet' ? (
             <DayTimesheet today={todayKey} initialDate={params.get('date') ?? undefined} />
           ) : view === 'due' ? (
             <>
@@ -600,7 +676,8 @@ export function MyTasksPage() {
                   <tr>
                     <th scope="col">Task</th>
                     <th scope="col">Project</th>
-                    <th scope="col">My role</th>
+                    <th scope="col">Role</th>
+                    {showPlanned && <th scope="col">Planned</th>}
                     <th scope="col">Due</th>
                     <th scope="col">Est. / actual</th>
                     <th scope="col">Status</th>
@@ -618,7 +695,8 @@ export function MyTasksPage() {
                       <td data-label="Project">
                         <Link to={`/projects/${t.project.id}`}>{t.project.name}</Link>
                       </td>
-                      <td data-label="My role">{ROLE_LABELS[t.role]}</td>
+                      <td data-label="Role">{ROLE_LABELS[t.role]}</td>
+                      {showPlanned && <PlannedCell t={t} />}
                       <td
                         data-label="Due"
                         className={`text-nowrap ${t.overdue ? 'text-danger' : ''}`}

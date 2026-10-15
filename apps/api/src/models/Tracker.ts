@@ -17,10 +17,18 @@ const lookupSchema = new Schema(
     order: { type: Number, default: 0 },
     deactivatedAt: { type: Date, default: null },
     deactivatedBy: { type: ObjectId, ref: 'User', default: null },
+    /** Stable key for system values (doc 14 FR-ACT-32: `quick_activity`); null for Admin-made ones. */
+    key: { type: String, default: null },
+    /** System values can't be renamed, deactivated or deleted (NFR-31). */
+    system: { type: Boolean, default: false },
   },
   { timestamps: true, strict: 'throw', collection: 'lookups', versionKey: false },
 );
 lookupSchema.index({ kind: 1, nameKey: 1 }, { unique: true });
+lookupSchema.index(
+  { kind: 1, key: 1 },
+  { unique: true, partialFilterExpression: { key: { $type: 'string' } } },
+);
 export type Lookup = InferSchemaType<typeof lookupSchema>;
 export const LookupModel = model('Lookup', lookupSchema);
 

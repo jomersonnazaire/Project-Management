@@ -1,6 +1,6 @@
 # 12 — Evidence Uploads, Follow-up Notifications, Project Conversation, Checklist UX
 
-**Status:** v0.5.0 approved by Jomerson with Q-29 to Q-31 defaults; notifications in-app only (2026-10-09) · **Author:** Rich · **Date:** 2026-10-09
+**Status:** v0.5.1 — Q-29 Defender for Storage deferred, not required for now, off the go-live checklist (2026-10-13, 9:15 PM SGT) · v0.5.0 approved by Jomerson with Q-29 to Q-31 defaults; notifications in-app only (2026-10-09) · **Author:** Rich · **Date:** 2026-10-09
 **Source:** Jomerson's testing feedback (room, 3:52 PM); Queen's test rules; UIE's v0.6 plan; Lean's split (PR #3 vs Milestone 3).
 
 ## 1. Scope
@@ -70,7 +70,7 @@
 | FR-EVD-05 | Each file shows name, type icon, size, uploader and time. Who can upload follows Edit on the task (owner/assignee for Members); who can view follows project access. | Must |
 | FR-EVD-06 | **Existing link evidence stays readable** (Queen), labelled "Link (legacy)", and can be removed by those with Edit, but no new links can be added. | Must |
 | FR-EVD-07 | A file attached as evidence to a task in For Review or Completed can't be removed without reopening the task; removals are audited. | Must |
-| FR-EVD-08 | Malware scanning of uploads (e.g. Microsoft Defender for Storage) is recommended; see Q-29. | Should |
+| FR-EVD-08 | Malware scanning of uploads (e.g. Microsoft Defender for Storage) is recommended; see Q-29. **Deferred (Jomerson, 2026-10-13, 9:15 PM SGT):** not required for now and off the go-live checklist. | Should |
 
 ### 3.3 Follow-up notifications (M3)
 | ID | Requirement | Priority |
@@ -128,7 +128,7 @@ Access rules (doc 11): add record types `notifications` (own only, not configura
 
 ## 7. Open questions and assumptions
 - **Q-28 (resolved, Jomerson 2026-10-09):** in-app only. Email notifications move to the External integrations stage in `docs/FEATURES_AND_ROADMAP.md`. Email needs an email service (e.g. Azure Communication Services) and would also enable emailed invite and reset links.
-- **Q-29 (resolved: proposed default approved; M3 ships with our own file checks, and turning on Defender for Storage is pending Jomerson's cost call)** Turn on malware scanning for uploads (Microsoft Defender for Storage, per-GB cost)? Proposed: yes for production.
+- **Q-29 (resolved: proposed default approved; M3 ships with our own file checks. Defender for Storage: deferred, not required for now, off the go-live checklist (Jomerson, 2026-10-13, 9:15 PM SGT))** Turn on malware scanning for uploads (Microsoft Defender for Storage, per-GB cost)? Proposed: yes for production.
 - **Q-30 (resolved: proposed default approved)** Should images (PNG, JPG) still be allowed in Documents, while evidence is limited to PDF, Word and Excel? Proposed: yes.
 - **Q-31 (resolved: proposed default approved)** Conversation messages permanent with no edit or delete, matching Lean's default? Proposed: yes; Admins can hide abusive content with an audited "hidden by Admin" marker.
 - **A-14** Old `.doc` and `.xls` formats are accepted as Word and Excel.

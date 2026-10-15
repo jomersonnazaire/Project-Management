@@ -44,8 +44,12 @@ export async function ensureDefaultAccessRules(logger?: Logger): Promise<number>
  * If the role's document is missing (not seeded yet), the defaults apply.
  */
 export async function permissionsFor(role: SystemRole): Promise<PermissionGrid> {
-  const doc = await AccessRuleModel.findOne({ role }).select('permissions').lean();
-  return effectivePermissions(role, (doc?.permissions as Partial<PermissionGrid>) ?? null);
+  const doc = await AccessRuleModel.findOne({ role }).lean();
+  if (!doc) return effectivePermissions(role, null);
+  // DEF-011: read the stored grid exactly the way the Access rules screen shows it (same
+  // hydration, same defaults), so what an Admin sees is what's enforced, including rows and
+  // cells written by the startup seed and migrations before any grid save.
+  return storedGrid(AccessRuleModel.hydrate(doc));
 }
 
 export async function getRuleDoc(role: SystemRole): Promise<AccessRuleDoc> {

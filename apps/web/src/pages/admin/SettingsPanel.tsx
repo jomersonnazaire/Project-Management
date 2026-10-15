@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { describeTimeLock, formatHour12, type TimeLockPolicy } from '@xc8/shared';
+import { describeTimeLock, normalizeTimeLock, type TimeLockPolicy } from '@xc8/shared';
 import { saveErrorMessage } from '../../api/client';
 import { useSaveTimeLock, useTimeLock } from '../../api/m4Hooks';
 import { useCan } from '../../auth/useCan';
@@ -7,11 +7,9 @@ import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { LookupsPanel } from './LookupsPanel';
 import { ProjectTypesPanel } from './ProjectTypesPanel';
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 /**
- * Q-09: Admins choose when last week's time entries lock. The default is every Monday at
- * 12:00 PM Philippine time; there is no approval step.
+ * Q-09: a day locks at 00:00 PHT on the third day after it. Admins can turn locking off; there is
+ * no approval step.
  */
 export function TimeLockCard() {
   const q = useTimeLock();
@@ -20,15 +18,17 @@ export function TimeLockCard() {
   // Local edits over the saved policy; cleared after a save.
   const [edit, setForm] = useState<TimeLockPolicy | null>(null);
   const [saved, setSaved] = useState(false);
-  const form = edit ?? q.data?.policy ?? null;
-  const dirty = form && q.data && JSON.stringify(form) !== JSON.stringify(q.data.policy);
+  // Never saved / null `enabled` shows ON; only `enabled` is kept (no legacy weekday/hour).
+  const savedPolicy = q.data ? normalizeTimeLock(q.data.policy) : null;
+  const form = edit ?? savedPolicy;
+  const dirty = form && savedPolicy && form.enabled !== savedPolicy.enabled;
   return (
     <div className="card mb-6">
       <div className="card-body">
         <h5 className="mb-1">Time entry lock</h5>
         <p className="small text-body-secondary">
-          Entries for last week lock at this time. Nobody approves timesheets; after the lock, only
-          an Admin can change them.
+          Each day's entries lock at 12:00 AM PHT on the third day after it. Nobody approves
+          timesheets; after the lock, only an Admin can reopen the day.
         </p>
         <ErrorAlert error={q.error} />
         {q.isPending || !form ? (
@@ -39,7 +39,7 @@ export function TimeLockCard() {
               e.preventDefault();
               setSaved(false);
               save.mutate(
-                { ...form, version: q.data!.version },
+                { enabled: form.enabled, version: q.data!.version },
                 {
                   onSuccess: () => {
                     setForm(null);
@@ -57,42 +57,10 @@ export function TimeLockCard() {
                 role="switch"
                 checked={form.enabled}
                 disabled={!canEdit}
-                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+                onChange={(e) => setForm({ enabled: e.target.checked })}
               />
               <label className="form-check-label" htmlFor="tl-enabled">
-                Lock last week's entries
-              </label>
-            </div>
-            <div className="d-flex flex-wrap gap-3 mb-3">
-              <label className="small">
-                Day
-                <select
-                  className="form-select form-select-sm"
-                  value={form.weekday}
-                  disabled={!canEdit || !form.enabled}
-                  onChange={(e) => setForm({ ...form, weekday: Number(e.target.value) })}
-                >
-                  {WEEKDAYS.map((d, i) => (
-                    <option key={d} value={i}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="small">
-                Time (Philippine time)
-                <select
-                  className="form-select form-select-sm"
-                  value={form.hour}
-                  disabled={!canEdit || !form.enabled}
-                  onChange={(e) => setForm({ ...form, hour: Number(e.target.value) })}
-                >
-                  {Array.from({ length: 24 }, (_, h) => (
-                    <option key={h} value={h}>
-                      {formatHour12(h)}
-                    </option>
-                  ))}
-                </select>
+                Lock days after two days
               </label>
             </div>
             <p className="small mb-3" aria-live="polite">

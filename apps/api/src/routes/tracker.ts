@@ -3,6 +3,7 @@ import {
   DAY_LOCKED_ADMIN,
   EDITABLE_LOOKUP_KINDS,
   LOOKUP_LABELS,
+  SYSTEM_ACTIVITY_TYPE_MESSAGE,
   STOP_TIMER_FIRST,
   TIMER_RUNNING_MESSAGE,
   type TimerRunningDetails,
@@ -78,13 +79,12 @@ function dateParam(req: Request): Date {
   return d;
 }
 
+/** FR-ACT-33 (doc 14 v1.2.3): no time logging on a date after today (PH): 422 FUTURE_DATE. */
 function noFuture(date: Date) {
   if (date > todayPH()) {
-    throw badRequest(
-      "Date can't be in the future.",
-      [{ path: 'date', message: "Date can't be in the future." }],
-      'VALIDATION_ERROR',
-    );
+    throw unprocessable("Date can't be in the future.", 'FUTURE_DATE', [
+      { path: 'date', message: "Date can't be in the future." },
+    ]);
   }
 }
 
@@ -456,6 +456,8 @@ export function trackerRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const entry = await TimeEntryModel.findById(idParam(req));
     if (!entry) throw notFound();
+    // NFR-25 (DEF-014): people who can't view the entry get the same 404 as a made-up id (the
+    // central scope gate answers it before the access rules); supervisors/Admins get VIEW_ONLY.
     if (!entry.userId.equals(user._id)) {
       if (await canViewPerson(user, entry.userId)) {
         throw forbidden('You can view this entry, but only its owner can change it.', 'VIEW_ONLY');
@@ -670,7 +672,14 @@ export function trackerRouter(registry: RouteRegistry) {
     await ensureDefaultLookups();
     const docs = await LookupModel.find({ active: true }).sort({ order: 1, name: 1 }).lean();
     const pick = (k: LookupKind) =>
-      docs.filter((d) => d.kind === k).map((d) => ({ id: d._id.toString(), name: d.name }));
+      docs
+        .filter((d) => d.kind === k)
+        .map((d) => ({
+          id: d._id.toString(),
+          name: d.name,
+          key: d.key ?? null,
+          system: d.system === true,
+        }));
     res.json({
       activityTypes: pick('ACTIVITY_TYPE'),
       locations: pick('LOCATION'),
@@ -703,6 +712,8 @@ export function trackerRouter(registry: RouteRegistry) {
       deactivatedAt?: Date | null;
       deactivatedBy?: Id | null;
       createdAt?: Date;
+      key?: string | null;
+      system?: boolean | null;
     }[],
   ): Promise<LookupDto[]> {
     const used = await usage(docs.map((d) => d._id));
@@ -721,6 +732,8 @@ export function trackerRouter(registry: RouteRegistry) {
           }
         : null,
       createdAt: (d.createdAt ?? new Date()).toISOString(),
+      key: d.key ?? null,
+      system: d.system === true,
     }));
   }
 
@@ -770,6 +783,10 @@ export function trackerRouter(registry: RouteRegistry) {
     const doc = await LookupModel.findById(idParam(req));
     // FR-ACT-22: the old Modules list stays in the database untouched.
     if (!doc || !isEditableKind(doc.kind)) throw notFound();
+    // FR-ACT-32 / FR-ACL-22: system types can't be renamed or deactivated.
+    if (doc.system && ((input.name && input.name !== doc.name) || input.active === false)) {
+      throw unprocessable(SYSTEM_ACTIVITY_TYPE_MESSAGE, 'SYSTEM_ACTIVITY_TYPE');
+    }
     const user = currentUser(req);
     const changes: { field: string; old: unknown; new: unknown }[] = [];
     if (input.name && input.name !== doc.name) {
@@ -808,6 +825,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const doc = await LookupModel.findById(idParam(req));
     // FR-ACT-22: the old Modules list stays in the database untouched.
     if (!doc || !isEditableKind(doc.kind)) throw notFound();
+    if (doc.system) throw unprocessable(SYSTEM_ACTIVITY_TYPE_MESSAGE, 'SYSTEM_ACTIVITY_TYPE');
     const n = (await usage([doc._id])).get(doc._id.toString()) ?? 0;
     if (n > 0) throw conflictWith(lookupInUseMessage(doc.name, n), 'LOOKUP_IN_USE', { usedBy: n });
     await doc.deleteOne();

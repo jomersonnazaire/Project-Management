@@ -140,7 +140,8 @@ describe('FR-ACT-27: own timesheet only', () => {
     const member = w.member.user._id.toString();
     const url = `/api/v1/tracker/day?date=2026-10-14&userId=${member}`;
     expect((await w.pm2.agent.get(url)).status).toBe(404);
-    expect((await w.viewer.agent.get(url)).status).toBe(404);
+    // Q-70 / AC-56.1: Viewers have no tracker access (403, not 404).
+    expect((await w.viewer.agent.get(url)).status).toBe(403);
     const mine = await w.member.agent.get('/api/v1/tracker/day?date=2026-10-14');
     expect(mine.body.day.user.id).toBe(member);
     // Another member asking for the PM's day: 404 too.

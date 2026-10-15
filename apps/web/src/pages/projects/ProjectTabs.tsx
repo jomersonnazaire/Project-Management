@@ -2,18 +2,20 @@ import {
   BOARD_COLUMNS,
   TASK_STATUS_LABELS,
   TASK_TRANSITIONS,
+  activityInUseMessage,
   effortSummary,
   formatHours,
   moveWithinGroup,
+  phaseNotEmptyMessage,
   plural,
   type PhaseDto,
   type ProjectDto,
   type TaskDto,
   type TaskStatus,
 } from '@xc8/shared';
-import { useState, type DragEvent } from 'react';
+import { Fragment, useState, type DragEvent } from 'react';
 import { useEdgeFade } from '../../lib/useEdgeFade';
-import { Button, Dropdown, Form } from 'react-bootstrap';
+import { Button, Form, Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import {
   useContactOptions,
@@ -25,7 +27,14 @@ import { DragHandle } from '../../components/ReorderControls';
 import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
 import { useAuth } from '../../auth/AuthContext';
 import { TaskFormModal } from './TaskFormModal';
-import { useDeletePhase, useProjectPhases } from '../../api/issueHooks';
+import {
+  useAddPhase,
+  useApplyTemplate,
+  useDeletePhase,
+  useProjectPhases,
+  useRenamePhase,
+} from '../../api/issueHooks';
+import { useTaskMutation, useTemplate, useTemplates } from '../../api/projectHooks';
 import { ApiError } from '../../api/client';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
@@ -101,6 +110,54 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   const emptyPhases = (phaseInfo.data ?? []).filter(
     (x) => x.taskCount === 0 && !phases.includes(x.name),
   );
+  // DR-49: inline ✎ Edit / 🗑 Delete per row (mockup v0.9.10). Delete refused with ACTIVITY_IN_USE
+  // shows one red line under the row and no dialog; otherwise confirm first.
+  const showActions = showEdit || canPlan;
+  const colCount = 6 + (canPlan ? 1 : 0) + (showActions ? 1 : 0);
+  const delTask = useTaskMutation();
+  const [confirmTask, confirmTaskDialog] = useConfirm();
+  const [rowBlocked, setRowBlocked] = useState<Record<string, string>>({});
+  const setBlockedLine = (id: string, line: string | null) =>
+    setRowBlocked((prev) => {
+      const next = { ...prev };
+      if (line) next[id] = line;
+      else delete next[id];
+      return next;
+    });
+  const deleteTask = async (t: TaskDto) => {
+    setBlockedLine(t.id, null);
+    if ((t.deleteBlockedBy?.length ?? 0) > 0) {
+      setBlockedLine(t.id, activityInUseMessage(t.deleteBlockedBy));
+      return;
+    }
+    if (!t.deletable) {
+      setBlockedLine(t.id, `Can’t delete: ${t.deleteBlockedReason ?? 'this activity is in use.'}`);
+      return;
+    }
+    if (
+      await confirmTask({
+        title: `Delete "${t.name}"?`,
+        body: 'Nothing has been recorded on it yet. This cannot be undone.',
+        confirmLabel: 'Delete',
+        danger: true,
+      })
+    ) {
+      delTask.mutate(
+        { path: `/tasks/${t.id}`, method: 'DELETE' },
+        {
+          onError: (e) => {
+            if (e instanceof ApiError && e.code === 'ACTIVITY_IN_USE') {
+              const by = (e.details as { blockedBy?: TaskDto['deleteBlockedBy'] } | undefined)
+                ?.blockedBy;
+              setBlockedLine(t.id, by?.length ? activityInUseMessage(by) : e.message);
+            } else if (e instanceof Error) {
+              setBlockedLine(t.id, `⚠ ${e.message}`);
+            }
+          },
+        },
+      );
+    }
+  };
   const move = (ph: string, from: number, to: number) => {
     const group = tasks.filter((t) => phaseOf(t) === ph);
     const ids = group.map((t) => t.id);
@@ -109,6 +166,14 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
     setAnnounce(`Moved ${group[from]!.name} to position ${to + 1} of ${ids.length} in ${ph}.`);
     reorder.mutate({ phase: ph === OTHER ? null : ph, taskIds: next });
   };
+
+  const toolbar = (
+    <ChecklistToolbar
+      project={project}
+      tasks={tasks}
+      hasPhases={phases.length > 0 || emptyPhases.length > 0}
+    />
+  );
 
   const emptySection = emptyPhases.length > 0 && (
     <>
@@ -122,7 +187,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
             <Button variant="outline-secondary" size="sm" onClick={() => setAddingTo(ph.name)}>
               + Add activity
             </Button>
-            <PhaseDelete projectId={project.id} phase={ph} />
+            <PhaseControls project={project} phase={ph} />
           </div>
         </div>
       ))}
@@ -133,6 +198,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
     if (emptySection) {
       return (
         <>
+          {toolbar}
           {emptySection}
           {addingTo !== null && (
             <TaskFormModal
@@ -146,16 +212,21 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         </>
       );
     }
+    // FR-PRJ-29: blank project empty state; the buttons live in the toolbar above.
     return (
-      <EmptyState icon="bx-list-check" title="No tasks yet">
-        {project.can.planTasks
-          ? 'Add the first task with + Add task.'
-          : 'Tasks will show here once the plan is ready.'}
-      </EmptyState>
+      <>
+        {toolbar}
+        <EmptyState icon="bx-list-check" title="No phases yet">
+          {project.can.planTasks
+            ? 'Add your first phase, or apply a template.'
+            : 'Phases will show here once the plan is ready.'}
+        </EmptyState>
+      </>
     );
   }
   return (
     <>
+      {toolbar}
       <p className="small text-body-secondary">
         Estimated {formatHours(summary.estimatedHours)} across{' '}
         {plural(tasks.length - summary.unestimatedCount, 'task')} ·{' '}
@@ -176,7 +247,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         return (
           <div key={ph} className="card mb-4">
             <div
-              className="card-header py-3 d-flex align-items-center gap-2 phase-toggle"
+              className="card-header py-3 d-flex flex-wrap align-items-center gap-2 phase-toggle"
               role="button"
               tabIndex={0}
               aria-expanded={open}
@@ -194,6 +265,9 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                 ▸
               </span>
               <h3 className="h6 mb-0">{ph}</h3>
+              {canPlan && ph !== OTHER && infoOf(ph) && (
+                <PhaseControls project={project} phase={infoOf(ph)!} />
+              )}
               <span className="small text-body-secondary">
                 {plural(group.length, 'activity', 'activities')} · {done} done
               </span>
@@ -210,7 +284,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
             </div>
             <div id={bodyId} hidden={!open}>
               <div className="table-responsive">
-                <table className="table table-stack-md mb-0">
+                <table className="table table-stack-md mb-0 checklist-table">
                   <thead>
                     <tr>
                       {canPlan && (
@@ -219,17 +293,12 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                         </th>
                       )}
                       <th scope="col">#</th>
-                      <th scope="col">Task</th>
+                      <th scope="col">Activity</th>
                       <th scope="col">Owner</th>
                       <th scope="col">Due</th>
-                      <th scope="col">Est. / actual</th>
+                      <th scope="col">Est / Act</th>
                       <th scope="col">Status</th>
-                      {showEdit && (
-                        <th scope="col" style={{ width: '2.5rem' }}>
-                          <span className="visually-hidden">Edit</span>
-                        </th>
-                      )}
-                      {canPlan && (
+                      {showActions && (
                         <th scope="col">
                           <span className="visually-hidden">Actions</span>
                         </th>
@@ -238,97 +307,116 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                   </thead>
                   <tbody>
                     {group.map((t, i) => (
-                      <tr
-                        key={t.id}
-                        {...dropTargetProps(canPlan, scope, (from) => move(ph, Number(from), i))}
-                      >
-                        {canPlan && (
-                          <td className="text-nowrap" style={{ width: '2rem' }}>
-                            <DragHandle
-                              name={t.name}
-                              index={i}
-                              count={group.length}
-                              disabled={reorder.isPending}
-                              onMove={(to) => move(ph, i, to)}
-                              dragProps={dragHandleProps(canPlan, scope, String(i))}
-                            />
-                          </td>
-                        )}
-                        <td data-label="#">{t.order}</td>
-                        <td className="cell-primary">
-                          <Button
-                            variant="link"
-                            className="p-0 text-start fw-medium"
-                            onClick={() => onOpen(t.id)}
-                          >
-                            {t.name}
-                          </Button>
-                          {t.party === 'CLIENT' && (
-                            <span className="badge bg-label-info ms-2">Client</span>
+                      <Fragment key={t.id}>
+                        <tr
+                          {...dropTargetProps(canPlan, scope, (from) => move(ph, Number(from), i))}
+                        >
+                          {canPlan && (
+                            <td className="text-nowrap" style={{ width: '2rem' }}>
+                              <DragHandle
+                                name={t.name}
+                                index={i}
+                                count={group.length}
+                                disabled={reorder.isPending}
+                                onMove={(to) => move(ph, i, to)}
+                                dragProps={dragHandleProps(canPlan, scope, String(i))}
+                              />
+                            </td>
                           )}
-                        </td>
-                        <td data-label="Owner">{t.owner?.name ?? '–'}</td>
-                        <td data-label="Due" className="text-nowrap">
-                          <DueCell t={t} />
-                        </td>
-                        <td data-label="Est. / actual">
-                          <EstAct est={t.estHours} act={t.actualHours} />
-                        </td>
-                        <td data-label="Status">
-                          <TaskStatusBadge status={t.status} />
-                        </td>
-                        {showEdit && (
-                          <td className="text-end cell-edit" style={{ width: '2.5rem' }}>
-                            {t.can.edit && (
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 text-body"
-                                aria-label="Edit task"
-                                title="Edit task"
-                                onClick={() => editTask(t)}
-                              >
-                                <i className="bx bx-pencil fs-5" aria-hidden="true" />
-                              </Button>
+                          <td data-label="#">{t.order}</td>
+                          <td className="cell-primary">
+                            <Button
+                              variant="link"
+                              className="p-0 text-start fw-medium"
+                              onClick={() => onOpen(t.id)}
+                            >
+                              {t.name}
+                            </Button>
+                            {t.party === 'CLIENT' && (
+                              <span className="badge bg-label-info ms-2">Client</span>
                             )}
                           </td>
-                        )}
-                        {canPlan && (
-                          <td className="text-end cell-actions">
-                            {/* Touch and non-drag alternative to the grip handle (FR-PRJ-18). Same reorder call;
-                                moving to another phase stays in Edit task. */}
-                            <Dropdown align="end">
-                              <Dropdown.Toggle
-                                variant="link"
-                                size="sm"
-                                className="hide-arrow p-0 text-body"
-                                aria-label={`Actions for ${t.name}`}
-                              >
-                                <i
-                                  className="bx bx-dots-vertical-rounded fs-5"
-                                  aria-hidden="true"
-                                />
-                              </Dropdown.Toggle>
-                              <Dropdown.Menu>
-                                <Dropdown.Item
-                                  as="button"
-                                  disabled={i === 0 || reorder.isPending}
-                                  onClick={() => move(ph, i, i - 1)}
-                                >
-                                  Move up
-                                </Dropdown.Item>
-                                <Dropdown.Item
-                                  as="button"
-                                  disabled={i === group.length - 1 || reorder.isPending}
-                                  onClick={() => move(ph, i, i + 1)}
-                                >
-                                  Move down
-                                </Dropdown.Item>
-                              </Dropdown.Menu>
-                            </Dropdown>
+                          <td data-label="Owner">{t.owner?.name ?? '–'}</td>
+                          <td data-label="Due" className="text-nowrap">
+                            <DueCell t={t} />
                           </td>
+                          <td data-label="Est / Act">
+                            <EstAct est={t.estHours} act={t.actualHours} />
+                          </td>
+                          <td data-label="Status">
+                            <TaskStatusBadge status={t.status} sentenceCase />
+                          </td>
+                          {showActions && (
+                            <td className="text-end text-nowrap cell-actions">
+                              {/* DR-49: touch / narrow-screen alternative to drag and Alt+↑/↓ (FR-PRJ-18). */}
+                              {canPlan && (
+                                <span className="touch-move">
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    className="me-1"
+                                    aria-label={`Move up ${t.name}`}
+                                    title="Move up"
+                                    disabled={i === 0 || reorder.isPending}
+                                    onClick={() => move(ph, i, i - 1)}
+                                  >
+                                    ↑
+                                  </Button>
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    className="me-1"
+                                    aria-label={`Move down ${t.name}`}
+                                    title="Move down"
+                                    disabled={i === group.length - 1 || reorder.isPending}
+                                    onClick={() => move(ph, i, i + 1)}
+                                  >
+                                    ↓
+                                  </Button>
+                                </span>
+                              )}
+                              {t.can.edit && (
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  title="Edit activity"
+                                  aria-label={`Edit ${t.name}`}
+                                  onClick={() => editTask(t)}
+                                >
+                                  ✎ Edit
+                                </Button>
+                              )}
+                              {canPlan && t.can.plan && (
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  className="ms-1"
+                                  title="Delete activity"
+                                  aria-label={`Delete ${t.name}`}
+                                  disabled={delTask.isPending}
+                                  onClick={() => deleteTask(t)}
+                                >
+                                  🗑 Delete
+                                </Button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                        {rowBlocked[t.id] && (
+                          <tr className="row-blocked">
+                            <td colSpan={colCount}>
+                              <div
+                                className="small"
+                                role="alert"
+                                style={{ color: '#b8240a' }}
+                                data-testid="delete-blocked"
+                              >
+                                {rowBlocked[t.id]}
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </tr>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -343,9 +431,6 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                   >
                     {addLabel}
                   </Button>
-                  {ph !== OTHER && infoOf(ph) && (
-                    <PhaseDelete projectId={project.id} phase={infoOf(ph)!} />
-                  )}
                 </div>
               )}
             </div>
@@ -353,6 +438,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         );
       })}
       {emptySection}
+      {confirmTaskDialog}
       {editingTask && (
         <TaskFormModal
           project={project}
@@ -374,54 +460,428 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   );
 }
 
-/** Delete phase: shown when allowed (with a confirm); otherwise disabled with the reason. */
-function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto }) {
-  const [confirm, confirmDialog] = useConfirm();
-  const del = useDeletePhase(projectId);
-  if (!phase.deletable && !phase.deleteBlockedReason) return null;
+/**
+ * Checklist toolbar (FR-PRJ-29..31, doc 14 v1.2.6): the starting-template label, "+ Add phase"
+ * (Project PM in Planning, or Admin) and "Apply template" (Planning only), plus the result toast.
+ */
+function ChecklistToolbar({
+  project,
+  tasks,
+  hasPhases,
+}: {
+  project: ProjectDto;
+  tasks: TaskDto[];
+  hasPhases: boolean;
+}) {
+  const { user } = useAuth();
+  const canEditProject = useCan('projects', 'edit');
+  const planner = project.can.planTasks && !project.archived && canEditProject;
+  const isAdmin = user?.systemRole === 'ADMIN';
+  const planning = project.status === 'PLANNING';
+  const canAddPhase = planner && (isAdmin || planning);
+  const canApply = planner && planning;
+  const [adding, setAdding] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [toastInfo, setToastInfo] = useState(false);
   return (
     <>
-      {confirmDialog}
-      <span className="d-inline-flex flex-wrap align-items-center gap-2 ms-auto">
-        <Button
-          variant="outline-danger"
-          size="sm"
-          disabled={!phase.deletable || del.isPending}
-          aria-describedby={
-            phase.deletable ? undefined : `phase-blocked-${phase.name.replace(/\W+/g, '-')}`
-          }
-          onClick={async () => {
-            if (
-              await confirm({
-                title: `Delete the phase "${phase.name}"?`,
-                body: 'This cannot be undone.',
-                confirmLabel: 'Delete phase',
-                danger: true,
-              })
-            ) {
-              del.mutate(phase.name);
-            }
+      <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <span className="small text-body-secondary" data-testid="started-from">
+          {project.templateName
+            ? `Started from ${project.templateName} v${project.templateVersion}`
+            : 'Started blank'}
+        </span>
+        <span className="ms-auto d-flex flex-wrap gap-2">
+          {canAddPhase && (
+            <Button
+              size="sm"
+              variant={hasPhases ? 'outline-primary' : 'primary'}
+              onClick={() => setAdding(true)}
+            >
+              + Add phase
+            </Button>
+          )}
+          {canApply && (
+            <Button size="sm" variant="outline-secondary" onClick={() => setApplying(true)}>
+              Apply template
+            </Button>
+          )}
+          {planner && !canAddPhase && (
+            <small
+              className="text-body-secondary"
+              title={PHASE_LOCK_NOTE}
+              data-testid="phase-lock-toolbar"
+            >
+              <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+              {PHASE_LOCK_NOTE}
+            </small>
+          )}
+        </span>
+      </div>
+      {toast && (
+        <div className={`alert ${toastInfo ? 'alert-info' : 'alert-success'} py-2`} role="status">
+          {toast}
+        </div>
+      )}
+      {adding && <AddPhaseModal projectId={project.id} onClose={() => setAdding(false)} />}
+      {applying && (
+        <ApplyTemplateModal
+          project={project}
+          tasks={tasks}
+          hasPhases={hasPhases}
+          onClose={() => setApplying(false)}
+          onDone={(msg, info) => {
+            setApplying(false);
+            setToast(msg);
+            setToastInfo(Boolean(info));
           }}
-        >
-          Delete phase
-        </Button>
-        {!phase.deletable && (
-          <small
-            className="text-body-secondary"
-            id={`phase-blocked-${phase.name.replace(/\W+/g, '-')}`}
-          >
-            {phase.deleteBlockedReason}
-          </small>
-        )}
-        {del.error instanceof ApiError && (
-          <small className="text-danger" role="alert">
-            ⚠ {del.error.message}
-          </small>
-        )}
-      </span>
+        />
+      )}
     </>
   );
 }
+
+function AddPhaseModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const add = useAddPhase(projectId);
+  return (
+    <Modal show onHide={onClose} centered aria-labelledby="phase-add-title">
+      <Form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) add.mutate(name.trim(), { onSuccess: onClose });
+        }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="phase-add-title">Add phase</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ErrorAlert error={add.error} />
+          <Form.Group controlId="phase-add-name">
+            <Form.Label>Phase name *</Form.Label>
+            <Form.Control value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={add.isPending || !name.trim()}>
+            Add phase
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
+function ApplyTemplateModal({
+  project,
+  tasks,
+  hasPhases,
+  onClose,
+  onDone,
+}: {
+  project: ProjectDto;
+  tasks: TaskDto[];
+  hasPhases: boolean;
+  onClose: () => void;
+  onDone: (toast: string, info?: boolean) => void;
+}) {
+  const templates = useTemplates({ status: 'PUBLISHED' });
+  const [id, setId] = useState('');
+  const apply = useApplyTemplate(project.id);
+  const items = (templates.data?.items ?? []).filter((t) => !t.superseded);
+  const t = items.find((x) => x.id === id);
+  // Doc 14 §J: n new and k merged phases, from the template's phases vs the project's.
+  const detail = useTemplate(id || undefined);
+  const phases = useProjectPhases(project.id);
+  const have = new Set((phases.data ?? []).map((p) => p.name.trim().toLowerCase()));
+  const tplNames = [
+    ...new Set((detail.data?.phases ?? []).map((p) => p.name.trim().toLowerCase())),
+  ];
+  const k = tplNames.filter((n) => have.has(n)).length;
+  const n = tplNames.length - k;
+  // DEF-016: already applied = every template phase exists and holds an activity with the same
+  // name (trimmed, case-insensitive), so applying again would add nothing.
+  const key = (x: string) => x.trim().toLowerCase();
+  const haveActs = new Set(tasks.map((x) => `${key(x.phase ?? '')}\u0000${key(x.name)}`));
+  const tplPhaseName = new Map((detail.data?.phases ?? []).map((p) => [p.id, p.name]));
+  const alreadyApplied =
+    Boolean(detail.data) &&
+    n === 0 &&
+    (detail.data?.activities ?? []).every((a) =>
+      haveActs.has(`${key(tplPhaseName.get(a.phaseId) ?? '')}\u0000${key(a.name)}`),
+    );
+  if (t && alreadyApplied) {
+    return (
+      <Modal show onHide={onClose} centered aria-labelledby="apply-template-title">
+        <Modal.Header closeButton>
+          <Modal.Title id="apply-template-title">Apply template</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-0" data-testid="apply-already">
+            {t.name} is already applied to this project. Applying it again adds nothing.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    );
+  }
+  return (
+    <Modal show onHide={onClose} centered aria-labelledby="apply-template-title">
+      <Form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!t) return;
+          apply.mutate(
+            { templateId: t.id, templateVersion: t.version },
+            {
+              onSuccess: (r) =>
+                r.alreadyApplied && r.phasesAdded === 0 && r.tasksAdded === 0
+                  ? onDone(`${r.template.name} is already applied. Nothing new to add.`, true)
+                  : onDone(
+                      applyToast(r.phasesAdded, r.phasesMerged ?? 0, r.template.name, r.tasksAdded),
+                    ),
+              onError: () => void templates.refetch(),
+            },
+          );
+        }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="apply-template-title">Apply template</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ErrorAlert error={apply.error || templates.error} />
+          <Form.Group controlId="apply-template-id">
+            <Form.Label>Template *</Form.Label>
+            <Form.Select value={id} onChange={(e) => setId(e.target.value)}>
+              <option value="">Choose…</option>
+              {items.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name} · v{x.version}
+                </option>
+              ))}
+            </Form.Select>
+            <Form.Text className="d-block">
+              Pre-fills a standard set of phases and activities. You can change them later.
+            </Form.Text>
+          </Form.Group>
+          {t && hasPhases && detail.data && (
+            <p className="mt-3 mb-0" data-testid="apply-confirm">
+              {applyConfirmText(n, k, t.activityCount)}
+            </p>
+          )}
+          {t && project.templateName === t.name && (
+            <p className="mt-2 mb-0 text-warning">
+              This template was already applied to this project.
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!t || apply.isPending}>
+            Apply template
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
+/** FR-PRJ-23: PMs outside Planning see why phase details are locked (tooltip and note). */
+export const PHASE_LOCK_NOTE = 'Phases can be edited only in Planning';
+
+/**
+ * Phase controls (FR-PRJ-22/23): Edit phase and Delete phase while the phase is editable (Project
+ * PM in Planning, or Admin); otherwise a lock note for planners. "+ Add activity" stays (Q-64).
+ */
+function PhaseControls({ project, phase }: { project: TabProps['project']; phase: PhaseDto }) {
+  const [renaming, setRenaming] = useState(false);
+  if (phase.editable === false) {
+    return (
+      <small className="text-body-secondary ms-2" title={PHASE_LOCK_NOTE} data-testid="phase-lock">
+        <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+        {PHASE_LOCK_NOTE}
+      </small>
+    );
+  }
+  return (
+    <>
+      <Button
+        variant="outline-secondary"
+        size="sm"
+        className="ms-2"
+        aria-label={`Edit phase ${phase.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setRenaming(true);
+        }}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        ✎ Edit
+      </Button>
+      <PhaseDelete projectId={project.id} phase={phase} />
+      {renaming && (
+        <PhaseRenameModal
+          projectId={project.id}
+          name={phase.name}
+          onClose={() => setRenaming(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function PhaseRenameModal({
+  projectId,
+  name,
+  onClose,
+}: {
+  projectId: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(name);
+  const rename = useRenamePhase(projectId);
+  return (
+    <Modal show onHide={onClose} centered aria-labelledby="phase-edit-title">
+      <Form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!value.trim()) return;
+          rename.mutate({ name, newName: value.trim() }, { onSuccess: onClose });
+        }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="phase-edit-title">Phase information</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <ErrorAlert error={rename.error} />
+          <Form.Group controlId="phase-name">
+            <Form.Label>Phase name *</Form.Label>
+            <Form.Control
+              value={value}
+              maxLength={120}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </Form.Group>
+          <p className="small text-body-secondary mt-2 mb-0">
+            Editable while the project is in Planning.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={rename.isPending || !value.trim()}>
+            Save phase
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+}
+
+/**
+ * Delete phase (FR-PRJ-32/33): an empty phase asks to confirm; a phase with activities opens no
+ * dialog and shows one red line under the header instead. Shown only while the phase is editable.
+ */
+function PhaseDelete({ projectId, phase }: { projectId: string; phase: PhaseDto }) {
+  const [confirm, confirmDialog] = useConfirm();
+  const del = useDeletePhase(projectId);
+  const [blocked, setBlocked] = useState<string | null>(null);
+  const serverBlock =
+    del.error instanceof ApiError && del.error.code === 'PHASE_NOT_EMPTY'
+      ? phaseNotEmptyText(
+          (del.error.details as { activityCount?: number } | undefined)?.activityCount,
+        )
+      : null;
+  const line = blocked ?? serverBlock;
+  return (
+    <>
+      {confirmDialog}
+      <Button
+        variant="outline-secondary"
+        size="sm"
+        aria-label={`Delete phase ${phase.name}`}
+        disabled={del.isPending}
+        onKeyDown={(e) => e.stopPropagation()}
+        onClick={async (e) => {
+          e.stopPropagation();
+          setBlocked(null);
+          if (phase.taskCount > 0) {
+            setBlocked(phaseNotEmptyText(phase.taskCount));
+            return;
+          }
+          if (!phase.deletable && phase.deleteBlockedReason) {
+            setBlocked(phase.deleteBlockedReason);
+            return;
+          }
+          if (
+            await confirm({
+              title: `Delete phase ${phase.name}?`,
+              cancelLabel: 'Cancel',
+              confirmLabel: 'Delete phase',
+              danger: true,
+              confirmClassName: 'btn-danger-strong',
+            })
+          ) {
+            del.mutate(phase.name);
+          }
+        }}
+      >
+        🗑 Delete
+      </Button>
+      {line && (
+        <div
+          className="w-100 small"
+          role="alert"
+          style={{ color: '#b8240a', order: 99 }}
+          data-testid="phase-delete-blocked"
+        >
+          {line}
+        </div>
+      )}
+      {del.error instanceof ApiError && !serverBlock && (
+        <div className="w-100 small text-danger" role="alert" style={{ order: 99 }}>
+          ⚠ {del.error.message}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Doc 14 §J: the apply-template result toast. */
+function applyToast(added: number, merged: number, name: string, tasks = 0) {
+  if (!added && tasks > 0) return `Added ${plural(tasks, 'activity', 'activities')} from ${name}.`;
+  if (added && merged)
+    return `Added ${plural(added, 'phase')} and merged ${merged} into existing ones from ${name}.`;
+  if (merged) return `Merged ${plural(merged, 'phase')} into existing ones from ${name}.`;
+  return `Added ${plural(added, 'phase')} from ${name}.`;
+}
+
+/** Doc 14 §J: the apply-template confirm text (merge clause only when k > 0). */
+function applyConfirmText(n: number, k: number, m: number) {
+  const merge = k
+    ? `, merges ${k} into existing ${k === 1 ? 'phase' : 'phases'} with the same name, and`
+    : ' and';
+  return `This adds ${n} new ${n === 1 ? 'phase' : 'phases'}${merge} adds ${plural(m, 'activity', 'activities')}. Nothing is replaced.`;
+}
+
+/** FR-PRJ-33: the inline "can't delete" line, with or without a count. */
+function phaseNotEmptyText(count: number | undefined) {
+  return typeof count === 'number' ? phaseNotEmptyMessage(count) : PHASE_NOT_EMPTY_NO_COUNT;
+}
+const PHASE_NOT_EMPTY_NO_COUNT =
+  "Can't delete: this phase still has activities. Delete them first.";
 
 /**
  * Kanban board by status (FR-TSK-10). Cards can be dragged, and every card also has a "Move to…"

@@ -51,7 +51,7 @@ describe('DR-23 project code', () => {
       return undefined;
     });
     renderAt(`/projects/new?clientId=${ACME.id}`, <App />);
-    await userEvent.selectOptions(await screen.findByLabelText('Template'), 't1');
+    await userEvent.selectOptions(await screen.findByLabelText('Template (optional)'), 't1');
     await screen.findByRole('option', { name: 'Implementation' });
     await userEvent.selectOptions(screen.getByLabelText('Project type *'), 'pt1');
     const code = screen.getByLabelText('Project code');

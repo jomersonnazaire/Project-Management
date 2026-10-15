@@ -48,6 +48,13 @@ export const DEFAULT_LOOKUPS: Record<LookupKind, string[]> = {
   // Free text since mockup v0.8.9: nothing to seed.
   MODULE: [],
 };
+/** Doc 14 FR-ACT-32 / NFR-31: the system Activity type, preselected by Add quick activity. */
+export const QUICK_ACTIVITY_KEY = 'quick_activity';
+export const QUICK_ACTIVITY_NAME = 'Quick Activity';
+/** EC-90 / A-21: an Admin-made type already named "Quick Activity" is renamed to this. */
+export const QUICK_ACTIVITY_CUSTOM_NAME = 'Quick Activity (custom)';
+export const SYSTEM_ACTIVITY_TYPE_MESSAGE =
+  "Quick Activity is a system type. It can't be renamed, deactivated or deleted.";
 export const lookupSchema = z.strictObject({
   name: z.string().trim().min(1, 'Add a name.').max(80),
 });
@@ -67,6 +74,17 @@ export interface LookupDto {
   deactivatedAt: string | null;
   deactivatedBy: Ref | null;
   createdAt: string;
+  /** Stable key for system values (`quick_activity`), else null (NFR-31). */
+  key: string | null;
+  /** System value: no rename, deactivate or delete (FR-ACT-32). */
+  system: boolean;
+}
+/** GET /lookups option (entry forms). `key`/`system` added in m8-polish (additive). */
+export interface LookupOptionDto {
+  id: string;
+  name: string;
+  key: string | null;
+  system: boolean;
 }
 export const lookupInUseMessage = (name: string, n: number) =>
   `"${name}" is used by ${n} ${n === 1 ? 'entry' : 'entries'}, so it can't be deleted. Deactivate it instead.`;
@@ -295,7 +313,7 @@ export const overlapMessage = (other: string, start: string, end: string) =>
   `This overlaps ${other} (${start}–${end}). Adjust the times so they don't overlap.`;
 export const STOP_TIMER_FIRST = 'Stop the running timer before submitting this day.';
 export const DAY_LOCKED = 'This day is locked. Ask your supervisor or an Admin to reopen it.';
-export const DAY_LOCKED_ADMIN = 'This day is past the weekly lock. Only an Admin can reopen it.';
+export const DAY_LOCKED_ADMIN = 'This day is past the day lock. Only an Admin can reopen it.';
 export const AUTO_STOPPED_LABEL = 'Auto-stopped – please check';
 export const NOT_SUBMITTED_LABEL = 'Not submitted';
 export const WHERE_WORKING = 'Where are you working today?';

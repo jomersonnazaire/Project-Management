@@ -92,7 +92,10 @@ export async function applyDefaultChange(
       cells.push({ role: c.role, cell, outcome: 'already' });
       continue;
     }
-    if (stored !== c.from || (await adminChanged(c.role, c.record, c.action))) {
+    if (
+      stored !== c.from ||
+      (!change.valueOnly && (await adminChanged(c.role, c.record, c.action)))
+    ) {
       cells.push({ role: c.role, cell, outcome: 'admin_changed' });
       continue;
     }

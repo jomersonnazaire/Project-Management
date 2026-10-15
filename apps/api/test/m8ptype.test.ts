@@ -255,6 +255,26 @@ describe('FR-PTY-02/03 project information', () => {
     await patch(w, support, { name: 'Support' });
   });
 
+  it('a legacy project inserted with no projectTypeId field at all has projectType null', async () => {
+    const w = await world(app);
+    const src = (await ProjectModel.findById(w.project.id).lean())! as Record<string, unknown>;
+    const { _id, projectTypeId, ...rest } = src;
+    void _id;
+    void projectTypeId;
+    const ins = await ProjectModel.collection.insertOne({
+      ...rest,
+      name: 'Legacy no type',
+      code: 'LEGACY-1',
+    });
+    const raw = await ProjectModel.collection.findOne({ _id: ins.insertedId });
+    expect(raw).not.toHaveProperty('projectTypeId');
+    const res = await w.pm.agent.get(`/api/v1/projects/${ins.insertedId.toString()}`);
+    expect(res.status).toBe(200);
+    expect(res.body.project.projectType).toBeNull();
+    const list = (await w.pm.agent.get('/api/v1/projects?projectTypeId=none')).body.items;
+    expect(list.map((x: { id: string }) => x.id)).toContain(ins.insertedId.toString());
+  });
+
   it('existing projects show Not set and must pick a type on their next save; an inactive type stays valid', async () => {
     const w = await world(app);
     const pid = w.project.id;

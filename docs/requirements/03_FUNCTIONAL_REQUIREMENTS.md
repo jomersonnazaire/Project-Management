@@ -7,7 +7,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 |----|-------------|----|-----|
 | FR-AUTH-01 | Internal users sign in with email + password. | BR-12 | Must |
 | FR-AUTH-02 | Passwords are hashed (bcrypt/argon2); minimum **8 characters, including at least one number and one symbol** (Jomerson, 2026-10-09). | BR-12 | Must |
-| FR-AUTH-03 | Sessions expire after **30 minutes** of inactivity (Admin-configurable), and after **12 hours** no matter what (absolute cap), even if the user stays active. Sign-out invalidates the session. **Mobile exception:** the OpsTrack mobile app signs in with `POST /auth/mobile/login` and gets a device token (body, not a cookie; stored hashed). Its session has a **3-day sliding idle window** (`MOBILE_SESSION_IDLE_HOURS`, default 72) that every API request and `POST /auth/mobile/refresh` (app open/resume) extend, and **no hard cap** unless `MOBILE_SESSION_MAX_DAYS` is set. Browsers can't use it: mobile login and bearer tokens are refused when the request carries `Origin`, `Referer`, `Cookie` or `Sec-Fetch-*` headers, and CORS doesn't allow `Authorization`. Web sessions keep 30 min / 12 h. | BR-12 | Must |
+| FR-AUTH-03 | Sessions expire after **30 minutes** of inactivity (Admin-configurable), and after **12 hours** no matter what (absolute cap), even if the user stays active. Sign-out invalidates the session. | BR-12 | Must |
 | FR-AUTH-04 | Admin invites users. The system creates a **single-use invite link** that the Admin copies and shares by hand, because email is deferred. The invite expires after 72 hours. The user sets their own password through the link. The token is never sent in a GET path; the page submits it in a **POST body** (Lean, 2026-10-09). | BR-12 | Must |
 | FR-AUTH-05 | Password reset: an Admin uses **"Copy reset link"** on the Users list to generate a single-use link that expires after 24 hours, and shares it by hand. Creating a new link cancels any earlier unused one. The sign-in page shows "Forgot your password? Ask an Admin for a reset link." Emailed reset links are **deferred**. As with invites, the token is submitted in a **POST body**, never in a GET path. | BR-12 | Must |
 | FR-AUTH-06 | Deactivated users cannot sign in; their history (tasks, time) is preserved. | BR-11 | Must |
@@ -91,7 +91,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | FR-TIME-01 | Time entry: user (self), project*, task*, work date*, hours* (0.25–24, step 0.25), type (Execution, Waiting on client/external, Rework), notes. | BR-06, BR-07 | Must |
 | FR-TIME-02 | Users can only log time to tasks in projects they're a member of (server). | BR-12 | Must |
 | FR-TIME-03 | Total hours per user per day can't exceed 24 (server). | BR-06 | Must |
-| FR-TIME-04 | Work date can't be in the future; entries older than the lock period (default: previous week after Monday 12:00, see Q-09) are read-only except by PM/Admin. | BR-06 | Must |
+| FR-TIME-04 | Work date can't be in the future; entries are read-only once the work date is locked: a day stays editable until the end of the second day after its work date and locks at 00:00 Philippine time on the third day (Oct 13 locks Oct 16, 00:00 PHT) (Q-09 decided by Jomerson, 2026-10-13, 9:15 PM SGT; was: previous week after Monday 12:00). Example: Oct 13 is editable on Oct 14 and 15 and locked from Oct 16, 00:00 PHT. Only Admins change locked entries (doc 14 FR-ACT-24, FR-ACT-36). | BR-06 | Must |
 | FR-TIME-05 | Weekly view (week selector) of my entries with totals and utilization vs capacity. | BR-06 | Must |
 | FR-TIME-06 | Users edit/delete their own unlocked entries; all edits audited. | BR-11 | Must |
 | FR-TIME-07 | Task actual hours = sum of all time entries on the task (all types); reports also show by type. | BR-06, BR-07 | Must |
@@ -106,7 +106,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 | FR-DASH-04 | Upcoming milestones (next 30 days): milestone-type tasks or tasks flagged as milestone. | BR-08 | Should |
 | FR-DASH-05 | AI insights panel is a visible "Phase 2" placeholder only. | BR-14 | Could |
 | FR-DASH-06 | Dashboard data respects visibility: PM/Admin/Viewer see all; Members see their projects. | BR-12 | Must |
-| FR-WL-01 | Team & workload table for a selected week: person, job role, team, assigned hours (remaining estimates of tasks due that week), recorded hours, utilization. | BR-08 | Must |
+| FR-WL-01 | Team & workload table for a selected week: person, job role, team, assigned hours (remaining estimates of tasks due that week), recorded hours, utilization. *(Weekly Recorded includes quick activities — doc 14 FR-ACT-34 / Q-71.)* | BR-08 | Must |
 | FR-WL-02 | Utilization = recorded working hours ÷ available hours (capacity) × 100. Assigned load % shown separately and flagged > 100%. | BR-08, BR-13 | Must |
 | FR-WL-03 | Workload view shows waiting time separately and carries the note that hours aren't a performance score. | BR-13 | Must |
 | FR-RPT-01 | Effort variance report per task/project: estimated, actual, variance (act − est), overrun % ((act − est) ÷ est × 100; "No estimate" when est = 0). | BR-06 | Must |

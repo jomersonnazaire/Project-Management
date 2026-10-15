@@ -371,7 +371,7 @@ describe('TC-S06: privacy', () => {
       expect(r.status).toBe(200);
       expect(r.body.item.reason).toBe('Personal appointment');
     }
-    for (const who of [w.pm2, w.outsider, w.viewer]) {
+    for (const who of [w.pm2, w.outsider]) {
       expect((await who.agent.get(`/api/v1/leave/${item.id}`)).status).toBe(404);
       expect((await who.agent.get(`/api/v1/leave?userId=${s.member}`)).status).toBe(404);
       expect((await who.agent.get(`/api/v1/leave/balances?userId=${s.member}`)).status).toBe(404);
@@ -379,6 +379,14 @@ describe('TC-S06: privacy', () => {
         (await who.agent.post(`/api/v1/leave/${item.id}/cancel`).set(CSRF).send({})).status,
       ).toBe(404);
     }
+    // Q-72 (FR-ACT-35): Viewers have no leave access at all, so the access rule answers 403 first.
+    for (const r of [
+      await w.viewer.agent.get(`/api/v1/leave/${item.id}`),
+      await w.viewer.agent.get(`/api/v1/leave?userId=${s.member}`),
+      await w.viewer.agent.get(`/api/v1/leave/balances?userId=${s.member}`),
+      await w.viewer.agent.post(`/api/v1/leave/${item.id}/cancel`).set(CSRF).send({}),
+    ])
+      expect(r.status).toBe(403);
     const team = await w.pm.agent.get('/api/v1/leave/team');
     expect(team.body.items.map((i: { id: string }) => i.id)).toEqual([item.id]);
     expect(team.body.items[0].reason).toBe('Personal appointment');

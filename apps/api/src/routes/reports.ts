@@ -116,17 +116,26 @@ export function reportsRouter(registry: RouteRegistry) {
         .lean(),
       currentPermissions(req).time.view
         ? TimeEntryModel.aggregate<{
-            _id: { userId: Types.ObjectId; type: TimeType };
+            _id: { userId: Types.ObjectId; type: TimeType | 'QUICK' };
             hours: number;
           }>([
             {
               $match: {
                 userId: { $in: ids },
                 workDate: { $gte: start, $lte: end },
-                taskId: { $ne: null },
+                running: { $ne: true },
               },
             },
-            { $group: { _id: { userId: '$userId', type: '$type' }, hours: { $sum: '$hours' } } },
+            // Tracked time counts as recorded: project time and quick activities (no task).
+            {
+              $group: {
+                _id: {
+                  userId: '$userId',
+                  type: { $cond: [{ $eq: ['$taskId', null] }, 'QUICK', '$type'] },
+                },
+                hours: { $sum: '$hours' },
+              },
+            },
           ])
         : Promise.resolve([]),
       TeamModel.find({ _id: { $in: people.flatMap((p) => p.teamIds ?? []) } })
@@ -141,7 +150,7 @@ export function reportsRouter(registry: RouteRegistry) {
         .reduce((n, t) => n + Math.max((t.estHours ?? 0) - (t.actualHours ?? 0), 0), 0);
       const mine = time.filter((t) => t._id.userId.toString() === pid);
       const recorded = mine
-        .filter((t) => WORKING_TYPES.includes(t._id.type))
+        .filter((t) => t._id.type === 'QUICK' || WORKING_TYPES.includes(t._id.type as TimeType))
         .reduce((n, t) => n + t.hours, 0);
       const waiting = mine.filter((t) => t._id.type === 'WAITING').reduce((n, t) => n + t.hours, 0);
       const capacity = p.weeklyCapacityHours ?? 40;

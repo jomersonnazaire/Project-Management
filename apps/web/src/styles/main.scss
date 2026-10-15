@@ -52,6 +52,11 @@ $label-pairs: (
 .row-inactive > th {
   color: $text-inactive !important;
 }
+// Admin › Project types: active names in the heading/body-emphasis text colour, not #646e78;
+// inactive rows keep .row-inactive.
+td.ptype-name-active {
+  color: var(--bs-heading-color, #384551);
+}
 .badge.badge-inactive {
   background-color: $secondary-bg-subtle !important;
   color: $text-inactive !important;
@@ -208,12 +213,16 @@ a:focus-visible,
     td.cell-primary {
       padding-bottom: 0.5rem;
     }
+    // FR-TSK-27: an empty optional field (e.g. Planned) is left out of the phone card.
+    td.cell-omit-empty:empty {
+      display: none;
+    }
     td.cell-actions {
       text-align: start !important;
       white-space: normal !important;
       padding-top: 0.5rem;
     }
-    // FR-PRJ-20: the Edit pencil and the ⋮ menu sit side by side at the foot of the card.
+    // FR-PRJ-20: row actions sit at the foot of the card.
     td.cell-edit,
     td.cell-edit + td.cell-actions {
       display: inline-block;
@@ -226,6 +235,8 @@ a:focus-visible,
 
 // --- Tab rows scroll sideways instead of clipping the last tab on phones (DR-05) ---
 .nav-tabs.nav-scrollable {
+  display: flex;
+  max-width: 100%;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
@@ -233,6 +244,7 @@ a:focus-visible,
   -webkit-overflow-scrolling: touch;
   .nav-item {
     flex: 0 0 auto;
+    flex-shrink: 0;
   }
   .nav-link {
     white-space: nowrap;
@@ -366,6 +378,49 @@ $board-gap: 0.75rem;
   &:active {
     cursor: grabbing;
   }
+}
+
+// DR-49 (mockup v0.9.10): Checklist headings read in sentence case ("Activity", "Est / Act").
+.checklist-table > thead th {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.text-none {
+  text-transform: none !important;
+}
+// v0.9.11: paired form fields (Time in / Time out, Activity type / Time type, Location /
+// Billable) sit side by side above 760px and stack below it.
+.row > .col-pair {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+@media (min-width: 761px) {
+  .row > .col-pair {
+    width: 50%;
+  }
+}
+
+// DR-49: row ↑/↓ buttons show only on narrow or touch screens; desktop uses drag and Alt+↑/↓.
+.touch-move {
+  display: none;
+}
+@media (max-width: 760px), (hover: none), (pointer: coarse) {
+  .touch-move {
+    display: inline;
+  }
+}
+// DR-49: only the confirm dialog's "Delete phase" button is red.
+.btn.btn-danger-strong {
+  --bs-btn-bg: #b8240a;
+  --bs-btn-border-color: #b8240a;
+  --bs-btn-hover-bg: #9e1f09;
+  --bs-btn-hover-border-color: #9e1f09;
+  --bs-btn-active-bg: #9e1f09;
+  --bs-btn-active-border-color: #9e1f09;
+  background-color: #b8240a;
+  border-color: #b8240a;
+  color: #fff;
 }
 
 // Checklist phase card header: the whole header opens or closes the phase.
@@ -696,4 +751,14 @@ $board-gap: 0.75rem;
   .menu-inner-shadow {
     display: none;
   }
+}
+
+// --- Wide tables scroll inside their card instead of widening the page (DR-48) ---
+.table-responsive {
+  // Contains absolutely positioned visually-hidden spans so they can't escape the scroll box.
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
