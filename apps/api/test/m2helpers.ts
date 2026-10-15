@@ -57,6 +57,15 @@ export async function publishedTemplate(admin: Agent, body: TemplateInput = SMAL
     .post(`/api/v1/templates/${created.body.template.id}/publish`)
     .set(CSRF)
     .send({});
+  if (pub.status !== 200) {
+    // Log the error for debugging CI failures
+    console.error('Template publish failed:', JSON.stringify({
+      status: pub.status,
+      body: pub.body,
+      template: created.body.template.id,
+      text: pub.text,
+    }, null, 2));
+  }
   expect(pub.status).toBe(200);
   return pub.body.template as { id: string; version: number; templateKey: string };
 }

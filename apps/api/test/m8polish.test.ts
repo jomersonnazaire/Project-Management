@@ -360,18 +360,22 @@ describe('FR-ACT-32/33: Quick Activity system type and FUTURE_DATE', () => {
     const l = await lookups();
     await UserModel.updateOne({ _id: w.member.user._id }, { supervisorId: w.pm.user._id });
     const qa = (await LookupModel.findOne({ key: 'quick_activity' }).lean())!._id.toString();
-    // Oct 13 is yesterday (still within the 2-day lock window).
+    // Use yesterday's date (within the 2-day lock window) by calculating from today.
+    const yesterday = new Date();
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    
     const ok = await w.member.agent.post('/api/v1/tracker/entries').set(CSRF).send({
       title: 'Email triage',
       activityTypeId: qa,
-      date: '2026-10-13',
+      date: yesterdayStr,
       timeIn: '08:00',
       timeOut: '09:00',
       dayLocationId: l.onsite,
     });
     expect(ok.status).toBe(201);
     expect(ok.body.entry.billable).toBe(false);
-    // Future date: 2099-01-01 is far in the future.
+    // Future date: far in the future.
     const fut = await w.member.agent.post('/api/v1/tracker/entries').set(CSRF).send({
       title: 'Tomorrow',
       activityTypeId: qa,
