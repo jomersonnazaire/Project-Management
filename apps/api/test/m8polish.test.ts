@@ -364,7 +364,7 @@ describe('FR-ACT-32/33: Quick Activity system type and FUTURE_DATE', () => {
     const yesterday = new Date();
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yesterdayStr = yesterday.toISOString().slice(0, 10);
-    
+
     const ok = await w.member.agent.post('/api/v1/tracker/entries').set(CSRF).send({
       title: 'Email triage',
       activityTypeId: qa,

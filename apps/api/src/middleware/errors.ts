@@ -45,6 +45,19 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   if (status >= 500) {
     req.log?.error({ err }, 'Unhandled error');
+    // In test mode, log 500 errors with full details to help diagnose CI failures
+    if (process.env.NODE_ENV === 'test') {
+      const errDetails =
+        err instanceof Error
+          ? {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+              cause: (err as any).cause,
+            }
+          : err;
+      console.error('[TEST] 500 Error:', JSON.stringify(errDetails, null, 2));
+    }
   }
   res.status(status).json({
     error: { code, message, ...(details !== undefined ? { details } : {}) },
