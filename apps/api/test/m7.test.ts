@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   HolidayModel,
@@ -13,6 +13,7 @@ import {
   TimesheetDayModel,
   UserModel,
 } from '../src/models/index.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { buildDar } from '../src/services/dar.js';
 import { ensureDefaultLeaveTypes } from '../src/services/leave.js';
 import { leaveLabelFor } from '../src/services/leaveHook.js';
@@ -26,13 +27,11 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  at('2026-10-14T02:00:00Z');
+  setTestTime('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all(
     [
       LeaveModel,
@@ -127,7 +126,7 @@ describe('TC-S01: record Full day, Half day AM, Half day PM', () => {
     expect(await label('2026-10-19')).toBe('On leave');
     expect(await label('2026-10-20')).toBe('Half day leave (AM)');
     expect(await label('2026-10-21')).toBe('Half day leave (PM)');
-    at('2026-10-21T10:00:00Z');
+    setTestTime('2026-10-21T10:00:00Z');
     const dar = await buildDar(w.member.user._id, '2026-10-19', '2026-10-21');
     expect(dar.rows.map((r) => r.remarks)).toEqual([
       'On leave',

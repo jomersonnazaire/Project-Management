@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProjectModel, TaskModel } from '../src/models/index.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
 import { entryFields } from './trackerHelpers.js';
@@ -8,10 +9,9 @@ import { entryFields } from './trackerHelpers.js';
 useDatabase();
 const app = makeApp();
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-14T03:00:00Z'));
+  setTestTime('2026-10-14T03:00:00Z');
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => resetTestTime());
 
 type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
@@ -101,7 +101,7 @@ describe('FR-TIME-04/06: day lock and own entries', () => {
       expect(locked.body.error.code).toBe('DAY_LOCKED');
     }
     // Sun Oct 11 23:59:59 Manila: Oct 9 is still open (it locks at 00:00 PHT on Oct 12).
-    vi.setSystemTime(new Date('2026-10-11T15:59:59Z'));
+    setTestTime('2026-10-11T15:59:59Z');
     expect((await log(w.member.agent, t1, '2026-10-09', 1)).status).toBe(201);
   });
 

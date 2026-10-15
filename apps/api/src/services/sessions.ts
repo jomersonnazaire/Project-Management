@@ -1,6 +1,7 @@
 import type { CookieOptions, Request, Response } from 'express';
 import type { Types } from 'mongoose';
 import type { AppConfig } from '../config.js';
+import { now as clockNow } from '../lib/clock.js';
 import { SessionModel } from '../models/index.js';
 import { newToken, sha256 } from './tokens.js';
 
@@ -53,7 +54,7 @@ export async function createMobileSession(
   ip: string,
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = newToken();
-  const now = new Date();
+  const now = clockNow();
   const expiresAt = new Date(now.getTime() + idleMs(config, 'mobile'));
   await SessionModel.create({
     tokenHash: sha256(token),
@@ -78,7 +79,7 @@ export async function createSession(
   ip: string,
 ): Promise<void> {
   const token = newToken();
-  const now = new Date();
+  const now = clockNow();
   await SessionModel.create({
     tokenHash: sha256(token),
     userId,

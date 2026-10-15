@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { Types } from 'mongoose';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,
@@ -10,6 +10,7 @@ import {
   TimesheetDayModel,
   UserModel,
 } from '../src/models/index.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { migrateModuleText } from '../src/services/moduleText.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
@@ -22,13 +23,11 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  at('2026-10-14T02:00:00Z');
+  setTestTime('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all(
     [
       TimeEntryModel,
@@ -366,7 +365,7 @@ describe('FR-ACT-23: Time out is idempotent', () => {
       .set(CSRF)
       .send({ taskId: t1, activityTypeId: l.configuration, dayLocationId: l.onsite });
     const id = started.body.entry.id as string;
-    at('2026-10-14T02:47:00Z');
+    setTestTime('2026-10-14T02:47:00Z');
     const stop = () => w.member.agent.post('/api/v1/tracker/stop').set(CSRF).send({ entryId: id });
     // Day timesheet and top bar at the same moment.
     const [one, two] = await Promise.all([stop(), stop()]);
@@ -380,7 +379,7 @@ describe('FR-ACT-23: Time out is idempotent', () => {
         minutes: 47,
       });
     // A later click changes nothing.
-    at('2026-10-14T03:30:00Z');
+    setTestTime('2026-10-14T03:30:00Z');
     const late = await stop();
     expect(late.status).toBe(200);
     expect(late.body.entry).toMatchObject({ endAt: '2026-10-14T02:47:00.000Z', minutes: 47 });
@@ -401,7 +400,7 @@ describe('FR-ACT-24: one lock rule on every route', () => {
   it('a locked week refuses everyone with 422 DAY_LOCKED on /time and /tracker until reopened', async () => {
     const { w, l, t1 } = await setup();
     // Friday Oct 9 (last week) while it was still open.
-    at('2026-10-09T08:00:00Z');
+    setTestTime('2026-10-09T08:00:00Z');
     const logTime = (a: Agent, date: string) =>
       a.post('/api/v1/time').set(CSRF).send({
         taskId: t1,
@@ -421,7 +420,7 @@ describe('FR-ACT-24: one lock rule on every route', () => {
       })
     ).body.entry.id as string;
     // Wed Oct 14: last week is past the Monday 12:00 lock.
-    at('2026-10-14T02:00:00Z');
+    setTestTime('2026-10-14T02:00:00Z');
     const locked = (res: { status: number; body: { error?: { code?: string } } }) => {
       expect(res.status).toBe(422);
       expect(res.body.error?.code).toBe('DAY_LOCKED');

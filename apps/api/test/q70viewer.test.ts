@@ -1,5 +1,5 @@
 import { ACCESS_DEFAULT_CHANGES, defaultPermissions } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AccessRuleModel,
   ActivityLogModel,
@@ -8,6 +8,7 @@ import {
 } from '../src/models/index.js';
 import { applyAccessDefaultChanges } from '../src/services/accessDefaults.js';
 import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 import { lookups } from './trackerHelpers.js';
 
@@ -17,11 +18,10 @@ const app = makeApp();
 const ID = '2026-10-13-viewer-no-tracker';
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-21T03:00:00Z'));
+  setTestTime('2026-10-21T03:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await AccessRuleModel.deleteMany({});
   await MigrationModel.deleteMany({});
   await ActivityLogModel.deleteMany({ entityType: { $in: ['accessRule', 'migration'] } });

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { PermissionGrid, SystemRole } from '@xc8/shared';
 import type { AppConfig } from '../config.js';
+import { now as clockNow } from '../lib/clock.js';
 import { unauthorized } from '../lib/errors.js';
 import { SessionModel, UserModel } from '../models/index.js';
 import { clearSessionCookie, cookieName, idleMs, looksLikeBrowser } from '../services/sessions.js';
@@ -35,7 +36,7 @@ export async function authenticate(config: AppConfig, req: Request, res: Respons
     clearSessionCookie(config, res);
     throw unauthorized('Your session has ended. Please sign in again.', 'SESSION_EXPIRED');
   }
-  const now = Date.now();
+  const now = clockNow().getTime();
   if (session.expiresAt.getTime() <= now || session.absoluteExpiresAt.getTime() <= now) {
     await session.deleteOne();
     clearSessionCookie(config, res);
@@ -53,7 +54,7 @@ export async function authenticate(config: AppConfig, req: Request, res: Respons
       { _id: session._id },
       {
         $set: {
-          lastSeenAt: new Date(now),
+          lastSeenAt: clockNow(),
           expiresAt: new Date(Math.min(idleExpiry, session.absoluteExpiresAt.getTime())),
         },
       },

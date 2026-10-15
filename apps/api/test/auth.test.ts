@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   ClientContactModel,
@@ -7,6 +7,7 @@ import {
   SessionModel,
   UserModel,
 } from '../src/models/index.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
 
 useDatabase();
@@ -105,22 +106,18 @@ describe('Sign in (US-01)', () => {
     expect(JSON.stringify(locked.body)).not.toMatch(/lock/i);
     expect(locked.headers['set-cookie']).toBeUndefined();
 
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      // Still locked one minute before the window ends.
-      vi.setSystemTime(lockedUntil - MINUTE);
-      const almost = await loginReq(proxied, user.email, PASSWORD, '10.0.0.7');
-      expect(almost.status).toBe(401);
-      expect(shape(almost.body)).toEqual(shape(unknown.body));
+    // Still locked one minute before the window ends.
+    setTestTime(lockedUntil - MINUTE);
+    const almost = await loginReq(proxied, user.email, PASSWORD, '10.0.0.7');
+    expect(almost.status).toBe(401);
+    expect(shape(almost.body)).toEqual(shape(unknown.body));
 
-      // After the 15-minute window the correct password works again.
-      vi.setSystemTime(lockedUntil + 1000);
-      const after = await loginReq(proxied, user.email, PASSWORD, '10.0.0.8');
-      expect(after.status).toBe(200);
-      expect(after.body.user.email).toBe(user.email);
-    } finally {
-      vi.useRealTimers();
-    }
+    // After the 15-minute window the correct password works again.
+    setTestTime(lockedUntil + 1000);
+    const after = await loginReq(proxied, user.email, PASSWORD, '10.0.0.8');
+    expect(after.status).toBe(200);
+    expect(after.body.user.email).toBe(user.email);
+    resetTestTime();
     const unlocked = await UserModel.findById(user._id);
     expect(unlocked!.lockedUntil).toBeNull();
     expect(unlocked!.failedLogins).toBe(0);
@@ -444,23 +441,19 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     expect(Math.abs(expiresAt - issuedAt - 72 * HOUR)).toBeLessThan(10_000);
     const token = tokenOf(invited.body.inviteUrl);
 
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      vi.setSystemTime(expiresAt - MINUTE);
-      expect((await verifyReq(app, token)).status).toBe(200);
-      vi.setSystemTime(expiresAt + MINUTE);
-      const late = await verifyReq(app, token);
-      expect(late.status).toBe(400);
-      expect(late.body.error).toMatchObject({ code: 'INVALID_TOKEN', message: LINK_EXPIRED });
-      const setup = await request(app)
-        .post('/api/v1/auth/setup-password')
-        .set(CSRF)
-        .send({ token, password: 'Late-password-1!' });
-      expect(setup.status).toBe(400);
-      expect(setup.body.error.message).toBe(LINK_EXPIRED);
-    } finally {
-      vi.useRealTimers();
-    }
+    setTestTime(expiresAt - MINUTE);
+    expect((await verifyReq(app, token)).status).toBe(200);
+    setTestTime(expiresAt + MINUTE);
+    const late = await verifyReq(app, token);
+    expect(late.status).toBe(400);
+    expect(late.body.error).toMatchObject({ code: 'INVALID_TOKEN', message: LINK_EXPIRED });
+    const setup = await request(app)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token, password: 'Late-password-1!' });
+    expect(setup.status).toBe(400);
+    expect(setup.body.error.message).toBe(LINK_EXPIRED);
+    resetTestTime();
   });
 
   it('reset links expire after 24 hours (RESET_TTL_HOURS, TC-A14)', async () => {
@@ -474,20 +467,16 @@ describe('Invite and first-time password setup (FR-AUTH-04, AC-02.2)', () => {
     expect(Math.abs(expiresAt - Date.now() - 24 * HOUR)).toBeLessThan(10_000);
     const token = tokenOf(res.body.inviteUrl);
 
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      vi.setSystemTime(expiresAt - MINUTE);
-      expect((await verifyReq(app, token)).status).toBe(200);
-      vi.setSystemTime(expiresAt + MINUTE);
-      const setup = await request(app)
-        .post('/api/v1/auth/setup-password')
-        .set(CSRF)
-        .send({ token, password: 'Late-reset-pass-1!' });
-      expect(setup.status).toBe(400);
-      expect(setup.body.error.message).toBe(LINK_EXPIRED);
-    } finally {
-      vi.useRealTimers();
-    }
+    setTestTime(expiresAt - MINUTE);
+    expect((await verifyReq(app, token)).status).toBe(200);
+    setTestTime(expiresAt + MINUTE);
+    const setup = await request(app)
+      .post('/api/v1/auth/setup-password')
+      .set(CSRF)
+      .send({ token, password: 'Late-reset-pass-1!' });
+    expect(setup.status).toBe(400);
+    expect(setup.body.error.message).toBe(LINK_EXPIRED);
+    resetTestTime();
     // The old password still works because the reset never happened.
     expect((await loginReq(app, user.email, PASSWORD)).status).toBe(200);
   });
