@@ -123,7 +123,7 @@ Future<void> submitDay(
       title: Text('Submit ${shortDate(day.date)}?'),
       content: Text(
         '${formatHHMM(day.totalMinutes)} in $n ${n == 1 ? 'entry' : 'entries'}. Submitting locks the day’s '
-        'entries. Before the weekly lock, your supervisor or an Admin can reopen it.',
+        'entries. Before the day lock, your supervisor or an Admin can reopen it.',
       ),
       actions: [
         TextButton(

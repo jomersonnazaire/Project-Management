@@ -164,7 +164,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
 
   Map<String, String> _validate(List<ProjectTypeInfo> types) {
     final e = <String, String>{};
-    if (!_edit && _template == null) e['templateId'] = 'Choose a template.';
+    // M8: template is optional on create (phases can be added or applied later).
     if (_name.text.trim().isEmpty) e['name'] = 'Project name is required.';
     if (_code.text.trim().isEmpty) {
       e['code'] = 'Project code is required.';
@@ -335,13 +335,24 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                     ),
                   ),
                 if (!_edit) ...[
-                  dd(
-                    'projectTemplateField',
-                    'Template *',
-                    'templateId',
-                    _template,
-                    _templates,
-                    (v) => setState(() => _template = v),
+                  DropdownMenu<String>(
+                    key: const Key('projectTemplateField'),
+                    expandedInsets: EdgeInsets.zero,
+                    label: const Text('Template (optional)'),
+                    helperText: 'Pre-fills a standard set of phases and activities. You can change them later.',
+                    errorText: _errors['templateId'],
+                    initialSelection: _template ?? '',
+                    dropdownMenuEntries: [
+                      const DropdownMenuEntry(
+                        value: '',
+                        label: 'None – start blank',
+                      ),
+                      for (final i in _templates)
+                        DropdownMenuEntry(value: i.id, label: i.name),
+                    ],
+                    onSelected: (v) => setState(
+                      () => _template = (v == null || v.isEmpty) ? null : v,
+                    ),
                   ),
                   gap(),
                 ],
