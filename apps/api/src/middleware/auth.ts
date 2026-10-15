@@ -5,7 +5,6 @@ import { unauthorized } from '../lib/errors.js';
 import { SessionModel, UserModel } from '../models/index.js';
 import { clearSessionCookie, cookieName, idleMs, looksLikeBrowser } from '../services/sessions.js';
 import { sha256 } from '../services/tokens.js';
-import { now as clockNow } from '../lib/clock.js';
 
 const TOUCH_INTERVAL_MS = 15_000;
 
@@ -36,7 +35,7 @@ export async function authenticate(config: AppConfig, req: Request, res: Respons
     clearSessionCookie(config, res);
     throw unauthorized('Your session has ended. Please sign in again.', 'SESSION_EXPIRED');
   }
-  const now = clockNow().getTime();
+  const now = Date.now();
   if (session.expiresAt.getTime() <= now || session.absoluteExpiresAt.getTime() <= now) {
     await session.deleteOne();
     clearSessionCookie(config, res);

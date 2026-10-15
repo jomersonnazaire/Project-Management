@@ -18,7 +18,6 @@ import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
 import { toUserDto } from '../services/dto.js';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '../services/passwords.js';
-import { now as clockNow } from '../lib/clock.js';
 import {
   clearSessionCookie,
   cookieName,
@@ -142,7 +141,7 @@ export function authRouter(
   router.post('/mobile/refresh', AUTHENTICATED, async (req, res) => {
     const session = await SessionModel.findById(req.auth!.sessionId);
     if (!session || session.kind !== 'mobile') throw MOBILE_ONLY;
-    const now = clockNow().getTime();
+    const now = Date.now();
     const expiresAt = new Date(
       Math.min(now + idleMs(config, 'mobile'), session.absoluteExpiresAt.getTime()),
     );

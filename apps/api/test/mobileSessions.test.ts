@@ -1,7 +1,6 @@
 import request from 'supertest';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionModel } from '../src/models/index.js';
-import { setTestTime, resetTestTime } from '../src/lib/clock.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
 
 useDatabase();
@@ -23,11 +22,11 @@ const refresh = (token: string) =>
     .set(CSRF)
     .set('Authorization', `Bearer ${token}`);
 
-/** Moves the clock; the API reads clockNow(). */
+/** Moves the clock; the API reads Date.now(). */
 function at(ms: number) {
-  setTestTime(new Date(ms));
+  vi.useFakeTimers({ now: ms, toFake: ['Date'] });
 }
-afterEach(() => resetTestTime());
+afterEach(() => vi.useRealTimers());
 
 describe('Mobile sessions (FR-AUTH-03 mobile exception)', () => {
   it('mobile login returns a body token (no cookie), stored hashed, 3-day sliding window, no cap', async () => {

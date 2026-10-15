@@ -1,5 +1,5 @@
 import { ACCESS_DEFAULT_CHANGES, defaultPermissions } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AccessRuleModel,
   ActivityLogModel,
@@ -17,10 +17,11 @@ const app = makeApp();
 const ID = '2026-10-13-viewer-no-tracker';
 
 beforeEach(() => {
-  setTestTime(new Date('2026-10-21T03:00:00Z'));
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-21T03:00:00Z'));
 });
 afterEach(async () => {
-  resetTestTime();
+  vi.useRealTimers();
   await AccessRuleModel.deleteMany({});
   await MigrationModel.deleteMany({});
   await ActivityLogModel.deleteMany({ entityType: { $in: ['accessRule', 'migration'] } });
