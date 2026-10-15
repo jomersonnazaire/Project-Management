@@ -4,7 +4,7 @@
 - **Result: M8 PASS. No open defects.** DEF-010's fix passed at code level, but its live restart retest could not be run (see Known gaps).
 - **Date:** 14 Oct 2026 (SGT).
 - **Build under test:** live API `8fdb005` and web `fdbeecb`, branch `m8-polish`. Preview: `xc8-projectmgmt-web-git-m8-polish-jomerson-team.vercel.app`. Q-09 2-day lock tests (section 6) ran on API `c96c8da`.
-- **Status:** M8 is complete. The Q-09 2-day lock (API `c96c8da`) was tested (section 6) with no defects. Two checks are **Rerun pending** because of a timing miss in the test run: the before-lock create (TC-T123) and the after-lock PATCH (part of TC-T124). Per Lean, that rerun is a follow-up and does not block M8.
+- **Status:** M8 is complete. The Q-09 2-day lock (API `c96c8da`) was tested (section 6) with no defects. Two boundary checks are still **Not run**: the before-lock create (TC-T123) and the after-lock PATCH (part of TC-T124). The first try missed on timing, and on the 2026-10-13 rerun the before phase (23:45 PHT, 15 Oct) did not run, so there was no entry to PATCH. The rerun's after phase (16 Oct 00:12 PHT) passed 4/0: location PUT and create on 2026-10-13 both gave 422 `DAY_LOCKED`. Per Lean, this follow-up does not block M8.
 - The round history (round 1, round 2, regression and the TC-Q03 rerun) is in the Appendix.
 
 ## 1. Defects
@@ -35,7 +35,7 @@ Closed earlier in M8 (see Appendix): DEF-007, DEF-008 and DEF-009. No severity w
 - Older entries that have their own location can show a different location in the DAR than the day's location. There is no data migration for these.
 - The DEF-010 restart retest was not run live.
 - EC-111 and EC-113 are covered by automated tests only. The live data had no such records.
-- **Q-09 lock boundary rerun pending** (not blocking, per Lean): the TC-T123 create before the lock and the TC-T124 PATCH after the lock. See section 6.
+- **Q-09 lock boundary: two checks not run** (not blocking, per Lean): the TC-T123 create just before the lock and the TC-T124 PATCH after the lock. The 2026-10-13 rerun's before phase did not run; its after phase passed 4/0. See section 6.
 - pm2's 2026-10-11 was left SUBMITTED by the lock tests (Lean approved).
 - The client portal is planned, and invites are on hold (Q-84). The outline cases are in `07_M8_TEST_CASES.md`.
 
@@ -60,29 +60,31 @@ Roles are taken from `/auth/me/permissions` in `regress/m8c_live3.log` (admin, p
 ## 6. Q-09 2-day lock (API c96c8da)
 Rule: a day locks at 00:00 PHT on the third day (for example, Oct 13 locks at 00:00 PHT on Oct 16). After that, only an Admin reopen allows changes. Accounts: pm2@ (PROJECT_MANAGER, writer), pm@ (PROJECT_MANAGER, acting supervisor), admin@ (ADMIN), viewer@ (VIEWER), outsider@ (MEMBER).
 
-Evidence (all in `/workspace/qa-run/regress/`): `lock_now.log` (14 Oct 08:32 SGT, 28 pass / 2 fail; both fails are superseded below), `lock_sup.log` (08:40, 2/0), `tl.log` (09:02), `def011_014_rerun.log` (08:33, 4/4), `lock_boundary_before.log` (15 Oct 00:02), `lock_boundary_after.log` (15 Oct 00:06, 3 pass / 1 not run).
+Evidence (all in `/workspace/qa-run/regress/`): `lock_now.log` (14 Oct 08:32 SGT, 28 pass / 2 fail; both fails are superseded below), `lock_sup.log` (08:40, 2/0), `tl.log` (09:02), `def011_014_rerun.log` (08:33, 4/4), `lock_boundary_before.log` (15 Oct 00:02), `lock_boundary_after.log` (15 Oct 00:06, 3 pass / 1 not run), `lock_boundary_after_oct13.log` (16 Oct 00:12, 4 pass / 0 fail, PATCH skipped).
 
 | Case | Check | Result | Evidence |
 |---|---|---|---|
 | TC-T123 | Edits on open days 2026-10-12 and 10-13 (create 201, PATCH 200, DELETE 204, location PUT 200) | Pass | `lock_now.log` |
-| TC-T123 | Create just before the lock, expect 201 | **Rerun pending** (timing miss: the scheduler started the before phase late, after 00:00) | `lock_boundary_before.log`: started at 00:02:25 PHT, 145 s past the lock, so 422 `DAY_LOCKED` was correct for that time. Not a defect |
+| TC-T123 | Create just before the lock, expect 201 | **Not run** (first try: the scheduler started the before phase late, after 00:00. Rerun for 2026-10-13: the 23:45 PHT 15 Oct before phase did not run, so no entry was created) | `lock_boundary_before.log`: started at 00:02:25 PHT, 145 s past the lock, so 422 `DAY_LOCKED` was correct for that time. `lock_boundary.json` still holds the 2026-10-12 record (`entryId: null`). Not a defect |
 | TC-T124 | Locked 2026-10-11: create, location PUT, PATCH and DELETE give 422 `DAY_LOCKED`; GET shows `weekLocked` and `can.edit false`; a future date gives 422 `FUTURE_DATE` | Pass | `lock_now.log` |
 | TC-T124 | Boundary after phase: location PUT on 2026-10-12 after 00:00 PHT gives 422 `DAY_LOCKED` | Pass | `lock_boundary_after.log` |
-| TC-T124 | Boundary after phase: PATCH the entry after the lock | **Rerun pending** (timing miss: the scheduler started the before phase late, after 00:00, so there was no entry to PATCH) | `lock_boundary_after.log`, `lock_boundary.json` (`entryId: null`) |
+| TC-T124 | Boundary rerun after phase (2026-10-13, server 16 Oct 00:12:59 PHT, 776 s past the lock): location PUT gives 422 `DAY_LOCKED` | Pass | `lock_boundary_after_oct13.log` |
+| TC-T124 | Boundary rerun after phase (2026-10-13, server 16 Oct 00:13:00 PHT): create gives 422 `DAY_LOCKED` | Pass | `lock_boundary_after_oct13.log` |
+| TC-T124 | Boundary after phase: PATCH the entry after the lock | **Not run** (no entry: the first before phase started late, after 00:00, and the 2026-10-13 rerun's before phase did not run) | `lock_boundary_after.log`, `lock_boundary_after_oct13.log`, `lock_boundary.json` (`entryId: null`) |
 | TC-T125 | Locked day in the UI | Pass (API side: `can.edit false`; UI: AC-52.8 UIE design pass, section 2) | `lock_now.log` |
 | TC-T126 | No "Monday 12:00" wording; the time-lock setting is an on/off switch | Pass. The first run failed the setting check because `policy.enabled` was null. This was fixed in `c96c8da`, and the re-check returned `policy: {"enabled": true}` | `lock_now.log`, `tl.log` |
 | TC-T127 | Admin reopen gives 200; pm2's create, PATCH and location PUT work after the reopen; the `day_reopened` audit record has pastLock true | Pass | `lock_now.log` |
 | TC-T127 | Admin-only reopen: the supervisor (pm@, set as pm2's supervisor) gets 403 `ADMIN_ONLY` on reopen; the supervisor setting was then restored | Pass, **2/0**. This supersedes the 404 in `lock_now.log`, where pm@ was not yet pm2's supervisor | `lock_sup.log` |
 | TC-T128 | The lock follows PHT: the boundary is PHT today minus 2 days while UTC was a different date, and the lock held after 00:00 PHT while UTC was still the previous day (14 Oct 16:06 UTC) | Pass | `lock_now.log`, `lock_boundary_after.log` |
-| AC-18.7 | A day is open until 00:00 PHT on the third day and locked after that | Pass on the after side (`lock_boundary_after.log`) and for open days (`lock_now.log`). The exact before-midnight side is part of the TC-T123 rerun | as listed |
+| AC-18.7 | A day is open until 00:00 PHT on the third day and locked after that | Pass on the after side for 2026-10-12 and 2026-10-13 (`lock_boundary_after.log`, `lock_boundary_after_oct13.log`) and for open days (`lock_now.log`). The exact before-midnight side is not run (TC-T123) | as listed |
 
 **Boundary after phase (15 Oct 00:06:55 PHT): 3 pass.** The location PUT returned 422 `DAY_LOCKED`; the lock held after 00:00 PHT while UTC was still 14 Oct; AC-18.7 passed on the after side.
 
 **Related reruns:** DEF-011 to DEF-014 **4/4 pass** (`def011_014_rerun.log`). Q-70 B probes on the correct routes **3/3 pass** (`lock_now.log`). qa.autostop@ role: MEMBER.
 
-**Rerun plan (follow-up, not blocking, per Lean):** work date 2026-10-13. Before phase at 23:45 PHT on 15 Oct (create, expect 201); after phase at 00:05 PHT on 16 Oct (PATCH and location PUT, expect 422 `DAY_LOCKED`).
+**Rerun (follow-up, not blocking, per Lean), work date 2026-10-13:** the before phase planned for 23:45 PHT on 15 Oct did not run, so no entry was created. The after phase ran at 00:12:56 PHT on 16 Oct (server time, 776 s past the lock) as pm2@: **4 pass / 0 fail**. Location PUT and create on 2026-10-13 both returned 422 `DAY_LOCKED`; the PATCH was skipped because there was no entry. The before-lock create and after-lock PATCH need a new work date with the before phase started by hand before 00:00 PHT.
 
-**Data left behind:** pm2's 2026-10-11 is SUBMITTED, because the API has no route back to "past lock, not submitted" (Lean approved). pm2's supervisor setting was restored to none. No boundary entry was created on 2026-10-12.
+**Data left behind:** pm2's 2026-10-11 is SUBMITTED, because the API has no route back to "past lock, not submitted" (Lean approved). pm2's supervisor setting was restored to none. No boundary entry was created on 2026-10-12 or 2026-10-13.
 
 No new defects.
 
