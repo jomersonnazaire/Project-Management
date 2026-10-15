@@ -15,7 +15,6 @@ import {
   DAR_EXPORT_NAME,
 } from '@xc8/shared';
 import type { Types } from 'mongoose';
-import { now as clockNow } from '../lib/clock.js';
 import {
   SavedReportModel,
   TimeEntryModel,
@@ -37,7 +36,7 @@ export async function buildDar(
   userId: Id,
   from: string,
   to: string,
-  now = clockNow(),
+  now = new Date(),
 ): Promise<DarReportDto> {
   await sweepAutoStop(now, userId);
   const today = phDateOf(now);

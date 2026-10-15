@@ -1,7 +1,6 @@
 import request from 'supertest';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionModel } from '../src/models/index.js';
-import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
 
 useDatabase();
@@ -23,7 +22,11 @@ const refresh = (token: string) =>
     .set(CSRF)
     .set('Authorization', `Bearer ${token}`);
 
-afterEach(() => resetTestTime());
+/** Moves the clock; the API reads Date.now(). */
+function at(ms: number) {
+  vi.useFakeTimers({ now: ms, toFake: ['Date'] });
+}
+afterEach(() => vi.useRealTimers());
 
 describe('Mobile sessions (FR-AUTH-03 mobile exception)', () => {
   it('mobile login returns a body token (no cookie), stored hashed, 3-day sliding window, no cap', async () => {
@@ -45,7 +48,7 @@ describe('Mobile sessions (FR-AUTH-03 mobile exception)', () => {
   it('idle expiry: 3 days + 1 min without activity → 401', async () => {
     const u = await createUser();
     const { body } = await mobileLogin(u.email);
-    setTestTime(Date.now() + 3 * DAY + 60_000);
+    at(Date.now() + 3 * DAY + 60_000);
     const r = await me(body.token);
     expect(r.status).toBe(401);
     expect(r.body.error.code).toBe('SESSION_EXPIRED');
@@ -58,13 +61,13 @@ describe('Mobile sessions (FR-AUTH-03 mobile exception)', () => {
     let t = Date.now();
     for (let i = 0; i < 4; i++) {
       t += 2 * DAY; // 8 days in total, each gap < 3 days
-      setTestTime(t);
+      at(t);
       const r = await refresh(body.token);
       expect(r.status).toBe(200);
       expect(new Date(r.body.expiresAt).getTime()).toBe(t + 3 * DAY);
     }
     t += 2 * DAY;
-    setTestTime(t);
+    at(t);
     expect((await me(body.token)).status).toBe(200); // plain activity also slides
     const s = await SessionModel.findOne({ userId: u._id }).lean();
     expect(s!.expiresAt.getTime()).toBe(t + 3 * DAY);
@@ -78,18 +81,18 @@ describe('Mobile sessions (FR-AUTH-03 mobile exception)', () => {
       .set(CSRF)
       .send({ email: u.email, password: PASSWORD });
     const t0 = Date.now();
-    setTestTime(t0 + 2 * DAY);
+    at(t0 + 2 * DAY);
     await request(capped)
       .post('/api/v1/auth/mobile/refresh')
       .set(CSRF)
       .set('Authorization', `Bearer ${body.token}`);
-    setTestTime(t0 + 4 * DAY);
+    at(t0 + 4 * DAY);
     const r = await request(capped)
       .post('/api/v1/auth/mobile/refresh')
       .set(CSRF)
       .set('Authorization', `Bearer ${body.token}`);
     expect(new Date(r.body.expiresAt).getTime()).toBeLessThanOrEqual(t0 + 5 * DAY + 1000);
-    setTestTime(t0 + 5 * DAY + 60_000);
+    at(t0 + 5 * DAY + 60_000);
     expect(
       (await request(capped).get('/api/v1/auth/me').set('Authorization', `Bearer ${body.token}`))
         .status,
@@ -144,7 +147,7 @@ describe('Mobile sessions (FR-AUTH-03 mobile exception)', () => {
     const s = await SessionModel.findOne({ userId: u._id }).lean();
     expect(s!.kind).toBe('web');
     expect(s!.absoluteExpiresAt.getTime() - s!.lastSeenAt.getTime()).toBe(12 * HOUR);
-    setTestTime(Date.now() + 31 * 60_000);
+    at(Date.now() + 31 * 60_000);
     expect((await agent.get('/api/v1/auth/me')).status).toBe(401);
   });
 

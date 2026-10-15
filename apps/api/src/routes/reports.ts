@@ -28,7 +28,6 @@ import { Types, type FilterQuery } from 'mongoose';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { perm, type RouteRegistry } from '../access/registry.js';
-import { now as clockNow } from '../lib/clock.js';
 import { forbidden } from '../lib/errors.js';
 import { parseQuery } from '../lib/validate.js';
 import { audit } from '../services/audit.js';
@@ -75,14 +74,14 @@ export function reportsRouter(registry: RouteRegistry) {
   const d = registry.router('/dashboard');
 
   d.get('/', perm('reports', 'view'), async (req, res) => {
-    res.json(await dashboard(currentUser(req), currentPermissions(req).time.view, clockNow()));
+    res.json(await dashboard(currentUser(req), currentPermissions(req).time.view));
   });
 
   // FR-PMV-04: PMs see the projects they manage, Admins and Viewers all; Members don't get it.
   d.get('/my-projects', perm('reports', 'view'), async (req, res) => {
     const user = currentUser(req);
     if (user.systemRole === 'MEMBER') throw forbidden();
-    const body: MyProjectsDto = { items: await myProjects(user, clockNow()) };
+    const body: MyProjectsDto = { items: await myProjects(user) };
     res.json(body);
   });
 
@@ -441,7 +440,7 @@ export function reportsRouter(registry: RouteRegistry) {
         ...(q.from || q.to ? { createdAt: raised } : {}),
       },
     );
-    const items = await issueReportRows(issues, projects, clockNow());
+    const items = await issueReportRows(issues, projects);
     const pm = new Map(projects.map((p) => [p._id.toString(), p]));
     const refs = await refMaps({ clients: projects.map((p) => p.clientId) });
     const body: IssueReportDto = {

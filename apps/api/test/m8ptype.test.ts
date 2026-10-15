@@ -1,5 +1,5 @@
 import { DEFAULT_PROJECT_TYPES } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,
@@ -8,7 +8,6 @@ import {
   ProjectTypeModel,
   TimeEntryModel,
 } from '../src/models/index.js';
-import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { PROJECT_TYPES_SEED_ID, ensureDefaultProjectTypes } from '../src/services/projectTypes.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { ptypeId, resetRules, world } from './m2helpers.js';
@@ -18,10 +17,11 @@ import { lookups } from './trackerHelpers.js';
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
 beforeEach(() => {
-  setTestTime('2026-10-14T02:00:00Z');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-14T02:00:00Z'));
 });
 afterEach(async () => {
-  resetTestTime();
+  vi.useRealTimers();
   await resetRules();
 });
 

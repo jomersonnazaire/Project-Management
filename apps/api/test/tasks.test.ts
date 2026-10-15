@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, it, onTestFinished } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ActivityLogModel, TaskModel } from '../src/models/index.js';
-import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { FILES, uploadEvidence } from './m3helpers.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world, ptypeId } from './m2helpers.js';
@@ -426,9 +425,10 @@ describe('Task state machine (workflow §2, FR-TSK-02..06, TC-F04/F06/F09/F11/F1
 describe('Board and My tasks (FR-TSK-10/13, AC-12.4, AC-17.1)', () => {
   it('filters the board by assignee and lists my open tasks across projects, overdue first, scoped to me', async () => {
     // Pin "now" to Rollout P's start so its tasks aren't overdue on the real clock.
-    setTestTime('2026-10-12T02:00:00Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-12T02:00:00Z'));
     onTestFinished(() => {
-      resetTestTime();
+      vi.useRealTimers();
     });
     const w = await world(app);
     await staffed(w);

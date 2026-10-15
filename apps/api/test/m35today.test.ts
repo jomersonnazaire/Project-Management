@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HolidayModel, ProjectModel, SettingModel, TaskModel } from '../src/models/index.js';
-import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world } from './m2helpers.js';
 
@@ -13,10 +12,14 @@ const app = makeApp();
 type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
+const at = (iso: string) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(iso));
+};
 const THU_10AM = '2026-10-08T02:00:00Z';
 
 afterEach(async () => {
-  resetTestTime();
+  vi.useRealTimers();
   await resetRules();
   await HolidayModel.deleteMany({});
   await SettingModel.deleteMany({});
@@ -90,7 +93,7 @@ describe('TC-N22: tabs', () => {
   it('Today and Due are separate views with their own counts; a task can be in both', async () => {
     const { w, plan } = await setup();
     const late = await plan(0, '2026-09-28', '2026-10-02', 'IN_PROGRESS');
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     const t = await today(w.member.agent);
     expect(t.counts).toMatchObject({ today: 1, due: 1 });
     expect(byId(t.items, late)!.section).toBe('AGING');
@@ -102,7 +105,7 @@ describe('TC-N23 / AC-TODAY-2: Aging vs Planned for today', () => {
   it('planned Monday, Not started, checked Thursday: Aging, 3 working days; In progress → Planned', async () => {
     const { w, plan, tasks } = await setup();
     const id = await plan(0, '2026-10-05', '2026-10-13');
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     let t = await today(w.member.agent);
     expect(byId(t.items, id)).toMatchObject({ section: 'AGING', ageDays: 3 });
     await TaskModel.updateOne({ _id: tasks[0]!.id }, { $set: { status: 'IN_PROGRESS' } });
@@ -118,7 +121,7 @@ describe('TC-N23 / AC-TODAY-2: Aging vs Planned for today', () => {
     const planned = await plan(0, '2026-10-08', '2026-10-09');
     const newer = await plan(1, '2026-10-07', '2026-10-13');
     const older = await plan(2, '2026-09-24', '2026-10-13');
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     const t = await today(w.member.agent);
     expect(t.items.map((x) => x.id)).toEqual([planned, older, newer]);
   });
@@ -128,7 +131,7 @@ describe('TC-N24 / AC-TODAY-3: planned last week and past due', () => {
   it('is Aging on Today and overdue on Due', async () => {
     const { w, plan } = await setup();
     const id = await plan(0, '2026-09-29', '2026-10-06', 'IN_PROGRESS');
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     expect(byId((await today(w.member.agent)).items, id)).toMatchObject({
       section: 'AGING',
       ageDays: 7,
@@ -143,17 +146,19 @@ describe('TC-N25 / AC-TODAY-4: age follows the calendar', () => {
     const mon = await plan(0, '2026-10-05', '2026-10-13');
     const fri = await plan(1, '2026-10-02', '2026-10-13');
     expect((await addHoliday(w.admin.agent, '2026-10-07', 'REGULAR')).status).toBe(201);
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     let t = await today(w.member.agent);
     expect(byId(t.items, mon)!.ageDays).toBe(2);
     // Fri → Thu: Mon, Tue, Thu (Wed is the holiday) = 3.
     expect(byId(t.items, fri)!.ageDays).toBe(3);
+    vi.useRealTimers();
     expect((await addHoliday(w.admin.agent, '2026-10-03', 'SPECIAL_WORKING')).status).toBe(201);
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     t = await today(w.member.agent);
     expect(byId(t.items, fri)!.ageDays).toBe(4);
+    vi.useRealTimers();
     await setDays(w.admin.agent, [1, 3, 4, 5]); // untick Tuesday
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     t = await today(w.member.agent);
     expect(byId(t.items, mon)!.ageDays).toBe(1);
     expect(byId(t.items, fri)!.ageDays).toBe(3);
@@ -166,7 +171,7 @@ describe('TC-N27 / AC-TODAY-5: Blocked and On Hold', () => {
     const blocked = await plan(0, '2026-10-01', '2026-10-07', 'BLOCKED', {
       blockerReason: 'Waiting on data',
     });
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     expect(byId((await today(w.member.agent)).items, blocked)).toMatchObject({
       status: 'BLOCKED',
       section: 'AGING',
@@ -199,7 +204,7 @@ describe('TC-N28: scope', () => {
         },
       },
     );
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     const ids = (await today(w.member.agent)).items.map((x) => x.id).sort();
     expect(ids).toEqual([owned, tasks[2]!.id].sort());
     // Another user's tasks are never returned.
@@ -207,8 +212,9 @@ describe('TC-N28: scope', () => {
     const pmIds = (await today(w.pm.agent)).items.map((x) => x.id);
     expect(pmIds).not.toContain(owned);
     // Cancelled is hidden too.
+    vi.useRealTimers();
     await TaskModel.updateOne({ _id: tasks[1]!.id }, { $set: { status: 'CANCELLED' } });
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     expect((await today(w.member.agent)).items.map((x) => x.id)).not.toContain(tasks[1]!.id);
   });
 });
@@ -218,7 +224,7 @@ describe('TC-N29 / TC-N30: edges', () => {
     const { w, plan } = await setup();
     const now = await plan(0, '2026-10-08', '2026-10-08');
     const later = await plan(1, '2026-10-09', '2026-10-13');
-    setTestTime(THU_10AM);
+    at(THU_10AM);
     const t = await today(w.member.agent);
     expect(byId(t.items, now)).toMatchObject({ section: 'PLANNED', ageDays: 0 });
     expect(byId(t.items, later)).toBeUndefined();
@@ -228,12 +234,12 @@ describe('TC-N29 / TC-N30: edges', () => {
     const { w, plan } = await setup();
     const sat = await plan(0, '2026-10-03', '2026-10-13');
     const sun = await plan(1, '2026-10-04', '2026-10-13');
-    setTestTime('2026-10-05T02:00:00Z'); // Mon 10:00 Manila
+    at('2026-10-05T02:00:00Z'); // Mon 10:00 Manila
     let t = await today(w.member.agent);
     expect(byId(t.items, sat)).toMatchObject({ section: 'AGING', ageDays: 1 });
     expect(byId(t.items, sun)).toMatchObject({ section: 'AGING', ageDays: 1 });
     // Checked on the Sunday itself: Saturday start is 0 working days old (not -1, not 1).
-    setTestTime('2026-10-04T02:00:00Z');
+    at('2026-10-04T02:00:00Z');
     t = await today(w.member.agent);
     expect(byId(t.items, sat)).toMatchObject({ section: 'AGING', ageDays: 0 });
   });
@@ -245,12 +251,12 @@ describe('TC-N31: midnight in Manila', () => {
     const thu = await plan(0, '2026-10-08', '2026-10-09');
     const mon = await plan(1, '2026-10-05', '2026-10-13');
     // 00:30 Thu Manila = 16:30 Wed UTC.
-    setTestTime('2026-10-07T16:30:00Z');
+    at('2026-10-07T16:30:00Z');
     let t = await today(w.member.agent);
     expect(byId(t.items, thu)).toMatchObject({ section: 'PLANNED', ageDays: 0 });
     expect(byId(t.items, mon)!.ageDays).toBe(3);
     // 23:59 Wed Manila: Thursday's task isn't planned yet, and Monday's is 2 days old.
-    setTestTime('2026-10-07T15:59:00Z');
+    at('2026-10-07T15:59:00Z');
     t = await today(w.member.agent);
     expect(byId(t.items, thu)).toBeUndefined();
     expect(byId(t.items, mon)!.ageDays).toBe(2);
