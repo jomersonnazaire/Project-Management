@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityLogModel,
   FolderModel,
@@ -16,12 +16,21 @@ import { SMALL_TEMPLATE, grant, publishedTemplate, resetRules, world } from './m
 import { FILES, uploadEvidence } from './m3helpers.js';
 import { lookups } from './trackerHelpers.js';
 
-/** m8-polish (doc 14 v1.2.4 §A, B, E, F; doc 11 v0.4.13 FR-ACL-19..22). */
+/**
+ * m8-polish (doc 14 v1.2.4 §A, B, E, F; doc 11 v0.4.13 FR-ACL-19..22).
+ * "Now" is Wed Oct 14, 2026 10:00 Manila time.
+ */
 useDatabase();
 const app = makeApp();
 type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
+const at = (iso: string) => vi.setSystemTime(new Date(iso));
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  at('2026-10-14T02:00:00Z'); // Oct 14, 2026 10:00 AM PHT
+});
 afterEach(async () => {
+  vi.useRealTimers();
   await resetRules();
   await TimeEntryModel.deleteMany({});
   await LookupModel.deleteMany({});
@@ -360,16 +369,18 @@ describe('FR-ACT-32/33: Quick Activity system type and FUTURE_DATE', () => {
     const l = await lookups();
     await UserModel.updateOne({ _id: w.member.user._id }, { supervisorId: w.pm.user._id });
     const qa = (await LookupModel.findOne({ key: 'quick_activity' }).lean())!._id.toString();
+    // Oct 13 is yesterday (still within the 2-day lock window).
     const ok = await w.member.agent.post('/api/v1/tracker/entries').set(CSRF).send({
       title: 'Email triage',
       activityTypeId: qa,
-      date: '2026-10-12',
+      date: '2026-10-13',
       timeIn: '08:00',
       timeOut: '09:00',
       dayLocationId: l.onsite,
     });
     expect(ok.status).toBe(201);
     expect(ok.body.entry.billable).toBe(false);
+    // Future date: 2099-01-01 is far in the future.
     const fut = await w.member.agent.post('/api/v1/tracker/entries').set(CSRF).send({
       title: 'Tomorrow',
       activityTypeId: qa,
