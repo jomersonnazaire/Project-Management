@@ -1,17 +1,17 @@
 # M8 QA Report (final): OpsTrack m8-polish
 
 ## Summary
-- **Result: PASS. No open defects.** DEF-010's fix passed at code level, but its live restart retest could not be run (see Known gaps).
+- **Result: M8 PASS. No open defects.** DEF-010's fix passed at code level, but its live restart retest could not be run (see Known gaps).
 - **Date:** 14 Oct 2026 (SGT).
-- **Build under test:** live API `8fdb005` and web `fdbeecb`, branch `m8-polish`. Preview: `xc8-projectmgmt-web-git-m8-polish-jomerson-team.vercel.app`.
-- **Status:** M8 is complete except for the Q-09 2-day lock build, which is still in progress. This report will be updated after the lock retest and before the merge to main.
+- **Build under test:** live API `8fdb005` and web `fdbeecb`, branch `m8-polish`. Preview: `xc8-projectmgmt-web-git-m8-polish-jomerson-team.vercel.app`. Q-09 2-day lock tests (section 6) ran on API `c96c8da`.
+- **Status:** M8 is complete. The Q-09 2-day lock (API `c96c8da`) was tested (section 6) with no defects. Two checks are **Rerun pending** because of a timing miss in the test run: the before-lock create (TC-T123) and the after-lock PATCH (part of TC-T124). Per Lean, that rerun is a follow-up and does not block M8.
 - The round history (round 1, round 2, regression and the TC-Q03 rerun) is in the Appendix.
 
 ## 1. Defects
 | ID | Severity | Defect | Final status | Evidence |
 |---|---|---|---|---|
 | DEF-010 | Medium | The module migration (`migrateModuleText`) ran again on every API start, so a cleared Module came back after a restart | **Fix passed at code level. The live restart retest was blocked and not run** (a live restart was not possible from QA) | `m8/qa_def010.test.ts`, `m8/def010_check.py`, `m8/def010.json` |
-| DEF-011 | High | Viewer got 403 on all Reports routes and exports under the starting grid (permission cache not refreshed after the startup seed) | Closed | Round 2 log `m8/m8r2_live.log`; retest script `regress/def011_014.py` (no saved run log on the box) |
+| DEF-011 | High | Viewer got 403 on all Reports routes and exports under the starting grid (permission cache not refreshed after the startup seed) | Closed | Round 2 log `m8/m8r2_live.log`; retest `regress/def011_014_rerun.log`: **4/4 pass** (14 Oct 08:33 SGT) |
 | DEF-012 | Medium | An access rule with Export on and View off was accepted (FR-ACL-14) | Closed | as DEF-011 |
 | DEF-013 | Medium | Someone else's saved DAR gave a different response from a made-up ID (existence leak), and Viewer got 403 instead of 404 (NFR-25, FR-ACL-17) | Closed | as DEF-011 |
 | DEF-014 | Low | Viewer PATCH/DELETE on another user's tracker entry returned 403 instead of 404 (FR-ACT-27) | Closed | as DEF-011 |
@@ -23,7 +23,7 @@ Closed earlier in M8 (see Appendix): DEF-007, DEF-008 and DEF-009. No severity w
 ## 2. Decisions and retests
 | Item | Decision / change | Retest | Result |
 |---|---|---|---|
-| Q-70 B | Viewers have no time, tracker or DAR access | On `d233083`: AC-56.1, EC-112 and A-25. EC-111 is covered by Deven's automated test, because the qa.viewer account could not sign in | Pass. Note: the saved `regress/q70b.log` (20:13 SGT, 13 Oct) shows 7 pass / 3 fail. The 3 fails are probes of `GET /tracker/entries` and `GET /dar/<date>`. Those paths also returned 404 for pm2, so they are script paths, not defects. That log also predates Q-72 (it checks that the Viewer still has `/leave`). There is no cleaner rerun log on the box |
+| Q-70 B | Viewers have no time, tracker or DAR access | On `d233083`: AC-56.1, EC-112 and A-25. EC-111 is covered by Deven's automated test, because the qa.viewer account could not sign in | Pass. The first run (`regress/q70b.log`, 20:13 SGT 13 Oct, 7 pass / 3 fail) probed routes that don't exist (`GET /tracker/entries`, `GET /dar/<date>`, which also gave 404 for pm2). The rerun on the correct routes in `regress/lock_now.log` (14 Oct 08:32 SGT): **3/3 pass** (viewer `GET /tracker/day` 403, viewer `GET /dar?from&to` 403, pm2 `GET /tracker/day` 200) |
 | Q-71 | Kept: weekly totals include quick activities and leave out leave | `regress/ac551.log`: qa.member with quick activities only shows `loggedTotal 4` and Team & workload `recordedHours 4` | Pass (EC-109). The exact 01:30 example in AC-55.1 and the leave part were not run live |
 | Q-72 | Viewers have no leave. Only Admins and the Viewer's direct supervisor see existing Viewer leave | `regress/q72.log` on `8fdb005`: **6 pass / 0 fail**, including "reset keeps leave+activities off". EC-113 is covered by an automated test | Pass. (`reset_check.log` at 20:52 still showed leave on after reset. That run was before `8fdb005`, and `q72.log` at 21:17 supersedes it) |
 | Location changes (`109912c`) | `PUT /tracker/days/<date>/location` | `regress/loc109.log`: **5 pass / 0 fail**. It writes an audit record, returns 422 `DAY_LOCKED` on a locked day, and returns 400 on an empty location | Pass |
@@ -35,7 +35,8 @@ Closed earlier in M8 (see Appendix): DEF-007, DEF-008 and DEF-009. No severity w
 - Older entries that have their own location can show a different location in the DAR than the day's location. There is no data migration for these.
 - The DEF-010 restart retest was not run live.
 - EC-111 and EC-113 are covered by automated tests only. The live data had no such records.
-- **Q-09 2-day lock is not built yet** (planned after 00:41). A day will lock at 00:00 PHT on the third day; for example, Oct 11 locks at 00:00 PHT on Oct 14. After that, only an Admin reopen allows changes. The cases are listed as "Pending build" in `07_M8_TEST_CASES.md`.
+- **Q-09 lock boundary rerun pending** (not blocking, per Lean): the TC-T123 create before the lock and the TC-T124 PATCH after the lock. See section 6.
+- pm2's 2026-10-11 was left SUBMITTED by the lock tests (Lean approved).
 - The client portal is planned, and invites are on hold (Q-84). The outline cases are in `07_M8_TEST_CASES.md`.
 
 ## 4. Test accounts
@@ -49,12 +50,41 @@ QA accounts only. member@ and Jomerson's account are not test accounts, and thei
 | viewer@xceler8.example | VIEWER |
 | qa.viewer@xceler8.example | VIEWER (could not sign in for EC-111) |
 | qa.member@xceler8.example | MEMBER |
-| qa.autostop@xceler8.example | Role not recorded in the QA scripts or logs (not on the seeded QA project team) |
+| qa.autostop@xceler8.example | MEMBER (not on the seeded QA project team) |
 
-Roles are taken from `/auth/me/permissions` in `regress/m8c_live3.log` (admin, pm, pm2, outsider, viewer) and from the account-creation scripts (`ec111b.py` for qa.viewer, `member_timer.py` for qa.member).
+Roles are taken from `/auth/me/permissions` in `regress/m8c_live3.log` (admin, pm, pm2, outsider, viewer) and from the account-creation scripts (`ec111b.py` for qa.viewer, `member_timer.py` for qa.member). qa.autostop's role is from `regress/lock_now.log`.
 
 ## 5. Test-case coverage
-`07_M8_TEST_CASES.md` now covers FR-PRJ-27 to 34 (AC-53.x, AC-54.1–54.8, EC-95, EC-100–108, EC-110), AC-55.1/EC-109, AC-56.1, EC-111–113 and AC-52.8. Each case has a status from the evidence. It also adds the Q-09 2-day lock section (Pending build) and the Client portal outline (pending contract build, including the invite-hold UI from mockup v0.9.15). Cases without a matching log line are marked "Not evidenced".
+`07_M8_TEST_CASES.md` now covers FR-PRJ-27 to 34 (AC-53.x, AC-54.1–54.8, EC-95, EC-100–108, EC-110), AC-55.1/EC-109, AC-56.1, EC-111–113 and AC-52.8. Each case has a status from the evidence. It also adds the Q-09 2-day lock section (results in section 6) and the Client portal outline (pending contract build, including the invite-hold UI from mockup v0.9.15). Cases without a matching log line are marked "Not evidenced".
+
+## 6. Q-09 2-day lock (API c96c8da)
+Rule: a day locks at 00:00 PHT on the third day (for example, Oct 13 locks at 00:00 PHT on Oct 16). After that, only an Admin reopen allows changes. Accounts: pm2@ (PROJECT_MANAGER, writer), pm@ (PROJECT_MANAGER, acting supervisor), admin@ (ADMIN), viewer@ (VIEWER), outsider@ (MEMBER).
+
+Evidence (all in `/workspace/qa-run/regress/`): `lock_now.log` (14 Oct 08:32 SGT, 28 pass / 2 fail; both fails are superseded below), `lock_sup.log` (08:40, 2/0), `tl.log` (09:02), `def011_014_rerun.log` (08:33, 4/4), `lock_boundary_before.log` (15 Oct 00:02), `lock_boundary_after.log` (15 Oct 00:06, 3 pass / 1 not run).
+
+| Case | Check | Result | Evidence |
+|---|---|---|---|
+| TC-T123 | Edits on open days 2026-10-12 and 10-13 (create 201, PATCH 200, DELETE 204, location PUT 200) | Pass | `lock_now.log` |
+| TC-T123 | Create just before the lock, expect 201 | **Rerun pending** (timing miss: the scheduler started the before phase late, after 00:00) | `lock_boundary_before.log`: started at 00:02:25 PHT, 145 s past the lock, so 422 `DAY_LOCKED` was correct for that time. Not a defect |
+| TC-T124 | Locked 2026-10-11: create, location PUT, PATCH and DELETE give 422 `DAY_LOCKED`; GET shows `weekLocked` and `can.edit false`; a future date gives 422 `FUTURE_DATE` | Pass | `lock_now.log` |
+| TC-T124 | Boundary after phase: location PUT on 2026-10-12 after 00:00 PHT gives 422 `DAY_LOCKED` | Pass | `lock_boundary_after.log` |
+| TC-T124 | Boundary after phase: PATCH the entry after the lock | **Rerun pending** (timing miss: the scheduler started the before phase late, after 00:00, so there was no entry to PATCH) | `lock_boundary_after.log`, `lock_boundary.json` (`entryId: null`) |
+| TC-T125 | Locked day in the UI | Pass (API side: `can.edit false`; UI: AC-52.8 UIE design pass, section 2) | `lock_now.log` |
+| TC-T126 | No "Monday 12:00" wording; the time-lock setting is an on/off switch | Pass. The first run failed the setting check because `policy.enabled` was null. This was fixed in `c96c8da`, and the re-check returned `policy: {"enabled": true}` | `lock_now.log`, `tl.log` |
+| TC-T127 | Admin reopen gives 200; pm2's create, PATCH and location PUT work after the reopen; the `day_reopened` audit record has pastLock true | Pass | `lock_now.log` |
+| TC-T127 | Admin-only reopen: the supervisor (pm@, set as pm2's supervisor) gets 403 `ADMIN_ONLY` on reopen; the supervisor setting was then restored | Pass, **2/0**. This supersedes the 404 in `lock_now.log`, where pm@ was not yet pm2's supervisor | `lock_sup.log` |
+| TC-T128 | The lock follows PHT: the boundary is PHT today minus 2 days while UTC was a different date, and the lock held after 00:00 PHT while UTC was still the previous day (14 Oct 16:06 UTC) | Pass | `lock_now.log`, `lock_boundary_after.log` |
+| AC-18.7 | A day is open until 00:00 PHT on the third day and locked after that | Pass on the after side (`lock_boundary_after.log`) and for open days (`lock_now.log`). The exact before-midnight side is part of the TC-T123 rerun | as listed |
+
+**Boundary after phase (15 Oct 00:06:55 PHT): 3 pass.** The location PUT returned 422 `DAY_LOCKED`; the lock held after 00:00 PHT while UTC was still 14 Oct; AC-18.7 passed on the after side.
+
+**Related reruns:** DEF-011 to DEF-014 **4/4 pass** (`def011_014_rerun.log`). Q-70 B probes on the correct routes **3/3 pass** (`lock_now.log`). qa.autostop@ role: MEMBER.
+
+**Rerun plan (follow-up, not blocking, per Lean):** work date 2026-10-13. Before phase at 23:45 PHT on 15 Oct (create, expect 201); after phase at 00:05 PHT on 16 Oct (PATCH and location PUT, expect 422 `DAY_LOCKED`).
+
+**Data left behind:** pm2's 2026-10-11 is SUBMITTED, because the API has no route back to "past lock, not submitted" (Lean approved). pm2's supervisor setting was restored to none. No boundary entry was created on 2026-10-12.
+
+No new defects.
 
 ---
 
