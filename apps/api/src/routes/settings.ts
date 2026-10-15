@@ -147,13 +147,13 @@ export function settingsRouter(registry: RouteRegistry) {
     res.json({ workingDays: now.days, version: updated?.version ?? now.version });
   });
 
-  // Q-09: when last week's time entries lock (Admin setting; no approval step).
+  // Q-09: the day lock (a day locks 00:00 PHT on the third day); Admins can turn it off.
   const timeLockDto = async (): Promise<TimeLockDto> => {
     const { policy, version } = await loadTimeLock();
     return {
       policy,
       version,
-      boundary: policy.enabled ? toDateOnly(timeLockBoundary(new Date(), policy)) : null,
+      boundary: policy.enabled !== false ? toDateOnly(timeLockBoundary(new Date(), policy)) : null,
       description: describeTimeLock(policy),
     };
   };
@@ -169,7 +169,7 @@ export function settingsRouter(registry: RouteRegistry) {
         'VERSION_CONFLICT',
       );
     }
-    const policy = { enabled: input.enabled, weekday: input.weekday, hour: input.hour };
+    const policy = { enabled: input.enabled };
     await SettingModel.findOneAndUpdate(
       { key: TIME_LOCK_KEY, version: input.version },
       { $set: { timeLock: policy, updatedBy: currentUser(req)._id }, $inc: { version: 1 } },

@@ -9,17 +9,17 @@ Questions marked ★ blocked development or design decisions. **All ★ question
 |----|----------|----------------|------------------|
 | Q-01 ★ | Who are the first users: Xceler8's own implementation team only, or will other companies use it (multi-tenant SaaS)? | Multi-tenancy changes the data model, auth, and billing | Single company (Xceler8) in Phase 1 **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
 | Q-02 ★ | Client interaction in Phase 1: contacts tracked only, or also email notifications/reminders to contacts? (blueprint §10) | Email needs a sending service and templates; affects password reset too | Tracked only; email used only for internal password reset **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
-| Q-03 | AI authority for Phase 2: recommendations only, automatic routine reminders, or broader automation with approval gates? (blueprint §10) | Shapes Phase 2 design; no impact on Phase 1 build | Recommendations only |
+| Q-03 | AI authority for Phase 2: recommendations only, automatic routine reminders, or broader automation with approval gates? (blueprint §10) | Shapes Phase 2 design; no impact on Phase 1 build | Recommendations only. **On hold (2026-10-13, 9:15 PM SGT):** Phase 2 waits until the whole app is built and working. |
 | Q-04 ★ | Which templates to seed at launch: SAP B1 only, or also Software/API, Cloud migration, General IT? | Someone must supply activities, estimates, durations | SAP B1 only, others created in-app later **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
 | Q-05 ★ | Keep the workload view and effort variance report in Phase 1 (mockup) or move them to Phase 2 (blueprint)? | Scope and timeline | Keep basic versions in Phase 1 **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
 | Q-06 | For the SAP B1 template, please confirm the dependencies (06 §4) and supply default estimates and durations per activity. | Plan generation needs them | Use proposed dependencies; estimates blank until supplied |
 | Q-07 | Working days and holidays: Mon–Fri? Philippine public holidays? Default timezone Asia/Manila? | Date offsets, overdue, utilization | Mon–Fri, PH holidays configurable, Asia/Manila |
 | Q-08 | Progress %: count of completed tasks, or weighted by estimated hours? | Dashboard accuracy | **Resolved (Lean, 2026-10-09):** share of tasks completed |
-| Q-09 | Timesheet lock: should past weeks lock? When? Does anyone approve timesheets? | Data integrity vs flexibility | Built as an Admin setting defaulting to Monday 12:00 PM PHT, no approval step; policy pending Jomerson |
+| Q-09 | Timesheet lock: should past weeks lock? When? Does anyone approve timesheets? | Data integrity vs flexibility | ~~Built as an Admin setting defaulting to Monday 12:00 PM PHT, no approval step; policy pending Jomerson~~ **✅ RESOLVED 2026-10-13, 9:15 PM SGT (Jomerson):** a day stays editable until the end of the second day after its work date and locks at 00:00 Philippine time on the third day (Oct 13 locks Oct 16, 00:00 PHT); no approval step. Example: Oct 13 is editable on Oct 14 and 15, locked from Oct 16, 00:00 PHT. Deven checks whether the build already does this; if not, it changes after 00:41. See FR-TIME-04, AC-18.7, doc 14 FR-ACT-36, AC-52.7 |
 | Q-10 | Success targets and availability expectations (01 §6, NFR-21): are those reasonable? | Defines "done" for the business | As proposed |
 | Q-11 | Can PMs create and publish templates, or Admin only? | Governance of the standard method | **Resolved (Jomerson, 2026-10-09):** PMs can create and publish; publishing follows Edit on Templates |
 | Q-12 | Can a PM edit projects managed by another PM? | Permissions | **Resolved (Jomerson, 2026-10-09):** view all, edit and archive own only |
-| Q-13 | Any data privacy requirements (PH Data Privacy Act, client NDAs) for storing client contact details and evidence files? | Hosting region, retention, access logs | Store minimal contact data; host in Singapore/APAC region |
+| Q-13 | Any data privacy requirements (PH Data Privacy Act, client NDAs) for storing client contact details and evidence files? | Hosting region, retention, access logs | Store minimal contact data; host in Singapore/APAC region. *(The separate xAI data privacy call, phase2 Q-AI-01, is on hold, see Decisions of 2026-10-13, 9:15 PM SGT.)* |
 | Q-14 | May a PM approve a task they own (self-approval)? | Audit/compliance | Allowed and flagged in audit |
 | Q-15 | How should On Hold projects behave in health counts and time logging? | Dashboard accuracy | **✅ RESOLVED 2026-10-09 (Lean):** excluded from health counts; time logging blocked. |
 | Q-16 | Hosting preference for production and preview builds (Vercel/Netlify + Atlas, Azure, on-prem)? | Deployment and cost | Front end on Vercel/Netlify previews, API + MongoDB Atlas (APAC) |
@@ -71,3 +71,16 @@ Document management questions Q-20 to Q-25 are in [10 §9](10_DOCUMENT_MANAGEMEN
 | Lockout response | Lock silently with the generic 401, not 423 (Lean) | FR-AUTH-07, AC-01.3 |
 | Invite and reset tokens | Sent in a POST body, not a GET path (Lean) | FR-AUTH-04, FR-AUTH-05 |
 | Rate limiter store | In memory with one pinned instance for now; shared store before scale-out is tech debt TD-01 (Lean) | NFR-05 |
+
+## Decisions of 2026-10-13, 9:15 PM SGT
+| Item | Decision | Updated in |
+|------|----------|-----------|
+| Timesheet lock (Q-09) | **Jomerson:** a day stays editable until the end of the second day after its work date and locks at 00:00 Philippine time on the third day (Oct 13 locks Oct 16, 00:00 PHT) (same PHT convention as before; the moment moves from the old Monday 12:00 PM weekly default to midnight, per Jomerson's example). Oct 13 is editable on Oct 14 and 15, locked from Oct 16, 00:00 PHT. **Deven** checks whether the build already does this; if not, it changes after 00:41. | Q-09, FR-TIME-04, AC-18.7, doc 14 FR-ACT-02/04/13/36, AC-52.7 |
+| Azure Defender for Storage (Q-29) | **Not required for now. Deferred.** Off the go-live checklist; uploads keep our own file checks. | doc 12 FR-EVD-08, Q-29 |
+| Module field | **Stays free text.** The old stored Modules list stays in the database and is **not deleted** (permanent removal is no longer pending). | doc 14 FR-ACT-22 |
+| HR leave amounts | **Keep the placeholder numbers for now.** | doc 14 §4 (FR-LV-02) |
+| Phase 2 (AI insights, e-signature) and the xAI data privacy call | **On hold** until the whole app is built and working. | Q-03, Q-13, phase2 Q-AI-01, doc 10 Q-20 |
+| Test accounts | **No password rotation after M8.** All dummy test accounts use the standard test password, which is **not recorded in the docs**. Queen keeps a list of test accounts (**email and role only**) in the QA report. | QA reports |
+| Doc 11 portal questions | Q-73 to Q-76 set aside by Jomerson: build on the current defaults, no decision needed. New portal build defaults from Lean (Q-77 to Q-81), pending Jomerson. | doc 11 §10 |
+
+> **Q-09 confirmed by Jomerson (2026-10-13, 10:13 PM SGT):** example work date Oct 11 can be changed on Oct 12 and 13 and locks at 00:00 PHT on Oct 14; after that only an Admin reopening the day allows changes.

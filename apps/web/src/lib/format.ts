@@ -99,3 +99,24 @@ export function longDayShort(value: string): string {
     timeZone: 'UTC',
   });
 }
+
+/** "Oct 5–11", or "Sep 28–Oct 4" across months: a compact week label for phones (DR-39). */
+export function weekRangeShort(weekStart: string): string {
+  const start = new Date(`${weekStart}T00:00:00Z`);
+  const end = new Date(start.getTime() + 6 * 86_400_000);
+  const month = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
+  return `${month(start)} ${start.getUTCDate()}–${sameMonth ? '' : `${month(end)} `}${end.getUTCDate()}`;
+}
+
+/** The day-location question (FR-ACT-17, DR-41): "today" for today, past tense for an earlier day. */
+export function whereWorkingQuestion(date: string, today: string): string {
+  if (date === today) return 'Where are you working today?';
+  const day = longDayShort(date);
+  return date < today
+    ? `Where were you working on ${day}?`
+    : `Where will you be working on ${day}?`;
+}
+
+/** Leave days with a real minus sign (DR-38): the shared helper. */
+export { leaveDaysLabel as daysLabel } from '@xc8/shared';

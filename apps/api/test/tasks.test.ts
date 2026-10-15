@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ActivityLogModel, TaskModel } from '../src/models/index.js';
 import { FILES, uploadEvidence } from './m3helpers.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { resetRules, world } from './m2helpers.js';
+import { resetRules, world, ptypeId } from './m2helpers.js';
 
 useDatabase();
 const app = makeApp();
@@ -424,6 +424,12 @@ describe('Task state machine (workflow §2, FR-TSK-02..06, TC-F04/F06/F09/F11/F1
 
 describe('Board and My tasks (FR-TSK-10/13, AC-12.4, AC-17.1)', () => {
   it('filters the board by assignee and lists my open tasks across projects, overdue first, scoped to me', async () => {
+    // Pin "now" to Rollout P's start so its tasks aren't overdue on the real clock.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-12T02:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const w = await world(app);
     await staffed(w);
     // A second project (past dates → overdue) where the Member is assigned one task.
@@ -432,6 +438,7 @@ describe('Board and My tasks (FR-TSK-10/13, AC-12.4, AC-17.1)', () => {
         .post('/api/v1/projects')
         .set(CSRF)
         .send({
+          projectTypeId: await ptypeId(),
           name: 'Late One',
           clientId: w.acme.client.id,
           managerId: w.pm.user._id.toString(),

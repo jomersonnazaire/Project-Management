@@ -1,13 +1,24 @@
-import { formatHHMM, formatTime24, type TrackerEntryDto } from '@xc8/shared';
+import {
+  QUICK_ACTIVITY_KEY,
+  formatHHMM,
+  formatTime24,
+  PROJECT_TYPE_NOT_SET,
+  projectTypeDeadDefaultHint,
+  projectTypeHint,
+  switchTimerQuestion,
+  type TimerRunningDetails,
+  type TrackerEntryDto,
+} from '@xc8/shared';
 import { longDayShort } from '../../lib/format';
 import { useState, type FormEvent } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
 import { useTimeOptions } from '../../api/m3Hooks';
-import { useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
+import { useProjectTypePreselect } from '../../api/projectTypeHooks';
+import { useLookups, useRunning, useTrackerDay, useTrackerMutation } from '../../api/trackerHooks';
 import { useConfirm } from '../ConfirmModal';
 import { ErrorAlert } from '../Feedback';
-import { DayLocationField, EntryFields } from './EntryFields';
+import { EntryFields, WorkLocationField } from './EntryFields';
 import { emptyFields, fieldErrors, fieldsBody, type EntryFieldValues } from './entryFieldValues';
 
 type SaveReq = { path: string; method?: 'POST' | 'PATCH'; body: unknown };
@@ -27,7 +38,7 @@ const QUICK = '__quick__';
 function fromEntry(e: TrackerEntryDto): EntryFieldValues {
   return {
     activityTypeId: e.activityType?.id ?? '',
-    moduleId: e.module?.id ?? '',
+    module: e.module ?? '',
     locationId: e.locationOverridden ? (e.location?.id ?? '') : '',
     billable: e.billable,
     type: e.type ?? 'EXECUTION',
@@ -39,6 +50,46 @@ function fromEntry(e: TrackerEntryDto): EntryFieldValues {
  * Time in on a task, "+ Quick activity", "Add entry" and editing an entry (doc 14 FR-ACT-02, -06,
  * -10, -15..18; mockup v0.8.7 tracker and daysheet). The server sets live timer times.
  */
+/** API paths that belong to another form field (FR-ACT-28). */
+const FIELD_ALIASES: Record<string, string> = { taskId: 'target' };
+/** Errors the form shows under a field; anything else is for the banner. */
+const SHOWN_FIELDS = new Set([
+  'target',
+  'title',
+  'timeIn',
+  'timeOut',
+  'dayLocationId',
+  'activityTypeId',
+  'locationId',
+  'billable',
+  'module',
+  'notes',
+]);
+
+/**
+ * FR-ACT-28: the top banner is for server and network problems. A validation error whose fields
+ * all show under their inputs stays out of it; one naming a field the form doesn't show is
+ * spelled out ("module: ...") so nobody sees a bare "Some fields are invalid".
+ */
+function bannerError(error: unknown, targetShown: boolean): unknown {
+  if (!(error instanceof ApiError)) return error;
+  const f = error.fieldErrors();
+  const keys = Object.keys(f);
+  if (!keys.length) return error;
+  const hidden = keys.filter((k) => {
+    const field = FIELD_ALIASES[k] ?? k;
+    if (field === 'target' && !targetShown) return true;
+    return !SHOWN_FIELDS.has(field);
+  });
+  if (!hidden.length) return null;
+  return new ApiError(
+    error.status,
+    error.code,
+    hidden.map((k) => `${k}: ${f[k]}`).join(' '),
+    error.details,
+  );
+}
+
 export function TrackerEntryModal({
   mode,
   onClose,
@@ -76,31 +127,75 @@ export function TrackerEntryModal({
     editing
       ? fromEntry(editing)
       : mode.kind === 'start' && mode.last
-        ? { ...fromEntry(mode.last), notes: '' }
+        ? // FR-PTY-04: the activity type comes from the project type, not the last entry.
+          { ...fromEntry(mode.last), activityTypeId: '', notes: '' }
         : emptyFields(mode.kind === 'quick' ? 'QUICK' : 'TASK'),
   );
+  // FR-PTY-04: Time in and + Add entry on a project task preselect the project type's default
+  // activity type ("From project type: X. You can change it."). Blank for quick activities, a
+  // project with no type, a type with no default, or an inactive default.
+  const presetTaskId = !editing && target && target !== QUICK ? target : null;
+  const preselect = useProjectTypePreselect(presetTaskId);
+  const pre = preselect.data && presetTaskId ? preselect.data : null;
+  const [appliedFor, setAppliedFor] = useState<string | null>(null);
+  const [activityTouched, setActivityTouched] = useState(false);
+  if (pre && presetTaskId !== appliedFor) {
+    setAppliedFor(presetTaskId);
+    if (!activityTouched) setFields((f) => ({ ...f, activityTypeId: pre.activityType?.id ?? '' }));
+  }
+  const activityHint =
+    pre?.projectType && pre.activityType && fields.activityTypeId === pre.activityType.id
+      ? projectTypeHint(pre.projectType.name)
+      : pre?.projectType && pre.inactiveDefault && !fields.activityTypeId
+        ? projectTypeDeadDefaultHint(pre.inactiveDefault, pre.projectType.name)
+        : undefined;
+  // FR-ACT-31: Add quick activity preselects the system type Quick Activity (by key, NFR-31).
+  const lists = useLookups();
+  const quickTypeId = lists.data?.activityTypes.find((a) => a.key === QUICK_ACTIVITY_KEY)?.id;
+  const [quickApplied, setQuickApplied] = useState(false);
+  if (mode.kind === 'quick' && quickTypeId && !quickApplied && !activityTouched) {
+    setQuickApplied(true);
+    if (!fields.activityTypeId) setFields((f) => ({ ...f, activityTypeId: quickTypeId }));
+  }
   const [title, setTitle] = useState(editing?.title ?? '');
   const [when, setWhen] = useState<'now' | 'times'>(
     mode.kind === 'add' || mode.kind === 'edit' ? 'times' : 'now',
   );
   const [timeIn, setTimeIn] = useState(editing?.startAt ? formatTime24(editing.startAt) : '');
   const [timeOut, setTimeOut] = useState(editing?.endAt ? formatTime24(editing.endAt) : '');
-  const [dayLocationId, setDayLocationId] = useState('');
+  // v0.9.11: every new entry asks "Where are you working today? *", prefilled with the day's
+  // location. It is per day only (no per-entry override): a different pick is sent as
+  // dayLocationId, which the API saves on the day after its lock checks.
+  const currentDayLocation = day.data?.location?.id ?? null;
+  // Time in on a task (My tasks) still asks only when the day has no location yet.
+  const asksLocation =
+    mode.kind === 'edit' ||
+    mode.kind === 'add' ||
+    mode.kind === 'quick' ||
+    (mode.kind === 'start' && day.isSuccess && !currentDayLocation);
+  const [dayLocationPick, setDayLocationId] = useState<string | null>(null);
+  const dayLocationId = dayLocationPick ?? currentDayLocation ?? '';
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const needsDayLocation = !editing && day.isSuccess && !day.data.location;
+  // FR-ACT-12/13: a submitted or locked day can't take new entries or a location change.
+  const dayLocked = Boolean(day.data && !day.data.can.edit);
   const runningEntry = running.data?.entry;
   const stopsRunning = !editing && when === 'now' && runningEntry;
   const projects = options.data ?? [];
 
   const change = (patch: Partial<EntryFieldValues>) => {
+    if ('activityTypeId' in patch) setActivityTouched(true);
     setFields((f) => ({ ...f, ...patch }));
     setErrors((e) => ({ ...e, ...Object.fromEntries(Object.keys(patch).map((k) => [k, ''])) }));
   };
 
   const pickTarget = (v: string) => {
     setTarget(v);
+    // A new task gets its own preselect (or none); a quick activity is never preselected.
+    setActivityTouched(false);
+    setAppliedFor(null);
     setFields((f) => ({
       ...f,
+      activityTypeId: '',
       billable: v !== QUICK,
       ...(v === QUICK ? { type: 'EXECUTION' } : {}),
     }));
@@ -116,14 +211,20 @@ export function TrackerEntryModal({
       if (!timeOut) next.timeOut = 'Enter the time out.';
       else if (timeIn && timeOut <= timeIn) next.timeOut = 'Time out must be after time in.';
     }
-    if (needsDayLocation && !dayLocationId)
-      next.dayLocationId = 'Choose where you’re working today.';
+    if (asksLocation && !dayLocationId) next.dayLocationId = 'Choose where you’re working today.';
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
     const body: Record<string, unknown> = { ...fieldsBody(fields, kind) };
-    if (needsDayLocation && dayLocationId) {
-      body.dayLocationId = dayLocationId;
+    if (editing) {
+      // The per-entry field is hidden, but a stored override is left untouched: the DAR (view,
+      // saved copies and export) reads each entry's effective location.
       delete body.locationId;
+    } else if (asksLocation) {
+      // The entry inherits the day's location; send it only when it is new or different.
+      delete body.locationId;
+      // No day location yet: it rides on the save. A change to an existing one goes through the
+      // day header's endpoint first (see send), so the day_location_set audit is written.
+      if (dayLocationId && !currentDayLocation) body.dayLocationId = dayLocationId;
     }
     let req: SaveReq;
     if (editing) {
@@ -133,25 +234,71 @@ export function TrackerEntryModal({
       req = { path: `/entries/${editing.id}`, method: 'PATCH', body };
     } else {
       Object.assign(body, kind === 'QUICK' ? { title: title.trim() } : { taskId: target });
-      if (body.moduleId === null) delete body.moduleId;
       if (body.locationId === null) delete body.locationId;
       if (body.notes === null) delete body.notes;
       req =
         when === 'now'
           ? { path: '/start', body }
           : { path: '/entries', body: { ...body, date, timeIn, timeOut } };
+      // FR-ACT-26: one timer at a time. Ask before stopping the running one.
+      if (when === 'now' && runningEntry) {
+        setSwitchPrompt({
+          id: runningEntry.id,
+          name: runningEntry.task?.name ?? runningEntry.title ?? 'Quick activity',
+          req,
+        });
+        return;
+      }
     }
-    send(req);
+    void send(req);
+  };
+
+  const [switchPrompt, setSwitchPrompt] = useState<{
+    id: string;
+    name: string;
+    req: SaveReq;
+  } | null>(null);
+  const doSwitch = () => {
+    if (!switchPrompt) return;
+    const { id, req } = switchPrompt;
+    setSwitchPrompt(null);
+    void send({ ...req, body: { ...(req.body as object), switchFrom: id } });
   };
 
   // Half-day leave (FR-LV-06, TC-S09): a warning the user can confirm; a full day is refused.
   const [leaveWarning, setLeaveWarning] = useState<{ message: string; req: SaveReq } | null>(null);
-  const send = (req: SaveReq) => {
+  const dayLoc = useTrackerMutation();
+  const send = async (req: SaveReq) => {
     setLeaveWarning(null);
+    if (
+      asksLocation &&
+      (currentDayLocation || editing) &&
+      dayLocationId &&
+      dayLocationId !== currentDayLocation
+    ) {
+      try {
+        // The same call as the day header's Change button (writes day_location_set).
+        await dayLoc.mutateAsync({
+          path: `/days/${date}/location`,
+          method: 'PUT',
+          body: { locationId: dayLocationId },
+        });
+      } catch {
+        return; // e.g. DAY_LOCKED: the banner shows it and the entry isn't saved.
+      }
+    }
     save.mutate(req, {
       onSuccess: onClose,
       onError: (err) => {
         if (err instanceof ApiError) {
+          if (err.code === 'TIMER_RUNNING') {
+            // Another tab or the top bar started a timer meanwhile: offer Switch for that one.
+            const running = (err.details as TimerRunningDetails | undefined)?.running;
+            if (running) {
+              setSwitchPrompt({ id: running.id, name: running.name, req });
+              return;
+            }
+          }
           if (err.code === 'HALF_DAY_LEAVE') {
             setLeaveWarning({
               message: err.message,
@@ -161,7 +308,10 @@ export function TrackerEntryModal({
           }
           const f = err.fieldErrors();
           if (err.code === 'TIME_OVERLAP' || err.code === 'DAILY_LIMIT') return;
-          setErrors(f);
+          // FR-ACT-28: each error goes under its field; aliases map API paths to form fields.
+          const mapped: Record<string, string> = {};
+          for (const [k, v] of Object.entries(f)) mapped[FIELD_ALIASES[k] ?? k] = v;
+          setErrors(mapped);
         }
       },
     });
@@ -171,9 +321,9 @@ export function TrackerEntryModal({
     mode.kind === 'start'
       ? 'Time in'
       : mode.kind === 'quick'
-        ? 'Quick activity'
+        ? 'Add quick activity'
         : mode.kind === 'add'
-          ? `Add entry · ${longDayShort(date)}`
+          ? `Log task time · ${longDayShort(date)}`
           : 'Edit entry';
   const timed = editing ? editing.timed && !editing.running : when === 'times';
 
@@ -186,23 +336,48 @@ export function TrackerEntryModal({
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {leaveWarning ? (
+          {switchPrompt ? (
+            <div
+              className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
+              role="alertdialog"
+              aria-label="Switch timer"
+            >
+              <span className="me-auto">{switchTimerQuestion(switchPrompt.name)}</span>
+              <Button size="sm" variant="primary" onClick={doSwitch}>
+                Switch
+              </Button>
+              <Button size="sm" variant="outline-secondary" onClick={() => setSwitchPrompt(null)}>
+                Cancel
+              </Button>
+            </div>
+          ) : leaveWarning ? (
             <div
               className="alert alert-warning d-flex flex-wrap align-items-center gap-2"
               role="alert"
             >
               <span className="me-auto">{leaveWarning.message}</span>
-              <Button size="sm" variant="warning" onClick={() => send(leaveWarning.req)}>
+              <Button size="sm" variant="warning" onClick={() => void send(leaveWarning.req)}>
                 Log time anyway
               </Button>
             </div>
           ) : (
-            <ErrorAlert error={save.error ?? remove.error} action />
+            <ErrorAlert
+              error={dayLoc.error ?? bannerError(save.error, mode.kind === 'add') ?? remove.error}
+              action
+            />
           )}
           {mode.kind === 'start' && (
             <p className="mb-3">
               <strong>{mode.task.name}</strong>
-              <span className="d-block small text-body-secondary">{mode.task.projectName}</span>
+              <span className="d-block small text-body-secondary">
+                {mode.task.projectName}
+                {pre && (
+                  <>
+                    {' '}
+                    · Project type: <b>{pre.projectType?.name ?? PROJECT_TYPE_NOT_SET}</b>
+                  </>
+                )}
+              </span>
             </p>
           )}
           {mode.kind === 'quick' && (
@@ -254,27 +429,30 @@ export function TrackerEntryModal({
               <Form.Control.Feedback type="invalid">{errors.title}</Form.Control.Feedback>
             </Form.Group>
           )}
-          {needsDayLocation && (
-            <DayLocationField
-              idPrefix="tracker"
-              value={dayLocationId}
-              error={errors.dayLocationId}
-              onChange={(v) => {
-                setDayLocationId(v);
-                setErrors((x) => ({ ...x, dayLocationId: '' }));
-              }}
-            />
-          )}
           <EntryFields
             kind={kind}
             values={fields}
             onChange={change}
             errors={errors}
             dayLocation={day.data?.location?.name ?? null}
-            hideLocation={needsDayLocation}
-            keep={
-              editing ? { activityType: editing.activityType, module: editing.module } : undefined
+            locationSlot={
+              asksLocation ? (
+                <WorkLocationField
+                  date={date}
+                  idPrefix="tracker"
+                  value={dayLocationId}
+                  dayLocationId={currentDayLocation}
+                  disabled={dayLocked}
+                  error={errors.dayLocationId}
+                  onChange={(v) => {
+                    setDayLocationId(v);
+                    setErrors((x) => ({ ...x, dayLocationId: '' }));
+                  }}
+                />
+              ) : undefined
             }
+            keep={editing ? { activityType: editing.activityType } : undefined}
+            activityHint={activityHint}
             idPrefix="tracker"
           />
           {mode.kind === 'quick' && (
@@ -302,7 +480,7 @@ export function TrackerEntryModal({
           )}
           {timed && (
             <div className="row g-3 mb-3">
-              <Form.Group className="col-6" controlId="tracker-time-in">
+              <Form.Group className="col-pair" controlId="tracker-time-in">
                 <Form.Label>Time in *</Form.Label>
                 <Form.Control
                   type="time"
@@ -312,7 +490,7 @@ export function TrackerEntryModal({
                 />
                 <Form.Control.Feedback type="invalid">{errors.timeIn}</Form.Control.Feedback>
               </Form.Group>
-              <Form.Group className="col-6" controlId="tracker-time-out">
+              <Form.Group className="col-pair" controlId="tracker-time-out">
                 <Form.Label>Time out *</Form.Label>
                 <Form.Control
                   type="time"
@@ -325,10 +503,15 @@ export function TrackerEntryModal({
               <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
             </div>
           )}
-          {stopsRunning && (
-            <p className="small text-warning mb-0" role="status">
-              Starting this stops the running timer on "
-              {runningEntry.task?.name ?? runningEntry.title}".
+          {dayLocked && !editing && (
+            <p className="small text-body-secondary mb-0" role="status" data-testid="day-locked">
+              🔒 This day is submitted or locked, so you can't add entries or change its location.
+            </p>
+          )}
+          {stopsRunning && !switchPrompt && (
+            <p className="small text-body-secondary mb-0" role="status">
+              A timer is running on "{runningEntry.task?.name ?? runningEntry.title}". You can
+              switch to this one.
             </p>
           )}
         </Modal.Body>
@@ -346,7 +529,10 @@ export function TrackerEntryModal({
           <Button variant="outline-secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={save.isPending}>
+          <Button
+            type="submit"
+            disabled={save.isPending || dayLoc.isPending || (dayLocked && !editing)}
+          >
             {editing ? 'Save' : when === 'now' ? 'Start timer' : 'Save entry'}
           </Button>
         </Modal.Footer>

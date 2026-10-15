@@ -371,7 +371,7 @@ describe('TC-S06: privacy', () => {
       expect(r.status).toBe(200);
       expect(r.body.item.reason).toBe('Personal appointment');
     }
-    for (const who of [w.pm2, w.outsider, w.viewer]) {
+    for (const who of [w.pm2, w.outsider]) {
       expect((await who.agent.get(`/api/v1/leave/${item.id}`)).status).toBe(404);
       expect((await who.agent.get(`/api/v1/leave?userId=${s.member}`)).status).toBe(404);
       expect((await who.agent.get(`/api/v1/leave/balances?userId=${s.member}`)).status).toBe(404);
@@ -379,6 +379,14 @@ describe('TC-S06: privacy', () => {
         (await who.agent.post(`/api/v1/leave/${item.id}/cancel`).set(CSRF).send({})).status,
       ).toBe(404);
     }
+    // Q-72 (FR-ACT-35): Viewers have no leave access at all, so the access rule answers 403 first.
+    for (const r of [
+      await w.viewer.agent.get(`/api/v1/leave/${item.id}`),
+      await w.viewer.agent.get(`/api/v1/leave?userId=${s.member}`),
+      await w.viewer.agent.get(`/api/v1/leave/balances?userId=${s.member}`),
+      await w.viewer.agent.post(`/api/v1/leave/${item.id}/cancel`).set(CSRF).send({}),
+    ])
+      expect(r.status).toBe(403);
     const team = await w.pm.agent.get('/api/v1/leave/team');
     expect(team.body.items.map((i: { id: string }) => i.id)).toEqual([item.id]);
     expect(team.body.items[0].reason).toBe('Personal appointment');
@@ -402,7 +410,7 @@ describe('TC-S07: entitlement below what is taken (EC-79)', () => {
     expect(res.status).toBe(200);
     expect(res.body.item).toMatchObject({ taken: 6, balance: -2, negative: true });
     expect(res.body.warning).toBe(
-      `${w.member.user.name} has already taken 6 days of Vacation. Setting 4 makes the balance -2. The balance is flagged (EC-79).`,
+      `${w.member.user.name} has already taken 6 days of Vacation. Setting 4 makes the balance −2. The balance is flagged (EC-79).`,
     );
     expect((await balance(w.member.agent, vacation)).negative).toBe(true);
     expect(
@@ -499,7 +507,7 @@ describe('TC-S09: timer on a leave day (FR-LV-06)', () => {
         .send({
           taskId: tasks[0]!.id,
           activityTypeId: l.configuration,
-          moduleId: l.financials,
+          module: l.financials,
           dayLocationId: l.wfh,
           ...extra,
         });
@@ -537,7 +545,7 @@ describe('TC-S09: timer on a leave day (FR-LV-06)', () => {
     const manual = await w.member.agent.post('/api/v1/tracker/entries').set(CSRF).send({
       taskId: tasks[0]!.id,
       activityTypeId: l.configuration,
-      moduleId: l.financials,
+      module: l.financials,
       date: '2026-10-13',
       timeIn: '08:00',
       timeOut: '09:00',

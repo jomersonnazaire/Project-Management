@@ -114,7 +114,15 @@ describe('New project (FR-PRJ-01..04)', () => {
       return undefined;
     });
     renderAt(`/projects/new?clientId=${ACME.id}`, <App />);
-    const select = await screen.findByLabelText('Template');
+    const select = await screen.findByLabelText('Template (optional)');
+    // FR-PRJ-27: the template is optional and defaults to a blank start.
+    expect(select).toHaveValue('');
+    expect(within(select).getByRole('option', { name: 'None – start blank' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Pre-fills a standard set of phases and activities. You can change them later.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Client')).toHaveValue(ACME.id);
     expect(screen.getByLabelText('Project manager')).toHaveValue(ME_PM);
     await userEvent.selectOptions(select, 't1');

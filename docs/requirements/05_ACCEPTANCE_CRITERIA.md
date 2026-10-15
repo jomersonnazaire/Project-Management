@@ -106,6 +106,7 @@ Given/When/Then. Each `AC-xx.y` maps to `US-xx`. "API" criteria must be verified
 - **AC-18.4 (API)** Logging to a task in a project the user isn't a member of returns 403.
 - **AC-18.5** After saving, the task's actual hours and variance update everywhere it's shown.
 - **AC-18.6** Time can't be logged to Cancelled tasks or to On Hold, Completed, or Cancelled projects (API refuses too).
+- **AC-18.7 (API)** Day lock (Q-09, 2026-10-13, 9:15 PM SGT): given work date Oct 13, a Member can create, edit and delete entries for it on Oct 14 and Oct 15 (Philippine time); from Oct 16, 00:00 PHT, the same requests return 422 `DAY_LOCKED` (FR-TIME-04, doc 14 FR-ACT-36).
 
 ## US-19 Weekly timesheet
 - **AC-19.1** The week selector shows entries for Mon–Sun with total hours and "of Xh available (Y% utilization)".

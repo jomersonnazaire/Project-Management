@@ -45,6 +45,23 @@ $label-pairs: (
   color: #5d6878 !important;
 }
 
+// Inactive list rows (Admin › Activity types, Locations): the shared $text-inactive token on the
+// row, every cell (tables set their own cell colour) and the Inactive badge.
+.row-inactive,
+.row-inactive > td,
+.row-inactive > th {
+  color: $text-inactive !important;
+}
+// Admin › Project types: active names in the heading/body-emphasis text colour, not #646e78;
+// inactive rows keep .row-inactive.
+td.ptype-name-active {
+  color: var(--bs-heading-color, #384551);
+}
+.badge.badge-inactive {
+  background-color: $secondary-bg-subtle !important;
+  color: $text-inactive !important;
+}
+
 // --- App shell tweaks (React replaces Sneat's menu.js) ---
 .layout-menu .menu-link.disabled {
   opacity: 0.7;
@@ -57,17 +74,15 @@ a:focus-visible,
   outline: 2px solid $primary;
   outline-offset: 2px;
 }
-.app-brand-logo-box {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.app-brand-mark {
   inline-size: 1.75rem;
   block-size: 1.75rem;
-  border-radius: 0.375rem;
-  background: $primary;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.95rem;
+  flex: none;
+}
+.app-brand-lockup {
+  display: block;
+  block-size: 40px; // logo README: min lockup height 32px
+  inline-size: auto;
 }
 .empty-state {
   text-align: center;
@@ -198,12 +213,16 @@ a:focus-visible,
     td.cell-primary {
       padding-bottom: 0.5rem;
     }
+    // FR-TSK-27: an empty optional field (e.g. Planned) is left out of the phone card.
+    td.cell-omit-empty:empty {
+      display: none;
+    }
     td.cell-actions {
       text-align: start !important;
       white-space: normal !important;
       padding-top: 0.5rem;
     }
-    // FR-PRJ-20: the Edit pencil and the ⋮ menu sit side by side at the foot of the card.
+    // FR-PRJ-20: row actions sit at the foot of the card.
     td.cell-edit,
     td.cell-edit + td.cell-actions {
       display: inline-block;
@@ -216,6 +235,8 @@ a:focus-visible,
 
 // --- Tab rows scroll sideways instead of clipping the last tab on phones (DR-05) ---
 .nav-tabs.nav-scrollable {
+  display: flex;
+  max-width: 100%;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
@@ -223,6 +244,7 @@ a:focus-visible,
   -webkit-overflow-scrolling: touch;
   .nav-item {
     flex: 0 0 auto;
+    flex-shrink: 0;
   }
   .nav-link {
     white-space: nowrap;
@@ -358,6 +380,49 @@ $board-gap: 0.75rem;
   }
 }
 
+// DR-49 (mockup v0.9.10): Checklist headings read in sentence case ("Activity", "Est / Act").
+.checklist-table > thead th {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.text-none {
+  text-transform: none !important;
+}
+// v0.9.11: paired form fields (Time in / Time out, Activity type / Time type, Location /
+// Billable) sit side by side above 760px and stack below it.
+.row > .col-pair {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+@media (min-width: 761px) {
+  .row > .col-pair {
+    width: 50%;
+  }
+}
+
+// DR-49: row ↑/↓ buttons show only on narrow or touch screens; desktop uses drag and Alt+↑/↓.
+.touch-move {
+  display: none;
+}
+@media (max-width: 760px), (hover: none), (pointer: coarse) {
+  .touch-move {
+    display: inline;
+  }
+}
+// DR-49: only the confirm dialog's "Delete phase" button is red.
+.btn.btn-danger-strong {
+  --bs-btn-bg: #b8240a;
+  --bs-btn-border-color: #b8240a;
+  --bs-btn-hover-bg: #9e1f09;
+  --bs-btn-hover-border-color: #9e1f09;
+  --bs-btn-active-bg: #9e1f09;
+  --bs-btn-active-border-color: #9e1f09;
+  background-color: #b8240a;
+  border-color: #b8240a;
+  color: #fff;
+}
+
 // Checklist phase card header: the whole header opens or closes the phase.
 .phase-toggle {
   cursor: pointer;
@@ -472,6 +537,12 @@ $board-gap: 0.75rem;
 .timer-pill-label {
   max-width: 180px;
 }
+// 768–1199px: no sidebar, but the title and actions share the top bar with the pill.
+@include media-breakpoint-between(md, xl) {
+  .timer-pill-label {
+    max-width: 7rem;
+  }
+}
 @keyframes timer-pulse {
   0%,
   100% {
@@ -489,6 +560,12 @@ $board-gap: 0.75rem;
     animation: none;
   }
 }
+// Small tablets (576–767px): the pill drops the task name (the time and Time out stay).
+@include media-breakpoint-down(md) {
+  .timer-pill-label {
+    display: none;
+  }
+}
 @include media-breakpoint-down(sm) {
   .timer-pill {
     padding-inline: 0.5rem !important;
@@ -496,7 +573,7 @@ $board-gap: 0.75rem;
   }
   .timer-pill-label,
   .timer-pill-stop-text,
-  .btn-collapse-label {
+  .layout-navbar .btn-collapse-label {
     display: none;
   }
   .layout-navbar .navbar-nav-right {
@@ -642,4 +719,46 @@ $board-gap: 0.75rem;
       width: 100%;
     }
   }
+}
+
+// DR-38, DR-44: negative leave balances use the danger token ($danger #b8240a, AA on white and
+// on the badge's #ffe0db).
+.text-negative {
+  color: $danger !important;
+}
+.badge.badge-negative {
+  background-color: $danger-bg-subtle;
+  color: $danger;
+}
+
+// NFR-27: the left menu scrolls on its own on short or small screens (Sneat's menu.js scrollbar
+// isn't used), so every item stays reachable.
+.layout-menu.menu-vertical {
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+  max-height: 100dvh;
+
+  .menu-inner {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .menu-inner-shadow {
+    display: none;
+  }
+}
+
+// --- Wide tables scroll inside their card instead of widening the page (DR-48) ---
+.table-responsive {
+  // Contains absolutely positioned visually-hidden spans so they can't escape the scroll box.
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

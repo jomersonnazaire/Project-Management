@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  ReportFilterOptionsDto,
   DashboardDto,
   EffortRowDto,
   IssueReportDto,
@@ -53,12 +54,25 @@ export interface ReportBodies {
   issues: IssueReportDto;
 }
 
+/** DR-43: Project and Client filter options within the caller's report scope. */
+export function useReportFilters() {
+  return useQuery({
+    queryKey: ['reports', 'filters'],
+    queryFn: () => api<ReportFilterOptionsDto>('/reports/filters'),
+  });
+}
+
 export function useReport<K extends ReportKey>(key: K, filters: Filters, enabled = true) {
   return useQuery({
     queryKey: ['reports', key, filters],
     queryFn: () => api<ReportBodies[K]>(`/reports/${key}${qs(filters)}`),
     enabled,
   });
+}
+
+/** FR-ACL-16: the rows to export come from the audited export route (needs Reports Export). */
+export function fetchReportExport<K extends ReportKey>(key: K, filters: Filters) {
+  return api<ReportBodies[K]>(`/reports/${key}/export${qs(filters)}`);
 }
 
 export function useTimeLock(enabled = true) {

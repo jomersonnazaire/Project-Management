@@ -116,7 +116,11 @@ const canArchiveDocs = (
 ) => !p.archived && perms.documents.edit && isPlanner(user, p);
 
 /** Contracts plus one folder per task phase, created on first use (FR-DOC-01, FR-DOC-17). */
-export async function ensureDefaultFolders(project: ProjectDoc): Promise<void> {
+export async function ensureDefaultFolders(
+  project: ProjectDoc,
+  /** Phases to keep even with no activities yet (apply-template's empty phases, DEF-016). */
+  extraPhases: string[] = [],
+): Promise<void> {
   const phases = (await TaskModel.distinct('phase', { projectId: project._id })).filter(
     (p): p is string => typeof p === 'string' && p.length > 0,
   );
@@ -124,7 +128,13 @@ export async function ensureDefaultFolders(project: ProjectDoc): Promise<void> {
     .select('phase order')
     .sort({ order: 1 })
     .lean();
-  const ordered = [...new Set(tasks.map((t) => t.phase).filter((p): p is string => Boolean(p)))];
+  const ordered = [
+    ...new Set([
+      ...tasks.map((t) => t.phase).filter((p): p is string => Boolean(p)),
+      ...extraPhases.filter((p) => p.trim()),
+    ]),
+  ];
+  phases.push(...extraPhases);
   const wanted: {
     name: string;
     kind: 'CONTRACTS' | 'PHASE';

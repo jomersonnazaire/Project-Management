@@ -184,7 +184,7 @@ export const negativeBalanceWarning = (
   set: number,
   balance: number,
 ) =>
-  `${name} has already taken ${days(taken)} of ${type}. Setting ${set} makes the balance ${balance}. The balance is flagged (EC-79).`;
+  `${name} has already taken ${days(taken)} of ${type}. Setting ${set} makes the balance ${leaveDaysLabel(balance)}. The balance is flagged (EC-79).`;
 export const carryOverLimitMessage = (type: string, limit: number) =>
   `Carry-over for ${type} can be up to ${days(limit)}.`;
 export const NO_SUPERVISOR_LEAVE =
@@ -238,4 +238,14 @@ export function mergeHalfDays(items: LeaveDto[]): LeaveRow[] {
     out.push(l);
   }
   return out;
+}
+
+/**
+ * Leave days with a real minus sign (U+2212, DR-38): -3.5 → "−3.5"; null → "–". The one helper
+ * for every balance on screen (My leave, Team on leave, Admin › Leave › Entitlements) and in
+ * messages.
+ */
+export function leaveDaysLabel(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '–';
+  return n < 0 ? `\u2212${Math.abs(n)}` : String(n);
 }

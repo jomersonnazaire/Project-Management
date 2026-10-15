@@ -2,7 +2,7 @@ import { MAX_UPLOAD_BYTES } from '@xc8/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ActivityLogModel, DocumentModel, TaskModel, UploadModel } from '../src/models/index.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { resetRules, world } from './m2helpers.js';
+import { resetRules, world, ptypeId } from './m2helpers.js';
 import { FILES, completeWith, evidenceTicket, store, uploadEvidence } from './m3helpers.js';
 
 /** Evidence uploads (doc 12 §3.2, TC-N03..N08). */
@@ -199,14 +199,18 @@ describe('TC-N07: evidence of another project can’t be downloaded', () => {
     const ev = up.body.task.evidence[0];
     // pm2's own project with their own task.
     const p2 = (
-      await w.pm2.agent.post('/api/v1/projects').set(CSRF).send({
-        name: 'Other P',
-        clientId: w.other.client.id,
-        managerId: w.pm2.user._id.toString(),
-        startDate: '2026-10-12',
-        plannedEndDate: '2026-12-18',
-        templateId: w.template.id,
-      })
+      await w.pm2.agent
+        .post('/api/v1/projects')
+        .set(CSRF)
+        .send({
+          projectTypeId: await ptypeId(),
+          name: 'Other P',
+          clientId: w.other.client.id,
+          managerId: w.pm2.user._id.toString(),
+          startDate: '2026-10-12',
+          plannedEndDate: '2026-12-18',
+          templateId: w.template.id,
+        })
     ).body.project;
     const p2task = (await w.pm2.agent.get(`/api/v1/projects/${p2.id}/tasks`)).body.items[0];
 

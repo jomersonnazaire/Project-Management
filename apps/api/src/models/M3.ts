@@ -4,6 +4,9 @@ import {
   PARTY_KINDS,
   FILE_KINDS,
   HOLIDAY_TYPES,
+  MODULE_MAX,
+  MODULE_TOO_LONG,
+  graphemeLength,
   MESSAGE_TYPES,
   NOTIFICATION_RETENTION_DAYS,
   NOTIFICATION_TYPES,
@@ -19,13 +22,15 @@ const settingSchema = new Schema(
   {
     key: { type: String, required: true, unique: true },
     workingDays: { type: [Number], default: undefined },
-    /** Q-09: `timeLock` key — when last week's entries lock (Admin setting, no approval step). */
+    /** Q-09: `timeLock` key — day lock on/off (Admin setting; null/missing enabled = ON). */
     timeLock: {
       type: new Schema(
         {
-          enabled: { type: Boolean, required: true },
-          weekday: { type: Number, min: 0, max: 6, required: true },
-          hour: { type: Number, min: 0, max: 23, required: true },
+          // Null/missing `enabled` reads as ON (normalizeTimeLock). New writes store only `enabled`.
+          enabled: { type: Boolean, default: null },
+          // Legacy weekly-lock fields: kept optional so old documents still load; never written.
+          weekday: { type: Number, min: 0, max: 6 },
+          hour: { type: Number, min: 0, max: 23 },
         },
         { _id: false },
       ),
@@ -74,6 +79,18 @@ const timeEntrySchema = new Schema(
     running: { type: Boolean, default: false },
     autoStopped: { type: Boolean, default: false },
     activityTypeId: { type: ObjectId, ref: 'Lookup', default: null },
+    /** Free text, trimmed, max 100 user-visible characters; null = blank (doc 14 FR-ACT-20).
+     *  Counted in graphemes like the API schema and the web counter (DEF-010). */
+    module: {
+      type: String,
+      default: null,
+      validate: {
+        validator: (v: string | null) => v == null || graphemeLength(v) <= MODULE_MAX,
+        message: MODULE_TOO_LONG,
+      },
+    },
+    /** Legacy (before FR-ACT-20): the old Modules list value, copied into `module` once by
+     *  migrateModuleText. Any later Module save (blank included) sets it to null (DEF-010). */
     moduleId: { type: ObjectId, ref: 'Lookup', default: null },
     /** Null = the day's location (FR-ACT-17). */
     locationId: { type: ObjectId, ref: 'Lookup', default: null },

@@ -1,3 +1,4 @@
+import { APP_NAME } from '@xc8/shared';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserDto } from '@xc8/shared';
@@ -33,7 +34,9 @@ describe('Sign in', () => {
       body: { error: { code: 'UNAUTHENTICATED', message: 'Please sign in.' } },
     }));
     renderAt('/admin', <App />);
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: `Sign in to ${APP_NAME}` }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Client contacts don't have accounts/)).toBeInTheDocument();
   });
 
@@ -222,11 +225,13 @@ describe('Admin-issued links (FR-AUTH-04/05, TC-A14)', () => {
       return { status: 200, body: { items: [] } };
     });
     renderAt('/login', <App />);
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: `Sign in to ${APP_NAME}` }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/^Forgot password\?$/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Forgot/ })).not.toBeInTheDocument();
     expect(
-      screen.getByText('Forgot your password? Ask an Admin for a reset link.'),
+      screen.getByText(`Forgot your password? Ask an ${APP_NAME} Admin for a reset link.`),
     ).toBeInTheDocument();
     expect(screen.getByText("You'll land on your Dashboard.")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Email'), 'member@xceler8.example');

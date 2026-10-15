@@ -13,3 +13,4 @@ export * from './Migration.js';
 export * from './Issue.js';
 export * from './Tracker.js';
 export * from './Leave.js';
+export * from './ProjectType.js';

@@ -167,6 +167,52 @@ export function useDeletePhase(projectId: string) {
   });
 }
 
+/** FR-PRJ-29/31: add a phase (422 PROJECT_NOT_PLANNING for PMs outside Planning). */
+export function useAddPhase(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api<{ name: string }>(`/projects/${projectId}/phases`, { method: 'POST', body: { name } }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
+/** FR-PRJ-29/30: append a published template's phases and activities (Planning only). */
+export function useApplyTemplate(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { templateId: string; templateVersion?: number }) =>
+      api<{
+        template: { id: string; name: string; version: number };
+        phasesAdded: number;
+        phasesMerged?: number;
+        tasksAdded: number;
+        alreadyApplied: boolean;
+      }>(`/projects/${projectId}/apply-template`, { method: 'POST', body }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
+/** FR-PRJ-22/23: rename a phase (422 PROJECT_NOT_PLANNING for PMs outside Planning). */
+export function useRenamePhase(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; newName: string }) =>
+      api<{ name: string }>(`/projects/${projectId}/phases`, { method: 'PATCH', body }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
 /**
  * Link a conversation message to an issue from the Conversation tab (M4, FR-ISS links). Reads the
  * issue first so existing links and the version are kept; a 409 means someone else changed it.

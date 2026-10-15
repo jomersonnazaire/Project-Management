@@ -51,11 +51,24 @@ export function ProjectBadge(p: {
   return <span className={`badge bg-label-${b.variant} text-uppercase`}>{b.label}</span>;
 }
 
-export function TaskStatusBadge({ status }: { status: TaskStatus }) {
+export function TaskStatusBadge({
+  status,
+  sentenceCase = false,
+}: {
+  status: TaskStatus;
+  /** DR-49: the Checklist pill reads "To do" (sentence case, no uppercase transform). */
+  sentenceCase?: boolean;
+}) {
+  const label = TASK_STATUS_LABELS[status];
+  if (sentenceCase) {
+    return (
+      <span className={`badge bg-label-${TASK_STATUS_VARIANTS[status]} text-none`}>
+        {label.charAt(0) + label.slice(1).toLowerCase()}
+      </span>
+    );
+  }
   return (
-    <span className={`badge bg-label-${TASK_STATUS_VARIANTS[status]} text-uppercase`}>
-      {TASK_STATUS_LABELS[status]}
-    </span>
+    <span className={`badge bg-label-${TASK_STATUS_VARIANTS[status]} text-uppercase`}>{label}</span>
   );
 }
 

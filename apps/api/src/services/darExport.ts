@@ -1,8 +1,10 @@
 import {
   DAR_COLUMNS,
-  DAR_FOOTER,
+  darExportName,
+  darFooter,
   DAR_TITLE,
   generatedRangeLabel,
+  moduleLabel,
   type DarReportDto,
   type DarRowDto,
 } from '@xc8/shared';
@@ -23,7 +25,7 @@ function cells(r: DarRowDto): string[] {
     r.activityType,
     r.location,
     r.billable,
-    r.module,
+    r.leave ? r.module : moduleLabel(r.module),
     r.remarks,
   ];
 }
@@ -41,7 +43,7 @@ export const darFileName = (r: DarReportDto, ext: 'pdf' | 'xlsx') => {
  */
 export async function darToXlsx(report: DarReportDto): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'Project Activity Tracker Application';
+  wb.creator = darExportName(report);
   wb.created = new Date(report.generatedAt);
   const ws = wb.addWorksheet('Report', { pageSetup: { orientation: 'landscape' } });
   const { from, to } = rangeOf(report);
@@ -64,7 +66,7 @@ export async function darToXlsx(report: DarReportDto): Promise<Buffer> {
   total.font = { bold: true };
   total.getCell(4).numFmt = '[h]:mm';
   ws.addRow([]);
-  ws.addRow([DAR_FOOTER]).font = { italic: true };
+  ws.addRow([darFooter(report)]).font = { italic: true };
   const widths = [12, 10, 10, 12, 22, 26, 20, 12, 9, 18, 48];
   widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
   ws.getColumn(11).alignment = { wrapText: true, vertical: 'top' };
@@ -78,7 +80,7 @@ export function darToPdf(report: DarReportDto, opts: { compress?: boolean } = {}
     layout: 'landscape',
     margin: 32,
     compress: opts.compress ?? true,
-    info: { Title: DAR_TITLE, Creator: 'Project Activity Tracker Application' },
+    info: { Title: DAR_TITLE, Creator: darExportName(report) },
   });
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
@@ -167,7 +169,7 @@ export function darToPdf(report: DarReportDto, opts: { compress?: boolean } = {}
     .font('Helvetica-Oblique')
     .fontSize(8)
     .fillColor('#4b5563')
-    .text(DAR_FOOTER, left, doc.y, { width: usable, align: 'center' });
+    .text(darFooter(report), left, doc.y, { width: usable, align: 'center' });
   doc.end();
   return done;
 }

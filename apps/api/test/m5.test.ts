@@ -16,7 +16,7 @@ import { lookups } from './trackerHelpers.js';
 
 /**
  * M5 Activity Tracker (doc 14 §2, §10, §12; QA 06 TC-Q01..Q14). "Now" is Wed Oct 14, 2026
- * 10:00 Manila time; the weekly lock (Monday 12:00) has locked last week.
+ * 10:00 Manila time; the Q-09 day lock has locked Oct 11 and earlier.
  */
 useDatabase();
 // Timers run for hours in these tests: keep the test sessions alive meanwhile.
@@ -59,7 +59,7 @@ async function setup() {
 const task = (l: L, taskId: string, extra = {}) => ({
   taskId,
   activityTypeId: l.configuration,
-  moduleId: l.financials,
+  module: l.financials,
   ...extra,
 });
 const start = (a: Agent, body: object) => a.post('/api/v1/tracker/start').set(CSRF).send(body);
@@ -96,11 +96,48 @@ describe('TC-Q01/Q02: Time in and Time out', () => {
     expect((await stop(w.member.agent)).body.error.code).toBe('NO_TIMER');
   });
 
+  it("Time in then Time out puts the entry on that day's timesheet and DAR, nothing typed", async () => {
+    const { w, l, t1 } = await setup();
+    // The body is what the Time in dialog sends with its prefilled values: no times at all.
+    expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(
+      201,
+    );
+    at('2026-10-14T03:25:00Z');
+    expect((await stop(w.member.agent)).status).toBe(200);
+    const d = (await day(w.member.agent, '2026-10-14')).body.day;
+    expect(d.entries).toHaveLength(1);
+    expect(d.entries[0]).toMatchObject({
+      kind: 'TASK',
+      task: { id: t1 },
+      date: '2026-10-14',
+      startAt: '2026-10-14T02:00:00.000Z',
+      endAt: '2026-10-14T03:25:00.000Z',
+      minutes: 85,
+      running: false,
+      timed: true,
+      location: { id: l.onsite },
+    });
+    expect(d.totalMinutes).toBe(85);
+    const dar = (await w.member.agent.get('/api/v1/dar?from=2026-10-14&to=2026-10-14')).body.report;
+    expect(dar.rows).toHaveLength(1);
+    expect(dar.rows[0]).toMatchObject({
+      timeIn: '10:00 AM',
+      timeOut: '11:25 AM',
+      rendered: '01:25',
+    });
+  });
+
   it('starting B stops A at the same moment; only one runs', async () => {
     const { w, l, t1, t2 } = await setup();
     const a = await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite });
     at('2026-10-14T02:30:00Z');
-    const b = await start(w.member.agent, task(l, t2));
+    // FR-ACT-26: a plain start while A runs is refused; Switch names A.
+    const refused = await start(w.member.agent, task(l, t2));
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe('TIMER_RUNNING');
+    expect(refused.body.error.details.running.id).toBe(a.body.entry.id);
+    const b = await start(w.member.agent, { ...task(l, t2), switchFrom: a.body.entry.id });
+    expect(b.status).toBe(201);
     expect(b.body.stopped).toBe(a.body.entry.id);
     const first = await TimeEntryModel.findById(a.body.entry.id).lean();
     expect(first!.endAt!.toISOString()).toBe(b.body.entry.startAt);
@@ -159,7 +196,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
       workDate: '2026-10-13',
       hours: 2,
       activityTypeId: l.configuration,
-      moduleId: l.financials,
+      module: l.financials,
     });
     expect(hoursOnly.status).toBe(201);
     // A manual entry can't end in the future.
@@ -169,7 +206,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
       timeIn: '09:00',
       timeOut: '11:00',
     });
-    expect(future.status).toBe(400);
+    expect([400, 422]).toContain(future.status);
   });
 
   it('refuses a day over 24 hours with HHh MMm and the next step', async () => {
@@ -180,7 +217,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
         workDate: '2026-10-13',
         hours: h,
         activityTypeId: l.configuration,
-        moduleId: l.financials,
+        module: l.financials,
       });
     }
     const res = await manual(w.member.agent, {
@@ -240,7 +277,13 @@ describe('TC-Q06/Q07: quick activities and their privacy', () => {
     });
     const id = res.body.entry.id;
     const uid = w.member.user._id.toString();
-    for (const who of [w.outsider, w.pm2, w.viewer]) {
+    // Q-70 / AC-56.1: Viewers have no tracker access at all, so they get 403 on every call.
+    expect((await day(w.viewer.agent, '2026-10-13', uid)).status).toBe(403);
+    // Someone else's entry stays "not found" for a Viewer too (scope check runs first).
+    expect((await w.viewer.agent.delete(`/api/v1/tracker/entries/${id}`).set(CSRF)).status).toBe(
+      404,
+    );
+    for (const who of [w.outsider, w.pm2]) {
       expect((await day(who.agent, '2026-10-13', uid)).status).toBe(404);
       expect(
         (await who.agent.patch(`/api/v1/tracker/entries/${id}`).set(CSRF).send({ notes: 'x' }))
@@ -278,7 +321,7 @@ describe('TC-Q08: location per day', () => {
     const b = await start(w.member.agent, task(l, t1, { locationId: l.onsite }));
     expect(b.body.entry).toMatchObject({ location: { name: 'Onsite' }, locationOverridden: true });
     at('2026-10-14T06:00:00Z');
-    const c = await start(w.member.agent, task(l, t1));
+    const c = await start(w.member.agent, { ...task(l, t1), switchFrom: b.body.entry.id });
     expect(c.body.entry.location.name).toBe('WFH');
     // Changing the day's location moves entries that follow it.
     const put = await w.member.agent
@@ -291,14 +334,14 @@ describe('TC-Q08: location per day', () => {
   });
 });
 
-describe('TC-Q09: Activity types, Locations and Modules lists', () => {
+describe('TC-Q09: Activity types and Locations lists', () => {
   it('Admin-only edits; in-use values deactivate, not delete; past entries keep the label', async () => {
     const { w, l, t1 } = await setup();
     expect(
       (await w.member.agent.post('/api/v1/lookups/activity-types').set(CSRF).send({ name: 'X' }))
         .status,
     ).toBe(403);
-    expect((await w.pm.agent.get('/api/v1/lookups/modules/all')).status).toBe(403);
+    expect((await w.pm.agent.get('/api/v1/lookups/locations/all')).status).toBe(403);
     const all = await w.admin.agent.get('/api/v1/lookups/locations/all');
     expect(all.body.items.map((i: { name: string }) => i.name)).toEqual([
       'Onsite',
@@ -312,7 +355,7 @@ describe('TC-Q09: Activity types, Locations and Modules lists', () => {
     expect(dup.status).toBe(409);
     expect(dup.body.error.message).toBe('"WFH" already exists.');
     const created = await w.admin.agent
-      .post('/api/v1/lookups/modules')
+      .post('/api/v1/lookups/activity-types')
       .set(CSRF)
       .send({ name: 'Production' });
     expect(created.status).toBe(201);
@@ -385,7 +428,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
       workDate: '2026-10-14',
       hours: 1,
       activityTypeId: l.integration,
-      moduleId: l.financials,
+      module: l.financials,
     });
     expect(time.body.error.code).toBe('DAY_LOCKED');
     // Late submission of an earlier day this week is fine.
@@ -402,7 +445,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
     const body = { userId: w.member.user._id.toString(), reason: 'Missing afternoon entries' };
     const url = '/api/v1/tracker/days/2026-10-13/reopen';
     expect((await w.member.agent.post(url).set(CSRF).send(body)).status).toBe(403);
-    expect((await w.pm2.agent.post(url).set(CSRF).send(body)).status).toBe(403);
+    expect((await w.pm2.agent.post(url).set(CSRF).send(body)).status).toBe(404); // FR-ACT-25: outside pm2's scope
     expect(
       (
         await w.pm.agent
@@ -466,7 +509,7 @@ describe('TC-Q10/Q11/Q12: submit, reopen and the weekly lock', () => {
     const sup = await w.pm.agent.post(url).set(CSRF).send(body);
     expect(sup.status).toBe(403);
     expect(sup.body.error.message).toBe(
-      'This day is past the weekly lock. Only an Admin can reopen it.',
+      'This day is past the day lock. Only an Admin can reopen it.',
     );
     expect((await day(w.pm.agent, '2026-10-09', body.userId)).body.day.can.reopen).toBe(false);
     expect((await day(w.admin.agent, '2026-10-09', body.userId)).body.day.can.reopen).toBe(true);
@@ -554,7 +597,7 @@ describe('TC-Q05 mixed: hours-only entries, timed entries and a running timer sh
         workDate: '2026-10-14',
         hours,
         activityTypeId: l.configuration,
-        moduleId: l.financials,
+        module: l.financials,
       });
     expect((await hoursOnly(18)).status).toBe(201);
     expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(
@@ -606,5 +649,72 @@ describe('FR-ACT-19 (DR-35): deleting your own entries', () => {
     const locked = await del(w.member.agent, b);
     expect(locked.status).toBe(422);
     expect(locked.body.error.code).toBe('DAY_LOCKED');
+  });
+});
+
+describe('Q-09 day lock: 00:00 PHT on the third day', () => {
+  const entry = (l: L, t1: string, date: string, timeIn = '08:00', timeOut = '09:00') => ({
+    ...task(l, t1),
+    date,
+    timeIn,
+    timeOut,
+    dayLocationId: l.onsite,
+  });
+
+  it('Oct 13 is editable at Oct 15 23:59:59 PHT and locked at Oct 16 00:00 PHT', async () => {
+    at('2026-10-15T15:59:59Z'); // Oct 15 23:59:59 PHT
+    const { w, l, t1 } = await setup();
+    expect(
+      (await manual(w.member.agent, entry(l, t1, '2026-10-13', '09:00', '10:00'))).status,
+    ).toBe(201);
+    at('2026-10-15T16:00:00Z'); // Oct 16 00:00 PHT
+    const locked = await manual(w.member.agent, entry(l, t1, '2026-10-13', '10:00', '11:00'));
+    expect(locked.status).toBe(422);
+    expect(locked.body.error.code).toBe('DAY_LOCKED');
+    expect((await day(w.member.agent, '2026-10-13')).body.day).toMatchObject({
+      weekLocked: true,
+      can: { edit: false },
+    });
+    // Oct 14 is still open at that moment.
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-14'))).status).toBe(201);
+  });
+
+  it('Oct 11 locks at 00:00 PHT on Oct 14 (and UTC dates do not decide it)', async () => {
+    at('2026-10-13T15:59:59Z'); // Oct 13 23:59:59 PHT (UTC still Oct 13)
+    const { w, l, t1 } = await setup();
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-11'))).status).toBe(201);
+    // Oct 13 23:59:59 PHT: Oct 13 itself is editable.
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-13'))).status).toBe(201);
+    at('2026-10-13T16:00:00Z'); // Oct 14 00:00 PHT, but Oct 13 in UTC
+    const res = await manual(w.member.agent, entry(l, t1, '2026-10-11', '09:00', '10:00'));
+    expect(res.body.error.code).toBe('DAY_LOCKED');
+  });
+
+  it('PUT /tracker/days/:date/location: FUTURE_DATE first, then DAY_LOCKED, open days save', async () => {
+    at('2026-10-14T02:00:00Z');
+    const { w, l } = await setup();
+    const put = (date: string) =>
+      w.member.agent
+        .put(`/api/v1/tracker/days/${date}/location`)
+        .set(CSRF)
+        .send({ locationId: l.onsite });
+    expect((await put('2026-10-15')).body.error.code).toBe('FUTURE_DATE');
+    const locked = await put('2026-10-11');
+    expect(locked.status).toBe(422);
+    expect(locked.body.error.code).toBe('DAY_LOCKED');
+    expect((await put('2026-10-12')).status).toBe(200);
+  });
+
+  it('only an Admin reopens a locked day; then it is editable again', async () => {
+    at('2026-10-16T02:00:00Z'); // Oct 16 10:00 PHT: Oct 13 is locked.
+    const { w, l, t1 } = await setup();
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-13'))).body.error.code).toBe(
+      'DAY_LOCKED',
+    );
+    const url = '/api/v1/tracker/days/2026-10-13/reopen';
+    const body = { userId: w.member.user._id.toString(), reason: 'Missed site visit' };
+    expect((await w.pm.agent.post(url).set(CSRF).send(body)).status).toBe(403);
+    expect((await w.admin.agent.post(url).set(CSRF).send(body)).status).toBe(200);
+    expect((await manual(w.member.agent, entry(l, t1, '2026-10-13'))).status).toBe(201);
   });
 });

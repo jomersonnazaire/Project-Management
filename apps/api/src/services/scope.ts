@@ -86,7 +86,23 @@ export function assertProjectScope(
  */
 export function isPlanner(user: ScopeUser, project: ProjectLike): boolean {
   const r = role(user);
-  return r === 'ADMIN' || (r === 'PROJECT_MANAGER' && canEditProjectScope(user, project));
+  // m8-polish (doc 14 Definitions, FR-PRJ-31): a PM on the project's team list is a Project PM too.
+  return (
+    r === 'ADMIN' ||
+    (r === 'PROJECT_MANAGER' && (canEditProjectScope(user, project) || isProjectPm(user, project)))
+  );
+}
+
+/**
+ * Doc 14 Definitions / doc 11 FR-ACL-19: the Project PM is the assigned manager, or any user with
+ * Access role PM on the project's team list. Admins aren't Project PMs (they have their own rule).
+ */
+export function isProjectPm(user: ScopeUser, project: ProjectLike): boolean {
+  if (role(user) !== 'PROJECT_MANAGER') return false;
+  return (
+    (project.managerId?.equals(user._id) ?? false) ||
+    (project.memberIds ?? []).some((id) => id.equals(user._id))
+  );
 }
 
 /**

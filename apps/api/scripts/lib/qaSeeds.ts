@@ -23,6 +23,13 @@ export const QA_PROJECT_NAME = 'QA M3 – Ready to activate';
 export const QA_COMPLETED_PROJECT_NAME = 'QA M3.5 – Completed with open issue';
 export const QA_COMPLETED_ISSUE_TITLE = 'QA: post go-live report totals differ (AC-44.1)';
 
+/** The QA Member account (QA_MEMBER_EMAIL overrides it). */
+export const QA_MEMBER_EMAIL_DEFAULT = 'qa.member@xceler8.example';
+
+export function qaMemberEmail(): string {
+  return process.env.QA_MEMBER_EMAIL?.trim() || QA_MEMBER_EMAIL_DEFAULT;
+}
+
 export function need(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`Set ${name} first.`);

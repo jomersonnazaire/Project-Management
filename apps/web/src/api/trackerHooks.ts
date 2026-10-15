@@ -13,12 +13,12 @@ import { api, qs } from './client';
 /** Data hooks for Milestone 5: the Activity tracker (doc 14 §2) and its Admin lists. */
 
 export interface LookupOptions {
-  activityTypes: Ref[];
+  /** `key`/`system` since m8-polish (NFR-31): Quick Activity is `quick_activity`. */
+  activityTypes: (Ref & { key?: string | null; system?: boolean })[];
   locations: Ref[];
-  modules: Ref[];
 }
 
-/** Active Activity types, Locations and Modules for entry forms. */
+/** Active Activity types and Locations for entry forms (Module is free text, FR-ACT-20). */
 export function useLookups() {
   return useQuery({
     queryKey: ['lookups'],

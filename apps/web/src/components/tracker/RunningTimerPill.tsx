@@ -47,7 +47,7 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
         aria-label="Time out"
         title="Time out"
         disabled={stop.isPending}
-        onClick={() => stop.mutate({ path: '/stop' })}
+        onClick={() => stop.mutate({ path: '/stop', body: { entryId: entry.id } })}
       >
         <span aria-hidden="true">■</span>
         <span className="timer-pill-stop-text ms-1">Time out</span>

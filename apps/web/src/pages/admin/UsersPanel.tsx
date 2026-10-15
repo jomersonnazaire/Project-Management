@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  APP_NAME,
   JOB_ROLES,
   JOB_ROLE_LABELS,
   SYSTEM_ROLES,
@@ -205,7 +206,7 @@ function InviteUserModal({ teams, onClose }: { teams: TeamDto[]; onClose: () => 
             <div className="mt-4">
               <CopyLinkField
                 id="invite-link"
-                label={`Invite link for ${created.user.name} (single use, expires in ${plural(hoursUntil(created.inviteExpiresAt), 'hour')}, share it yourself)`}
+                label={`Invite link to ${APP_NAME} for ${created.user.name} (single use, expires in ${plural(hoursUntil(created.inviteExpiresAt), 'hour')}, share it yourself)`}
                 url={created.inviteUrl}
               />
             </div>

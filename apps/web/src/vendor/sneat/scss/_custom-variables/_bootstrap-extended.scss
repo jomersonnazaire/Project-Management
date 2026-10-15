@@ -12,6 +12,9 @@ $success: #2e7d17;
 $info: #00718a;
 $warning: #9a5b00;
 $danger: #b8240a;
+// Inactive rows and their status badge (Activity types, Locations): Sneat body text, 5.19:1 on
+// white and AA on the secondary tint; Sneat's #8592a3 fails AA.
+$text-inactive: #646e78;
 
 $primary-bg-subtle: #e7e7ff;
 $secondary-bg-subtle: #ebeef0;

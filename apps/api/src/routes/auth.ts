@@ -1,8 +1,9 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import {
   changePasswordSchema,
   inviteTokenSchema,
   loginSchema,
+  myPermissionsSummary,
   setupPasswordSchema,
   type SystemRole,
 } from '@xc8/shared';
@@ -11,7 +12,7 @@ import type { AppConfig } from '../config.js';
 import { HttpError, badRequest, unauthorized } from '../lib/errors.js';
 import { parseBody } from '../lib/validate.js';
 import { clientIp } from '../middleware/clientIp.js';
-import { currentPermissions, currentRole, currentUser } from '../middleware/auth.js';
+import { bearerToken, currentPermissions, currentRole, currentUser } from '../middleware/auth.js';
 import { SessionModel, UserModel } from '../models/index.js';
 import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
@@ -20,12 +21,20 @@ import { burnPasswordCheck, hashPassword, verifyPassword } from '../services/pas
 import {
   clearSessionCookie,
   cookieName,
+  createMobileSession,
   createSession,
+  idleMs,
+  looksLikeBrowser,
   revokeUserSessions,
 } from '../services/sessions.js';
 import { sha256 } from '../services/tokens.js';
 
 const INVALID_CREDENTIALS = 'Email or password is incorrect.';
+const MOBILE_ONLY = new HttpError(
+  403,
+  'MOBILE_ONLY',
+  'This sign-in is only for the OpsTrack mobile app.',
+);
 
 /**
  * Auth routes. Every lookup is against the `users` collection only, so a client contact's
@@ -38,7 +47,8 @@ export function authRouter(
 ) {
   const router = registry.router('/auth');
 
-  router.post('/login', PUBLIC, authLimiter, async (req, res) => {
+  /** Shared credential checks for web and mobile sign-in (AC-01.2–AC-01.4). */
+  async function checkCredentials(req: Request) {
     const { email, password } = parseBody(loginSchema, req);
     const user = await UserModel.findOne({ email }).select('+passwordHash');
 
@@ -94,18 +104,64 @@ export function authRouter(
       { _id: user._id },
       { $set: { failedLogins: 0, lockedUntil: null, lastLoginAt: now } },
     );
-    await createSession(
-      config,
-      user._id,
-      req,
-      res,
-      clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET }),
-    );
     user.lastLoginAt = now;
+    return user;
+  }
+
+  const ipOf = (req: Request) =>
+    clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET });
+
+  router.post('/login', PUBLIC, authLimiter, async (req, res) => {
+    const user = await checkCredentials(req);
+    await createSession(config, user._id, req, res, ipOf(req));
     res.json({
       user: toUserDto(user),
       permissions: await permissionsFor(user.systemRole as SystemRole),
     });
+  });
+
+  /**
+   * Mobile app sign-in (mobile exception to FR-AUTH-03): returns a device token in the body,
+   * never a cookie. Refused for browser requests, so a web page can't opt in to the longer
+   * sliding session.
+   */
+  router.post('/mobile/login', PUBLIC, authLimiter, async (req, res) => {
+    if (looksLikeBrowser(req)) throw MOBILE_ONLY;
+    const user = await checkCredentials(req);
+    const { token, expiresAt } = await createMobileSession(config, user._id, req, ipOf(req));
+    res.json({
+      user: toUserDto(user),
+      permissions: await permissionsFor(user.systemRole as SystemRole),
+      token,
+      expiresAt: expiresAt.toISOString(),
+    });
+  });
+
+  /** Called by the app on open/resume: extends the sliding window; 401 when already expired. */
+  router.post('/mobile/refresh', AUTHENTICATED, async (req, res) => {
+    const session = await SessionModel.findById(req.auth!.sessionId);
+    if (!session || session.kind !== 'mobile') throw MOBILE_ONLY;
+    const now = Date.now();
+    const expiresAt = new Date(
+      Math.min(now + idleMs(config, 'mobile'), session.absoluteExpiresAt.getTime()),
+    );
+    await SessionModel.updateOne(
+      { _id: session._id },
+      { $set: { lastSeenAt: new Date(now), expiresAt } },
+    );
+    res.json({
+      user: toUserDto(currentUser(req)),
+      permissions: currentPermissions(req),
+      expiresAt: expiresAt.toISOString(),
+    });
+  });
+
+  router.post('/mobile/logout', PUBLIC, async (req, res) => {
+    const token = bearerToken(req);
+    if (token && token.length <= 200) {
+      await SessionModel.deleteOne({ tokenHash: sha256(token), kind: 'mobile' });
+    }
+    res.status(204).end();
   });
 
   router.post('/logout', PUBLIC, async (req, res) => {
@@ -122,9 +178,12 @@ export function authRouter(
     res.json({ user: toUserDto(currentUser(req)), permissions: currentPermissions(req) });
   });
 
-  /** Read-only summary of the caller's own role's permissions (FR-ACL-13). */
+  /**
+   * Effective permissions (FR-ACL-13, FR-ACL-21 / NFR-32): role and grid as before, plus Setup
+   * children, create flags, `myTasksTabs` ([] when none) and `defaultTab` (null when none).
+   */
   router.get('/me/permissions', AUTHENTICATED, (req, res) => {
-    res.json({ role: currentRole(req), permissions: currentPermissions(req) });
+    res.json(myPermissionsSummary(currentRole(req), currentPermissions(req)));
   });
 
   /**

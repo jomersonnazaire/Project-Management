@@ -1,5 +1,6 @@
 import {
   ACCESS_ACTIONS,
+  actionApplies,
   SYSTEM_ROLES,
   defaultPermissions,
   isRecordType,
@@ -84,6 +85,10 @@ function mergePatch(current: PermissionGrid, patch: Record<string, Record<string
         next[record][action as AccessAction] = value;
       }
     }
+    // FR-ACL-15 / DEF-012: Export needs View. With View off, Export is cleared (as the grid
+    // does), so the API never stores Export on without View.
+    const r = next[record];
+    if (actionApplies(record, 'export') && r.export && !r.view) r.export = false;
   }
   return { next, issues };
 }

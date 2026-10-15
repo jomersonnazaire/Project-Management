@@ -16,6 +16,7 @@ import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 useDatabase();
 const app = makeApp();
 const MEMBER_TIME = '2026-10-09-member-time-delete';
+const ONLY_MEMBER = ACCESS_DEFAULT_CHANGES.filter((c) => c.id === MEMBER_TIME);
 
 afterEach(async () => {
   await AccessRuleModel.deleteMany({});
@@ -39,7 +40,7 @@ const memberTimeDelete = async () =>
 
 describe('Access default changes (doc 11 §12): Member Delete on time', () => {
   it('the seeded default for Members is VCED on time', () => {
-    expect(defaultPermissions('MEMBER').time).toEqual({
+    expect(defaultPermissions('MEMBER').time).toMatchObject({
       view: true,
       create: true,
       edit: true,
@@ -49,7 +50,7 @@ describe('Access default changes (doc 11 §12): Member Delete on time', () => {
 
   it('switches a cell still at the old default, bumps the version and audits it; runs once', async () => {
     await oldProductionGrid(3);
-    const [r] = await applyAccessDefaultChanges();
+    const [r] = await applyAccessDefaultChanges(undefined, ONLY_MEMBER);
     expect(r).toMatchObject({
       id: MEMBER_TIME,
       status: 'applied',
@@ -72,7 +73,7 @@ describe('Access default changes (doc 11 §12): Member Delete on time', () => {
     expect((await MigrationModel.findById(MEMBER_TIME).lean())!.status).toBe('DONE');
 
     // Second start-up: nothing changes and nothing is logged again.
-    const [again] = await applyAccessDefaultChanges();
+    const [again] = await applyAccessDefaultChanges(undefined, ONLY_MEMBER);
     expect(again!.status).toBe('skipped');
     expect((await AccessRuleModel.findOne({ role: 'MEMBER' }).lean())!.version).toBe(4);
     expect(await ActivityLogModel.countDocuments({ action: 'access_rule_default_migrated' })).toBe(
@@ -84,7 +85,7 @@ describe('Access default changes (doc 11 §12): Member Delete on time', () => {
     await oldProductionGrid();
     const { agent } = await signedInAs(app, 'MEMBER');
     expect((await agent.get('/api/v1/auth/me')).body.permissions.time.delete).toBe(false);
-    await applyAccessDefaultChanges();
+    await applyAccessDefaultChanges(undefined, ONLY_MEMBER);
     expect((await agent.get('/api/v1/auth/me')).body.permissions.time.delete).toBe(true);
   });
 
@@ -99,7 +100,7 @@ describe('Access default changes (doc 11 §12): Member Delete on time', () => {
       .set(CSRF)
       .send({ version: member.version, permissions: { time: { delete: false } } });
     expect(off.status).toBe(200);
-    const [r] = await applyAccessDefaultChanges();
+    const [r] = await applyAccessDefaultChanges(undefined, ONLY_MEMBER);
     expect(r!.cells).toEqual([{ role: 'MEMBER', cell: 'time.delete', outcome: 'admin_changed' }]);
     expect((await memberTimeDelete()).time.delete).toBe(false);
     expect(await ActivityLogModel.countDocuments({ action: 'access_rule_default_migrated' })).toBe(
@@ -111,14 +112,17 @@ describe('Access default changes (doc 11 §12): Member Delete on time', () => {
 
   it('a fresh database already has the new default: nothing to switch', async () => {
     await ensureDefaultAccessRules();
-    const [r] = await applyAccessDefaultChanges();
+    const [r] = await applyAccessDefaultChanges(undefined, ONLY_MEMBER);
     expect(r!.cells[0]!.outcome).toBe('already');
     expect((await AccessRuleModel.findOne({ role: 'MEMBER' }).lean())!.version).toBe(1);
   });
 
   it('two instances starting together apply it once', async () => {
     await oldProductionGrid(2);
-    const results = await Promise.all([applyAccessDefaultChanges(), applyAccessDefaultChanges()]);
+    const results = await Promise.all([
+      applyAccessDefaultChanges(undefined, ONLY_MEMBER),
+      applyAccessDefaultChanges(undefined, ONLY_MEMBER),
+    ]);
     expect(results.flat().filter((r) => r.status === 'applied')).toHaveLength(1);
     expect((await AccessRuleModel.findOne({ role: 'MEMBER' }).lean())!.version).toBe(3);
     expect(await ActivityLogModel.countDocuments({ action: 'access_rule_default_migrated' })).toBe(
@@ -134,7 +138,7 @@ describe('Access default changes (doc 11 §12): Member Delete on time', () => {
       status: 'RUNNING',
       startedAt: new Date(Date.now() - 60 * 60 * 1000),
     });
-    const [r] = await applyAccessDefaultChanges();
+    const [r] = await applyAccessDefaultChanges(undefined, ONLY_MEMBER);
     expect(r!.status).toBe('applied');
     expect((await memberTimeDelete()).time.delete).toBe(true);
   });
@@ -196,10 +200,12 @@ describe('New record types after go-live (e.g. Issues)', () => {
     const member = (await AccessRuleModel.findOne({ role: 'MEMBER' }).lean())!;
     expect(member.version).toBe(6);
     const perms = member.permissions as unknown as Record<string, Record<string, boolean>>;
-    expect(perms.issues).toEqual({ view: true, create: true, edit: true, delete: false });
+    expect(perms.issues).toMatchObject({ view: true, create: true, edit: true, delete: false });
     expect(perms.clients!.view).toBe(false);
     const roles = (await agent.get('/api/v1/access-rules')).body.roles;
-    expect(roles.find((r: { role: string }) => r.role === 'VIEWER').permissions.issues).toEqual({
+    expect(
+      roles.find((r: { role: string }) => r.role === 'VIEWER').permissions.issues,
+    ).toMatchObject({
       view: true,
       create: false,
       edit: false,

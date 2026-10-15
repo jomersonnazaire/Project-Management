@@ -59,7 +59,7 @@ describe('Seeded defaults (FR-ACL-01/02, doc 11 §6)', () => {
       const me = await agent.get('/api/v1/auth/me');
       expect(me.body.permissions).toEqual(DEFAULT_ACCESS_RULES[role]);
       const mine = await agent.get('/api/v1/auth/me/permissions');
-      expect(mine.body).toEqual({ role, permissions: DEFAULT_ACCESS_RULES[role] });
+      expect(mine.body).toMatchObject({ role, permissions: DEFAULT_ACCESS_RULES[role] });
     }
   });
 
@@ -287,7 +287,7 @@ describe('Changing rules', () => {
 
     const saved = await putRules(admin.agent, 'PROJECT_MANAGER', { clients: { delete: false } });
     expect(saved.status).toBe(200);
-    expect(saved.body.rules.permissions.clients).toEqual({
+    expect(saved.body.rules.permissions.clients).toMatchObject({
       view: true,
       create: true,
       edit: true,

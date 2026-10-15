@@ -71,7 +71,9 @@ describe('FR-TIME-01/02/07: logging', () => {
     const { w, t1, t2 } = await setup();
     for (const hours of [0, 0.1, 24.25])
       expect((await log(w.member.agent, t1, '2026-10-13', hours)).status, `${hours}`).toBe(400);
-    expect((await log(w.member.agent, t1, '2026-10-15', 1)).status).toBe(400);
+    const fut = await log(w.member.agent, t1, '2026-10-15', 1);
+    expect(fut.status).toBe(422);
+    expect(fut.body.error.code).toBe('FUTURE_DATE');
     expect((await log(w.member.agent, t1, '2026-10-13', 20)).status).toBe(201);
     const over = await log(w.member.agent, t2, '2026-10-13', 4.25);
     expect(over.status).toBe(422);
@@ -90,15 +92,16 @@ describe('FR-TIME-01/02/07: logging', () => {
   });
 });
 
-describe('FR-TIME-04/06: weekly lock and own entries', () => {
-  it('last week is locked for members from Monday 12:00 Manila; PMs can still fix theirs', async () => {
+describe('FR-TIME-04/06: day lock and own entries', () => {
+  it('a day locks at 00:00 PHT on the third day for everyone, PMs included (FR-ACT-24)', async () => {
     const { w, t1 } = await setup();
-    const locked = await log(w.member.agent, t1, '2026-10-09', 1);
-    expect(locked.status).toBe(422);
-    expect(locked.body.error.code).toBe('TIME_LOCKED');
-    expect((await log(w.pm.agent, t1, '2026-10-09', 1)).status).toBe(201);
-    // Monday 11:59 Manila: last week is still open.
-    vi.setSystemTime(new Date('2026-10-12T03:59:00Z'));
+    for (const a of [w.member.agent, w.pm.agent]) {
+      const locked = await log(a, t1, '2026-10-09', 1);
+      expect(locked.status).toBe(422);
+      expect(locked.body.error.code).toBe('DAY_LOCKED');
+    }
+    // Sun Oct 11 23:59:59 Manila: Oct 9 is still open (it locks at 00:00 PHT on Oct 12).
+    vi.setSystemTime(new Date('2026-10-11T15:59:59Z'));
     expect((await log(w.member.agent, t1, '2026-10-09', 1)).status).toBe(201);
   });
 
@@ -133,8 +136,9 @@ describe('FR-TIME-04/06: weekly lock and own entries', () => {
     const del = await w.pm.agent.delete(`/api/v1/tasks/${t1}`).set(CSRF);
     expect(del.status).toBe(409);
     expect(del.body.error).toMatchObject({
-      code: 'TASK_HAS_RECORDS',
-      message: 'This task has 1 time entry; remove it first.',
+      code: 'ACTIVITY_IN_USE',
+      message: "Can't delete: this activity has logged time.",
+      details: { blockedBy: ['time'] },
     });
   });
 });

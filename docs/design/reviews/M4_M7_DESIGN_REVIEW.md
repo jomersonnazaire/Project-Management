@@ -38,3 +38,43 @@ Test data left (shared DB):
 - Admin: a Cancelled Unpaid half day on Oct 21.
 - Both QA project time entries were deleted. The duplicate-code test created no project.
 Screenshots: /workspace/review/m47/.
+
+## Re-check c81519c (PR #13) — Oct 9, 2026, 11:30 PM SGT
+Result: PASS. All Medium findings are fixed. DR-24 is fixed on every page except Time logging, which now goes on as DR-39 (Low). No page errors and no /api/v1 responses ≥400 for admin or member at 1440 and 390; the only 422s were the expected validation ones. Without a running timer, every page is 390px wide. With one running, every page is 390px except Time logging (489px).
+Accepted: HH:MM replaces DR-08's "4h" style everywhere (doc 14 §17).
+- DR-24 Fixed on 9 of 10 pages. At 390 the pill becomes a dot, time and ■, and "+ Quick activity" / "Record leave" become icons, so scrollWidth is 390 on Dashboard, My tasks, Day timesheet, Workload, Reports, DAR, Saved reports, Leave, Admin Settings and Admin Leave. This was checked with the admin's own timer and with the member's running timer. Time logging is still 489px (see DR-39).
+- DR-25 Fixed. Time logging shows "00:02" with Total "00:02 of 40:00 available". Reports › Effort variance Actual shows "04:53" / "00:22", and Workload shows 40:00 / 10:45. The CSV uses HH:MM ("−04:00"), and "Logged this week" shows "00:00".
+- DR-26 Fixed. The preview has the navy band with the white centered title and "Generated range". All 11 columns fit at 1440, with Remarks wrapping. Column headers are in title case ("Time In"). The PDF has the same navy band. At 390 the table scrolls inside the preview card.
+- DR-27 Fixed. Columns are now Health (On track / At risk), a separate Status (Completed / Active / Planning) and Waiting on client counts.
+- DR-28 Fixed. At 390 the Reports tabs scroll sideways and the DAR buttons stack full width; both pages are 390px wide.
+- DR-29 Fixed. A member opening Team & workload makes no 403 call.
+- DR-30 Fixed. The first entry of a day asks only "Where are you working today?" (no second Location select). Later Time ins show only "Location: Today's location (WFH)".
+- DR-31 Fixed. The running row is tinted (`row-running`, #e8fadf) and shows "00:00 RUNNING". The pill shows HH:MM:SS ("00:00:04").
+- DR-32 Fixed. A skeleton shows while loading. The TODAY and Actions columns render at about 2.7 s with Time in disabled, and Time in is enabled at about 3.0 s, so nothing shifts.
+- DR-33 Fixed. Maria's Oct 13 Vacation AM + PM shows as one row, "Full day (AM + PM)", 1 working day, in My leave and in Team on leave.
+- DR-34 Fixed. Roles show as "Project Manager" and "Consultant".
+- DR-35 Fixed (FR-ACT-19). The ✎ modal has "Delete entry", which opens an in-app confirm ("Delete this entry? QA quick activity check · 00:10 on Fri, Oct 9. This can't be undone."). Time logging Delete now uses an app modal too, and no native dialog fired. The earlier "QA quick activity check" was deleted this way.
+- DR-36 Fixed. The "SETUP" label is #5d6878. A contrast scan of Dashboard, My tasks, Day timesheet, DAR, Leave, Admin Settings and Reports found no AA failures.
+- DR-37 Fixed. Tabs are in sentence case ("Assigned to me", "Day timesheet", "Saved reports", "My leave", "Team on leave", "Activity types", "Effort variance").
+- DR-38 Fixed, except one item that couldn't be checked:
+  - The Add entry modal says "Add entry · Wed, Oct 7" / "Philippine time · Fri, Oct 9".
+  - The sidebar shows "Daily Accomplishment Report" on two lines.
+  - Time in is green (btn-success) and Time out is red (btn-danger).
+  - The hours note reads "Sum of the day's entries (exact minutes; a running timer counts up to now)".
+  - The team-balance "−3.5 Negative" style couldn't be checked: no user has a negative balance in the live data any more (Maria's Vacation is now 5.5), and I didn't change entitlements.
+- DR-38 negative balance, checked Oct 10, 12:05 AM SGT (Oscar Outsider, Vacation 2026 = −3.5; view only).
+  - Fixed in Team on leave › My team's balances: it shows "−3.5" with a real minus sign (U+2212) in danger #b8240a on white (6.37:1) and a "Negative" badge (#b8240a on #ffe0db, 5.14:1). See `m47b/negative-balance.png`.
+  - Still open in Admin › Leave › Entitlements (Vacation): the balance shows "-3.5" with an ASCII hyphen in body grey #646e78. Only the "Negative" badge is in danger colour (5.14:1), so the AA contrast is fine. See `m47b/negative-balance-admin.png`. **Fix:** use the same balance formatter as Team on leave, with "−" and `text-danger` on the number.
+- FR-DAR-19 Verified. Rows with blank remarks show just the task name ("Submit master data template to client", "Data gathering") or the quick activity title ("QA timer 2"), with no prefix. A row that has remarks shows only the remarks.
+
+New findings:
+- DR-39 (Low): with a timer running at 390, Time logging is still 489px wide for admin and member. The header's "‹ Week of Oct 5 ›" control wraps into a tall three-line box and pushes the top bar (`m47b/admin-time-390-timer.png`). Below 576px, move the week picker out of the top bar into the page body, or cut it down to ‹ › with a short "Oct 5–11".
+- DR-40 (Cosmetic): with a timer running at 390, page titles shrink to almost nothing ("M" on My tasks, "Dail…" on the DAR). When the pill is showing on xs, hide the title in the top bar and show it as a heading at the top of the page.
+- DR-41 (Cosmetic): Add entry on an empty past day (Wed, Oct 7) still asks "Where are you working today?". When the date isn't today, use "Where were you working on Wed, Oct 7?".
+- DR-42 (Cosmetic): Export PDF on a range with no entries downloads a blank report ("Total Activities: 0") while the preview shows the empty state. Disable Export PDF / Excel when there are no entries in the range.
+
+Test data (re-check):
+- Admin: one time entry ("QA recheck timer", 00:02) was created and then deleted, and the earlier "QA quick activity check" was deleted. Admin's Oct 9 now has no entries (location WFH, still Reopened).
+- Still present from the first review, both kept by design: admin's saved report for Oct 9 (saved reports can't be deleted) and a Cancelled Unpaid half day on Oct 21.
+- The member's running "QA auto-stop check" timer belongs to another tester. It was only viewed.
+Screenshots: /workspace/review/m47b/.

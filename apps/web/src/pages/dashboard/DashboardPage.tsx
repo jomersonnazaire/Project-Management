@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import {
   AI_INSIGHTS_PHASE2_NOTE,
   ISSUE_SEVERITY_LABELS,
+  PROJECT_TYPE_NOT_SET,
   ISSUE_STAGE_LABELS,
   type IssueSeverity,
   type IssueStage,
@@ -171,6 +172,7 @@ export function DashboardPage() {
                         <thead>
                           <tr>
                             <th>Project</th>
+                            <th>Project type</th>
                             <th>Template</th>
                             <th>Progress</th>
                             <th>Health</th>
@@ -186,6 +188,7 @@ export function DashboardPage() {
                                 </Link>
                                 <div className="small text-body-secondary">{p.client.name}</div>
                               </td>
+                              <td className="small">{p.projectType ?? PROJECT_TYPE_NOT_SET}</td>
                               <td className="small">{p.template ?? '–'}</td>
                               <td>
                                 <ProgressBar value={p.progress} label={`${p.name} progress`} />

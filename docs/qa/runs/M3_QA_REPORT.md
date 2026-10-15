@@ -45,3 +45,18 @@ Info: tagging a contact from another client answers `CONTACT_NOT_ACTIVE`; a clea
 | Official PH holidays | Admin only (PM 403). 2026 adds 21, and loading again skips all 21. 2027 adds 19. 2028 is refused with NO_OFFICIAL_LIST | Pass |
 
 Observation for Rich and Lean: FR-TIME-06 says users can delete their own unlocked time entries, but the default access grid gives Member time View/Create/Edit without Delete, so a Member deleting their own entry gets 403. One of the two needs to change.
+
+## Follow-up: TC-N16 / TC-N31 midnight boundary (2026-10-10 ~00:51 PHT). Result: PASS (API)
+
+**Preview:** https://xc8-projectmgmt-web-git-milestone-7-jomerson-team.vercel.app · **Ran:** 2026-10-10 00:51 Asia/Manila (UTC+8) · **Accounts:** admin, pm, member (viewer tasks 403) · **Method:** read-only `GET /api/v1/tasks/mine?view=today|due` via `/workspace/qa-run/m2lib.py` `login_all` · **Evidence file:** `/workspace/qa-run/tc_n16_n31_2026-10-10.json` · **No writes.**
+
+Calendar at run time: `workingDays: [1,2,3,4,5,6]` (Mon–Sat). 2026-10-10 is Saturday and **is** a working day, so ages advance overnight from Friday.
+
+| Case | Result | Evidence (member@, primary) |
+|---|---|---|
+| TC-N16 / AC-TODAY-1 (Due tab; TC-N22 rerun of old Today) | **Pass** | Just after midnight PHT. Due items in order: overdue `2026-10-07` (daysLate 3), `2026-10-08` (2), **`2026-10-09` overdue daysLate 1**, then **`2026-10-10` overdue=false daysLate 0** (due today). Overdue flagged first (`overdue: true` → red in UI); due-today last. Counts: `due: 4`, `overdue: 3`. |
+| TC-N31 / FR-TSK-21 (Today tab; PH date not UTC) | **Pass** | At 00:51 PHT = 16:51 UTC on 2026-10-09. If the API used UTC, today would still be 10-09. Observed instead: (1) due 10-09 is overdue on Due; (2) due 10-10 is on Due as due today, not tomorrow; (3) `plannedStart=2026-10-09` + TODO → Today **AGING ageDays=1** (would be PLANNED age 0 if today were still 10-09 UTC); (4) Mon `2026-10-05` IN_PROGRESS → **PLANNED ageDays=5** (Fri was 4; +1 for Saturday working day). Aging and Planned-for-today sections both populated; a task never in both. |
+
+Admin Due also shows overdue on a 10-08 task (daysLate 2); pm had empty Today/Due. Same conclusions from admin Today (`plannedStart=2026-10-09` → AGING age 1).
+
+Re-check 2026-10-10 01:01 PHT (UTC still 2026-10-09), member@ read-only: same Due order (10-07, 10-08, 10-09 overdue daysLate 1, then 10-10 due today daysLate 0) and Today sections unchanged. Still **Pass**.

@@ -64,8 +64,9 @@ export function useCalendarMutation() {
 export type HolidayBody = HolidayInput;
 
 // ----- Time logging -----
-export function useTimeWeek(week?: string) {
+export function useTimeWeek(week?: string, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ['time', 'week', week ?? ''],
     queryFn: () => api<TimeWeekDto>(`/time${qs({ week })}`),
   });

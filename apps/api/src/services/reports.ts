@@ -42,6 +42,7 @@ import {
   type Project,
 } from '../models/index.js';
 import { projectScopeFilter, type ScopeUser } from './scope.js';
+import { projectTypeRefs } from './projectTypes.js';
 
 /**
  * Milestone 4 read models: dashboard, My projects, workload and reports. Everything starts from the
@@ -63,6 +64,7 @@ export interface ScopedProject {
   plannedEndDate: Date | null;
   activeContactIds: Id[];
   templateName: string | null;
+  projectTypeId: Id | null;
 }
 export interface LoadedTask {
   _id: Id;
@@ -90,7 +92,7 @@ export async function scopedProjects(
     ...extra,
   })
     .select(
-      'name clientId managerId memberIds status startDate plannedEndDate activeContactIds templateSnapshot.name',
+      'name clientId managerId memberIds status startDate plannedEndDate activeContactIds templateSnapshot.name projectTypeId',
     )
     .sort({ name: 1 })
     .lean();
@@ -105,6 +107,7 @@ export async function scopedProjects(
     plannedEndDate: p.plannedEndDate ?? null,
     activeContactIds: p.activeContactIds ?? [],
     templateName: p.templateSnapshot?.name ?? null,
+    projectTypeId: p.projectTypeId ?? null,
   }));
 }
 
@@ -416,6 +419,7 @@ export async function dashboard(user: ScopeUser, canSeeTime: boolean): Promise<D
     });
 
   const issues = await issuesOf(ids);
+  const types = await projectTypeRefs(active.map((p) => p.projectTypeId));
   const clientOf = (pid: Id) => refs.client(pById.get(pid.toString())!.clientId);
 
   return {
@@ -435,6 +439,7 @@ export async function dashboard(user: ScopeUser, canSeeTime: boolean): Promise<D
         name: p.name,
         client: refs.client(p.clientId),
         template: p.templateName,
+        projectType: p.projectTypeId ? (types.get(p.projectTypeId.toString())?.name ?? null) : null,
         status: p.status,
         progress: c.progressPct,
         health: c.health as Health,

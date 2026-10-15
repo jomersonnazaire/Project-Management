@@ -10,6 +10,46 @@ const objectId = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
 const requiredText = (label: string, max = 200) =>
   z.string().trim().min(1, `${label} is required.`).max(max);
 const optionalText = (max = 2000) => z.string().trim().max(max).nullable().optional();
+
+// ---------- Module (doc 14 v0.9.7 FR-ACT-20): optional free text, no Admin list ----------
+export const MODULE_MAX = 100;
+/** The counter shows from this many characters (FR-ACT-20). */
+export const MODULE_COUNTER_FROM = 80;
+export const MODULE_TOO_LONG = `Keep the module under ${MODULE_MAX} characters.`;
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+/**
+ * DEF-010: lengths users see. Counts grapheme clusters, so an emoji (even a multi-code-point
+ * one such as a flag or a family) counts as 1. The web counter and the API use this same rule.
+ */
+export const graphemeLength = (s: string) => {
+  let n = 0;
+  for (const _ of graphemes.segment(s)) n++;
+  return n;
+};
+/** The first `max` user-visible characters of `s` (never splits an emoji). */
+export const graphemeSlice = (s: string, max: number) => {
+  let out = '';
+  let n = 0;
+  for (const { segment } of graphemes.segment(s)) {
+    if (n++ >= max) break;
+    out += segment;
+  }
+  return out;
+};
+/** Module length in user-visible characters, after trimming (FR-ACT-20, DEF-010). */
+export const moduleLength = (s: string) => graphemeLength(s.trim());
+
+/** Trimmed free text, max 100 characters after trimming; blank or spaces-only saves as blank (null). */
+export const moduleText = z
+  .string()
+  .trim()
+  .refine((v) => graphemeLength(v) <= MODULE_MAX, MODULE_TOO_LONG)
+  .nullable()
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v || null));
+/** How a blank module shows on screen, in the report, PDF and Excel. */
+export const moduleLabel = (m: string | null | undefined) => m?.trim() || '–';
 const dateOnly = (label: string) =>
   z
     .string()
@@ -134,7 +174,7 @@ export const timeEntrySchema = z.strictObject({
   notes: optionalText(1000),
   /** Doc 14 FR-ACT-15, FR-DAR-09: required on every entry, Log time included. */
   activityTypeId: objectId,
-  moduleId: objectId,
+  module: moduleText,
   locationId: objectId.nullable().optional(),
   billable: z.boolean().default(true),
   /** Confirms the half-day leave warning (FR-LV-06). */
@@ -147,7 +187,7 @@ export const updateTimeEntrySchema = z.strictObject({
   type: z.enum(TIME_TYPES).optional(),
   notes: optionalText(1000),
   activityTypeId: objectId.optional(),
-  moduleId: objectId.optional(),
+  module: moduleText,
   locationId: objectId.nullable().optional(),
   billable: z.boolean().optional(),
 });
@@ -165,7 +205,8 @@ export interface TimeEntryDto {
   /** Logged with Time in / Time out (doc 14 FR-ACT-02); hours change on the Day timesheet. */
   timed: boolean;
   activityType: Ref | null;
-  module: Ref | null;
+  /** Free text (mockup v0.8.9). */
+  module: string | null;
   billable: boolean;
   type: TimeType;
   notes: string | null;
@@ -177,9 +218,15 @@ export interface TimeWeekDto {
   weekStart: string;
   weekEnd: string;
   items: TimeEntryDto[];
+  /** Project time in `items`. */
   total: number;
+  /**
+   * All tracked time this week, project time plus quick activities (My tasks "Logged this week",
+   * doc 14 FR-ACT-10). m8-polish; older servers omit it.
+   */
+  loggedTotal?: number;
   capacity: number;
-  /** Q-09: the Admin-set lock in words, e.g. "Last week's entries lock every Monday at 12:00 PM Philippine time." */
+  /** Q-09: the day lock in words (DAY_LOCK_DESCRIPTION). */
   lockDescription?: string;
 }
 
@@ -195,20 +242,25 @@ export function weekStartOf(d: Date): Date {
 }
 
 /**
- * Q-09 (built as an Admin setting, v0.7.2): the previous week locks every week at `weekday`
- * (0 = Sunday … 6 = Saturday) and `hour` Philippine time. Default: Monday 12:00 PM. There is no
- * approval step. With `enabled` off nothing locks.
+ * Q-09 (Jomerson, v1.3): a day's entries can be edited until the end of the second day after it;
+ * the day locks at 00:00 Asia/Manila (PHT) on the third day (Oct 11 locks at 00:00 PHT on Oct 14,
+ * Oct 13 at 00:00 PHT on Oct 16). After that only an Admin reopening the day allows changes.
+ * The Admin setting is just `enabled` (off = nothing locks). A never-saved or null `enabled`
+ * means ON. The old weekly-lock `weekday` / `hour` fields are gone; extra fields sent by old
+ * clients are ignored (stripped by the schema).
  */
 export interface TimeLockPolicy {
   enabled: boolean;
-  weekday: number;
-  hour: number;
 }
-export const DEFAULT_TIME_LOCK: TimeLockPolicy = { enabled: true, weekday: 1, hour: 12 };
+export const DEFAULT_TIME_LOCK: TimeLockPolicy = { enabled: true };
+/** Never-saved, null or missing `enabled` → ON; legacy fields are dropped. */
+export function normalizeTimeLock(
+  t: { enabled?: boolean | null } | null | undefined,
+): TimeLockPolicy {
+  return { enabled: t?.enabled !== false };
+}
 export const timeLockSchema = z.object({
   enabled: z.boolean(),
-  weekday: z.number().int().min(0).max(6),
-  hour: z.number().int().min(0).max(23),
   version: z.number().int().min(0),
 });
 export type TimeLockInput = z.infer<typeof timeLockSchema>;
@@ -219,41 +271,37 @@ export interface TimeLockDto {
   boundary: string | null;
   description: string;
 }
-const WEEKDAY_NAMES = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-];
 export function formatHour12(hour: number): string {
   const h = hour % 12 === 0 ? 12 : hour % 12;
   return `${h}:00 ${hour < 12 ? 'AM' : 'PM'}`;
 }
-/** "Last week locks every Monday at 12:00 PM Philippine time." */
-export function describeTimeLock(p: TimeLockPolicy): string {
-  if (!p.enabled) return 'Time entries never lock.';
-  return `Last week's entries lock every ${WEEKDAY_NAMES[p.weekday]} at ${formatHour12(p.hour)} Philippine time.`;
+/** Days after a work date during which it stays editable (Q-09). */
+export const DAY_LOCK_GRACE_DAYS = 2;
+export const DAY_LOCK_DESCRIPTION =
+  "You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.";
+export function describeTimeLock(p: Partial<TimeLockPolicy> | null | undefined): string {
+  if (p?.enabled === false) return 'Time entries never lock.';
+  return DAY_LOCK_DESCRIPTION;
+}
+
+/** Q-09: the instant a work date (calendar date at UTC midnight) locks: 00:00 PHT, 3 days later. */
+export function dayLockAt(workDate: Date): Date {
+  return new Date(workDate.getTime() + (DAY_LOCK_GRACE_DAYS + 1) * 86_400_000 - 8 * 3_600_000);
 }
 
 /**
- * FR-TIME-04 / Q-09: returns the first work date that is still open; anything earlier is read-only
- * (except PM/Admin). Weeks run Monday to Sunday. The previous week locks at this week's lock moment
- * (weekday + hour, Philippine time). With locking off, nothing is locked (the epoch is returned).
+ * FR-TIME-04 / Q-09: returns the first work date that is still open; anything earlier is locked
+ * (until an Admin reopens it). That is today's PHT date minus two days. With locking off, nothing
+ * is locked (the epoch is returned).
  */
 export function timeLockBoundary(
   now = new Date(),
-  policy: TimeLockPolicy = DEFAULT_TIME_LOCK,
+  policy: Partial<TimeLockPolicy> | null | undefined = DEFAULT_TIME_LOCK,
 ): Date {
-  if (!policy.enabled) return new Date(0);
+  if (policy?.enabled === false) return new Date(0);
   const ph = new Date(now.getTime() + 8 * 3_600_000);
   const today = new Date(`${ph.toISOString().slice(0, 10)}T00:00:00.000Z`);
-  const monday = weekStartOf(today);
-  const lockAt =
-    monday.getTime() + ((policy.weekday + 6) % 7) * 86_400_000 + policy.hour * 3_600_000;
-  return ph.getTime() >= lockAt ? monday : new Date(monday.getTime() - 7 * 86_400_000);
+  return new Date(today.getTime() - DAY_LOCK_GRACE_DAYS * 86_400_000);
 }
 
 // ---------- Uploads (FR-EVD-01..08, FR-DOC-13) ----------

@@ -12,6 +12,7 @@ import {
   type SavedReportDto,
   type SavedReportSummaryDto,
   type SavedTag,
+  DAR_EXPORT_NAME,
 } from '@xc8/shared';
 import type { Types } from 'mongoose';
 import {
@@ -82,7 +83,8 @@ export async function buildDar(
       activityType: e.activityType?.name ?? '',
       location: e.location?.name ?? '',
       billable: e.billable ? 'Yes' : 'No',
-      module: e.module?.name ?? '',
+      // FR-ACT-20: free text; a blank module shows as "–" when rendered (moduleLabel).
+      module: e.module ?? '',
       remarks,
     };
   });
@@ -137,6 +139,7 @@ export async function buildDar(
     rows: shown,
     days,
     runningExcluded,
+    exportName: DAR_EXPORT_NAME,
   };
 }
 

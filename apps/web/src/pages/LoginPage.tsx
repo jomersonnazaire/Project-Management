@@ -1,5 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, type LoginInput, type PermissionGrid, type UserDto } from '@xc8/shared';
+import {
+  APP_NAME,
+  loginSchema,
+  type LoginInput,
+  type PermissionGrid,
+  type UserDto,
+} from '@xc8/shared';
 import { useState } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
@@ -7,7 +13,6 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, authErrorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { AuthCard, safeNext } from '../components/AuthCard';
-import { BrandLogo } from '../components/BrandLogo';
 
 export function LoginPage() {
   const { user, setSession } = useAuth();
@@ -39,11 +44,8 @@ export function LoginPage() {
 
   const reason = params.get('reason');
   return (
-    <AuthCard>
-      <div className="app-brand justify-content-center mb-4">
-        <BrandLogo />
-      </div>
-      <h4 className="mb-1">Sign in</h4>
+    <AuthCard title="Sign in">
+      <h4 className="mb-1">Sign in to {APP_NAME}</h4>
       {reason === 'expired' && (
         <Alert variant="warning" className="mt-3">
           Your session expired after 30 minutes of inactivity. Please sign in again.
@@ -92,10 +94,11 @@ export function LoginPage() {
         You&apos;ll land on your Dashboard.
       </p>
       <p className="small text-body-secondary text-center mb-3">
-        Forgot your password? Ask an Admin for a reset link.
+        Forgot your password? Ask an {APP_NAME} Admin for a reset link.
       </p>
       <p className="small text-body-secondary mb-0">
-        Only invited Xceler8 staff can sign in. Client contacts don&apos;t have accounts.
+        Only invited Xceler8 staff can sign in to {APP_NAME}. Client contacts don&apos;t have
+        accounts.
       </p>
     </AuthCard>
   );

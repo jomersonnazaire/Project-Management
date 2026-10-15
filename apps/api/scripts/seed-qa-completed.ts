@@ -3,16 +3,16 @@
  * like "QA M3 – Ready to activate"; owned by the QA Member, managed by the QA PM).
  * Re-runnable: matched by name; re-runs only complete what is left and re-raise a missing issue.
  *   MONGODB_URI, MONGODB_DB_NAME     database
- *   QA_PM_EMAIL, QA_MEMBER_EMAIL     project manager and task owner
+ *   QA_PM_EMAIL, QA_MEMBER_EMAIL     project manager (QA_MEMBER_EMAIL defaults to qa.member@xceler8.example) and task owner
  *   QA_SEED_CLIENT (optional)        client name; defaults to the first client with an active contact
  * Usage: npm run seed:qa-completed --workspace @xc8/api
  */
 import { connectDb, disconnectDb } from '../src/db.js';
-import { need, qaPeople, seedCompletedProject } from './lib/qaSeeds.js';
+import { need, qaMemberEmail, qaPeople, seedCompletedProject } from './lib/qaSeeds.js';
 
 async function main() {
   await connectDb(need('MONGODB_URI'), process.env.MONGODB_DB_NAME);
-  const people = await qaPeople(need('QA_PM_EMAIL'), need('QA_MEMBER_EMAIL'));
+  const people = await qaPeople(need('QA_PM_EMAIL'), qaMemberEmail());
   await seedCompletedProject(people, process.env.QA_SEED_CLIENT);
   await disconnectDb();
 }

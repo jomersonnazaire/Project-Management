@@ -1,5 +1,6 @@
 import {
   PROJECT_CODE_LOCKED,
+  PROJECT_TYPE_REQUIRED,
   projectCodeSchema,
   PROJECT_STATUS_LABELS,
   PROJECT_STATUSES,
@@ -16,6 +17,9 @@ import { useClients } from '../../api/hooks';
 import { usePeople, useUpdateProject } from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { HandoverModal } from '../../components/HandoverModal';
+import { useConfirm } from '../../components/ConfirmModal';
+import { useProjectPhases } from '../../api/issueHooks';
+import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
 
 /**
  * Edit a project (FR-PRJ-11..13): details, team, status, baseline dates (with a reason) and the
@@ -40,6 +44,7 @@ export function ProjectEditModal({
   const [managerId, setManagerId] = useState(project.managerId ?? '');
   const [memberIds, setMemberIds] = useState(project.members.map((m) => m.id));
   const [clientId, setClientId] = useState(project.clientId);
+  const [projectTypeId, setProjectTypeId] = useState(project.projectType?.id ?? '');
   const [startDate, setStartDate] = useState(project.startDate ?? '');
   const [plannedEndDate, setPlannedEndDate] = useState(project.plannedEndDate ?? '');
   const [reason, setReason] = useState('');
@@ -60,7 +65,11 @@ export function ProjectEditModal({
       ? update.error
       : null;
 
-  const submit = (e: FormEvent) => {
+  const [confirm, confirmDialog] = useConfirm();
+  // Q-69: the leave-Planning confirm depends on phases (not tasks); falls back to the task count.
+  const phaseList = useProjectPhases(project.id, project.status === 'PLANNING');
+  const phaseCount = phaseList.data ? phaseList.data.length : project.taskCount;
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Project name is required.';
@@ -69,6 +78,8 @@ export function ProjectEditModal({
       const check = projectCodeSchema.safeParse(code);
       if (!check.success) next.code = check.error.issues[0]?.message ?? 'Invalid code.';
     }
+    // FR-PTY-02/03: required; a project created before project types picks one now.
+    if (!projectTypeId) next.projectTypeId = PROJECT_TYPE_REQUIRED;
     if (plannedEndDate <= startDate) next.plannedEndDate = END_AFTER_START;
     if (datesChanged && !reason.trim()) next.reason = 'Give a reason for changing the baseline.';
     setErrors(next);
@@ -79,6 +90,7 @@ export function ProjectEditModal({
     if ((description.trim() || null) !== project.description)
       body.description = description.trim() || null;
     if (status !== project.status) body.status = status;
+    if (projectTypeId !== (project.projectType?.id ?? '')) body.projectTypeId = projectTypeId;
     if (managerId !== project.managerId) body.managerId = managerId;
     const members = memberIds.filter((m) => m !== managerId);
     if (members.join() !== project.members.map((m) => m.id).join()) body.memberIds = members;
@@ -93,6 +105,21 @@ export function ProjectEditModal({
       body.reason = reason.trim();
     }
     if (!Object.keys(body).length) return onClose();
+    // EC-96 / Q-69: leaving Planning with no phases is allowed after a confirm (UI only).
+    if (
+      body.status &&
+      project.status === 'PLANNING' &&
+      body.status !== 'PLANNING' &&
+      phaseCount === 0 &&
+      !(await confirm({
+        title: 'Leave Planning with no phases?',
+        body: 'This project has no phases or activities yet. Phase details will lock for PMs once it leaves Planning.',
+        cancelLabel: 'Stay in Planning',
+        confirmLabel: 'Move on anyway',
+      }))
+    ) {
+      return;
+    }
     // A PM giving away a project they manage confirms first (doc 11 §12).
     if (
       body.managerId &&
@@ -111,195 +138,207 @@ export function ProjectEditModal({
   );
 
   return (
-    <Modal show onHide={onClose} centered size="lg">
-      <Form onSubmit={submit} noValidate>
-        <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">
-            Edit project
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {update.error && !Object.keys(serverErrors).length && !needsConfirm && !issueWarning ? (
-            <Alert variant="danger">{saveErrorMessage(update.error)}</Alert>
-          ) : null}
-          {needsConfirm && <Alert variant="warning">{(update.error as ApiError).message}</Alert>}
-          {issueWarning && clientChanged && (
-            <Alert variant="warning">
-              <p className="mb-2">{issueWarning.message}</p>
-              <Form.Check
-                type="checkbox"
-                id="edit-prj-confirm-issues"
-                label="Change the client anyway"
-                checked={confirmIssues}
-                onChange={(e) => setConfirmIssues(e.target.checked)}
-              />
-            </Alert>
-          )}
-          <div className="row g-3">
-            <Form.Group className="col-md-8" controlId="edit-prj-name">
-              <Form.Label>Project name</Form.Label>
-              <Form.Control
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                isInvalid={Boolean(err('name'))}
-              />
-              <Form.Control.Feedback type="invalid">{err('name')}</Form.Control.Feedback>
-            </Form.Group>
-            <Form.Group className="col-md-4" controlId="edit-prj-code">
-              <Form.Label>Project code</Form.Label>
-              <Form.Control
-                value={code}
-                readOnly={project.codeLocked}
-                maxLength={20}
-                style={{ textTransform: 'uppercase' }}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                isInvalid={Boolean(err('code'))}
-                aria-describedby={project.codeLocked ? 'edit-prj-code-hint' : undefined}
-              />
-              <Form.Control.Feedback type="invalid">{err('code')}</Form.Control.Feedback>
-              {project.codeLocked && (
-                <Form.Text id="edit-prj-code-hint">
-                  <i className="bx bx-lock-alt me-1" aria-hidden="true" />
-                  {PROJECT_CODE_LOCKED}
-                </Form.Text>
-              )}
-            </Form.Group>
-            <Form.Group className="col-md-4" controlId="edit-prj-status">
-              <Form.Label>Status</Form.Label>
-              <Form.Select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-              >
-                {PROJECT_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {PROJECT_STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-            <Form.Group className="col-md-6" controlId="edit-prj-client">
-              <Form.Label>Client</Form.Label>
-              <Form.Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                {(clients.data?.items ?? [])
-                  .filter((c) => c.active || c.id === project.clientId)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
+    <>
+      {confirmDialog}
+      <Modal show={!confirmDialog} onHide={onClose} centered size="lg">
+        <Form onSubmit={(e) => void submit(e)} noValidate>
+          <Modal.Header closeButton>
+            <Modal.Title as="h2" className="h5">
+              Edit project
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {update.error && !Object.keys(serverErrors).length && !needsConfirm && !issueWarning ? (
+              <Alert variant="danger">{saveErrorMessage(update.error)}</Alert>
+            ) : null}
+            {needsConfirm && <Alert variant="warning">{(update.error as ApiError).message}</Alert>}
+            {issueWarning && clientChanged && (
+              <Alert variant="warning">
+                <p className="mb-2">{issueWarning.message}</p>
+                <Form.Check
+                  type="checkbox"
+                  id="edit-prj-confirm-issues"
+                  label="Change the client anyway"
+                  checked={confirmIssues}
+                  onChange={(e) => setConfirmIssues(e.target.checked)}
+                />
+              </Alert>
+            )}
+            <div className="row g-3">
+              <Form.Group className="col-md-8" controlId="edit-prj-name">
+                <Form.Label>Project name</Form.Label>
+                <Form.Control
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  isInvalid={Boolean(err('name'))}
+                />
+                <Form.Control.Feedback type="invalid">{err('name')}</Form.Control.Feedback>
+              </Form.Group>
+              <Form.Group className="col-md-4" controlId="edit-prj-code">
+                <Form.Label>Project code</Form.Label>
+                <Form.Control
+                  value={code}
+                  readOnly={project.codeLocked}
+                  maxLength={20}
+                  style={{ textTransform: 'uppercase' }}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  isInvalid={Boolean(err('code'))}
+                  aria-describedby={project.codeLocked ? 'edit-prj-code-hint' : undefined}
+                />
+                <Form.Control.Feedback type="invalid">{err('code')}</Form.Control.Feedback>
+                {project.codeLocked && (
+                  <Form.Text id="edit-prj-code-hint">
+                    <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+                    {PROJECT_CODE_LOCKED}
+                  </Form.Text>
+                )}
+              </Form.Group>
+              <Form.Group className="col-md-4" controlId="edit-prj-status">
+                <Form.Label>Status</Form.Label>
+                <Form.Select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+                >
+                  {PROJECT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {PROJECT_STATUS_LABELS[s]}
                     </option>
                   ))}
-                {!clients.data && <option value={project.clientId}>{project.clientName}</option>}
-              </Form.Select>
-              {clientChanged && project.activeContacts.length > 0 && (
-                <Form.Check
-                  className="mt-2"
-                  id="edit-prj-confirm-clear"
-                  label={`Remove the ${plural(project.activeContacts.length, 'active contact')} from ${project.clientName}`}
-                  checked={confirmClear}
-                  isInvalid={needsConfirm && !confirmClear}
-                  onChange={(e) => setConfirmClear(e.target.checked)}
-                />
-              )}
-            </Form.Group>
-            <Form.Group className="col-md-6" controlId="edit-prj-manager">
-              <Form.Label>Project manager</Form.Label>
-              <Form.Select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-                {managers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-                {!people.data && project.manager && (
-                  <option value={project.manager.id}>{project.manager.name}</option>
-                )}
-              </Form.Select>
-            </Form.Group>
-            <Form.Group className="col-md-6" controlId="edit-prj-start">
-              <Form.Label>Baseline start</Form.Label>
-              <Form.Control
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </Form.Group>
-            <Form.Group className="col-md-6" controlId="edit-prj-end">
-              <Form.Label>Baseline end</Form.Label>
-              <Form.Control
-                type="date"
-                value={plannedEndDate}
-                onChange={(e) => setPlannedEndDate(e.target.value)}
-                isInvalid={Boolean(err('plannedEndDate'))}
-              />
-              <Form.Control.Feedback type="invalid">{err('plannedEndDate')}</Form.Control.Feedback>
-            </Form.Group>
-            {datesChanged && (
-              <Form.Group className="col-12" controlId="edit-prj-reason">
-                <Form.Label>Reason for re-baselining</Form.Label>
-                <Form.Control
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  isInvalid={Boolean(err('reason'))}
-                />
-                <Form.Control.Feedback type="invalid">{err('reason')}</Form.Control.Feedback>
+                </Form.Select>
               </Form.Group>
-            )}
-            <fieldset className="col-12">
-              <legend className="form-label fs-6">Team members</legend>
-              <div
-                className="border rounded p-2 d-flex flex-wrap gap-3"
-                style={{ maxHeight: 160, overflowY: 'auto' }}
-              >
-                {(people.data ?? [])
-                  .filter((p) => p.id !== managerId)
-                  .map((p) => (
-                    <Form.Check
-                      key={p.id}
-                      id={`edit-prj-member-${p.id}`}
-                      label={p.name}
-                      checked={memberIds.includes(p.id)}
-                      onChange={(e) =>
-                        setMemberIds(
-                          e.target.checked
-                            ? [...memberIds, p.id]
-                            : memberIds.filter((x) => x !== p.id),
-                        )
-                      }
-                    />
+              <Form.Group className="col-md-6" controlId="edit-prj-client">
+                <Form.Label>Client</Form.Label>
+                <Form.Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+                  {(clients.data?.items ?? [])
+                    .filter((c) => c.active || c.id === project.clientId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  {!clients.data && <option value={project.clientId}>{project.clientName}</option>}
+                </Form.Select>
+                {clientChanged && project.activeContacts.length > 0 && (
+                  <Form.Check
+                    className="mt-2"
+                    id="edit-prj-confirm-clear"
+                    label={`Remove the ${plural(project.activeContacts.length, 'active contact')} from ${project.clientName}`}
+                    checked={confirmClear}
+                    isInvalid={needsConfirm && !confirmClear}
+                    onChange={(e) => setConfirmClear(e.target.checked)}
+                  />
+                )}
+              </Form.Group>
+              <Form.Group className="col-md-6" controlId="edit-prj-manager">
+                <Form.Label>Project manager</Form.Label>
+                <Form.Select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+                  {managers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
                   ))}
-              </div>
-            </fieldset>
-            <Form.Group className="col-12" controlId="edit-prj-desc">
-              <Form.Label>Description</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={2}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                  {!people.data && project.manager && (
+                    <option value={project.manager.id}>{project.manager.name}</option>
+                  )}
+                </Form.Select>
+              </Form.Group>
+              <ProjectTypeSelect
+                id="edit-prj-type"
+                value={projectTypeId}
+                current={project.projectType}
+                onChange={setProjectTypeId}
+                error={err('projectTypeId')}
               />
-            </Form.Group>
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="outline-secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={update.isPending}>
-            Save changes
-          </Button>
-        </Modal.Footer>
-      </Form>
-      {handover && (
-        <HandoverModal
-          name={managers.find((m) => m.id === handover.managerId)?.name ?? 'the new manager'}
-          pending={update.isPending}
-          onCancel={() => setHandover(null)}
-          onConfirm={() =>
-            update.mutate(handover, {
-              onSuccess: onClose,
-              onSettled: () => setHandover(null),
-            })
-          }
-        />
-      )}
-    </Modal>
+              <Form.Group className="col-md-6" controlId="edit-prj-start">
+                <Form.Label>Baseline start</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </Form.Group>
+              <Form.Group className="col-md-6" controlId="edit-prj-end">
+                <Form.Label>Baseline end</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={plannedEndDate}
+                  onChange={(e) => setPlannedEndDate(e.target.value)}
+                  isInvalid={Boolean(err('plannedEndDate'))}
+                />
+                <Form.Control.Feedback type="invalid">
+                  {err('plannedEndDate')}
+                </Form.Control.Feedback>
+              </Form.Group>
+              {datesChanged && (
+                <Form.Group className="col-12" controlId="edit-prj-reason">
+                  <Form.Label>Reason for re-baselining</Form.Label>
+                  <Form.Control
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    isInvalid={Boolean(err('reason'))}
+                  />
+                  <Form.Control.Feedback type="invalid">{err('reason')}</Form.Control.Feedback>
+                </Form.Group>
+              )}
+              <fieldset className="col-12">
+                <legend className="form-label fs-6">Team members</legend>
+                <div
+                  className="border rounded p-2 d-flex flex-wrap gap-3"
+                  style={{ maxHeight: 160, overflowY: 'auto' }}
+                >
+                  {(people.data ?? [])
+                    .filter((p) => p.id !== managerId)
+                    .map((p) => (
+                      <Form.Check
+                        key={p.id}
+                        id={`edit-prj-member-${p.id}`}
+                        label={p.name}
+                        checked={memberIds.includes(p.id)}
+                        onChange={(e) =>
+                          setMemberIds(
+                            e.target.checked
+                              ? [...memberIds, p.id]
+                              : memberIds.filter((x) => x !== p.id),
+                          )
+                        }
+                      />
+                    ))}
+                </div>
+              </fieldset>
+              <Form.Group className="col-12" controlId="edit-prj-desc">
+                <Form.Label>Description</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </Form.Group>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline-secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={update.isPending}>
+              Save changes
+            </Button>
+          </Modal.Footer>
+        </Form>
+        {handover && (
+          <HandoverModal
+            name={managers.find((m) => m.id === handover.managerId)?.name ?? 'the new manager'}
+            pending={update.isPending}
+            onCancel={() => setHandover(null)}
+            onConfirm={() =>
+              update.mutate(handover, {
+                onSuccess: onClose,
+                onSettled: () => setHandover(null),
+              })
+            }
+          />
+        )}
+      </Modal>
+    </>
   );
 }
