@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,
@@ -22,12 +22,21 @@ useDatabase();
 // Timers run for hours in these tests: keep the test sessions alive meanwhile.
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
 const at = (iso: string) => vi.setSystemTime(new Date(iso));
-beforeEach(() => {
+
+// Set fake timers once after DB connection is established, to avoid interfering with
+// mongoose's internal connection timers. Toggling timers in beforeEach/afterEach was
+// causing "Connection operation buffering timed out" errors in CI.
+beforeAll(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   at('2026-10-14T02:00:00Z');
 });
+
+beforeEach(() => {
+  // Just reset the time for each test; don't toggle timers
+  at('2026-10-14T02:00:00Z');
+});
+
 afterEach(async () => {
-  vi.useRealTimers();
   // The database is shared by the tests in this file: start each one clean.
   await Promise.all(
     [
@@ -39,6 +48,10 @@ afterEach(async () => {
       MigrationModel,
     ].map((m) => (m as typeof TimeEntryModel).deleteMany({})),
   );
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 type W = Awaited<ReturnType<typeof world>>;
