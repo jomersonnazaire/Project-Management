@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   ActivityLogModel,
   FolderModel,
@@ -18,23 +18,30 @@ import { lookups } from './trackerHelpers.js';
 
 /**
  * m8-polish (doc 14 v1.2.4 §A, B, E, F; doc 11 v0.4.13 FR-ACL-19..22).
- * "Now" is Wed Oct 14, 2026 10:00 Manila time.
+ * "Now" is Wed Oct 14, 2026 10:00 Manila time (mocked in specific tests that need it).
  */
 useDatabase();
 const app = makeApp();
 type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
-beforeEach(() => {
+
+// Set fake timers AFTER database connection is established
+beforeAll(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  at('2026-10-14T02:00:00Z'); // Oct 14, 2026 10:00 AM PHT
+  vi.setSystemTime(new Date('2026-10-14T02:00:00Z')); // Oct 14, 2026 10:00 AM PHT
 });
+
 afterEach(async () => {
-  vi.useRealTimers();
   await resetRules();
   await TimeEntryModel.deleteMany({});
   await LookupModel.deleteMany({});
   await MigrationModel.deleteMany({});
+  // Reset to the base mocked time after each test
+  vi.setSystemTime(new Date('2026-10-14T02:00:00Z'));
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 const base = (w: W) => `/api/v1/projects/${w.project.id}`;
