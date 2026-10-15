@@ -3,6 +3,7 @@ import type { Types } from 'mongoose';
 import type { AppConfig } from '../config.js';
 import { SessionModel } from '../models/index.js';
 import { newToken, sha256 } from './tokens.js';
+import { now as clockNow } from '../lib/clock.js';
 
 export function cookieName(config: AppConfig): string {
   // The __Host- prefix pins the cookie to this host, path "/", Secure, with no Domain.
@@ -78,7 +79,7 @@ export async function createSession(
   ip: string,
 ): Promise<void> {
   const token = newToken();
-  const now = new Date();
+  const now = clockNow();
   await SessionModel.create({
     tokenHash: sha256(token),
     userId,

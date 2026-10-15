@@ -1,6 +1,7 @@
 import { DEFAULT_ACCESS_RULES } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AccessRuleModel, ActivityLogModel, ProjectModel, TaskModel } from '../src/models/index.js';
+import { setTestTime, resetTestTime } from '../src/lib/clock.js';
 import { addMissingCells, addMissingRecordTypes } from '../src/services/accessDefaults.js';
 import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
@@ -14,11 +15,10 @@ import { entryFields } from './trackerHelpers.js';
 useDatabase();
 const app = makeApp();
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-21T03:00:00Z'));
+  setTestTime(new Date('2026-10-21T03:00:00Z'));
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all([
     ProjectModel.deleteMany({}),
     TaskModel.deleteMany({}),

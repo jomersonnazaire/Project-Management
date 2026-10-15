@@ -1,7 +1,7 @@
 import { DAR_FOOTER } from '@xc8/shared';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,
@@ -19,6 +19,7 @@ import { setLeaveLabeler } from '../src/services/leaveHook.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
 import { lookups } from './trackerHelpers.js';
+import { setTestTime, resetTestTime } from '../src/lib/clock.js';
 
 /**
  * M6 Daily Accomplishment Report (doc 14 §3, §14, §15; QA 06 TC-R01..R10).
@@ -26,13 +27,12 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
+const at = (iso: string) => setTestTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
   at('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   setLeaveLabeler(async () => null);
   await Promise.all(
     [

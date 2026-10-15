@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   IssueModel,
   NotificationModel,
@@ -21,11 +21,10 @@ import { entryFields } from './trackerHelpers.js';
 useDatabase();
 const app = makeApp();
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-21T03:00:00Z'));
+  setTestTime(new Date('2026-10-21T03:00:00Z'));
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   // The database is shared by the tests in this file and PMs see every project: start clean.
   await Promise.all(
     [SettingModel, ProjectModel, TaskModel, IssueModel, TimeEntryModel, NotificationModel].map(

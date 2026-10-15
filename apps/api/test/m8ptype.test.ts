@@ -1,5 +1,5 @@
 import { DEFAULT_PROJECT_TYPES } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,
@@ -17,11 +17,10 @@ import { lookups } from './trackerHelpers.js';
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-14T02:00:00Z'));
+  setTestTime(new Date('2026-10-14T02:00:00Z'));
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await resetRules();
 });
 

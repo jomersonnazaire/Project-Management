@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { HolidayModel, ProjectModel, SettingModel, TaskModel } from '../src/models/index.js';
+import { setTestTime, resetTestTime } from '../src/lib/clock.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world } from './m2helpers.js';
 
@@ -13,13 +14,12 @@ type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
 const at = (iso: string) => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(iso));
+  setTestTime(new Date(iso));
 };
 const THU_10AM = '2026-10-08T02:00:00Z';
 
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await resetRules();
   await HolidayModel.deleteMany({});
   await SettingModel.deleteMany({});
@@ -151,12 +151,12 @@ describe('TC-N25 / AC-TODAY-4: age follows the calendar', () => {
     expect(byId(t.items, mon)!.ageDays).toBe(2);
     // Fri → Thu: Mon, Tue, Thu (Wed is the holiday) = 3.
     expect(byId(t.items, fri)!.ageDays).toBe(3);
-    vi.useRealTimers();
+    resetTestTime();
     expect((await addHoliday(w.admin.agent, '2026-10-03', 'SPECIAL_WORKING')).status).toBe(201);
     at(THU_10AM);
     t = await today(w.member.agent);
     expect(byId(t.items, fri)!.ageDays).toBe(4);
-    vi.useRealTimers();
+    resetTestTime();
     await setDays(w.admin.agent, [1, 3, 4, 5]); // untick Tuesday
     at(THU_10AM);
     t = await today(w.member.agent);
@@ -212,7 +212,7 @@ describe('TC-N28: scope', () => {
     const pmIds = (await today(w.pm.agent)).items.map((x) => x.id);
     expect(pmIds).not.toContain(owned);
     // Cancelled is hidden too.
-    vi.useRealTimers();
+    resetTestTime();
     await TaskModel.updateOne({ _id: tasks[1]!.id }, { $set: { status: 'CANCELLED' } });
     at(THU_10AM);
     expect((await today(w.member.agent)).items.map((x) => x.id)).not.toContain(tasks[1]!.id);

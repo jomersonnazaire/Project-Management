@@ -1,7 +1,7 @@
 import { BRAND, DAR_FOOTER, PRE_BRAND_EXPORT_NAME } from '@xc8/shared';
 import ExcelJS from 'exceljs';
 import { Types } from 'mongoose';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   AccessRuleModel,
@@ -24,6 +24,7 @@ import { sweepAutoStop } from '../src/services/tracker.js';
 import { CSRF, createUser, login, makeApp, useDatabase } from './helpers.js';
 import { world, ptypeId } from './m2helpers.js';
 import { lookups } from './trackerHelpers.js';
+import { setTestTime, resetTestTime } from '../src/lib/clock.js';
 
 /**
  * M8 workforce items (doc 14 v0.9.9): FR-ACT-26 one timer, FR-ACT-27 own timesheet only,
@@ -31,13 +32,12 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
+const at = (iso: string) => setTestTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
   at('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all(
     [
       LeaveModel,

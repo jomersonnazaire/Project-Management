@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   HolidayModel,
@@ -26,13 +26,12 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
+const at = (iso: string) => setTestTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
   at('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all(
     [
       LeaveModel,
