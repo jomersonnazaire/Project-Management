@@ -68,6 +68,7 @@ import {
   type EntryDoc,
 } from '../services/tracker.js';
 import { loadLoggableTask } from './time.js';
+import { now as clockNow } from '../lib/clock.js';
 
 type Id = Types.ObjectId;
 
@@ -81,7 +82,7 @@ function dateParam(req: Request): Date {
 
 /** FR-ACT-33 (doc 14 v1.2.3): no time logging on a date after today (PH): 422 FUTURE_DATE. */
 function noFuture(date: Date) {
-  if (date > todayPH()) {
+  if (date > todayPH(clockNow())) {
     throw unprocessable("Date can't be in the future.", 'FUTURE_DATE', [
       { path: 'date', message: "Date can't be in the future." },
     ]);
@@ -197,7 +198,7 @@ async function buildDay(
   date: Date,
   relation: string,
 ): Promise<TrackerDayDto> {
-  await sweepAutoStop(new Date(), userId);
+  await sweepAutoStop(clockNow(), userId);
   const [state, entries, owner] = await Promise.all([
     dayState(userId, date),
     TimeEntryModel.find({ userId, workDate: date })
@@ -268,20 +269,20 @@ export function trackerRouter(registry: RouteRegistry) {
     const userId = q.userId ? new Types.ObjectId(q.userId) : viewer._id;
     const relation = await canViewPerson(viewer, userId);
     if (!relation) throw notFound();
-    const date = q.date ? parseDateOnly(q.date) : todayPH();
+    const date = q.date ? parseDateOnly(q.date) : todayPH(clockNow());
     res.json({ day: await buildDay(viewer, userId, date, relation) });
   });
 
   r.get('/running', perm('activities', 'view'), async (req, res) => {
     const user = currentUser(req);
-    await sweepAutoStop(new Date(), user._id);
+    await sweepAutoStop(clockNow(), user._id);
     const e = (await TimeEntryModel.findOne({
       userId: user._id,
       running: true,
     }).lean()) as EntryDoc | null;
     const body: RunningDto = {
       entry: e ? (await toTrackerDtos([e]))[0]! : null,
-      now: new Date().toISOString(),
+      now: clockNow().toISOString(),
     };
     res.json(body);
   });
@@ -291,7 +292,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const input = parseBody(startTimerSchema, req);
     const user = currentUser(req);
     // DR-45: the timer starts on the whole minute.
-    const now = floorToMinute(new Date());
+    const now = floorToMinute(clockNow());
     await sweepAutoStop(now, user._id);
     const target = await resolveTarget(req, input);
     const fields = await resolveFields(input, target.kind);
@@ -363,7 +364,7 @@ export function trackerRouter(registry: RouteRegistry) {
   r.post('/stop', perm('activities', 'edit'), async (req, res) => {
     const input = parseBody(stopTimerSchema, req);
     const user = currentUser(req);
-    const now = new Date();
+    const now = clockNow();
     await sweepAutoStop(now, user._id);
     // FR-ACT-23: stopping a named entry is idempotent. If it has already stopped (the other
     // Time out button, a double click, or the 23:59 auto-stop), return it unchanged.
@@ -404,7 +405,7 @@ export function trackerRouter(registry: RouteRegistry) {
     noFuture(date);
     const startAt = phInstant(input.date, input.timeIn);
     const endAt = phInstant(input.date, input.timeOut);
-    if (endAt > new Date()) {
+    if (endAt > clockNow()) {
       throw badRequest(
         "Time out can't be in the future.",
         [{ path: 'timeOut', message: "Time out can't be in the future." }],
@@ -464,7 +465,7 @@ export function trackerRouter(registry: RouteRegistry) {
       }
       throw notFound();
     }
-    await sweepAutoStop(new Date(), user._id);
+    await sweepAutoStop(clockNow(), user._id);
     return (await TimeEntryModel.findById(entry._id))!;
   }
 
@@ -506,7 +507,7 @@ export function trackerRouter(registry: RouteRegistry) {
           'VALIDATION_ERROR',
         );
       }
-      if (endAt > new Date()) {
+      if (endAt > clockNow()) {
         throw badRequest(
           "Time out can't be in the future.",
           [{ path: 'timeOut', message: "Time out can't be in the future." }],
@@ -579,7 +580,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const day = await getOrCreateDay(user._id, date);
     const old = day.locationId?.toString() ?? null;
     day.locationId = await assertLookup(input.locationId, 'LOCATION', 'locationId', day.locationId);
-    day.changedAt = new Date();
+    day.changedAt = clockNow();
     await day.save();
     await audit({
       actorId: user._id,
@@ -597,7 +598,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const user = currentUser(req);
     const date = dateParam(req);
     noFuture(date);
-    await sweepAutoStop(new Date(), user._id);
+    await sweepAutoStop(clockNow(), user._id);
     const state = await dayState(user._id, date);
     if (state.pastLock) throw unprocessable(DAY_LOCKED, 'DAY_LOCKED');
     if (!state.submitted) {
@@ -606,7 +607,7 @@ export function trackerRouter(registry: RouteRegistry) {
       }
       const day = await getOrCreateDay(user._id, date);
       day.status = 'SUBMITTED';
-      day.submittedAt = new Date();
+      day.submittedAt = clockNow();
       day.unlockedPastLock = false;
       await day.save();
       await audit({
@@ -643,7 +644,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const day = await getOrCreateDay(userId, date);
     day.status = 'REOPENED';
     day.unlockedPastLock = state.weekLocked;
-    day.reopened.push({ by: actor._id, at: new Date(), reason: input.reason });
+    day.reopened.push({ by: actor._id, at: clockNow(), reason: input.reason });
     await day.save();
     await audit({
       actorId: actor._id,
@@ -802,7 +803,7 @@ export function trackerRouter(registry: RouteRegistry) {
     if (input.active !== undefined && input.active !== (doc.active !== false)) {
       changes.push({ field: 'active', old: doc.active !== false, new: input.active });
       doc.active = input.active;
-      doc.deactivatedAt = input.active ? null : new Date();
+      doc.deactivatedAt = input.active ? null : clockNow();
       doc.deactivatedBy = input.active ? null : user._id;
     }
     await doc.save();
