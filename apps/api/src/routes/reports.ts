@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import { forbidden } from '../lib/errors.js';
 import { parseQuery } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { audit } from '../services/audit.js';
 import { projectTypeRefs } from '../services/projectTypes.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
@@ -273,7 +274,7 @@ export function reportsRouter(registry: RouteRegistry) {
       }),
       req,
     );
-    const today = todayPH();
+    const today = clockNow();
     const projects = narrow(await scopedProjects(currentUser(req)), q).filter(
       (p) => p.status === 'ACTIVE' || p.status === 'PLANNING',
     );
@@ -383,7 +384,7 @@ export function reportsRouter(registry: RouteRegistry) {
   // FR-RPT-04: project status: progress, health, baseline vs forecast, overdue, blocked, client items.
   report('project-status', async (req) => {
     const q = parseQuery(projectFilters.extend({ health: z.enum(HEALTH_VALUES).optional() }), req);
-    const today = todayPH();
+    const today = clockNow();
     const projects = narrow(await scopedProjects(currentUser(req)), q);
     const tByP = byProject(await tasksOf(projects.map((p) => p._id)));
     const refs = await refMaps({ clients: projects.map((p) => p.clientId) });

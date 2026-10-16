@@ -12,6 +12,7 @@ import {
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
 import { entryFields } from './trackerHelpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
 /**
  * Milestone 4: dashboard (FR-DASH, AC-20.x), My projects (doc 14 FR-PMV-01..04), workload
@@ -21,11 +22,10 @@ import { entryFields } from './trackerHelpers.js';
 useDatabase();
 const app = makeApp();
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-21T03:00:00Z'));
+  setTestTime(new Date('2026-10-21T03:00:00Z'));
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   // The database is shared by the tests in this file and PMs see every project: start clean.
   await Promise.all(
     [SettingModel, ProjectModel, TaskModel, IssueModel, TimeEntryModel, NotificationModel].map(
