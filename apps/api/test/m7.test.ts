@@ -19,6 +19,7 @@ import { leaveLabelFor } from '../src/services/leaveHook.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
 import { lookups } from './trackerHelpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
 /**
  * M7 Leave (doc 14 §4, §12 Q-46, §16 FR-LV-11; QA 06 TC-S01..S10).
@@ -26,13 +27,12 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
+const at = (iso: string) => setTestTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
   at('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all(
     [
       LeaveModel,
@@ -115,7 +115,9 @@ describe('TC-S01: record Full day, Half day AM, Half day PM', () => {
     const notes = await NotificationModel.find({
       userId: w.pm.user._id,
       type: 'LEAVE_RECORDED',
-    }).lean();
+    })
+      .sort({ createdAt: 1 })
+      .lean();
     expect(notes).toHaveLength(3);
     expect(notes[0]!.message).toBe(
       `${w.member.user.name} recorded Vacation leave for Oct 19 (Full day).`,

@@ -11,9 +11,15 @@ export function now(): Date {
 }
 
 export function setTestTime(time: Date | string | null): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('setTestTime can only be called in test environment');
+  }
   testNow = time ? (typeof time === 'string' ? new Date(time) : time) : null;
 }
 
 export function resetTestTime(): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('resetTestTime can only be called in test environment');
+  }
   testNow = null;
 }
