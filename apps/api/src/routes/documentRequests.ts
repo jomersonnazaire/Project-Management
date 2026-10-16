@@ -19,6 +19,7 @@ import {
 import { hiddenFolderIdsFor, partyFrom, resolveParties } from '../services/documentAccess.js';
 import { userRefs } from '../services/projectService.js';
 import { projectScopeFilter } from '../services/scope.js';
+import { now as clockNow } from '../lib/clock.js';
 
 type Id = Types.ObjectId;
 const DAY_MS = 86_400_000;
@@ -66,7 +67,7 @@ async function openRequests(
   const projectById = new Map(projects.map((p) => [p._id.toString(), p]));
   const folderNames = new Map(folders.map((f) => [f._id.toString(), f.name]));
   const clientNames = new Map(clients.map((c) => [c._id.toString(), c.name]));
-  const today = todayPH().getTime();
+  const today = todayPH(clockNow()).getTime();
   const items: DocumentRequestRowDto[] = visible.map((d) => {
     const p = projectById.get(d.projectId.toString())!;
     const due = d.dueDate ?? new Date(today);

@@ -29,6 +29,7 @@ import {
 } from '../models/index.js';
 import { canAddProjectMembers, canEditProjectScope, isPlanner, type ScopeUser } from './scope.js';
 import { projectTypeRefs } from './projectTypes.js';
+import { now as clockNow } from '../lib/clock.js';
 
 type Id = Types.ObjectId;
 export type ProjectDoc = Project & { _id: Id; createdAt?: Date; updatedAt?: Date };
@@ -43,12 +44,12 @@ export async function recomputeProject(projectId: Id | string, session?: ClientS
     .select('status mandatory plannedStart dueDate')
     .session(session ?? null)
     .lean();
-  const baselineEnd = project.plannedEndDate ?? todayPH();
+  const baselineEnd = project.plannedEndDate ?? todayPH(clockNow());
   const c = computeProject(
     project.status as ProjectStatus,
     baselineEnd,
     tasks.map((t) => ({ ...t, status: t.status as TaskStatus })),
-    todayPH(),
+    todayPH(clockNow()),
   );
   await ProjectModel.updateOne(
     { _id: project._id },

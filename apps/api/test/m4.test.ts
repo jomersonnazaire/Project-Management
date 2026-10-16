@@ -9,7 +9,7 @@ import {
   TimeEntryModel,
   UserModel,
 } from '../src/models/index.js';
-import { CSRF, makeApp, useDatabase } from './helpers.js';
+import { CSRF, login, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
 import { entryFields } from './trackerHelpers.js';
 import { resetTestTime, setTestTime } from '../src/lib/clock.js';
@@ -527,5 +527,35 @@ describe('EC-66 and EC-68', () => {
     expect((await IssueModel.findById(i.id).lean())!.reportedByContactId?.toString()).toBe(
       w.acme.active[0].id,
     );
+  });
+});
+
+describe('DEF-017: report overdue uses the Philippine calendar date', () => {
+  it('a task due today is not overdue at 08:30 PHT in /reports/overdue and /reports/project-status', async () => {
+    // 00:30 UTC = 08:30 PHT on 2026-11-02 (sessions are created at this pinned time).
+    setTestTime(new Date('2026-11-02T00:30:00Z'));
+    const w = await world(app);
+    const projectId = new Types.ObjectId(w.project.id);
+    await TaskModel.updateMany({ projectId }, { $set: { dueDate: d('2099-01-01') } });
+    const task = (await TaskModel.findOne({ projectId, status: { $ne: 'DONE' } }).lean())!;
+    await TaskModel.updateOne({ _id: task._id }, { $set: { dueDate: d('2026-11-02') } });
+
+    const check = async (agent: W['pm']['agent'], overdue: boolean) => {
+      const o = await agent.get('/api/v1/reports/overdue');
+      expect(o.status).toBe(200);
+      const ids = (o.body.items as { id: string }[]).map((i) => i.id);
+      expect(ids.includes(task._id.toString())).toBe(overdue);
+      const s = await agent.get('/api/v1/reports/project-status');
+      expect(s.status).toBe(200);
+      const row = (s.body.items as { id: string; overdueTasks: number }[]).find(
+        (r) => r.id === w.project.id,
+      );
+      expect(row?.overdueTasks).toBe(overdue ? 1 : 0);
+    };
+    await check(w.pm.agent, false);
+
+    // The next PH day the same task is overdue in both reports.
+    setTestTime(new Date('2026-11-03T00:30:00Z'));
+    await check(await login(app, w.pm.user.email), true);
   });
 });
