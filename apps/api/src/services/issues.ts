@@ -40,6 +40,7 @@ import { audit } from './audit.js';
 import { notify } from './notify.js';
 import { userRefs } from './projectService.js';
 import { isPlanner, isProjectMember, type ScopeUser } from './scope.js';
+import { now as clockNow } from '../lib/clock.js';
 
 type Id = Types.ObjectId;
 export type IssueDoc = Issue & { _id: Id; createdAt: Date; updatedAt: Date };
@@ -147,7 +148,7 @@ export async function toIssueRows(docs: IssueDoc[]): Promise<IssueRowDto[]> {
   ]);
   const cm = new Map(clients.map((c) => [c._id.toString(), c.name]));
   const contactMap = new Map(contacts.map((c) => [c._id.toString(), c]));
-  const today = toDateOnly(todayPH());
+  const today = toDateOnly(todayPH(clockNow()));
   return docs.map((d) => {
     const p = pm.get(d.projectId.toString());
     const owner = d.ownerId ? (users.get(d.ownerId.toString()) ?? null) : null;
@@ -358,7 +359,7 @@ export async function runIssueSweeps(opts: { force?: boolean; logger?: Logger; n
       changes: [{ field: 'status', old: 'RESOLVED', new: 'CLOSED' }],
     });
   }
-  const today = todayPH();
+  const today = todayPH(clockNow());
   const overdue = await IssueModel.find({
     status: { $in: ['OPEN', 'IN_PROGRESS', 'WAITING_ON_CLIENT'] },
     dueDate: { $lt: today },

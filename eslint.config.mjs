@@ -53,6 +53,11 @@ export default tseslint.config(
             'Do not use vi.useFakeTimers with Date. Use the injectable clock (setTestTime/resetTestTime from lib/clock.ts) instead.',
         },
         {
+          selector: "CallExpression[callee.object.name='vi'][callee.property.name='useFakeTimers']",
+          message:
+            'Do not use vi.useFakeTimers in API tests. Use the injectable clock (setTestTime/resetTestTime from lib/clock.ts) instead.',
+        },
+        {
           selector: "CallExpression[callee.object.name='vi'][callee.property.name='setSystemTime']",
           message: 'Do not use vi.setSystemTime. Use setTestTime from lib/clock.ts instead.',
         },

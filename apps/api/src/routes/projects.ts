@@ -59,6 +59,7 @@ import { assertProjectScope, isProjectPm, projectScopeFilter } from '../services
 import { loadCalendar } from '../services/calendar.js';
 import { stopTimersForProject } from '../services/tracker.js';
 import { ensureDefaultFolders } from './documents.js';
+import { now as clockNow } from '../lib/clock.js';
 
 /**
  * Projects (FR-PRJ-01..13, doc 11 FR-PRJ-11..13). The central gate checks `projects.*`; these
@@ -135,7 +136,7 @@ async function assertUsableTemplate(templateId: string, version?: number) {
 
 /** Refreshes stored health once a day so "overdue" follows the calendar (NFR-13). */
 async function refreshStale(projects: ProjectDoc[]): Promise<ProjectDoc[]> {
-  const today = todayPH();
+  const today = todayPH(clockNow());
   const stale = projects.filter((p) => !p.computed?.updatedAt || p.computed.updatedAt < today);
   if (!stale.length) return projects;
   await Promise.all(stale.map((p) => recomputeProject(p._id)));
@@ -406,7 +407,7 @@ export function projectsRouter(registry: RouteRegistry) {
       const days = Math.round((lastDue.getTime() - end.getTime()) / 86_400_000);
       warnings.push(`Plan exceeds baseline end by ${days} day${days === 1 ? '' : 's'}.`);
     }
-    if (end < todayPH()) warnings.push('The baseline end is in the past.');
+    if (end < todayPH(clockNow())) warnings.push('The baseline end is in the past.');
     if (
       await ProjectModel.exists({
         _id: { $ne: projectId },
@@ -455,7 +456,7 @@ export function projectsRouter(registry: RouteRegistry) {
     const planned = buildPlanTasks(
       template,
       project._id,
-      project.startDate ?? todayPH(),
+      project.startDate ?? todayPH(clockNow()),
       await loadCalendar(),
     );
     // FR-PRJ-30 / EC-95 / EC-106: phases are unique per project (trimmed, case-insensitive); a

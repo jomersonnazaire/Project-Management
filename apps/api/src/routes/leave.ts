@@ -47,7 +47,7 @@ import { notifyPersonal } from '../services/notify.js';
 import { canViewPerson, touchDay } from '../services/tracker.js';
 
 type Id = Types.ObjectId;
-const yearNow = () => todayPH().getUTCFullYear();
+const yearNow = () => todayPH(clockNow()).getUTCFullYear();
 const fail = (path: string, message: string, code = 'VALIDATION_ERROR') =>
   badRequest(message, [{ path, message }], code);
 
@@ -232,7 +232,7 @@ export function leaveRouter(registry: RouteRegistry) {
     })
       .sort({ from: -1, createdAt: -1 })
       .lean()) as LeaveDoc[];
-    res.json({ items: await toLeaveDtos(docs, viewer, todayPH()) });
+    res.json({ items: await toLeaveDtos(docs, viewer, todayPH(clockNow())) });
   });
 
   // Team on leave, next 30 days (direct reports; Admins: everyone).
@@ -246,7 +246,7 @@ export function leaveRouter(registry: RouteRegistry) {
       .select('name supervisorId')
       .sort({ name: 1 })
       .lean();
-    const today = todayPH();
+    const today = todayPH(clockNow());
     const docs = (await LeaveModel.find({
       userId: { $in: people.map((p) => p._id) },
       status: 'RECORDED',
@@ -272,7 +272,7 @@ export function leaveRouter(registry: RouteRegistry) {
     if (!doc) throw notFound();
     const viewer = currentUser(req);
     if (!(await canViewPerson(viewer, doc.userId))) throw notFound();
-    const [item] = await toLeaveDtos([doc], viewer, todayPH());
+    const [item] = await toLeaveDtos([doc], viewer, todayPH(clockNow()));
     res.json({ item });
   });
 
@@ -366,7 +366,7 @@ export function leaveRouter(registry: RouteRegistry) {
       message: `${user.name} recorded ${type.name} leave for ${dates} (${DAY_PART_LABELS[input.dayPart]}).`,
       link: '/leave?tab=team',
     });
-    const [item] = await toLeaveDtos([doc.toObject() as LeaveDoc], user, todayPH());
+    const [item] = await toLeaveDtos([doc.toObject() as LeaveDoc], user, todayPH(clockNow()));
     res.status(201).json({ item, notified });
   });
 
@@ -383,7 +383,8 @@ export function leaveRouter(registry: RouteRegistry) {
       throw forbidden('Only the person or an Admin can cancel leave.', 'FORBIDDEN_CANCEL');
     if (doc.status !== 'RECORDED')
       throw unprocessable('This leave is already cancelled.', 'ALREADY_CANCELLED');
-    if (!isAdmin && doc.from <= todayPH()) throw unprocessable(PAST_LEAVE_ADMIN_ONLY, 'PAST_LEAVE');
+    if (!isAdmin && doc.from <= todayPH(clockNow()))
+      throw unprocessable(PAST_LEAVE_ADMIN_ONLY, 'PAST_LEAVE');
     doc.status = 'CANCELLED';
     doc.cancelledAt = clockNow();
     doc.cancelledBy = user._id;
@@ -424,7 +425,7 @@ export function leaveRouter(registry: RouteRegistry) {
         link: '/leave?tab=team',
       });
     }
-    const [item] = await toLeaveDtos([doc.toObject() as LeaveDoc], user, todayPH());
+    const [item] = await toLeaveDtos([doc.toObject() as LeaveDoc], user, todayPH(clockNow()));
     res.json({ item });
   });
 
