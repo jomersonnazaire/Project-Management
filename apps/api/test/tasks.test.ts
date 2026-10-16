@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished } from 'vitest';
 import { ActivityLogModel, TaskModel } from '../src/models/index.js';
 import { FILES, uploadEvidence } from './m3helpers.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';

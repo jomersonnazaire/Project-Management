@@ -54,8 +54,7 @@ export default tseslint.config(
         },
         {
           selector: "CallExpression[callee.object.name='vi'][callee.property.name='setSystemTime']",
-          message:
-            'Do not use vi.setSystemTime. Use setTestTime from lib/clock.ts instead.',
+          message: 'Do not use vi.setSystemTime. Use setTestTime from lib/clock.ts instead.',
         },
       ],
     },

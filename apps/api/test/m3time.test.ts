@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProjectModel, TaskModel } from '../src/models/index.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';

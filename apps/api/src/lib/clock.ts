@@ -10,11 +10,19 @@ export function now(): Date {
   return testNow ? new Date(testNow) : new Date();
 }
 
-export function setTestTime(time: Date | string | null): void {
+export function setTestTime(time: Date | string | number | null): void {
   if (process.env.NODE_ENV !== 'test') {
     throw new Error('setTestTime can only be called in test environment');
   }
-  testNow = time ? (typeof time === 'string' ? new Date(time) : time) : null;
+  if (time === null) {
+    testNow = null;
+  } else if (typeof time === 'number') {
+    testNow = new Date(time);
+  } else if (typeof time === 'string') {
+    testNow = new Date(time);
+  } else {
+    testNow = time;
+  }
 }
 
 export function resetTestTime(): void {

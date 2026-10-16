@@ -1,5 +1,5 @@
 import { DEFAULT_PROJECT_TYPES } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,

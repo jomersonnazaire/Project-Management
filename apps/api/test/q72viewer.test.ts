@@ -1,5 +1,5 @@
 import { ACCESS_DEFAULT_CHANGES, defaultPermissions } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AccessRuleModel,
   ActivityLogModel,
