@@ -12,16 +12,16 @@ import { PROJECT_TYPES_SEED_ID, ensureDefaultProjectTypes } from '../src/service
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { ptypeId, resetRules, world } from './m2helpers.js';
 import { lookups } from './trackerHelpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
 /** Project types (doc 14 v1.1.1 FR-PTY-01..07; mockup v0.9.2 Admin › Project types). */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-14T02:00:00Z'));
+  setTestTime(new Date('2026-10-14T02:00:00Z'));
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await resetRules();
 });
 
