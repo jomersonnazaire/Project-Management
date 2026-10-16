@@ -2,12 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ActivityLogModel, HolidayModel, SettingModel, TaskModel } from '../src/models/index.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 import { resetRules, world, ptypeId } from './m2helpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
 /** Working-day calendar and the Today view (doc 12 §3.1b, TC-N16..N20, FR-CAL-01..05). */
 useDatabase();
 const app = makeApp();
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all([HolidayModel.deleteMany({}), SettingModel.deleteMany({}), resetRules()]);
 });
 
@@ -64,8 +65,7 @@ describe('TC-N16 / AC-TODAY-1 (rerun on Due, TC-N22): Due uses the Philippine da
       { _id: tasks[2].id },
       { $set: { ...mine, dueDate: d('2026-10-10') } },
     );
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-08T16:30:00Z'));
+    setTestTime(new Date('2026-10-08T16:30:00Z'));
     const res = await w.member.agent.get('/api/v1/tasks/mine?view=due');
     expect(res.status).toBe(200);
     expect(res.body.today).toBe('2026-10-09');
@@ -74,7 +74,7 @@ describe('TC-N16 / AC-TODAY-1 (rerun on Due, TC-N22): Due uses the Philippine da
     expect(res.body.items[0]).toMatchObject({ overdue: true, daysLate: 1 });
     expect(res.body.items[1].overdue).toBe(false);
     // One minute before midnight Manila it's still Oct 8 there: only the Oct 8 task is "today".
-    vi.setSystemTime(new Date('2026-10-08T15:59:00Z'));
+    setTestTime(new Date('2026-10-08T15:59:00Z'));
     const before = (await w.member.agent.get('/api/v1/tasks/mine?view=due')).body;
     expect(before.today).toBe('2026-10-08');
     expect(before.items.map((t: { id: string }) => t.id)).toEqual([tasks[1].id]);
@@ -83,8 +83,7 @@ describe('TC-N16 / AC-TODAY-1 (rerun on Due, TC-N22): Due uses the Philippine da
   it('the holiday banner data comes back when today is a holiday', async () => {
     const w = await world(app);
     await addHoliday(w.admin.agent, '2026-10-09', 'Test Day', 'SPECIAL_NON_WORKING');
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-08T16:30:00Z'));
+    setTestTime(new Date('2026-10-08T16:30:00Z'));
     const res = await w.member.agent.get('/api/v1/tasks/mine?view=today');
     expect(res.body.holiday).toEqual({ name: 'Test Day', type: 'SPECIAL_NON_WORKING' });
     expect(res.body.items).toEqual([]);

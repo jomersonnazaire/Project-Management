@@ -6,6 +6,7 @@ import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { grant, world, ptypeId } from './m2helpers.js';
 import { entryFields } from './trackerHelpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
 /**
  * Doc 11 v0.4.8, FR-ACL-14..17: Reports (View, Export) and Team & workload (View) are Access-rule
@@ -14,11 +15,10 @@ import { entryFields } from './trackerHelpers.js';
 useDatabase();
 const app = makeApp();
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-21T03:00:00Z'));
+  setTestTime(new Date('2026-10-21T03:00:00Z'));
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all([
     ProjectModel.deleteMany({}),
     TaskModel.deleteMany({}),
