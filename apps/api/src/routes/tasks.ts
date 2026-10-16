@@ -20,6 +20,7 @@ import {
   renamePhaseSchema,
   createPhaseSchema,
   taskDeleteBlockedReason,
+  todayPH,
   todaySection,
   workingDaysSince,
   taskStatusSchema,
@@ -877,7 +878,7 @@ export function tasksRouter(registry: RouteRegistry) {
     };
     const base = { projectId: { $in: projectIds } };
     const all = (await TaskModel.find({ ...base, $or: [mine, review] }).lean()) as TaskDoc[];
-    const today = clockNow();
+    const today = todayPH(clockNow());
     const weekEnd = new Date(today.getTime() + 7 * 86_400_000);
     const isOpen = (t: TaskDoc) => (OPEN_TASK_STATUSES as string[]).includes(t.status);
     const isReview = (t: TaskDoc) =>

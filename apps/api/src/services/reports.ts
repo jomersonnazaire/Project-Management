@@ -188,7 +188,7 @@ export const projectRef = (p: { _id: Id; name: string }): Ref => ({
 });
 
 /** Live health/progress/forecast for a project (FR-PRJ-08..10, Q-08 share of tasks completed). */
-export function computeFor(p: ScopedProject, tasks: LoadedTask[], today = todayPH()) {
+export function computeFor(p: ScopedProject, tasks: LoadedTask[], today = todayPH(clockNow())) {
   const baseline = p.plannedEndDate ?? today;
   const c = computeProject(p.status, baseline, tasks, today);
   return { ...c, baselineEnd: p.plannedEndDate };
@@ -246,7 +246,7 @@ const daysToResolve = (i: IssueLite) =>
 export function summarizeIssues(
   issues: IssueLite[],
   clientOf: (projectId: Id) => Ref,
-  today = toDateOnly(todayPH()),
+  today = toDateOnly(todayPH(clockNow())),
 ): IssueSummaryDto {
   const open = issues.filter((i) => isIssueOpen(i.status));
   const overdue = (i: IssueLite) =>
@@ -290,7 +290,7 @@ export async function issueReportRows(issues: IssueLite[], projects: ScopedProje
     clients: projects.map((p) => p.clientId),
     users: issues.map((i) => i.ownerId),
   });
-  const today = toDateOnly(todayPH());
+  const today = toDateOnly(todayPH(clockNow()));
   return issues.map((i): IssueReportRowDto => {
     const p = pm.get(i.projectId.toString())!;
     const due = i.dueDate ? toDateOnly(i.dueDate) : null;
@@ -336,7 +336,7 @@ export function weekOf(day: Date) {
 
 // ---------- Dashboard (FR-DASH-01..06) ----------
 export async function dashboard(user: ScopeUser, canSeeTime: boolean): Promise<DashboardDto> {
-  const today = todayPH();
+  const today = todayPH(clockNow());
   const projects = await scopedProjects(user);
   const ids = projects.map((p) => p._id);
   const tasks = await tasksOf(ids);
@@ -456,7 +456,7 @@ export async function dashboard(user: ScopeUser, canSeeTime: boolean): Promise<D
 
 // ---------- My projects (doc 14 FR-PMV-01..04) ----------
 export async function myProjects(user: ScopeUser): Promise<MyProjectRowDto[]> {
-  const today = todayPH();
+  const today = todayPH(clockNow());
   const projects = await scopedProjects(
     user,
     user.systemRole === 'PROJECT_MANAGER' ? { managerId: user._id } : {},
