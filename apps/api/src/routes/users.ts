@@ -13,6 +13,7 @@ import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith } from '../lib/http422.js';
 import { paginate } from '../lib/pagination.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { currentUser } from '../middleware/auth.js';
 import { TeamModel, UserModel, type User, type UserDoc } from '../models/index.js';
 import { audit } from '../services/audit.js';
@@ -181,7 +182,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
           user._id,
           user._id.equals(admin._id) ? req.auth?.sessionId : undefined,
         );
-        const hadLink = !!user.invite?.tokenHash && user.invite.expiresAt > new Date();
+        const hadLink = !!user.invite?.tokenHash && user.invite.expiresAt > clockNow();
         await UserModel.updateOne({ _id: user._id }, { $set: { invite: null } });
         if (hadLink) changes.push({ field: 'previousLink', old: 'unused', new: 'cancelled' });
       }
@@ -208,7 +209,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
     if (user.active) {
       if (user.systemRole === 'ADMIN') await assertNotLastAdmin(user);
       user.active = false;
-      user.deactivatedAt = new Date();
+      user.deactivatedAt = clockNow();
       await user.save();
       await revokeUserSessions(user._id);
       await audit({
@@ -260,7 +261,7 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
     if (!user.active) throw conflict('Reactivate this user first.', 'USER_DEACTIVATED');
     const purpose = user.passwordHash ? 'RESET' : 'INVITE';
     const ttlHours = purpose === 'RESET' ? config.RESET_TTL_HOURS : config.INVITE_TTL_HOURS;
-    const now = new Date();
+    const now = clockNow();
     const replacedPrevious = !!user.invite?.tokenHash && user.invite.expiresAt > now;
     const token = newToken();
     const expiresAt = new Date(now.getTime() + ttlHours * 3_600_000);
