@@ -42,6 +42,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith, unprocessable } from '../lib/http422.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
 import {
   ActivityLogModel,
@@ -223,7 +224,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
     const u = ref(id);
     return u ? { id: u.id, name: u.name } : null;
   };
-  const today = todayPH();
+  const today = clockNow();
   // M3.5: planners may delete a task only while nothing is recorded under it.
   const mayDelete = canDeleteTasks(user, perms, project);
   const records = mayDelete ? await taskRecordCounts(tasks.map((t) => t._id)) : null;
@@ -877,7 +878,7 @@ export function tasksRouter(registry: RouteRegistry) {
     };
     const base = { projectId: { $in: projectIds } };
     const all = (await TaskModel.find({ ...base, $or: [mine, review] }).lean()) as TaskDoc[];
-    const today = todayPH();
+    const today = clockNow();
     const weekEnd = new Date(today.getTime() + 7 * 86_400_000);
     const isOpen = (t: TaskDoc) => (OPEN_TASK_STATUSES as string[]).includes(t.status);
     const isReview = (t: TaskDoc) =>
