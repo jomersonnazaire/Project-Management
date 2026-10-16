@@ -14,6 +14,7 @@ import { migrateModuleText } from '../src/services/moduleText.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
 import { lookups } from './trackerHelpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
 /**
  * Doc 14 v0.9.7 FR-ACT-20..23 (mockup v0.8.9): Module is optional free text, the old Modules
@@ -22,13 +23,12 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
+const at = (iso: string) => setTestTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
   at('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all(
     [
       TimeEntryModel,
