@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { Types, type FilterQuery } from 'mongoose';
 import { z } from 'zod';
 import { perm, type RouteRegistry } from '../access/registry.js';
+import { now as clockNow } from '../lib/clock.js';
 import { notFound } from '../lib/errors.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
@@ -16,7 +17,7 @@ const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 /** Default range: today (FR-DAR-02). */
 function rangeQuery(req: Request) {
-  const today = phDateOf(new Date());
+  const today = phDateOf(clockNow());
   const q = req.query as Record<string, unknown>;
   return parseQuery(darRangeSchema, {
     query: { ...q, from: q.from ?? q.to ?? today, to: q.to ?? q.from ?? today },
@@ -86,7 +87,7 @@ export function darRouter(registry: RouteRegistry) {
       userId: user._id,
       from,
       to,
-      savedAt: new Date(),
+      savedAt: clockNow(),
       totalActivities: report.totalActivities,
       totalMinutes: report.totalMinutes,
       report,

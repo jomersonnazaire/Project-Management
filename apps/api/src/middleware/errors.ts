@@ -41,10 +41,27 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     status = 409;
     code = 'DUPLICATE';
     message = 'This record already exists.';
+  } else if (isDatabaseUnavailable(err)) {
+    status = 503;
+    code = 'DATABASE_UNAVAILABLE';
+    message = 'The database is temporarily unavailable. Please try again.';
   }
 
   if (status >= 500) {
     req.log?.error({ err }, 'Unhandled error');
+    // In test mode, log 500 errors with full details to help diagnose CI failures
+    if (process.env.NODE_ENV === 'test') {
+      const errDetails =
+        err instanceof Error
+          ? {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+              cause: (err as { cause?: unknown }).cause,
+            }
+          : err;
+      console.error('[TEST] 500 Error:', JSON.stringify(errDetails, null, 2));
+    }
   }
   res.status(status).json({
     error: { code, message, ...(details !== undefined ? { details } : {}) },
@@ -64,4 +81,15 @@ function isBodyParserError(err: unknown): boolean {
     ((err as { type?: string }).type === 'entity.parse.failed' ||
       (err as { type?: string }).type === 'entity.too.large')
   );
+}
+
+function isDatabaseUnavailable(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // MongooseError: Connection operation buffering timed out
+  if (err.name === 'MongooseError' && err.message.includes('buffering timed out')) return true;
+  // MongoServerError: connection errors
+  if (err.name === 'MongoServerError' && err.message.includes('connection')) return true;
+  // MongoNetworkError
+  if (err.name === 'MongoNetworkError') return true;
+  return false;
 }

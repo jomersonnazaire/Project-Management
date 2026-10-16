@@ -38,6 +38,7 @@ import { notifyPersonal } from './notify.js';
 import { recomputeProject } from './projectService.js';
 import type { ScopeUser } from './scope.js';
 import { currentLockBoundary } from './timeLock.js';
+import { now as clockNow } from '../lib/clock.js';
 
 /**
  * Activity tracker rules (doc 14 §2, §10, §12): one running timer per user, auto-stop at 23:59
@@ -163,7 +164,7 @@ export async function assertLookup(
 
 // ---------- Days ----------
 export const dateKey = (d: Date) => toDateOnly(d);
-export const todayKey = (now = new Date()) => phDateOf(now);
+export const todayKey = (now?: Date) => phDateOf(now ?? clockNow());
 
 export async function loadDay(userId: Id, date: Date) {
   return TimesheetDayModel.findOne({ userId, date });
@@ -226,7 +227,7 @@ export async function assertDayEditable(userId: Id, date: Date) {
 export async function touchDay(userId: Id, date: Date) {
   await TimesheetDayModel.updateOne(
     { userId, date },
-    { $set: { changedAt: new Date() }, $setOnInsert: { userId, date } },
+    { $set: { changedAt: clockNow() }, $setOnInsert: { userId, date } },
     { upsert: true },
   );
 }
@@ -236,7 +237,8 @@ export async function touchDay(userId: Id, date: Date) {
  * Minutes already on a day: every entry (timed, quick and hours-only, TC-Q05 mixed) plus a running
  * timer's elapsed minutes up to now, so the 24-hour cap can't be dodged while a timer runs.
  */
-export async function dayMinutes(userId: Id, date: Date, ignoreId?: Id, now = new Date()) {
+export async function dayMinutes(userId: Id, date: Date, ignoreId?: Id, now?: Date) {
+  now = now ?? clockNow();
   const entries = await TimeEntryModel.find({
     userId,
     workDate: date,
@@ -341,7 +343,8 @@ export async function recomputeTask(taskId: Id, projectId: Id | null) {
  * `timer_auto_stopped` with the system as actor (actorId null, meta.actor 'system'; the audit log
  * shows "System"), the entry ID, the stop time and `autoStopped: true` (NFR-28).
  */
-export async function sweepAutoStop(now = new Date(), userId?: Id): Promise<number> {
+export async function sweepAutoStop(now?: Date, userId?: Id): Promise<number> {
+  now = now ?? clockNow();
   const running = await TimeEntryModel.find({ running: true, ...(userId ? { userId } : {}) })
     .select('_id workDate')
     .lean();
@@ -377,7 +380,7 @@ export async function stopTimersForProject(
   actorId: Id,
 ): Promise<number> {
   const running = await TimeEntryModel.find({ projectId: project._id, running: true }).lean();
-  const now = new Date();
+  const now = clockNow();
   for (const e of running) {
     const done = await stopEntry(e._id, now);
     if (!done) continue;
@@ -477,7 +480,7 @@ export async function toTrackerDtos(
   const [pm, tm, um, lm, cm] = [m(projects), m(tasks), m(users), m(lookups), m(clients)];
   const ref = (id: Id | null | undefined, map: Map<string, { name: string }>, fallback = '') =>
     id ? { id: id.toString(), name: map.get(id.toString())?.name ?? fallback } : null;
-  const now = opts.now ?? new Date();
+  const now = opts.now ?? clockNow();
   return entries.map((e) => {
     const p = e.projectId ? pm.get(e.projectId.toString()) : undefined;
     const date = dateKey(e.workDate);
