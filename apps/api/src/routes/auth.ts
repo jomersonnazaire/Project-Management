@@ -142,7 +142,7 @@ export function authRouter(
   router.post('/mobile/refresh', AUTHENTICATED, async (req, res) => {
     const session = await SessionModel.findById(req.auth!.sessionId);
     if (!session || session.kind !== 'mobile') throw MOBILE_ONLY;
-    const now = Date.now();
+    const now = clockNow().getTime();
     const expiresAt = new Date(
       Math.min(now + idleMs(config, 'mobile'), session.absoluteExpiresAt.getTime()),
     );
