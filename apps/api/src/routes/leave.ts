@@ -383,7 +383,8 @@ export function leaveRouter(registry: RouteRegistry) {
       throw forbidden('Only the person or an Admin can cancel leave.', 'FORBIDDEN_CANCEL');
     if (doc.status !== 'RECORDED')
       throw unprocessable('This leave is already cancelled.', 'ALREADY_CANCELLED');
-    if (!isAdmin && doc.from <= todayPH()) throw unprocessable(PAST_LEAVE_ADMIN_ONLY, 'PAST_LEAVE');
+    if (!isAdmin && doc.from <= todayPH(clockNow()))
+      throw unprocessable(PAST_LEAVE_ADMIN_ONLY, 'PAST_LEAVE');
     doc.status = 'CANCELLED';
     doc.cancelledAt = clockNow();
     doc.cancelledBy = user._id;

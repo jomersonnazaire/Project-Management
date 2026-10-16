@@ -20,8 +20,12 @@ useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
 const ID = '2026-10-13-viewer-no-leave';
 
+// Pin the test clock to the REAL current time. Sessions get expiresAt = clockNow() + idle, and
+// MongoDB's TTL monitor on Session.expiresAt deletes by real wall-clock time; a clock pinned in
+// the past (e.g. 2026-10-14) made sessions "already expired", so the TTL sweep (every ~60 s)
+// deleted them mid-test and requests failed with 401.
 beforeEach(() => {
-  setTestTime(new Date('2026-10-14T02:00:00Z'));
+  setTestTime(new Date());
 });
 afterEach(async () => {
   resetTestTime();
