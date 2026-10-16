@@ -11,6 +11,7 @@ import { AUTHENTICATED, PUBLIC, type RouteRegistry } from '../access/registry.js
 import type { AppConfig } from '../config.js';
 import { HttpError, badRequest, unauthorized } from '../lib/errors.js';
 import { parseBody } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { clientIp } from '../middleware/clientIp.js';
 import { bearerToken, currentPermissions, currentRole, currentUser } from '../middleware/auth.js';
 import { SessionModel, UserModel } from '../models/index.js';
@@ -57,7 +58,7 @@ export function authRouter(
       throw unauthorized(INVALID_CREDENTIALS, 'INVALID_CREDENTIALS');
     }
 
-    const now = new Date();
+    const now = clockNow();
     if (user.lockedUntil && user.lockedUntil > now) {
       // Silent lockout (AC-01.3): a locked account answers exactly like a wrong password,
       // even when the correct password is entered, so the lock can't be used to confirm
@@ -141,7 +142,7 @@ export function authRouter(
   router.post('/mobile/refresh', AUTHENTICATED, async (req, res) => {
     const session = await SessionModel.findById(req.auth!.sessionId);
     if (!session || session.kind !== 'mobile') throw MOBILE_ONLY;
-    const now = Date.now();
+    const now = clockNow().getTime();
     const expiresAt = new Date(
       Math.min(now + idleMs(config, 'mobile'), session.absoluteExpiresAt.getTime()),
     );
@@ -222,7 +223,7 @@ export function authRouter(
           failedLogins: 0,
           lockedUntil: null,
           invite: null,
-          lastLoginAt: new Date(),
+          lastLoginAt: clockNow(),
         },
       },
       { new: true },
@@ -281,7 +282,7 @@ function invalidLink() {
 async function findByInviteToken(token: unknown) {
   if (typeof token !== 'string' || token.length < 20 || token.length > 200) throw invalidLink();
   const user = await UserModel.findOne({ 'invite.tokenHash': sha256(token) }).select('+invite');
-  if (!user || !user.active || !user.invite || user.invite.expiresAt <= new Date()) {
+  if (!user || !user.active || !user.invite || user.invite.expiresAt <= clockNow()) {
     throw invalidLink();
   }
   return user;

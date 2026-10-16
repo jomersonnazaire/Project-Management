@@ -24,6 +24,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { unprocessable } from '../lib/http422.js';
 import { idParam, parseBody } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { currentUser } from '../middleware/auth.js';
 import {
   HolidayModel,
@@ -153,7 +154,7 @@ export function settingsRouter(registry: RouteRegistry) {
     return {
       policy,
       version,
-      boundary: policy.enabled !== false ? toDateOnly(timeLockBoundary(new Date(), policy)) : null,
+      boundary: policy.enabled !== false ? toDateOnly(timeLockBoundary(clockNow(), policy)) : null,
       description: describeTimeLock(policy),
     };
   };

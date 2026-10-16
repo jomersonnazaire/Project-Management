@@ -28,6 +28,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith, unprocessable } from '../lib/http422.js';
 import { idParam, parseBody, parseQuery } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { currentUser } from '../middleware/auth.js';
 import { LeaveEntitlementModel, LeaveModel, LeaveTypeModel, UserModel } from '../models/index.js';
 import { audit } from '../services/audit.js';
@@ -384,7 +385,7 @@ export function leaveRouter(registry: RouteRegistry) {
       throw unprocessable('This leave is already cancelled.', 'ALREADY_CANCELLED');
     if (!isAdmin && doc.from <= todayPH()) throw unprocessable(PAST_LEAVE_ADMIN_ONLY, 'PAST_LEAVE');
     doc.status = 'CANCELLED';
-    doc.cancelledAt = new Date();
+    doc.cancelledAt = clockNow();
     doc.cancelledBy = user._id;
     await doc.save();
     for (const d of doc.dates) await touchDay(doc.userId, new Date(d as unknown as Date));

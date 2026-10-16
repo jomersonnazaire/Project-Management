@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HolidayModel, ProjectModel, SettingModel, TaskModel } from '../src/models/index.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world } from './m2helpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
 /**
  * My tasks › Today (doc 12 v0.6.9 FR-TSK-22..25; TC-N22..N31 in docs/qa/05_M3_TEST_CASES.md).
@@ -12,14 +13,11 @@ const app = makeApp();
 type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
-const at = (iso: string) => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(iso));
-};
+const at = (iso: string) => setTestTime(new Date(iso));
 const THU_10AM = '2026-10-08T02:00:00Z';
 
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await resetRules();
   await HolidayModel.deleteMany({});
   await SettingModel.deleteMany({});
