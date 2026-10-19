@@ -478,6 +478,6 @@ const _roleLabels = {
 /// "Project Manager · SAP consultant"; never shows raw codes or the same label twice.
 String _roleLine(String? system, String? job) {
   final a = _roleLabels[system] ?? system;
-  final b = job == null || job.isEmpty ? null : (_roleLabels[job] ?? job);
+  final b = job == null || job.isEmpty ? 'Not set' : (_roleLabels[job] ?? job);
   return [a, if (b != a) b].whereType<String>().join(' · ');
 }

@@ -152,6 +152,8 @@ export function createApp(
   for (const router of routers) api.use(router);
 
   app.use('/api/v1', api);
+  // OAuth redirect URIs are registered on the web origin as /api/auth/… (Vercel rewrite → API).
+  app.use('/api', api);
   app.get('/', (_req, res) => res.json({ name: 'xc8-projectmgmt-api', docs: '/api/v1/health' }));
   app.use(notFoundHandler);
   app.use(errorHandler);

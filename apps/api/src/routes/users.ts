@@ -59,9 +59,14 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
       if (!(SYSTEM_ROLES as readonly string[]).includes(q.role)) throw badRequest('Unknown role.');
       filter.systemRole = q.role;
     }
-    if (q.status === 'ACTIVE') Object.assign(filter, { active: true, passwordHash: { $ne: null } });
-    else if (q.status === 'INVITED') Object.assign(filter, { active: true, passwordHash: null });
-    else if (q.status === 'DEACTIVATED') filter.active = false;
+    if (q.status === 'ACTIVE') {
+      Object.assign(filter, {
+        active: true,
+        $or: [{ passwordHash: { $ne: null } }, { msOid: { $ne: null } }],
+      });
+    } else if (q.status === 'INVITED') {
+      Object.assign(filter, { active: true, passwordHash: null, msOid: null });
+    } else if (q.status === 'DEACTIVATED') filter.active = false;
     else if (q.status) throw badRequest('Unknown status.');
 
     const { skip, limit } = paginate(q.page, q.pageSize);

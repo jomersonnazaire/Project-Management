@@ -43,7 +43,8 @@ export async function authenticate(config: AppConfig, req: Request, res: Respons
     throw unauthorized('Your session expired. Please sign in again.', 'SESSION_EXPIRED');
   }
   const user = await UserModel.findById(session.userId).select('+passwordHash');
-  if (!user || !user.active || !user.passwordHash) {
+  const canAuth = user?.passwordHash || user?.msOid;
+  if (!user || !user.active || !canAuth) {
     await SessionModel.deleteMany({ userId: session.userId });
     clearSessionCookie(config, res);
     throw unauthorized('Your session has ended. Please sign in again.', 'SESSION_EXPIRED');

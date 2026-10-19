@@ -33,6 +33,12 @@ export const JOB_ROLE_LABELS: Record<JobRole, string> = {
   PROJECT_MANAGER: 'Project Manager',
 };
 
+/** Display label for API job roles; Microsoft-created users may have null until an Admin sets one. */
+export function jobRoleLabel(jobRole: JobRole | null | undefined): string {
+  if (jobRole == null) return 'Not set';
+  return JOB_ROLE_LABELS[jobRole];
+}
+
 export type UserStatus = 'ACTIVE' | 'INVITED' | 'DEACTIVATED';
 
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {

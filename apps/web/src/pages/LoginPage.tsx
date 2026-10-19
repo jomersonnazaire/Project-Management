@@ -6,7 +6,7 @@ import {
   type PermissionGrid,
   type UserDto,
 } from '@xc8/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, Form } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -19,6 +19,12 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [msEnabled, setMsEnabled] = useState(false);
+  useEffect(() => {
+    void api<{ microsoft: boolean }>('/auth/providers', { quiet401: true })
+      .then((r) => setMsEnabled(r.microsoft))
+      .catch(() => setMsEnabled(false));
+  }, []);
   const {
     register,
     handleSubmit,
@@ -43,9 +49,16 @@ export function LoginPage() {
   });
 
   const reason = params.get('reason');
+  const msError = params.get('error') === 'ms_signin_failed';
   return (
     <AuthCard title="Sign in">
       <h4 className="mb-1">Sign in to {APP_NAME}</h4>
+      {msError && (
+        <Alert variant="danger" className="mt-3">
+          We couldn&apos;t sign you in with Microsoft. Try again or use your email and password, or
+          contact an Admin if the problem continues.
+        </Alert>
+      )}
       {reason === 'expired' && (
         <Alert variant="warning" className="mt-3">
           Your session expired after 30 minutes of inactivity. Please sign in again.
@@ -90,6 +103,13 @@ export function LoginPage() {
           {isSubmitting ? 'Signing in…' : 'Sign in'}
         </Button>
       </Form>
+      {msEnabled && (
+        <div className="mt-3">
+          <a href="/api/auth/microsoft/login" className="btn btn-outline-secondary w-100">
+            Sign in with Microsoft
+          </a>
+        </div>
+      )}
       <p className="small text-body-secondary text-center mt-3 mb-1">
         You&apos;ll land on your Dashboard.
       </p>

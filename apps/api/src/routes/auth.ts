@@ -1,4 +1,4 @@
-import type { Request, RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import {
   changePasswordSchema,
   inviteTokenSchema,
@@ -15,6 +15,14 @@ import { now as clockNow } from '../lib/clock.js';
 import { clientIp } from '../middleware/clientIp.js';
 import { bearerToken, currentPermissions, currentRole, currentUser } from '../middleware/auth.js';
 import { SessionModel, UserModel } from '../models/index.js';
+import { buildMicrosoftLoginUrl, exchangeMicrosoftCode } from '../services/microsoftAuth.js';
+import {
+  MS_OAUTH_COOKIE,
+  clearMicrosoftOAuthCookie,
+  readMicrosoftOAuthCookie,
+  setMicrosoftOAuthCookie,
+} from '../services/microsoftOAuthCookie.js';
+import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
 import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
 import { toUserDto } from '../services/dto.js';
@@ -111,6 +119,71 @@ export function authRouter(
 
   const ipOf = (req: Request) =>
     clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET });
+
+  const msFailureRedirect = (res: Response) => {
+    res.redirect(`${config.WEB_APP_URL}/login?error=ms_signin_failed`);
+  };
+
+  router.get('/providers', PUBLIC, (_req, res) => {
+    res.json({ microsoft: config.msEnabled });
+  });
+
+  router.get('/microsoft/login', PUBLIC, authLimiter, async (req, res) => {
+    if (!config.msEnabled) {
+      msFailureRedirect(res);
+      return;
+    }
+    try {
+      const login = await buildMicrosoftLoginUrl(config);
+      setMicrosoftOAuthCookie(config, res, {
+        codeVerifier: login.codeVerifier,
+        state: login.state,
+        nonce: login.nonce,
+      });
+      res.redirect(login.url);
+    } catch (err) {
+      req.log?.warn({ err }, 'Microsoft login redirect failed');
+      msFailureRedirect(res);
+    }
+  });
+
+  router.get('/microsoft/callback', PUBLIC, authLimiter, async (req, res) => {
+    if (!config.msEnabled) {
+      msFailureRedirect(res);
+      return;
+    }
+    const code = typeof req.query.code === 'string' ? req.query.code : '';
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+    const oauth = readMicrosoftOAuthCookie(config, req.cookies?.[MS_OAUTH_COOKIE]);
+    clearMicrosoftOAuthCookie(config, res);
+    if (!code || !state || !oauth || oauth.state !== state) {
+      req.log?.warn('Microsoft callback rejected: bad or missing OAuth state');
+      msFailureRedirect(res);
+      return;
+    }
+    try {
+      const claims = await exchangeMicrosoftCode(config, code, oauth.codeVerifier, oauth.nonce);
+      const result = await resolveMicrosoftSignIn(config, claims);
+      if (!result.ok) {
+        req.log?.warn(
+          { reason: result.reason, tid: claims.tid, oid: claims.oid },
+          'Microsoft sign-in refused',
+        );
+        msFailureRedirect(res);
+        return;
+      }
+      const now = clockNow();
+      await UserModel.updateOne(
+        { _id: result.user._id },
+        { $set: { lastLoginAt: now, failedLogins: 0, lockedUntil: null } },
+      );
+      await createSession(config, result.user._id, req, res, ipOf(req));
+      res.redirect(config.WEB_APP_URL);
+    } catch (err) {
+      req.log?.warn({ err }, 'Microsoft callback failed');
+      msFailureRedirect(res);
+    }
+  });
 
   router.post('/login', PUBLIC, authLimiter, async (req, res) => {
     const user = await checkCredentials(req);

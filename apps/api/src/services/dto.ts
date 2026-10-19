@@ -16,7 +16,8 @@ interface UserLike {
   name: string;
   email: string;
   systemRole: UserDto['systemRole'];
-  jobRole: UserDto['jobRole'];
+  jobRole?: UserDto['jobRole'] | null;
+  msOid?: string | null;
   teamIds?: Id[] | null;
   weeklyCapacityHours?: number | null;
   supervisorId?: Id | null;
@@ -31,9 +32,11 @@ interface UserLike {
 export function userStatus(u: {
   active?: boolean | null;
   passwordHash?: string | null;
+  msOid?: string | null;
 }): UserStatus {
   if (!u.active) return 'DEACTIVATED';
-  return u.passwordHash ? 'ACTIVE' : 'INVITED';
+  if (u.passwordHash || u.msOid) return 'ACTIVE';
+  return 'INVITED';
 }
 
 /** `u.passwordHash` is only used to derive status; the hash itself is never returned. */
@@ -43,7 +46,7 @@ export function toUserDto(u: UserLike): UserDto {
     name: u.name,
     email: u.email,
     systemRole: u.systemRole,
-    jobRole: u.jobRole,
+    jobRole: u.jobRole ?? null,
     teamIds: (u.teamIds ?? []).map((t) => t.toString()),
     weeklyCapacityHours: u.weeklyCapacityHours ?? 40,
     supervisorId: u.supervisorId ? u.supervisorId.toString() : null,

@@ -1,6 +1,6 @@
 import {
   DUE_NOT_BEFORE_START,
-  JOB_ROLE_LABELS,
+  jobRoleLabel,
   type JobRole,
   type PersonDto,
   NO_ESTIMATE_LABEL,
@@ -471,7 +471,7 @@ function PeoplePicker({
             >
               {p.name}
               <span className="small text-body-secondary ms-2">
-                {JOB_ROLE_LABELS[p.jobRole as JobRole] ?? p.jobRole}
+                {jobRoleLabel(p.jobRole as JobRole | null)}
               </span>
             </button>
           ))}
