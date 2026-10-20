@@ -39,6 +39,13 @@ function nameFromClaims(claims: Record<string, unknown>, email: string): string 
   return email.split('@')[0] ?? 'User';
 }
 
+/**
+ * A NEW MSAL client on every call, on purpose: no token storage (DAR Send, action emails). MSAL
+ * keeps the tokens of a code exchange (incl. the refresh token from its default offline_access
+ * scope) in the instance's in-memory cache, so a per-request instance with no cachePlugin is
+ * thrown away with the request and nothing is carried between requests or users. Do not make
+ * this a shared singleton or add a cachePlugin (test/msalClient.test.ts).
+ */
 export function createMsalClient(config: AppConfig): ConfidentialClientApplication {
   return new ConfidentialClientApplication({
     auth: {

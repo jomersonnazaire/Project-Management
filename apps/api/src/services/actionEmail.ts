@@ -130,24 +130,47 @@ export async function startActionEmail(
 export async function membersAdded(
   config: AppConfig,
   res: Response,
-  me: { _id: Id; email: string; msOid?: string | null; msTid?: string | null },
+  me: SaveActor,
   project: ProjectLike,
   added: Id[],
   emailOptIn: boolean | undefined,
 ): Promise<ActionEmailStartDto | null> {
-  if (!added.length) return emailOptIn ? noEmail('NO_RECIPIENTS', 'Nobody to email.') : null;
-  await notify({ type: 'ADDED_TO_PROJECT', project, actorId: me._id, recipients: added });
+  if (added.length)
+    await notify({ type: 'ADDED_TO_PROJECT', project, actorId: me._id, recipients: added });
+  return saveEmail(config, res, me, project, null, 'PROJECT_ADDED', added, emailOptIn);
+}
+
+type SaveActor = { _id: Id; email: string; msOid?: string | null; msTid?: string | null };
+
+/**
+ * The email part of a save that gave people something (a task, a place on a project): only when
+ * ticked, only to `people` (the save's own before/after diff, re-checked against the saved
+ * record), and it never blocks the save. Returns how it went, or null when not asked.
+ */
+export async function saveEmail(
+  config: AppConfig,
+  res: Response,
+  me: SaveActor,
+  project: ProjectLike,
+  task: TaskLike | null,
+  kind: 'PROJECT_ADDED' | 'TASK_ASSIGNED',
+  people: (Id | string)[],
+  emailOptIn: boolean | undefined,
+): Promise<ActionEmailStartDto | null> {
   if (!emailOptIn) return null;
   if (!config.actionEmailEnabled) return noEmail('EMAIL_DISABLED', 'Emails are switched off.');
   if (!me.msOid || !me.msTid) return noEmail('MICROSOFT_NOT_LINKED', ACTION_EMAIL_NOT_LINKED);
-  const people = await actionRecipients('PROJECT_ADDED', me._id, project, null, added.map(String));
-  if (!people.length) return noEmail('NO_RECIPIENTS', 'Nobody to email.');
+  const to = people.length
+    ? await actionRecipients(kind, me._id, project, task, people.map(String))
+    : [];
+  if (!to.length) return noEmail('NO_RECIPIENTS', 'Nobody to email.');
   const url = await startActionEmail(config, res, me, {
-    kind: 'PROJECT_ADDED',
+    kind,
     projectId: project._id,
-    recipientIds: people.map((p) => p._id),
+    taskId: task?._id ?? null,
+    recipientIds: to.map((p) => p._id),
   });
-  return { url, error: null, message: null, recipients: people.length };
+  return { url, error: null, message: null, recipients: to.length };
 }
 
 const noEmail = (

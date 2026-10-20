@@ -246,7 +246,11 @@ export function useTaskMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: { path: string; method?: 'POST' | 'PATCH' | 'DELETE'; body?: unknown }) =>
-      api<{ task?: TaskDto }>(req.path, { method: req.method ?? 'POST', body: req.body }),
+      // `email` is there when a task save asked to email the people it newly assigned.
+      api<{ task?: TaskDto; email?: ActionEmailStartDto }>(req.path, {
+        method: req.method ?? 'POST',
+        body: req.body,
+      }),
     // Also on errors: a 409 VERSION_CONFLICT means someone else changed the task, so refetch.
     onSettled: () => invalidateProjects(qc),
   });

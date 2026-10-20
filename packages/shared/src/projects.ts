@@ -723,6 +723,13 @@ const taskFields = {
  */
 const addMemberIds = z.array(objectId).max(20).optional();
 
+/**
+ * Action emails: also email the people this save newly gives the task (owner or assignee), from
+ * my own Outlook. The server diffs owner/assignees before and after the save; the response
+ * carries the Microsoft URL to continue (`email`). Not a plan field.
+ */
+const emailNewAssignees = z.boolean().optional();
+
 const datesInOrder = (v: { plannedStart?: string | null; dueDate?: string | null }) =>
   !v.plannedStart || !v.dueDate || v.dueDate >= v.plannedStart;
 
@@ -744,6 +751,7 @@ export const createTaskSchema = z
     reviewerId: taskFields.reviewerId.optional(),
     isMilestone: taskFields.isMilestone.default(false),
     addMemberIds,
+    emailNewAssignees,
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
 export type CreateTaskInput = z.input<typeof createTaskSchema>;
@@ -753,9 +761,11 @@ export const updateTaskSchema = z
     ...Object.fromEntries(Object.entries(taskFields).map(([k, s]) => [k, s.optional()])),
     version: z.number().int().min(0),
     addMemberIds,
+    emailNewAssignees,
   } as { [K in keyof typeof taskFields]: z.ZodOptional<(typeof taskFields)[K]> } & {
     version: z.ZodNumber;
     addMemberIds: typeof addMemberIds;
+    emailNewAssignees: typeof emailNewAssignees;
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;

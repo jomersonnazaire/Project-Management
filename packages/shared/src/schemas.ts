@@ -136,10 +136,11 @@ export const listQuerySchema = z.strictObject({
 export type ListQuery = z.infer<typeof listQuerySchema>;
 
 /**
- * POST /action-emails: after a follow-up or an assignment, the actor emails the people concerned
- * from their own Outlook (delegated Mail.Send, as DAR Send). Recipients are checked on the
- * server against the saved record; the body only narrows them. Emails to people added to a
- * project start from the project save itself (`emailAddedMembers`), which diffs the members.
+ * POST /action-emails: after posting a follow-up, its author emails the in-app recipients from
+ * their own Outlook (delegated Mail.Send, as DAR Send); the server works out who they are.
+ * Assignment and added-to-project emails start from the task / project save itself
+ * (`emailNewAssignees`, `emailAddedMembers`), which diffs the people before vs after; the
+ * client never names recipients.
  */
 const objectIdSchema = z.string().regex(/^[a-f0-9]{24}$/i, 'Invalid id.');
 export const actionEmailSchema = z.discriminatedUnion('kind', [
@@ -147,11 +148,6 @@ export const actionEmailSchema = z.discriminatedUnion('kind', [
     kind: z.literal('FOLLOW_UP'),
     taskId: objectIdSchema,
     followUpId: objectIdSchema,
-  }),
-  z.strictObject({
-    kind: z.literal('TASK_ASSIGNED'),
-    taskId: objectIdSchema,
-    userIds: z.array(objectIdSchema).min(1).max(50),
   }),
 ]);
 export type ActionEmailInput = z.infer<typeof actionEmailSchema>;

@@ -13,13 +13,13 @@ import {
   type ProjectDto,
   type TaskDto,
 } from '@xc8/shared';
+import { useSearchParams } from 'react-router-dom';
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
 import { ApiError, saveErrorMessage } from '../../api/client';
-import { joinNames, sendActionEmail, useWantsEmail } from '../../api/emailHooks';
+import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { EmailCheckbox } from '../../components/EmailCheckbox';
-import { ErrorAlert } from '../../components/Feedback';
 import {
   taskCreate,
   taskPatch,
@@ -78,14 +78,16 @@ export function TaskFormModal({
   const [isMilestone, setIsMilestone] = useState(task?.isMilestone ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { user } = useAuth();
-  // Action emails: the people newly given the task (owner or assignee), never me.
+  // Action emails: who looks newly given the task (owner or assignee), never me. For the
+  // checkbox label only: the API diffs the task before vs after the save and only takes the
+  // opt-in, so it emails exactly the people the save really gave the task.
   const before = new Set([task?.owner?.id, ...(task?.assignees ?? []).map((a) => a.id)]);
   const newlyAssigned = [...new Set([ownerId, ...assigneeIds])].filter(
     (id) => id && !before.has(id) && id !== user?.id,
   );
   const [emailAssigned, setEmailAssigned] = useState(true);
   const wantsEmail = useWantsEmail(emailAssigned) && newlyAssigned.length > 0;
-  const [emailError, setEmailError] = useState<unknown>(null);
+  const [, setParams] = useSearchParams();
 
   const serverErrors = mutation.error instanceof ApiError ? mutation.error.fieldErrors() : {};
   const err = (k: string) => errors[k] ?? serverErrors[k];
@@ -124,7 +126,11 @@ export function TaskFormModal({
     };
     const roles = new Set([body.ownerId, body.reviewerId, ...assigneeIds].filter(Boolean));
     const joining = added.filter((p) => roles.has(p.id) && !memberIds.has(p.id));
-    const withAdds = joining.length ? { ...body, addMemberIds: joining.map((p) => p.id) } : body;
+    const withAdds = {
+      ...body,
+      ...(joining.length ? { addMemberIds: joining.map((p) => p.id) } : {}),
+      ...(wantsEmail ? { emailNewAssignees: true } : {}),
+    };
     mutation.mutate(
       task
         ? taskPatch(task.id, { ...withAdds, version: task.version })
@@ -132,14 +138,9 @@ export function TaskFormModal({
       {
         onSuccess: (data) => {
           // Saved, with its in-app notifications; the email is extra (from my own Outlook).
-          if (wantsEmail && data.task) {
-            sendActionEmail({
-              kind: 'TASK_ASSIGNED',
-              taskId: data.task.id,
-              userIds: newlyAssigned,
-            }).catch(setEmailError);
-            return;
-          }
+          const email = continueSaveEmail(data.email);
+          if (email && 'redirected' in email) return;
+          if (email) setParams((p) => ({ ...Object.fromEntries(p), email_error: email.error }));
           if (!joining.length) return onClose();
           setConfirmation(
             `${joining.map((p) => p.name).join(', ')} added to ${project.name} and assigned.`,
@@ -435,7 +436,6 @@ export function TaskFormModal({
             checked={emailAssigned}
             onChange={setEmailAssigned}
           />
-          <ErrorAlert error={emailError} />
         </Modal.Body>
         <Modal.Footer>
           <Button variant="outline-secondary" onClick={onClose}>

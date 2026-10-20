@@ -54,7 +54,13 @@ function setup(
     if (url.endsWith('/tasks/k1/follow-ups') && init?.method === 'POST')
       return { status: 201, body: { task: task({ followUps: [FU] }) } };
     if (url.endsWith(`/projects/${PID}/tasks`) && init?.method === 'POST')
-      return { status: 201, body: { task: task({ id: 'k2' }) } };
+      return {
+        status: 201,
+        body: {
+          task: task({ id: 'k2' }),
+          ...(JSON.parse(String(init.body)).emailNewAssignees ? { email: START } : {}),
+        },
+      };
     if (url.endsWith('/action-emails') && init?.method === 'POST')
       return { status: 200, body: { url: 'https://login.microsoftonline.com/x', recipients: 1 } };
     if (url.includes(`/projects/${PID}/tasks`)) return { status: 200, body: { items: [task()] } };
@@ -156,7 +162,7 @@ describe('Follow-up "Email {name}"', () => {
 
 describe('Task assigned "Email {name}"', () => {
   it('names only the person newly given the task, never me, and emails after the save', async () => {
-    const { assign, emailCalls } = setup({ enabled: true, linked: true });
+    const { assign, emailCalls, sent } = setup({ enabled: true, linked: true });
     renderAt(`/projects/${PID}`, <App />);
     await userEvent.click(await screen.findByRole('button', { name: '+ Add task' }));
     const dialog = within(await screen.findByRole('dialog'));
@@ -167,16 +173,16 @@ describe('Task assigned "Email {name}"', () => {
     await userEvent.selectOptions(dialog.getByLabelText('Owner (accountable)'), 'Maria Member');
     expect(dialog.getByRole('checkbox', { name: 'Email Maria Member' })).toBeChecked();
     await userEvent.click(dialog.getByRole('button', { name: 'Add task' }));
-    await waitFor(() => expect(assign).toHaveBeenCalled());
-    expect(JSON.parse(String(emailCalls()[0]![1]!.body))).toEqual({
-      kind: 'TASK_ASSIGNED',
-      taskId: 'k2',
-      userIds: ['u2'],
-    });
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(START.url));
+    // Only the opt-in goes with the save; the server works out who was newly assigned (E1).
+    const body = sent('POST', `/projects/${PID}/tasks`)!;
+    expect(body.emailNewAssignees).toBe(true);
+    expect(body.ownerId).toBe('u2');
+    expect(emailCalls()).toHaveLength(0);
   });
 
   it('unlinked: disabled with the same hint; the task still saves (FA-02)', async () => {
-    const { emailCalls } = setup({ enabled: true, linked: false });
+    const { emailCalls, sent } = setup({ enabled: true, linked: false });
     renderAt(`/projects/${PID}`, <App />);
     await userEvent.click(await screen.findByRole('button', { name: '+ Add task' }));
     const dialog = within(await screen.findByRole('dialog'));
@@ -187,6 +193,7 @@ describe('Task assigned "Email {name}"', () => {
     await userEvent.click(dialog.getByRole('button', { name: 'Add task' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(emailCalls()).toHaveLength(0);
+    expect(sent('POST', `/projects/${PID}/tasks`)!.emailNewAssignees).toBeUndefined();
   });
 });
 

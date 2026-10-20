@@ -61,7 +61,8 @@ import { audit } from '../services/audit.js';
 import { loadCalendar } from '../services/calendar.js';
 import { taskRecordCounts } from '../services/taskRecords.js';
 import { notify } from '../services/notify.js';
-import { followUpRecipientIds } from '../services/actionEmail.js';
+import type { AppConfig } from '../config.js';
+import { followUpRecipientIds, saveEmail } from '../services/actionEmail.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
 import {
   canAddProjectMembers,
@@ -342,10 +343,25 @@ export async function respondTask(
   project: ProjectDoc,
   taskId: Id,
   status = 200,
+  emailNew?: { config: AppConfig; people: (Id | string)[]; optIn: boolean | undefined },
 ) {
   const fresh = (await TaskModel.findById(taskId).lean()) as TaskDoc;
+  // Action emails: "You were assigned" only to the people this save newly gave the task
+  // (the route's own before/after diff), and only when ticked. Never blocks the save.
+  const email = emailNew?.optIn
+    ? await saveEmail(
+        emailNew.config,
+        res,
+        currentUser(req),
+        (await ProjectModel.findById(project._id).lean()) ?? project,
+        fresh,
+        'TASK_ASSIGNED',
+        emailNew.people,
+        true,
+      )
+    : null;
   const [dto] = await toTaskDtos(req, project, [fresh]);
-  res.status(status).json({ task: dto });
+  res.status(status).json({ task: dto, ...(email ? { email } : {}) });
 }
 
 type PlanInput = Partial<{
@@ -543,7 +559,14 @@ async function writeWithMembers(
 function toPlanUpdate(input: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
-    if (v === undefined || k === 'version' || k === 'reviewerId' || k === 'addMemberIds') continue;
+    if (
+      v === undefined ||
+      k === 'version' ||
+      k === 'reviewerId' ||
+      k === 'addMemberIds' ||
+      k === 'emailNewAssignees'
+    )
+      continue;
     if (k === 'plannedStart' || k === 'dueDate') out[k] = v ? parseDateOnly(v as string) : null;
     else if (k === 'deliverable' || k === 'phase' || k === 'taskType') out[k] = v || null;
     else out[k] = v;
@@ -581,7 +604,7 @@ async function notifyFresh(
   });
 }
 
-export function tasksRouter(registry: RouteRegistry) {
+export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
   const p = registry.router('/projects');
 
   p.get('/:id/tasks', perm('tasks', 'view'), async (req, res) => {
@@ -802,11 +825,15 @@ export function tasksRouter(registry: RouteRegistry) {
       action: 'task_created',
     });
     // FR-NTF-05: tell the people given the task.
-    await notifyFresh('ASSIGNED', project._id, _id, currentUser(req)._id, [
-      input.ownerId,
-      ...(input.assigneeIds ?? []),
-    ]);
-    await respondTask(req, res, project, _id, 201);
+    const given = [input.ownerId, ...(input.assigneeIds ?? [])].filter((x): x is string =>
+      Boolean(x),
+    );
+    await notifyFresh('ASSIGNED', project._id, _id, currentUser(req)._id, given);
+    await respondTask(req, res, project, _id, 201, {
+      config,
+      people: given,
+      optIn: input.emailNewAssignees,
+    });
   });
 
   // Reorder one phase's tasks (Checklist drag-and-drop / Move up/down). Edit on tasks, and only the
@@ -1096,7 +1123,11 @@ export function tasksRouter(registry: RouteRegistry) {
       ...(input.assigneeIds ?? (task.assigneeIds ?? []).map(String)),
     ].filter((x): x is string => Boolean(x) && !before0.has(x as string));
     await notifyFresh('ASSIGNED', project._id, task._id, currentUser(req)._id, now);
-    await respondTask(req, res, project, task._id);
+    await respondTask(req, res, project, task._id, 200, {
+      config,
+      people: now,
+      optIn: input.emailNewAssignees,
+    });
   });
 
   // Status changes follow the state machine (workflow §2, FR-TSK-03..06, TC-F04).

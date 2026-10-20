@@ -13,7 +13,7 @@ export function useEmailStatus() {
 }
 
 /**
- * Starts an action email: the API checks who may be emailed and returns the Microsoft consent
+ * Starts a follow-up email: the API checks who may be emailed and returns the Microsoft consent
  * URL (same flow as DAR Send); the browser goes there and comes back to the item with
  * `?email=sent` or `?email_error=…`. The action itself is already saved.
  */
@@ -23,7 +23,8 @@ export async function sendActionEmail(body: ActionEmailInput) {
 }
 
 /**
- * After a project save that asked to email the people it added (`emailAddedMembers`): go to
+ * After a task or project save that asked to email the people it newly assigned or added
+ * (`emailNewAssignees` / `emailAddedMembers`): go to
  * Microsoft when the API started the email, or hand back the `email_error` code to show on the
  * project page. The API alone decided who was added. Returns null when there's nothing to do.
  */

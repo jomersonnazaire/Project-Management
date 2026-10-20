@@ -155,7 +155,7 @@ export function createApp(
     clientsRouter(registry),
     contactsRouter(registry),
     templatesRouter(registry),
-    ...tasksRouter(registry),
+    ...tasksRouter(registry, config),
     ...projectsRouter(registry, config),
     projectTypesRouter(registry),
     accessRulesRouter(registry),

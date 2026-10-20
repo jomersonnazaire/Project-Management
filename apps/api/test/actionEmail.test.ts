@@ -113,6 +113,16 @@ async function postFollowUp(agent: Agent, taskId: string, note = 'Called the cli
   const f = res.body.task.followUps.at(-1);
   return f.id as string;
 }
+/** Saves the task's owner, ticking "Email {name}"; the server works out who is newly given it. */
+async function assignWithEmail(w: W, taskId: string, ownerId: string, agent: Agent = w.pm.agent) {
+  const t = (await agent.get(`/api/v1/tasks/${taskId}`)).body.task;
+  const state = nextLogin();
+  const res = await agent
+    .patch(`/api/v1/tasks/${taskId}`)
+    .set(CSRF)
+    .send({ version: t.version, ownerId, emailNewAssignees: true });
+  return { res, state, cookie: actCookie(res) };
+}
 async function assign(w: W, taskId: string, ownerId: string) {
   const t = (await w.pm.agent.get(`/api/v1/tasks/${taskId}`)).body.task;
   const res = await w.pm.agent
@@ -188,12 +198,17 @@ describe('Unlinked actor (FE-02, FE-08, FA-02, FA-04, FA-05)', () => {
     expect(
       await NotificationModel.countDocuments({ type: 'ASSIGNED', userId: w.member.user._id }),
     ).toBe(1);
-    const r = await w.pm.agent
-      .post('/api/v1/action-emails')
+    const other = await createUser({ name: 'Oli Other' });
+    await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
       .set(CSRF)
-      .send({ kind: 'TASK_ASSIGNED', taskId: t.id, userIds: [w.member.user._id.toString()] });
-    expect(r.status).toBe(409);
-    expect(r.body.error.code).toBe('MICROSOFT_NOT_LINKED');
+      .send({ memberIds: [w.member.user._id.toString(), other._id.toString()] });
+    const { res: r } = await assignWithEmail(w, t.id, other._id.toString());
+    loginUrlMock.mockReset();
+    expect(r.status).toBe(200);
+    expect(r.body.task.owner.id).toBe(other._id.toString());
+    expect(r.body.email).toMatchObject({ url: null, error: 'MICROSOFT_NOT_LINKED' });
+    expect(await NotificationModel.countDocuments({ type: 'ASSIGNED', userId: other._id })).toBe(1);
 
     // An unlinked PM adding a member and ticking email: saved, in-app sent, email refused.
     const newbie = await createUser({ name: 'Nia New' });
@@ -358,11 +373,14 @@ describe('Failures never undo the action (AC4, FE-05, FE-06, FE-07, FA-10)', () 
       [{ error: 'access_denied', error_description: 'AADSTS65004' }, 'consent_declined'],
       [{ error: 'access_denied', error_description: 'AADSTS90094' }, 'admin_consent_required'],
     ] as const) {
-      const { state, cookie } = await start(w.pm.agent, {
-        kind: 'TASK_ASSIGNED',
-        taskId: t.id,
-        userIds: [w.member.user._id.toString()],
-      });
+      // A fresh owner each round, so the save newly assigns someone.
+      const next = await createUser({ name: `Next ${reason}` });
+      const p = (await w.pm.agent.get(`/api/v1/projects/${w.project.id}`)).body.project;
+      await w.pm.agent
+        .patch(`/api/v1/projects/${w.project.id}`)
+        .set(CSRF)
+        .send({ memberIds: [...p.members.map((m: { id: string }) => m.id), next._id.toString()] });
+      const { state, cookie } = await assignWithEmail(w, t.id, next._id.toString());
       const done = await callback(cookie, { state, ...query });
       expect(done.headers.location).toContain(`email_error=${reason}`);
       expect(
@@ -380,12 +398,7 @@ describe('Failures never undo the action (AC4, FE-05, FE-06, FE-07, FA-10)', () 
     const w = await world(appOn);
     await link(w.pm.user._id);
     const t = await firstTask(w);
-    await assign(w, t.id, w.member.user._id.toString());
-    const { state, cookie } = await start(w.pm.agent, {
-      kind: 'TASK_ASSIGNED',
-      taskId: t.id,
-      userIds: [w.member.user._id.toString()],
-    });
+    const { state, cookie } = await assignWithEmail(w, t.id, w.member.user._id.toString());
     mailExchangeMock.mockResolvedValueOnce(token('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'));
     const spy = graph();
     const done = await callback(cookie, { code: 'c', state });
@@ -394,8 +407,8 @@ describe('Failures never undo the action (AC4, FE-05, FE-06, FE-07, FA-10)', () 
   });
 });
 
-describe('Task assigned (FA-01, FA-06, FA-07)', () => {
-  it('emails only the people now on the task, never the assigner; reassigned people get nothing', async () => {
+describe('Task assigned (FA-01, FA-06, FA-07, E1)', () => {
+  it('emails only the person the save newly gives the task, never the assigner', async () => {
     const w = await world(appOn);
     const oid = await link(w.pm.user._id);
     const t = await firstTask(w);
@@ -405,28 +418,11 @@ describe('Task assigned (FA-01, FA-06, FA-07)', () => {
       .set(CSRF)
       .send({ memberIds: [w.member.user._id.toString(), other._id.toString()] });
     await assign(w, t.id, w.member.user._id.toString());
-    // Reassign A (member) to B (other): only B can be emailed.
-    await assign(w, t.id, other._id.toString());
+    // Reassign A (member) to B (other): only B is emailed (FA-07).
+    const { res, state, cookie } = await assignWithEmail(w, t.id, other._id.toString());
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.email).toMatchObject({ error: null, recipients: 1 });
     expect(await NotificationModel.countDocuments({ type: 'ASSIGNED', userId: other._id })).toBe(1);
-    const stale = await w.pm.agent
-      .post('/api/v1/action-emails')
-      .set(CSRF)
-      .send({ kind: 'TASK_ASSIGNED', taskId: t.id, userIds: [w.member.user._id.toString()] });
-    expect(stale.status).toBe(409);
-    expect(stale.body.error.code).toBe('NO_RECIPIENTS');
-    // Self-assign: no email to self (FA-06).
-    const self = await w.pm.agent
-      .post('/api/v1/action-emails')
-      .set(CSRF)
-      .send({ kind: 'TASK_ASSIGNED', taskId: t.id, userIds: [w.pm.user._id.toString()] });
-    expect(self.body.error.code).toBe('NO_RECIPIENTS');
-
-    const { res, state, cookie } = await start(w.pm.agent, {
-      kind: 'TASK_ASSIGNED',
-      taskId: t.id,
-      userIds: [other._id.toString(), w.pm.user._id.toString(), w.member.user._id.toString()],
-    });
-    expect(res.body.recipients).toBe(1);
     mailExchangeMock.mockResolvedValueOnce(token(oid));
     const spy = graph();
     const done = await callback(cookie, { code: 'c', state });
@@ -436,18 +432,80 @@ describe('Task assigned (FA-01, FA-06, FA-07)', () => {
     expect(msg.subject).toBe(`[Rollout P] You were assigned ${t.name}`);
     expect(msg.body.content).toContain('Hi Bea Other,');
     expect(msg.body.content).toContain(`assigned you to ${t.name} in Rollout P.`);
+
+    // Self-assign: nobody to email (FA-06).
+    const self = await assignWithEmail(w, t.id, w.pm.user._id.toString());
+    expect(self.res.status).toBe(200);
+    expect(self.res.body.email).toMatchObject({ url: null, error: 'NO_RECIPIENTS' });
   });
 
-  it('only someone who can plan the task can start an assignment email', async () => {
+  it('E1 (Queen QA-P2): saving again with the same owner emails nobody, however often', async () => {
     const w = await world(appOn);
-    await link(w.member.user._id);
+    await link(w.pm.user._id);
     const t = await firstTask(w);
     await assign(w, t.id, w.member.user._id.toString());
-    const res = await w.member.agent
+    const spy = graph();
+    for (let i = 0; i < 3; i++) {
+      const { res, cookie } = await assignWithEmail(w, t.id, w.member.user._id.toString());
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.email).toEqual({
+        url: null,
+        error: 'NO_RECIPIENTS',
+        message: 'Nobody to email.',
+        recipients: 0,
+      });
+      expect(cookie).toBe('');
+    }
+    // Adding B as an assignee next to owner A: only B, never A again.
+    const b = await createUser({ name: 'Bo Assignee' });
+    await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({ memberIds: [w.member.user._id.toString(), b._id.toString()] });
+    const t1 = (await w.pm.agent.get(`/api/v1/tasks/${t.id}`)).body.task;
+    nextLogin();
+    const both = await w.pm.agent
+      .patch(`/api/v1/tasks/${t.id}`)
+      .set(CSRF)
+      .send({ version: t1.version, assigneeIds: [b._id.toString()], emailNewAssignees: true });
+    expect(both.status, JSON.stringify(both.body)).toBe(200);
+    expect(both.body.email).toMatchObject({ error: null, recipients: 1 });
+    expect(spy).not.toHaveBeenCalled();
+
+    // The client can't name recipients any more: TASK_ASSIGNED on /action-emails is refused.
+    const direct = await w.pm.agent
       .post('/api/v1/action-emails')
       .set(CSRF)
-      .send({ kind: 'TASK_ASSIGNED', taskId: t.id, userIds: [w.pm.user._id.toString()] });
-    expect(res.status).toBe(403);
+      .send({ kind: 'TASK_ASSIGNED', taskId: t.id, userIds: [w.member.user._id.toString()] });
+    expect(direct.status).toBe(400);
+  });
+
+  it('new task: emails its owner and assignees (not me) when ticked; unticked sends nothing', async () => {
+    const w = await world(appOn);
+    const oid = await link(w.pm.user._id);
+    const state = nextLogin();
+    const res = await w.pm.agent
+      .post(`/api/v1/projects/${w.project.id}/tasks`)
+      .set(CSRF)
+      .send({
+        name: 'Go-live check',
+        ownerId: w.member.user._id.toString(),
+        assigneeIds: [w.pm.user._id.toString()],
+        emailNewAssignees: true,
+      });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.email).toMatchObject({ error: null, recipients: 1 });
+    mailExchangeMock.mockResolvedValueOnce(token(oid));
+    const spy = graph();
+    await callback(actCookie(res), { code: 'c', state });
+    expect(sentTo(spy)).toEqual([w.member.user.email]);
+    const plain = await w.pm.agent
+      .post(`/api/v1/projects/${w.project.id}/tasks`)
+      .set(CSRF)
+      .send({ name: 'No email', ownerId: w.member.user._id.toString() });
+    expect(plain.status).toBe(201);
+    expect(plain.body.email).toBeUndefined();
+    expect(actCookie(plain)).toBe('');
   });
 });
 
