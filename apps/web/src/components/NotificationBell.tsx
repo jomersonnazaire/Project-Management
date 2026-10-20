@@ -9,7 +9,7 @@ import { ErrorAlert, LoadingRows } from './Feedback';
 
 /**
  * In-app notifications (FR-NTF-01..06): the bell polls the unread count every 60 s and on focus.
- * Clicking a notification opens its task and marks it read. No email in this milestone.
+ * Clicking a notification opens its task (or project) and marks it read.
  */
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -94,6 +94,13 @@ export function NotificationBell() {
                     {n.message ? (
                       // Personal notices (tracker, leave) carry their own sentence.
                       <>{n.message}</>
+                    ) : n.type === 'ADDED_TO_PROJECT' ? (
+                      // Added to a project: no task, the project is the object.
+                      <>
+                        <strong>{n.actor ? shortName(n.actor.name) : 'Someone'}</strong>{' '}
+                        {NOTIFICATION_VERBS[n.type]}{' '}
+                        <strong>{n.project?.name ?? 'a project'}</strong>
+                      </>
                     ) : n.issue && !n.actor ? (
                       // System reminders (overdue, owner needed) have no actor.
                       <>
@@ -111,7 +118,7 @@ export function NotificationBell() {
                         </strong>
                       </>
                     )}
-                    {n.project && ` · ${n.project.name}`}
+                    {n.project && n.type !== 'ADDED_TO_PROJECT' && ` · ${n.project.name}`}
                     <span className="d-block text-body-secondary">{relativeTime(n.at)}</span>
                   </span>
                 </button>

@@ -39,9 +39,9 @@ Progress is reported as events, not dates (Jomerson's rule).
 
 | Integration | Notes |
 |---|---|
-| **Email notifications** | Follow-ups, assignments, and due or overdue reminders sent by email, on top of in-app notifications. Includes emailed invite and password reset links (replacing the links copied by hand). Needs an email sending service and Jomerson's sign-off on the sender address. |
-| **Microsoft (Entra ID) sign-in** | On hold (Jomerson, 2026-10-09). Spec kept in doc 14 §1: alongside passwords, Xceler8 tenant only, existing users only. Also enables Outlook calendar in the tracker. |
-| **Report sending from own account** | Once Entra ID is set up, Daily Accomplishment Reports send from each person's own Outlook account (Jomerson), Saved reports gain a Send button. Until then reports are viewed, saved and exported. |
+| **Email notifications** | **In progress:** action emails sent from the signed-in person's own Outlook (Microsoft-linked accounts only), behind a flag that is off by default. After posting a follow-up, assigning a task (PM), adding people to a project or creating a project with a team, an "Email {name}" box (ticked by default) emails the people concerned, on top of the in-app notifications (people added to a project also get an in-app "added you to" notice). Unlinked accounts see it disabled with "Link your Microsoft account to send emails." Uses the same delegated Mail.Send consent as DAR Send; no tokens are stored. **Planned:** a noreply@ shared mailbox as the system sender, used for due or overdue reminders and for emailed invite and password reset links (replacing the links copied by hand). |
+| **Microsoft (Entra ID) sign-in** | **Done, live** on web (PR #27, nonce fix PR #32) and mobile (PR #28). Alongside passwords, Xceler8 tenant only (spec in doc 14 §1). Also enables Outlook calendar in the tracker. |
+| **Report sending from own account** | **Built (PR #29)**, behind the Microsoft sign-in configuration (no separate feature flag): Daily Accomplishment Reports send from each person's own Outlook account, and Saved reports have a Send button. Waiting on admin consent for the Microsoft Graph delegated Mail.Send permission; until then Send shows a consent error and reports are viewed, saved and exported. |
 | In-app e-signature | On hold. Researched options are BoldSign and Docusign (RA 8792 compliant). |
 | Client portal | On hold. Client contacts have no login until then. |
 | Native mobile apps | On hold. |

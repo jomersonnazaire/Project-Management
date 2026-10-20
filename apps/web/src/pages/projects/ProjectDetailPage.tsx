@@ -24,6 +24,7 @@ import { useProjectIssues } from '../../api/issueHooks';
 import { useProject, useProjectAction, useProjectTasks } from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
+import { EmailResultAlert } from '../../components/EmailResultAlert';
 import { PageHeader } from '../../components/PageHeader';
 import { ProgressBar, ProjectBadge, ScheduleVariance } from '../../components/ProjectBadges';
 import { shortDate } from '../../lib/format';
@@ -135,6 +136,7 @@ export function ProjectDetailPage() {
             <Button onClick={() => setEditing(true)}>Edit project</Button>
           )}
         </PageHeader>
+        <EmailResultAlert />
         <div className="d-flex flex-wrap align-items-baseline gap-3 mb-4">
           <Link to="/projects">‹ All projects</Link>
           {/* Doc 14 FR-PTY-02/03 (mockup v0.9.2 header meta): current name, or "Not set". */}

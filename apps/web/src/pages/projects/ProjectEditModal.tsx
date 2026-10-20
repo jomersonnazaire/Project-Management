@@ -6,12 +6,14 @@ import {
   PROJECT_STATUSES,
   plural,
   END_AFTER_START,
+  type ActionEmailStartDto,
   type ProjectDto,
   type ProjectStatus,
   type UpdateProjectInput,
 } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError, saveErrorMessage } from '../../api/client';
 import { useClients } from '../../api/hooks';
 import { usePeople, useUpdateProject } from '../../api/projectHooks';
@@ -20,6 +22,8 @@ import { HandoverModal } from '../../components/HandoverModal';
 import { useConfirm } from '../../components/ConfirmModal';
 import { useProjectPhases } from '../../api/issueHooks';
 import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
+import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
+import { EmailCheckbox } from '../../components/EmailCheckbox';
 
 /**
  * Edit a project (FR-PRJ-11..13): details, team, status, baseline dates (with a reason) and the
@@ -51,6 +55,21 @@ export function ProjectEditModal({
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmIssues, setConfirmIssues] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Action emails: who looks newly added, for the checkbox label only. The API works out who
+  // was really added (before/after the save) and only takes the opt-in.
+  const wasMember = new Set([...project.members.map((m) => m.id), project.managerId]);
+  const added = [managerId, ...memberIds].filter(
+    (m, i, all) => m && all.indexOf(m) === i && !wasMember.has(m) && m !== user?.id,
+  );
+  const [emailAdded, setEmailAdded] = useState(true);
+  const wantsEmail = useWantsEmail(emailAdded) && added.length > 0;
+  const [, setParams] = useSearchParams();
+  const saved = ({ email }: { email?: ActionEmailStartDto }) => {
+    const next = continueSaveEmail(email);
+    if (next && 'redirected' in next) return;
+    if (next) setParams((p) => ({ ...Object.fromEntries(p), email_error: next.error }));
+    onClose();
+  };
 
   const datesChanged =
     startDate !== (project.startDate ?? '') || plannedEndDate !== (project.plannedEndDate ?? '');
@@ -105,6 +124,7 @@ export function ProjectEditModal({
       body.reason = reason.trim();
     }
     if (!Object.keys(body).length) return onClose();
+    if (wantsEmail) body.emailAddedMembers = true;
     // EC-96 / Q-69: leaving Planning with no phases is allowed after a confirm (UI only).
     if (
       body.status &&
@@ -130,7 +150,7 @@ export function ProjectEditModal({
       setHandover(body);
       return;
     }
-    update.mutate(body, { onSuccess: onClose });
+    update.mutate(body, { onSuccess: saved });
   };
 
   const managers = (people.data ?? []).filter(
@@ -304,6 +324,18 @@ export function ProjectEditModal({
                       />
                     ))}
                 </div>
+                <div className="mt-2">
+                  <EmailCheckbox
+                    id="project-added-email"
+                    names={joinNames(
+                      added
+                        .map((id) => (people.data ?? []).find((p) => p.id === id)?.name ?? '')
+                        .filter(Boolean),
+                    )}
+                    checked={emailAdded}
+                    onChange={setEmailAdded}
+                  />
+                </div>
               </fieldset>
               <Form.Group className="col-12" controlId="edit-prj-desc">
                 <Form.Label>Description</Form.Label>
@@ -332,7 +364,7 @@ export function ProjectEditModal({
             onCancel={() => setHandover(null)}
             onConfirm={() =>
               update.mutate(handover, {
-                onSuccess: onClose,
+                onSuccess: saved,
                 onSettled: () => setHandover(null),
               })
             }

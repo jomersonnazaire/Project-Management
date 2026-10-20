@@ -384,6 +384,7 @@ class AppNotification {
     'REJECTED': 'returned your task',
     'BLOCKED': 'blocked a task',
     'MENTION': 'mentioned you',
+    'ADDED_TO_PROJECT': 'added you to a project',
   };
 
   factory AppNotification.fromJson(Map<String, dynamic> j) {

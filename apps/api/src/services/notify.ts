@@ -18,6 +18,30 @@ export async function notify(input: {
   actorId: Id | null;
   recipients: (Id | null | undefined)[];
 }): Promise<number> {
+  const active = await projectRecipients(input);
+  if (!active.length) return 0;
+  await NotificationModel.insertMany(
+    active.map((u) => ({
+      userId: u._id,
+      projectId: input.project._id,
+      taskId: input.taskId ?? null,
+      issueId: input.issueId ?? null,
+      type: input.type,
+      actorId: input.actorId,
+    })),
+  );
+  return active.length;
+}
+
+/**
+ * Who a project notification reaches: ACTIVE users CURRENTLY on the project, never the actor.
+ * Follow-up emails use the same list, so the email goes to exactly the in-app recipients.
+ */
+export async function projectRecipients(input: {
+  project: { managerId?: Id | null; memberIds?: Id[] | null };
+  actorId: Id | null;
+  recipients: (Id | null | undefined)[];
+}): Promise<{ _id: Id; name: string; email: string }[]> {
   const onProject = new Set(
     [...(input.project.memberIds ?? []), input.project.managerId]
       .filter((x): x is Id => Boolean(x))
@@ -31,22 +55,10 @@ export async function notify(input: {
         .filter((id) => onProject.has(id) && id !== input.actorId?.toString()),
     ),
   ];
-  if (!wanted.length) return 0;
-  const active = await UserModel.find({ _id: { $in: wanted }, active: true })
-    .select('_id')
+  if (!wanted.length) return [];
+  return UserModel.find({ _id: { $in: wanted }, active: true })
+    .select('_id name email')
     .lean();
-  if (!active.length) return 0;
-  await NotificationModel.insertMany(
-    active.map((u) => ({
-      userId: u._id,
-      projectId: input.project._id,
-      taskId: input.taskId ?? null,
-      issueId: input.issueId ?? null,
-      type: input.type,
-      actorId: input.actorId,
-    })),
-  );
-  return active.length;
 }
 
 /**
