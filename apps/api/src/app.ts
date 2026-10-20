@@ -1,3 +1,4 @@
+import { DAR_SEND_RATE_LIMITED } from '@xc8/shared';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
@@ -41,6 +42,7 @@ import { trackerRouter } from './routes/tracker.js';
 import { darRouter } from './routes/dar.js';
 import { leaveRouter } from './routes/leave.js';
 import { timeRouter } from './routes/time.js';
+import { actionEmailsRouter } from './routes/actionEmails.js';
 import { createBlobStore, type BlobStore } from './storage/blobStore.js';
 
 export function createApp(
@@ -110,6 +112,33 @@ export function createApp(
       ),
   });
 
+  // DAR Send has its own per-user limiter (D5): a Send must not use up the office's sign-in
+  // bucket, and sign-ins must not block Send. Same single-instance MemoryStore caveat (TD-01).
+  const darSendLimiter = rateLimit({
+    windowMs: config.DAR_SEND_RATE_LIMIT_WINDOW_MINUTES * 60_000,
+    limit: config.DAR_SEND_RATE_LIMIT_MAX,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    validate: false,
+    // Runs after the auth gate, so a user is always present.
+    keyGenerator: (req) => `dar-send:${String(req.auth?.user._id ?? 'anon')}`,
+    handler: (_req, _res, next) =>
+      next(new HttpError(429, 'DAR_SEND_RATE_LIMITED', DAR_SEND_RATE_LIMITED)),
+  });
+
+  // Action emails (follow-up, assigned, added to project) get their own per-user limiter too,
+  // with DAR Send's numbers, so they never use up the sign-in or DAR Send buckets.
+  const actionEmailLimiter = rateLimit({
+    windowMs: config.DAR_SEND_RATE_LIMIT_WINDOW_MINUTES * 60_000,
+    limit: config.DAR_SEND_RATE_LIMIT_MAX,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    validate: false,
+    keyGenerator: (req) => `action-email:${String(req.auth?.user._id ?? 'anon')}`,
+    handler: (_req, _res, next) =>
+      next(new HttpError(429, 'RATE_LIMITED', 'Too many emails. Please wait and try again.')),
+  });
+
   // Every route is declared with its access policy; the central gate checks it before any
   // handler runs, and requests matching no declared route are denied (doc 11 §8).
   const registry = new RouteRegistry();
@@ -126,15 +155,15 @@ export function createApp(
     clientsRouter(registry),
     contactsRouter(registry),
     templatesRouter(registry),
-    ...tasksRouter(registry),
-    ...projectsRouter(registry),
+    ...tasksRouter(registry, config),
+    ...projectsRouter(registry, config),
     projectTypesRouter(registry),
     accessRulesRouter(registry),
     auditRouter(registry),
     settingsRouter(registry),
     ...timeRouter(registry),
     ...trackerRouter(registry),
-    ...darRouter(registry),
+    ...darRouter(config, registry, darSendLimiter),
     ...leaveRouter(registry),
     ...documentsRouter(config, registry, blobStore),
     documentRequestsRouter(registry),
@@ -142,6 +171,7 @@ export function createApp(
     conversationsRouter(registry),
     ...issuesRouter(registry),
     ...reportsRouter(registry),
+    actionEmailsRouter(config, registry, actionEmailLimiter),
     ...(extraRoutes ? [extraRoutes(registry)] : []),
   ];
 
@@ -152,6 +182,11 @@ export function createApp(
   for (const router of routers) api.use(router);
 
   app.use('/api/v1', api);
+  // Vercel rewrite: only Microsoft OAuth paths on /api (not the full API).
+  app.use('/api', (req, res, next) => {
+    if (!/^\/auth\/microsoft\/(login|callback)\/?$/i.test(req.path)) return next();
+    return api(req, res, next);
+  });
   app.get('/', (_req, res) => res.json({ name: 'xc8-projectmgmt-api', docs: '/api/v1/health' }));
   app.use(notFoundHandler);
   app.use(errorHandler);

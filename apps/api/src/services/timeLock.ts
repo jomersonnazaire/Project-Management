@@ -14,6 +14,7 @@ export async function loadTimeLock(): Promise<{ policy: TimeLockPolicy; version:
 }
 
 /** First work date still open under the current policy (FR-TIME-04). */
-export async function currentLockBoundary(now = new Date()): Promise<Date> {
-  return timeLockBoundary(now, (await loadTimeLock()).policy);
+export async function currentLockBoundary(nowTime?: Date): Promise<Date> {
+  const { now } = await import('../lib/clock.js');
+  return timeLockBoundary(nowTime ?? now(), (await loadTimeLock()).policy);
 }

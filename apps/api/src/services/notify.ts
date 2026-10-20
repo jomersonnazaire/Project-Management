@@ -18,23 +18,7 @@ export async function notify(input: {
   actorId: Id | null;
   recipients: (Id | null | undefined)[];
 }): Promise<number> {
-  const onProject = new Set(
-    [...(input.project.memberIds ?? []), input.project.managerId]
-      .filter((x): x is Id => Boolean(x))
-      .map(String),
-  );
-  const wanted = [
-    ...new Set(
-      input.recipients
-        .filter((x): x is Id => Boolean(x))
-        .map(String)
-        .filter((id) => onProject.has(id) && id !== input.actorId?.toString()),
-    ),
-  ];
-  if (!wanted.length) return 0;
-  const active = await UserModel.find({ _id: { $in: wanted }, active: true })
-    .select('_id')
-    .lean();
+  const active = await projectRecipients(input);
   if (!active.length) return 0;
   await NotificationModel.insertMany(
     active.map((u) => ({
@@ -50,6 +34,34 @@ export async function notify(input: {
 }
 
 /**
+ * Who a project notification reaches: ACTIVE users CURRENTLY on the project, never the actor.
+ * Follow-up emails use the same list, so the email goes to exactly the in-app recipients.
+ */
+export async function projectRecipients(input: {
+  project: { managerId?: Id | null; memberIds?: Id[] | null };
+  actorId: Id | null;
+  recipients: (Id | null | undefined)[];
+}): Promise<{ _id: Id; name: string; email: string }[]> {
+  const onProject = new Set(
+    [...(input.project.memberIds ?? []), input.project.managerId]
+      .filter((x): x is Id => Boolean(x))
+      .map(String),
+  );
+  const wanted = [
+    ...new Set(
+      input.recipients
+        .filter((x): x is Id => Boolean(x))
+        .map(String)
+        .filter((id) => onProject.has(id) && id !== input.actorId?.toString()),
+    ),
+  ];
+  if (!wanted.length) return [];
+  return UserModel.find({ _id: { $in: wanted }, active: true })
+    .select('_id name email')
+    .lean();
+}
+
+/**
  * Personal notices not tied to a project (doc 14: day reopened, timer stopped, leave recorded).
  * Each carries its full sentence and in-app link. Inactive users are skipped.
  */
@@ -58,7 +70,7 @@ export async function notifyPersonal(input: {
   actorId: Id | null;
   recipients: (Id | null | undefined)[];
   message: string;
-  link: string;
+  link?: string | null;
 }): Promise<number> {
   const wanted = [
     ...new Set(input.recipients.filter((x): x is Id => Boolean(x)).map(String)),
@@ -75,7 +87,7 @@ export async function notifyPersonal(input: {
       type: input.type,
       actorId: input.actorId,
       message: input.message,
-      link: input.link,
+      link: input.link ?? null,
     })),
   );
   return active.length;

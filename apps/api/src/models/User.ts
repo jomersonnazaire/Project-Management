@@ -18,7 +18,14 @@ const userSchema = new Schema(
     },
     passwordHash: { type: String, default: null, select: false },
     systemRole: { type: String, enum: SYSTEM_ROLES, required: true },
-    jobRole: { type: String, enum: JOB_ROLES, required: true },
+    jobRole: { type: String, enum: JOB_ROLES, required: false, default: null },
+    msOid: { type: String, default: null },
+    msTid: { type: String, default: null },
+    authProvider: {
+      type: String,
+      enum: ['password', 'microsoft'],
+      default: 'password',
+    },
     teamIds: { type: [Schema.Types.ObjectId], ref: 'Team', default: [], index: true },
     weeklyCapacityHours: { type: Number, min: 0, max: 80, default: 40 },
     active: { type: Boolean, default: true },
@@ -50,6 +57,13 @@ const userSchema = new Schema(
 );
 
 userSchema.index({ 'invite.tokenHash': 1 }, { sparse: true });
+userSchema.index(
+  { msOid: 1, msTid: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { msOid: { $type: 'string' }, msTid: { $type: 'string' } },
+  },
+);
 
 export type User = InferSchemaType<typeof userSchema>;
 export type UserDoc = HydratedDocument<User>;

@@ -9,6 +9,7 @@ abstract interface class AuthRepository {
   Future<AppUser> login(String email, String password);
   Future<void> logout();
   Future<void> setupPassword(String token, String password);
+  Future<bool> microsoftAvailable();
 }
 
 abstract interface class ProjectRepository {

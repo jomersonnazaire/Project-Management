@@ -41,5 +41,23 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    files: ['apps/api/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.name='vi'][callee.property.name='useFakeTimers'] ObjectExpression > Property[key.name='toFake'] > ArrayExpression > Literal[value='Date']",
+          message:
+            'Do not use vi.useFakeTimers with Date. Use the injectable clock (setTestTime/resetTestTime from lib/clock.ts) instead.',
+        },
+        {
+          selector: "CallExpression[callee.object.name='vi'][callee.property.name='setSystemTime']",
+          message: 'Do not use vi.setSystemTime. Use setTestTime from lib/clock.ts instead.',
+        },
+      ],
+    },
+  },
   prettier,
 );

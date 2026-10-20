@@ -197,15 +197,15 @@ The expected results use doc 14's wording. Status comes from the QA logs in `/wo
 |---|---|---|---|---|
 | TC-T122 | Day timesheet and Time logging on a locked viewed day; My tasks quick-activity buttons (incl. compact "+" at 390); ↑↓ reorder buttons | Buttons follow the viewed day: disabled (never hidden) with "This day is locked" at every width. My tasks follows today's lock state. ↑↓ styled like the row Edit/Delete | AC-52.8 | Pass (UIE design pass, `/workspace/review/m16`) |
 
-## Q-09 2-day lock (FR-ACT-36, AC-52.7): Pending build
+## Q-09 2-day lock (FR-ACT-36, AC-52.7): Tested on API `c96c8da` (one rerun pending)
 | ID | Case | Expected | Traces | Status |
 |---|---|---|---|---|
-| TC-T123 | Member edits an Oct 11 entry at 23:59 PHT on Oct 13 | Succeeds (day still editable) | FR-ACT-36, AC-52.7 | Pending build |
-| TC-T124 | Same edit/create/delete at 00:00 PHT on Oct 14 via `/time` and `/tracker/entries` | 422 `DAY_LOCKED`; day flagged "Not submitted" | FR-ACT-36, FR-ACT-13 | Pending build |
-| TC-T125 | Open the locked day in the UI | Buttons disabled with "This day is locked" | AC-52.8 | Pending build |
-| TC-T126 | Time logging page wording | No "Monday 12:00 PM" text anywhere | FR-ACT-36 | Pending build |
-| TC-T127 | Admin reopens the locked day; Member edits | Edit allowed; audit record for the reopen | FR-ACT-24, FR-ACT-36 | Pending build |
-| TC-T128 | Device time zone set to something other than PHT (e.g. UTC, US) around the boundary | The lock follows PHT (Asia/Manila), not the device time zone | FR-ACT-36 | Pending build |
+| TC-T123 | Member edits an Oct 11 entry at 23:59 PHT on Oct 13 | Succeeds (day still editable) | FR-ACT-36, AC-52.7 | Rerun pending (timing miss, work date 2026-10-13) |
+| TC-T124 | Same edit/create/delete at 00:00 PHT on Oct 14 via `/time` and `/tracker/entries` | 422 `DAY_LOCKED`; day flagged "Not submitted" | FR-ACT-36, FR-ACT-13 | PASS on API `c96c8da`; PATCH-after-lock part also Rerun pending (same timing miss) |
+| TC-T125 | Open the locked day in the UI | Buttons disabled with "This day is locked" | AC-52.8 | PASS on API `c96c8da` |
+| TC-T126 | Time logging page wording | No "Monday 12:00 PM" text anywhere | FR-ACT-36 | PASS on API `c96c8da` |
+| TC-T127 | Admin reopens the locked day; Member edits | Edit allowed; audit record for the reopen | FR-ACT-24, FR-ACT-36 | PASS on API `c96c8da` |
+| TC-T128 | Device time zone set to something other than PHT (e.g. UTC, US) around the boundary | The lock follows PHT (Asia/Manila), not the device time zone | FR-ACT-36 | PASS on API `c96c8da` |
 
 ## Client portal (pending contract build)
 Outline only (doc 15, doc 11 v0.4.23). Invites are on hold (Q-84).

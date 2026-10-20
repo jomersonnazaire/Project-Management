@@ -1,6 +1,11 @@
 import {
-  DAR_SEND_NOTE,
-  DAR_SEND_PILL,
+  DAR_NOTIFIED,
+  DAR_NOTIFY_RECENT,
+  DAR_PASSWORD_ONLY,
+  DAR_SEND_HOW,
+  DAR_SEND_RATE_LIMITED,
+  darSendError,
+  darSentMessage,
   changedAfterSaveMessage,
   darRangeSchema,
   formatLongDate,
@@ -18,17 +23,22 @@ import {
   type DarRange,
   type DarReportDto,
 } from '@xc8/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Form, Modal, Table } from 'react-bootstrap';
 import { Link, NavLink, useSearchParams } from 'react-router-dom';
-import { downloadFile } from '../../api/client';
+import { ApiError, downloadFile } from '../../api/client';
 import {
   useDar,
+  useDarSendStatus,
+  useNotifySupervisor,
   useSaveReport,
   useSavedReport,
   useSavedReports,
+  useStartSend,
+  type DarSendStatus,
   type SavedFilters,
 } from '../../api/darHooks';
+import { useConfirm } from '../../components/ConfirmModal';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { DarReportView, SavedTagBadge } from './DarReportView';
@@ -125,6 +135,7 @@ export function DarPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [savedId, setSavedId] = useState<string | null>(null);
   const report = useDar(range);
+  const sendStatus = useDarSendStatus();
   const save = useSaveReport();
 
   const preview = (f = from, t = to) => {
@@ -218,10 +229,15 @@ export function DarPage() {
           <p className="small text-body-secondary mb-2">
             Default today · max 31 days · Philippine time · future days left out
           </p>
-          <p className="small mb-3">
-            <span className="badge bg-label-secondary me-2">{DAR_SEND_PILL}</span>
-            {DAR_SEND_NOTE}
-          </p>
+          {sendStatus.data?.reason === 'not_linked' ? (
+            <p className="small mb-3" data-testid="dar-send-note">
+              {DAR_PASSWORD_ONLY}
+            </p>
+          ) : sendStatus.data?.enabled || sendStatus.data?.reason === 'no_supervisor' ? (
+            <p className="small mb-3" data-testid="dar-send-note">
+              {DAR_SEND_HOW}
+            </p>
+          ) : null}
           {report.isLoading && <LoadingRows rows={4} />}
           {report.error ? <ErrorAlert error={report.error} /> : null}
           {r && (
@@ -295,19 +311,41 @@ function RecipientsLine({ report }: { report: DarReportDto }) {
 
 /** My saved reports (FR-DAR-11 to -16): private, read-only, newest first, no deletes. */
 export function SavedReportsPage() {
+  const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useState<SavedFilters>({ label: 'ALL' });
   const [open, setOpen] = useState<string | null>(null);
   const list = useSavedReports(filters);
+  // Read the return-from-Microsoft result once, so the message stays after the URL is cleaned.
+  const [{ sentId, sendError }] = useState(() => ({
+    sentId: params.get('sent'),
+    sendError: params.get('send_error'),
+  }));
+  const sendStatus = useDarSendStatus();
   const items = list.data ?? [];
   const filtered = Boolean(
     filters.from || filters.to || (filters.label && filters.label !== 'ALL'),
   );
+  useEffect(() => {
+    if (!params.get('sent') && !params.get('send_error')) return;
+    const t = window.setTimeout(() => setParams({}, { replace: true }), 0);
+    return () => window.clearTimeout(t);
+  }, [params, setParams]);
   return (
     <>
       <PageHeader title="My saved reports" />
       <Tabs active="saved" />
       <div className="card rounded-top-0">
         <div className="card-body">
+          {sentId && sendStatus.data?.to && (
+            <div className="alert alert-success py-2" role="status">
+              {darSentMessage(sendStatus.data.to.name, sendStatus.data.cc.length)}
+            </div>
+          )}
+          {sendError && (
+            <div className="alert alert-danger py-2" role="alert">
+              {darSendError(sendError)}
+            </div>
+          )}
           <div className="d-flex flex-wrap gap-2 align-items-end mb-3">
             <Form.Group controlId="saved-from">
               <Form.Label className="small mb-0">Saved from</Form.Label>
@@ -406,9 +444,74 @@ export function SavedReportsPage() {
   );
 }
 
+function sendDisableHint(reason: DarSendStatus['reason']): string | null {
+  if (reason === 'no_supervisor') return darSendError('no_supervisor');
+  return null;
+}
+
+/** Friendly text for a failed Send start or Notify (no raw JSON, D5, D7). */
+function darActionError(e: unknown): unknown {
+  if (e instanceof ApiError && e.status === 429) {
+    return new ApiError(429, e.code, DAR_SEND_RATE_LIMITED);
+  }
+  if (e instanceof ApiError && e.code === 'NOTIFY_RECENT') {
+    return new ApiError(409, e.code, DAR_NOTIFY_RECENT);
+  }
+  return e;
+}
+
 function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useSavedReport(id);
   const s = q.data;
+  const sendStatus = useDarSendStatus();
+  const notify = useNotifySupervisor();
+  const startSend = useStartSend();
+  const [confirm, confirmDialog] = useConfirm();
+  const [notifyError, setNotifyError] = useState<unknown>(null);
+  const [sendError, setSendError] = useState<unknown>(null);
+  const [notifyOk, setNotifyOk] = useState(false);
+  const status = sendStatus.data;
+  // Password-only users aren't offered Send at all (AC-57.4, FR-DAR-24).
+  const passwordOnly = status?.reason === 'not_linked';
+  const showSend = status && status.reason !== 'ms_disabled' && !passwordOnly;
+  const sendDisabled = !status?.enabled || !s || s.totalActivities === 0;
+  const sendHint = sendDisabled ? sendDisableHint(status?.reason ?? null) : null;
+
+  const onSend = async () => {
+    if (!s || !status?.to) return;
+    const cc = status.cc.length ? status.cc.join(', ') : 'None';
+    const ok = await confirm({
+      title: 'Send this report?',
+      body: `To: ${status.to.name} · CC: ${cc} (Set by Admin). It's sent from your Microsoft 365 mailbox with the PDF attached. The first time, Microsoft may ask you to allow this.`,
+      confirmLabel: 'Send',
+    });
+    if (!ok) return;
+    setSendError(null);
+    try {
+      const { url } = await startSend.mutateAsync(s.id);
+      window.location.assign(url);
+    } catch (e) {
+      setSendError(darActionError(e));
+    }
+  };
+
+  const onNotify = async () => {
+    if (!s || !status?.to) return;
+    setNotifyError(null);
+    const ok = await confirm({
+      title: `Notify ${status.to.name}?`,
+      body: `They'll get an in-app notice that your report for ${rangeLabel(s.from, s.to)} is ready. Export the PDF to share it.`,
+      confirmLabel: 'Notify',
+    });
+    if (!ok) return;
+    try {
+      await notify.mutateAsync(s.id);
+      setNotifyOk(true);
+    } catch (e) {
+      setNotifyError(darActionError(e));
+    }
+  };
+
   return (
     <Modal show onHide={onClose} size="xl" scrollable aria-labelledby="saved-title">
       <Modal.Header closeButton>
@@ -423,12 +526,47 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
         {q.error ? <ErrorAlert error={q.error} /> : null}
         {s && (
           <>
-            <div className="d-flex flex-wrap gap-2 mb-3">
+            <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
               <ExportButtons
                 empty={s.totalActivities === 0}
                 href={(fmt) => `/dar/saved/${s.id}/export/${fmt}`}
               />
+              {showSend && (
+                <>
+                  <Button
+                    variant="primary"
+                    disabled={sendDisabled || startSend.isPending}
+                    onClick={() => void onSend()}
+                  >
+                    Send to supervisor
+                  </Button>
+                  {sendHint && <span className="small text-body-secondary">{sendHint}</span>}
+                </>
+              )}
+              {status?.canNotify && status.to && (
+                <Button
+                  variant="outline-primary"
+                  disabled={s.totalActivities === 0 || notify.isPending}
+                  onClick={() => void onNotify()}
+                >
+                  Notify supervisor
+                </Button>
+              )}
             </div>
+            {passwordOnly && (
+              <p className="small text-body-secondary" data-testid="dar-password-only">
+                {DAR_PASSWORD_ONLY}
+                {!status.to && <> {darSendError('no_supervisor')}</>}
+              </p>
+            )}
+            {sendError ? <ErrorAlert error={sendError} /> : null}
+            {notifyOk && (
+              <div className="alert alert-success py-2 small" role="status">
+                {DAR_NOTIFIED}
+              </div>
+            )}
+            {notifyError ? <ErrorAlert error={notifyError} /> : null}
+            {confirmDialog}
             <p className="small">{savedCopyNote(savedOn(s.savedAt).replace(' ·', ','))}</p>
             {darExportName(s.report) !== DAR_EXPORT_NAME && (
               <p className="small text-body-secondary" data-testid="old-name-note">

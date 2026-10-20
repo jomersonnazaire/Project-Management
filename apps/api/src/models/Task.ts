@@ -74,6 +74,8 @@ const taskSchema = new Schema(
           contactId: { type: Schema.Types.ObjectId, ref: 'ClientContact', default: null },
           note: String,
           at: { type: Date, default: () => new Date() },
+          /** Set when the author emailed it from their own Outlook (follow-up emails). */
+          emailedAt: { type: Date, default: null },
         }),
       ],
       default: [],

@@ -44,6 +44,7 @@ import { loadTimeLock } from '../services/timeLock.js';
 import { recomputeProject } from '../services/projectService.js';
 import { isProjectMember, type ScopeUser } from '../services/scope.js';
 import { loadProject } from './projects.js';
+import { now as clockNow } from '../lib/clock.js';
 
 /**
  * Time logging (FR-TIME-01..08). Users log their own time to tasks of projects they're on; the
@@ -107,7 +108,7 @@ async function toDtos(entries: EntryDoc[]): Promise<TimeEntryDto[]> {
 
 /** Checks the work date and the 24 h/day cap for `userId` (excluding `ignoreId`). */
 async function assertDateAndCap(user: ScopeUser, workDate: Date, hours: number, ignoreId?: Id) {
-  if (workDate > todayPH()) {
+  if (workDate > todayPH(clockNow())) {
     // FR-ACT-33: 422 FUTURE_DATE (was 400 VALIDATION_ERROR before m8-polish).
     throw unprocessable("Work date can't be in the future.", 'FUTURE_DATE', [
       { path: 'workDate', message: "Work date can't be in the future." },
@@ -150,7 +151,7 @@ export function timeRouter(registry: RouteRegistry) {
   r.get('/', perm('time', 'view'), async (req, res) => {
     const q = parseQuery(timeWeekQuerySchema, req);
     const user = currentUser(req);
-    const start = weekStartOf(q.week ? parseDateOnly(q.week) : todayPH());
+    const start = weekStartOf(q.week ? parseDateOnly(q.week) : todayPH(clockNow()));
     const end = addDays(start, 6);
     // Project time only; quick activities live on the Day timesheet (doc 14 FR-ACT-10).
     const entries = (await TimeEntryModel.find({

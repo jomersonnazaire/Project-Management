@@ -16,6 +16,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { unprocessable } from '../lib/http422.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
 import { ProjectModel, TemplateModel, type Template } from '../models/index.js';
 import { audit } from '../services/audit.js';
@@ -336,7 +337,7 @@ export function templatesRouter(registry: RouteRegistry) {
           { session },
         );
         t.status = 'PUBLISHED';
-        t.publishedAt = new Date();
+        t.publishedAt = clockNow();
         t.updatedBy = currentUser(req)._id;
         await t.save({ session });
       });

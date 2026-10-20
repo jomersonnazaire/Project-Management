@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,
@@ -13,6 +13,7 @@ import { sweepAutoStop } from '../src/services/tracker.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { world } from './m2helpers.js';
 import { lookups } from './trackerHelpers.js';
+import { setTestTime, resetTestTime } from '../src/lib/clock.js';
 
 /**
  * M5 Activity Tracker (doc 14 §2, §10, §12; QA 06 TC-Q01..Q14). "Now" is Wed Oct 14, 2026
@@ -21,13 +22,17 @@ import { lookups } from './trackerHelpers.js';
 useDatabase();
 // Timers run for hours in these tests: keep the test sessions alive meanwhile.
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
+const at = (iso: string) => setTestTime(new Date(iso));
+
+beforeAll(() => {
   at('2026-10-14T02:00:00Z');
 });
+
+beforeEach(() => {
+  at('2026-10-14T02:00:00Z');
+});
+
 afterEach(async () => {
-  vi.useRealTimers();
   // The database is shared by the tests in this file: start each one clean.
   await Promise.all(
     [
@@ -39,6 +44,10 @@ afterEach(async () => {
       MigrationModel,
     ].map((m) => (m as typeof TimeEntryModel).deleteMany({})),
   );
+});
+
+afterAll(() => {
+  resetTestTime();
 });
 
 type W = Awaited<ReturnType<typeof world>>;

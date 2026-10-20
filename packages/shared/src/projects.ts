@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ProjectTypeRefDto } from './projectTypes.js';
-import { JOB_ROLES, type SystemRole } from './roles.js';
+import { JOB_ROLES, type JobRole, type SystemRole } from './roles.js';
 
 /**
  * Milestone 2: implementation templates, projects and tasks (doc 03 TPL/PRJ/TSK, doc 11 FR-PRJ-11..13).
@@ -640,6 +640,11 @@ export const createProjectSchema = z
     /** The template version shown in the preview (EC-11): a newer version answers 409. */
     templateVersion: z.number().int().min(1).optional(),
     memberIds: z.array(objectId).max(200).default([]),
+    /**
+     * Action emails: also email the initial members (except the creator) from my own Outlook.
+     * The server works out who they are; the response carries the Microsoft URL to continue.
+     */
+    emailAddedMembers: z.boolean().optional(),
   })
   .refine((v) => v.plannedEndDate > v.startDate, {
     path: ['plannedEndDate'],
@@ -667,6 +672,11 @@ export const updateProjectSchema = z
     confirmClearContacts: z.boolean().optional(),
     /** EC-68: confirms the client change although issues keep contacts from the old client. */
     confirmIssueContacts: z.boolean().optional(),
+    /**
+     * Action emails: also email the people this save adds to the team, from my own Outlook. The
+     * server diffs the member list before and after the save; the client never names them.
+     */
+    emailAddedMembers: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
@@ -713,6 +723,13 @@ const taskFields = {
  */
 const addMemberIds = z.array(objectId).max(20).optional();
 
+/**
+ * Action emails: also email the people this save newly gives the task (owner or assignee), from
+ * my own Outlook. The server diffs owner/assignees before and after the save; the response
+ * carries the Microsoft URL to continue (`email`). Not a plan field.
+ */
+const emailNewAssignees = z.boolean().optional();
+
 const datesInOrder = (v: { plannedStart?: string | null; dueDate?: string | null }) =>
   !v.plannedStart || !v.dueDate || v.dueDate >= v.plannedStart;
 
@@ -734,6 +751,7 @@ export const createTaskSchema = z
     reviewerId: taskFields.reviewerId.optional(),
     isMilestone: taskFields.isMilestone.default(false),
     addMemberIds,
+    emailNewAssignees,
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
 export type CreateTaskInput = z.input<typeof createTaskSchema>;
@@ -743,9 +761,11 @@ export const updateTaskSchema = z
     ...Object.fromEntries(Object.entries(taskFields).map(([k, s]) => [k, s.optional()])),
     version: z.number().int().min(0),
     addMemberIds,
+    emailNewAssignees,
   } as { [K in keyof typeof taskFields]: z.ZodOptional<(typeof taskFields)[K]> } & {
     version: z.ZodNumber;
     addMemberIds: typeof addMemberIds;
+    emailNewAssignees: typeof emailNewAssignees;
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
@@ -950,6 +970,8 @@ export interface FollowUpDto {
   author: Ref | null;
   contact: Ref | null;
   at: string;
+  /** When the author emailed it from their own Outlook (follow-up emails); null if never. */
+  emailedAt: string | null;
 }
 
 export interface TaskDto {
@@ -1170,7 +1192,7 @@ export interface PersonDto {
   id: string;
   name: string;
   systemRole: string;
-  jobRole: string;
+  jobRole: JobRole | null;
 }
 
 /** POST /projects/:id/tasks/reorder: the new order of one phase's tasks (null = no phase). */

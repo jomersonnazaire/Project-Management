@@ -48,7 +48,9 @@ class ProfileScreen extends ConsumerWidget {
             Text(
               [
                 _roles[u['systemRole']] ?? u['systemRole'],
-                u['jobRole'],
+                u['jobRole'] == null || u['jobRole'] == ''
+                    ? 'Not set'
+                    : u['jobRole'],
               ].whereType<String>().where((x) => x.isNotEmpty).join(' · '),
               textAlign: TextAlign.center,
               style: t.bodySmall,

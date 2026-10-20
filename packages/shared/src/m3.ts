@@ -696,6 +696,9 @@ export const NOTIFICATION_TYPES = [
   'TIMER_STOPPED',
   'LEAVE_RECORDED',
   'LEAVE_CANCELLED',
+  'DAR_READY',
+  // Action emails (roadmap §4): someone was added to a project (always in-app; email optional).
+  'ADDED_TO_PROJECT',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -750,6 +753,8 @@ export const NOTIFICATION_VERBS: Record<NotificationType, string> = {
   TIMER_STOPPED: 'Timer stopped:',
   LEAVE_RECORDED: 'recorded leave',
   LEAVE_CANCELLED: 'cancelled leave',
+  DAR_READY: 'has a report ready',
+  ADDED_TO_PROJECT: 'added you to',
 };
 
 // ---------- Project conversation (FR-CNV-01..08) ----------

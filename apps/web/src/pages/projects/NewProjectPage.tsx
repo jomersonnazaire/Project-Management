@@ -14,7 +14,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, saveErrorMessage } from '../../api/client';
 import { useClients } from '../../api/hooks';
 import { useCreateProject, usePeople, useTemplates } from '../../api/projectHooks';
+import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
 import { useAuth } from '../../auth/AuthContext';
+import { EmailCheckbox } from '../../components/EmailCheckbox';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { HandoverModal } from '../../components/HandoverModal';
 import { PageHeader } from '../../components/PageHeader';
@@ -46,6 +48,13 @@ export function NewProjectPage() {
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmHandover, setConfirmHandover] = useState(false);
+  // Action emails: the initial team except me, for the checkbox label only. The API works out
+  // who to email from the saved project and only takes the opt-in.
+  const initial = [managerId, ...memberIds].filter(
+    (m, i, all) => m && all.indexOf(m) === i && m !== user?.id,
+  );
+  const [emailInitial, setEmailInitial] = useState(true);
+  const wantsEmail = useWantsEmail(emailInitial) && initial.length > 0;
 
   const activeClients = (clients.data?.items ?? []).filter((c) => c.active);
   const template = templates.data?.items.find((t) => t.id === templateId);
@@ -99,10 +108,15 @@ export function NewProjectPage() {
         startDate,
         plannedEndDate,
         description: description.trim() || null,
+        ...(wantsEmail ? { emailAddedMembers: true } : {}),
       },
       {
-        onSuccess: (res) =>
-          navigate(`/projects/${res.project.id}`, { state: { warnings: res.warnings } }),
+        onSuccess: (res) => {
+          const email = continueSaveEmail(res.email);
+          if (email && 'redirected' in email) return;
+          const query = email ? `?email_error=${encodeURIComponent(email.error)}` : '';
+          navigate(`/projects/${res.project.id}${query}`, { state: { warnings: res.warnings } });
+        },
         onError: (err) => {
           // A newer version was published while the form was open (EC-11): show the latest.
           if (
@@ -298,6 +312,18 @@ export function NewProjectPage() {
                     ))}
                 </div>
                 <Form.Text>The project manager is always on the team.</Form.Text>
+                <div className="mt-2">
+                  <EmailCheckbox
+                    id="project-created-email"
+                    names={joinNames(
+                      initial
+                        .map((id) => (people.data ?? []).find((p) => p.id === id)?.name ?? '')
+                        .filter(Boolean),
+                    )}
+                    checked={emailInitial}
+                    onChange={setEmailInitial}
+                  />
+                </div>
               </fieldset>
               <Form.Group className="col-12" controlId="prj-desc">
                 <Form.Label>Description</Form.Label>

@@ -24,6 +24,8 @@ import { IssueStatusBadge, RaiseIssueModal, SeverityBadge } from '../issues/Issu
 import { Link } from 'react-router-dom';
 import { moveLabel, useStatusMove } from './useStatusMove';
 import { useConfirm } from '../../components/ConfirmModal';
+import { sendActionEmail, useWantsEmail } from '../../api/emailHooks';
+import { EmailCheckbox } from '../../components/EmailCheckbox';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -55,6 +57,9 @@ export function TaskPanel({
   const [editing, setEditing] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState('');
+  const [emailNote, setEmailNote] = useState(true);
+  const wantsEmail = useWantsEmail(emailNote);
+  const [emailError, setEmailError] = useState<unknown>(null);
   const t = task.data;
   const archived = project.archived;
   const { permissions } = useAuth();
@@ -71,7 +76,22 @@ export function TaskPanel({
   const addNote = (e: FormEvent) => {
     e.preventDefault();
     if (!t || !note.trim()) return;
-    post(`/tasks/${t.id}/follow-ups`, { note: note.trim() }, () => setNote(''));
+    setEmailError(null);
+    mutation.mutate(
+      { path: `/tasks/${t.id}/follow-ups`, body: { note: note.trim() } },
+      {
+        onSuccess: (data) => {
+          setNote('');
+          // The follow-up and its in-app notification are saved; the email is extra.
+          const posted = data.task?.followUps.at(-1);
+          if (wantsEmail && notifies && posted) {
+            sendActionEmail({ kind: 'FOLLOW_UP', taskId: t.id, followUpId: posted.id }).catch(
+              setEmailError,
+            );
+          }
+        },
+      },
+    );
   };
 
   return (
@@ -253,6 +273,7 @@ export function TaskPanel({
                       <div>{f.note}</div>
                       <span className="text-body-secondary">
                         {f.author?.name ?? 'Unknown'} · {dateTime(f.at)}
+                        {f.emailedAt && ' · Emailed'}
                       </span>
                     </li>
                   ))}
@@ -273,7 +294,18 @@ export function TaskPanel({
                 </Form>
               )}
               {t.can.edit && !archived && notifies && (
-                <p className="small text-body-secondary mt-n2 mb-4">Notifies {notifies}</p>
+                <p className="small text-body-secondary mt-n2 mb-2">Notifies {notifies}</p>
+              )}
+              {t.can.edit && !archived && (
+                <div className="small mb-4">
+                  <EmailCheckbox
+                    id="follow-up-email"
+                    names={notifies}
+                    checked={emailNote}
+                    onChange={setEmailNote}
+                  />
+                  <ErrorAlert error={emailError} />
+                </div>
               )}
 
               <h3 className="h6">History</h3>

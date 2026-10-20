@@ -20,11 +20,11 @@ import {
   renamePhaseSchema,
   createPhaseSchema,
   taskDeleteBlockedReason,
+  todayPH,
   todaySection,
   workingDaysSince,
   taskStatusSchema,
   taskVersionSchema,
-  todayPH,
   toDateOnly,
   updateTaskSchema,
   type MyTaskDto,
@@ -42,6 +42,7 @@ import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith, unprocessable } from '../lib/http422.js';
 import { escapeRegex, idParam, parseBody, parseQuery } from '../lib/validate.js';
+import { now as clockNow } from '../lib/clock.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
 import {
   ActivityLogModel,
@@ -60,6 +61,8 @@ import { audit } from '../services/audit.js';
 import { loadCalendar } from '../services/calendar.js';
 import { taskRecordCounts } from '../services/taskRecords.js';
 import { notify } from '../services/notify.js';
+import type { AppConfig } from '../config.js';
+import { followUpRecipientIds, saveEmail } from '../services/actionEmail.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
 import {
   canAddProjectMembers,
@@ -223,7 +226,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
     const u = ref(id);
     return u ? { id: u.id, name: u.name } : null;
   };
-  const today = todayPH();
+  const today = clockNow();
   // M3.5: planners may delete a task only while nothing is recorded under it.
   const mayDelete = canDeleteTasks(user, perms, project);
   const records = mayDelete ? await taskRecordCounts(tasks.map((t) => t._id)) : null;
@@ -289,6 +292,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
         author: nameRef(f.authorId),
         contact: f.contactId ? (contactMap.get(f.contactId.toString()) ?? null) : null,
         at: (f.at ?? new Date()).toISOString(),
+        emailedAt: f.emailedAt ? f.emailedAt.toISOString() : null,
       })),
       isMilestone: Boolean(t.isMilestone),
       overdue,
@@ -339,10 +343,25 @@ export async function respondTask(
   project: ProjectDoc,
   taskId: Id,
   status = 200,
+  emailNew?: { config: AppConfig; people: (Id | string)[]; optIn: boolean | undefined },
 ) {
   const fresh = (await TaskModel.findById(taskId).lean()) as TaskDoc;
+  // Action emails: "You were assigned" only to the people this save newly gave the task
+  // (the route's own before/after diff), and only when ticked. Never blocks the save.
+  const email = emailNew?.optIn
+    ? await saveEmail(
+        emailNew.config,
+        res,
+        currentUser(req),
+        (await ProjectModel.findById(project._id).lean()) ?? project,
+        fresh,
+        'TASK_ASSIGNED',
+        emailNew.people,
+        true,
+      )
+    : null;
   const [dto] = await toTaskDtos(req, project, [fresh]);
-  res.status(status).json({ task: dto });
+  res.status(status).json({ task: dto, ...(email ? { email } : {}) });
 }
 
 type PlanInput = Partial<{
@@ -487,6 +506,18 @@ const withMembers = (project: ProjectDoc, add: string[]): ProjectDoc =>
 
 /** One audit entry per person, as a project member add (same action as the project form). */
 async function auditMemberAdds(req: Request, project: ProjectDoc, add: string[], taskId: Id) {
+  // In-app "added you to" for people joining through the task form (they're also told they
+  // were assigned). Fresh members, since the project just gained them.
+  if (add.length) {
+    const fresh = await ProjectModel.findById(project._id).select('managerId memberIds').lean();
+    if (fresh)
+      await notify({
+        type: 'ADDED_TO_PROJECT',
+        project: fresh,
+        actorId: currentUser(req)._id,
+        recipients: add.map((a) => new Types.ObjectId(a)),
+      });
+  }
   for (const id of add) {
     await audit({
       actorId: currentUser(req)._id,
@@ -528,7 +559,14 @@ async function writeWithMembers(
 function toPlanUpdate(input: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
-    if (v === undefined || k === 'version' || k === 'reviewerId' || k === 'addMemberIds') continue;
+    if (
+      v === undefined ||
+      k === 'version' ||
+      k === 'reviewerId' ||
+      k === 'addMemberIds' ||
+      k === 'emailNewAssignees'
+    )
+      continue;
     if (k === 'plannedStart' || k === 'dueDate') out[k] = v ? parseDateOnly(v as string) : null;
     else if (k === 'deliverable' || k === 'phase' || k === 'taskType') out[k] = v || null;
     else out[k] = v;
@@ -566,7 +604,7 @@ async function notifyFresh(
   });
 }
 
-export function tasksRouter(registry: RouteRegistry) {
+export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
   const p = registry.router('/projects');
 
   p.get('/:id/tasks', perm('tasks', 'view'), async (req, res) => {
@@ -787,11 +825,15 @@ export function tasksRouter(registry: RouteRegistry) {
       action: 'task_created',
     });
     // FR-NTF-05: tell the people given the task.
-    await notifyFresh('ASSIGNED', project._id, _id, currentUser(req)._id, [
-      input.ownerId,
-      ...(input.assigneeIds ?? []),
-    ]);
-    await respondTask(req, res, project, _id, 201);
+    const given = [input.ownerId, ...(input.assigneeIds ?? [])].filter((x): x is string =>
+      Boolean(x),
+    );
+    await notifyFresh('ASSIGNED', project._id, _id, currentUser(req)._id, given);
+    await respondTask(req, res, project, _id, 201, {
+      config,
+      people: given,
+      optIn: input.emailNewAssignees,
+    });
   });
 
   // Reorder one phase's tasks (Checklist drag-and-drop / Move up/down). Edit on tasks, and only the
@@ -877,7 +919,7 @@ export function tasksRouter(registry: RouteRegistry) {
     };
     const base = { projectId: { $in: projectIds } };
     const all = (await TaskModel.find({ ...base, $or: [mine, review] }).lean()) as TaskDoc[];
-    const today = todayPH();
+    const today = todayPH(clockNow());
     const weekEnd = new Date(today.getTime() + 7 * 86_400_000);
     const isOpen = (t: TaskDoc) => (OPEN_TASK_STATUSES as string[]).includes(t.status);
     const isReview = (t: TaskDoc) =>
@@ -1081,7 +1123,11 @@ export function tasksRouter(registry: RouteRegistry) {
       ...(input.assigneeIds ?? (task.assigneeIds ?? []).map(String)),
     ].filter((x): x is string => Boolean(x) && !before0.has(x as string));
     await notifyFresh('ASSIGNED', project._id, task._id, currentUser(req)._id, now);
-    await respondTask(req, res, project, task._id);
+    await respondTask(req, res, project, task._id, 200, {
+      config,
+      people: now,
+      optIn: input.emailNewAssignees,
+    });
   });
 
   // Status changes follow the state machine (workflow §2, FR-TSK-03..06, TC-F04).
@@ -1374,12 +1420,7 @@ export function tasksRouter(registry: RouteRegistry) {
       project,
       taskId: task._id,
       actorId: currentUser(req)._id,
-      recipients: [
-        task.ownerId,
-        ...(task.assigneeIds ?? []),
-        task.approval?.reviewerId,
-        project.managerId,
-      ],
+      recipients: followUpRecipientIds(task, project),
     });
     await respondTask(req, res, project, task._id, 201);
   });

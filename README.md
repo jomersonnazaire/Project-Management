@@ -3,7 +3,7 @@
 The app name, tagline and export footer live in `packages/shared/src/brand.ts` (one-line rename).
 
 Web app for managing Xceler8 implementation projects: templates, tasks, time, client follow-up and documents.
-Requirements, the QA plan and the design (mockup v0.4, theme tokens) are in [`docs/`](docs/).
+Requirements, the QA plan and the design (mockup v0.4, theme tokens) are in [`docs/`](docs/). Microsoft 365 sign-in setup: [`docs/setup/MS365_LOGIN_SETUP.md`](docs/setup/MS365_LOGIN_SETUP.md).
 
 **Status:** Phase 1, Milestone 2. Covers tooling, authentication, access and job roles, users, teams, clients and client contacts (Milestone 1), editable access rules and client Details/Contacts/Projects tabs (Milestone 1.5, `docs/requirements/11_ACCESS_RULES_AND_CONTACTS.md`), plus versioned implementation templates, projects created from templates, task checklist and kanban board, task details with approvals and evidence links, project active contacts and a real My tasks page (Milestone 2). Time logging and documents (Milestone 3) and the dashboard, workload and reports (Milestone 4) are not built yet.
 

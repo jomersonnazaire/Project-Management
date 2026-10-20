@@ -8,8 +8,10 @@ import '../data/api_client.dart';
 import '../data/ph_time.dart';
 import '../data/session_store.dart';
 import '../data/api_repositories.dart';
+import '../data/http_factory.dart';
 import '../data/mock_repositories.dart';
 import '../data/models.dart';
+import '../data/ms_sign_in.dart';
 import '../data/repositories.dart';
 
 /// Override in tests / demo. Defaults: API when API_BASE_URL is set, otherwise mock data.
@@ -116,6 +118,10 @@ class AuthController extends AsyncNotifier<AppUser?> {
     state = AsyncData(user);
   }
 
+  Future<void> loginWithMicrosoftResult(AppUser user) async {
+    state = AsyncData(user);
+  }
+
   Future<void> logout() async {
     await ref.read(authRepositoryProvider).logout();
     state = const AsyncData(null);
@@ -150,6 +156,29 @@ class AuthController extends AsyncNotifier<AppUser?> {
 final authProvider = AsyncNotifierProvider<AuthController, AppUser?>(
   AuthController.new,
 );
+
+class MsSignInErrorController extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? message) => state = message;
+}
+
+final msSignInErrorProvider =
+    NotifierProvider<MsSignInErrorController, String?>(
+      MsSignInErrorController.new,
+    );
+
+final msSignInProvider = Provider<MicrosoftSignIn>((ref) {
+  final ms = MicrosoftSignIn(api: ref.watch(apiClientProvider));
+  ref.onDispose(ms.dispose);
+  return ms;
+});
+
+final msAvailableProvider = FutureProvider<bool>((ref) async {
+  if (AppConfig.demoMode || browserManagesCookies) return false;
+  return ref.read(authRepositoryProvider).microsoftAvailable();
+});
 
 /// In-app appearance setting (proposal: kept in memory, not persisted).
 class ThemeModeController extends Notifier<ThemeMode> {

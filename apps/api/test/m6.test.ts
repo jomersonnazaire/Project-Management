@@ -1,7 +1,7 @@
 import { DAR_FOOTER } from '@xc8/shared';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ActivityLogModel,
   LookupModel,
@@ -13,6 +13,7 @@ import {
   TimesheetDayModel,
   UserModel,
 } from '../src/models/index.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { buildDar } from '../src/services/dar.js';
 import { darToPdf, darToXlsx } from '../src/services/darExport.js';
 import { setLeaveLabeler } from '../src/services/leaveHook.js';
@@ -26,13 +27,11 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  at('2026-10-14T02:00:00Z');
+  setTestTime('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   setLeaveLabeler(async () => null);
   await Promise.all(
     [
@@ -201,7 +200,7 @@ describe('TC-R04: day status', () => {
       module: l.financials,
       dayLocationId: l.wfh,
     });
-    at('2026-10-14T03:00:00Z');
+    setTestTime('2026-10-14T03:00:00Z');
     const r = (await dar(w.member.agent, '2026-10-12', '2026-10-14')).body.report;
     expect(r.days.map((d: { status: string }) => d.status)).toEqual([
       'Reopened',
@@ -328,19 +327,24 @@ function pdfText(pdf: Buffer): string {
   return out.join(' ').replace(/\s+/g, ' ');
 }
 
-describe('TC-R06: no Send', () => {
-  it('has no send or email endpoint', async () => {
+describe('TC-R06: no free-form send', () => {
+  it('has no send-anywhere or email endpoint; saved Send takes no recipients', async () => {
     const s = await setup();
     await sampleDay(s);
     const saved = (await save(s.w.member.agent, '2026-10-13', '2026-10-13')).body.item;
-    for (const url of [
-      '/api/v1/dar/send',
-      `/api/v1/dar/saved/${saved.id}/send`,
-      '/api/v1/dar/email',
-    ])
+    for (const url of ['/api/v1/dar/send', '/api/v1/dar/email'])
       expect((await s.w.member.agent.post(url).set(CSRF).send({ to: 'x@y.example' })).status).toBe(
         404,
       );
+    // Doc 14 §N: Send exists only for a saved report, and the browser can't choose recipients.
+    expect(
+      (
+        await s.w.member.agent
+          .post(`/api/v1/dar/saved/${saved.id}/send`)
+          .set(CSRF)
+          .send({ to: 'x@y.example' })
+      ).status,
+    ).toBe(400);
   });
 });
 
@@ -359,15 +363,15 @@ describe('TC-R07: saved copies, Latest and Earlier version', () => {
       }),
     ).toBe(1);
 
-    at('2026-10-14T02:10:00Z');
+    setTestTime('2026-10-14T02:10:00Z');
     const edit = await w.member.agent
       .patch(`/api/v1/tracker/entries/${project.id}`)
       .set(CSRF)
       .send({ notes: 'Checked logs and fixed mapping' });
     expect(edit.status).toBe(200);
-    at('2026-10-14T02:20:00Z');
+    setTestTime('2026-10-14T02:20:00Z');
     const second = (await save(w.member.agent, '2026-10-13', '2026-10-13')).body.item;
-    at('2026-10-14T02:30:00Z');
+    setTestTime('2026-10-14T02:30:00Z');
     const overlap = (await save(w.member.agent, '2026-10-12', '2026-10-13')).body.item;
 
     const list = (await w.member.agent.get('/api/v1/dar/saved')).body.items;

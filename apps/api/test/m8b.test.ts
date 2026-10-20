@@ -1,7 +1,7 @@
 import { BRAND, DAR_FOOTER, PRE_BRAND_EXPORT_NAME } from '@xc8/shared';
 import ExcelJS from 'exceljs';
 import { Types } from 'mongoose';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   AccessRuleModel,
@@ -17,6 +17,7 @@ import {
   TimesheetDayModel,
   UserModel,
 } from '../src/models/index.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 import { formatIssues } from '../src/lib/validate.js';
 import { ensureDefaultAccessRules } from '../src/services/accessRules.js';
 import { ensureDefaultLeaveTypes } from '../src/services/leave.js';
@@ -31,13 +32,11 @@ import { lookups } from './trackerHelpers.js';
  */
 useDatabase();
 const app = makeApp({ SESSION_IDLE_MINUTES: '1440' });
-const at = (iso: string) => vi.setSystemTime(new Date(iso));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  at('2026-10-14T02:00:00Z');
+  setTestTime('2026-10-14T02:00:00Z');
 });
 afterEach(async () => {
-  vi.useRealTimers();
+  resetTestTime();
   await Promise.all(
     [
       LeaveModel,
@@ -79,7 +78,7 @@ describe('FR-ACT-26: one timer per person', () => {
     const { w, l, tasks, task } = await setup();
     const a = await start(w.member.agent, task(0, { dayLocationId: l.onsite }));
     expect(a.status).toBe(201);
-    at('2026-10-14T02:20:00Z');
+    setTestTime('2026-10-14T02:20:00Z');
     const refused = await start(w.member.agent, task(1));
     expect(refused.status).toBe(409);
     expect(refused.body.error.code).toBe('TIMER_RUNNING');
@@ -96,7 +95,7 @@ describe('FR-ACT-26: one timer per person', () => {
     expect(old!.running).toBe(false);
     expect(old!.minutes).toBe(20);
     // A stale Switch (A is no longer running) is refused too.
-    at('2026-10-14T02:40:00Z');
+    setTestTime('2026-10-14T02:40:00Z');
     const stale = await start(w.member.agent, task(0, { switchFrom: a.body.entry.id }));
     expect(stale.status).toBe(409);
     expect(stale.body.error.details.running.id).toBe(sw.body.entry.id);
@@ -159,7 +158,7 @@ describe('FR-ACT-27: own timesheet only', () => {
     const week = await w.pm2.agent.get('/api/v1/time?week=2026-10-12');
     expect(week.body.items).toHaveLength(0);
     // Reopen is unchanged: supervisor yes, an unrelated PM 404.
-    at('2026-10-14T03:00:00Z');
+    setTestTime('2026-10-14T03:00:00Z');
     await w.member.agent.post('/api/v1/tracker/stop').set(CSRF).send({});
     await w.member.agent.post('/api/v1/tracker/days/2026-10-14/submit').set(CSRF).send({});
     const body = { userId: member, reason: 'Fix the afternoon' };
@@ -390,11 +389,11 @@ describe('Branding: DAR exports and saved snapshots', () => {
 describe('DR-45: timer times on whole minutes', () => {
   it('01:02:40 → 01:05:10 saves 01:02 → 01:05 and 3 minutes', async () => {
     const { w, l, task } = await setup();
-    at('2026-10-13T17:02:40.500Z'); // 01:02:40 PHT, Wed Oct 14
+    setTestTime('2026-10-13T17:02:40.500Z'); // 01:02:40 PHT, Wed Oct 14
     const a = await start(w.member.agent, task(0, { dayLocationId: l.onsite }));
     expect(a.status).toBe(201);
     expect(a.body.entry.startAt).toBe('2026-10-13T17:02:00.000Z');
-    at('2026-10-13T17:05:10.000Z');
+    setTestTime('2026-10-13T17:05:10.000Z');
     const s = await w.member.agent
       .post('/api/v1/tracker/stop')
       .set(CSRF)
@@ -414,7 +413,7 @@ describe('DR-45: timer times on whole minutes', () => {
       { _id: new Types.ObjectId(a.body.entry.id as string) },
       { $set: { startAt: new Date('2026-10-14T01:02:40Z') } },
     );
-    at('2026-10-14T01:05:10Z');
+    setTestTime('2026-10-14T01:05:10Z');
     const s = await w.member.agent.post('/api/v1/tracker/stop').set(CSRF).send({});
     expect(s.body.entry).toMatchObject({
       startAt: '2026-10-14T01:02:00.000Z',
@@ -424,7 +423,7 @@ describe('DR-45: timer times on whole minutes', () => {
   });
 
   it('the auto-stop still ends at exactly 23:59:00 PHT', async () => {
-    at('2026-10-14T15:30:45.900Z'); // 23:30:45 PHT (sign in now: sessions have a maximum age)
+    setTestTime('2026-10-14T15:30:45.900Z'); // 23:30:45 PHT (sign in now: sessions have a maximum age)
     const { w, l, task } = await setup();
     const a = await start(w.member.agent, task(0, { dayLocationId: l.onsite }));
     expect(a.body.entry.startAt).toBe('2026-10-14T15:30:00.000Z');
@@ -446,12 +445,12 @@ describe('DR-45: timer times on whole minutes', () => {
         activityTypeId: l.configuration,
       });
     expect((await hoursOnly(18)).status).toBe(201);
-    at('2026-10-14T02:00:37Z'); // 10:00:37 PHT
+    setTestTime('2026-10-14T02:00:37Z'); // 10:00:37 PHT
     const a = await start(w.member.agent, task(0, { dayLocationId: l.onsite }));
     expect(a.body.entry.startAt).toBe('2026-10-14T02:00:00.000Z');
-    at('2026-10-14T03:00:00Z');
+    setTestTime('2026-10-14T03:00:00Z');
     expect((await hoursOnly(5)).status).toBe(201); // 18h + 5h + 1h on the timer = 24h
-    at('2026-10-14T05:45:59Z'); // 3h45m59s on the timer would pass 24 hours
+    setTestTime('2026-10-14T05:45:59Z'); // 3h45m59s on the timer would pass 24 hours
     const s = await w.member.agent.post('/api/v1/tracker/stop').set(CSRF).send({});
     expect(s.body.entry).toMatchObject({
       startAt: '2026-10-14T02:00:00.000Z',
