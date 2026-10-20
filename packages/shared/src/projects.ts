@@ -950,6 +950,8 @@ export interface FollowUpDto {
   author: Ref | null;
   contact: Ref | null;
   at: string;
+  /** When the author emailed it from their own Outlook (follow-up emails); null if never. */
+  emailedAt: string | null;
 }
 
 export interface TaskDto {

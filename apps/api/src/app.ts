@@ -42,6 +42,7 @@ import { trackerRouter } from './routes/tracker.js';
 import { darRouter } from './routes/dar.js';
 import { leaveRouter } from './routes/leave.js';
 import { timeRouter } from './routes/time.js';
+import { actionEmailsRouter } from './routes/actionEmails.js';
 import { createBlobStore, type BlobStore } from './storage/blobStore.js';
 
 export function createApp(
@@ -125,6 +126,19 @@ export function createApp(
       next(new HttpError(429, 'DAR_SEND_RATE_LIMITED', DAR_SEND_RATE_LIMITED)),
   });
 
+  // Action emails (follow-up, assigned, added to project) get their own per-user limiter too,
+  // with DAR Send's numbers, so they never use up the sign-in or DAR Send buckets.
+  const actionEmailLimiter = rateLimit({
+    windowMs: config.DAR_SEND_RATE_LIMIT_WINDOW_MINUTES * 60_000,
+    limit: config.DAR_SEND_RATE_LIMIT_MAX,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    validate: false,
+    keyGenerator: (req) => `action-email:${String(req.auth?.user._id ?? 'anon')}`,
+    handler: (_req, _res, next) =>
+      next(new HttpError(429, 'RATE_LIMITED', 'Too many emails. Please wait and try again.')),
+  });
+
   // Every route is declared with its access policy; the central gate checks it before any
   // handler runs, and requests matching no declared route are denied (doc 11 §8).
   const registry = new RouteRegistry();
@@ -157,6 +171,7 @@ export function createApp(
     conversationsRouter(registry),
     ...issuesRouter(registry),
     ...reportsRouter(registry),
+    actionEmailsRouter(config, registry, actionEmailLimiter),
     ...(extraRoutes ? [extraRoutes(registry)] : []),
   ];
 

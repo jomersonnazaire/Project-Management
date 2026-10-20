@@ -13,7 +13,7 @@ export class GraphSendError extends Error {
   }
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -91,6 +91,42 @@ export async function sendMailWithPdf(
     },
     signal: AbortSignal.timeout(20_000),
     body: JSON.stringify(body),
+  });
+  if (res.status === 202) return;
+  let code = 'send_failed';
+  try {
+    const json = (await res.json()) as { error?: { code?: string } };
+    if (typeof json.error?.code === 'string') code = json.error.code;
+  } catch {
+    /* ignore */
+  }
+  throw new GraphSendError(res.status, code);
+}
+
+/**
+ * A plain HTML email (no attachment) from the signed-in user's own mailbox via delegated
+ * /me/sendMail: it lands in their Sent Items. Used by follow-up emails; DAR Send keeps
+ * sendMailWithPdf. Throws GraphSendError like sendMailWithPdf.
+ */
+export async function sendMailAsUser(
+  accessToken: string,
+  input: { subject: string; html: string; to: string[] },
+): Promise<void> {
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    signal: AbortSignal.timeout(20_000),
+    body: JSON.stringify({
+      message: {
+        subject: input.subject,
+        body: { contentType: 'HTML', content: input.html },
+        toRecipients: input.to.map((address) => ({ emailAddress: { address } })),
+      },
+      saveToSentItems: true,
+    }),
   });
   if (res.status === 202) return;
   let code = 'send_failed';

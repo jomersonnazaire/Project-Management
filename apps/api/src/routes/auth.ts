@@ -7,6 +7,7 @@ import {
   loginSchema,
   myPermissionsSummary,
   setupPasswordSchema,
+  type EmailStatusDto,
   type SystemRole,
 } from '@xc8/shared';
 import { AUTHENTICATED, PUBLIC, type RouteRegistry } from '../access/registry.js';
@@ -19,11 +20,15 @@ import { bearerToken, currentPermissions, currentRole, currentUser } from '../mi
 import { MobileAuthCodeModel, SessionModel, UserModel } from '../models/index.js';
 import { buildMicrosoftLoginUrl, exchangeMicrosoftCode } from '../services/microsoftAuth.js';
 import { handleMicrosoftDarMailCallback } from '../services/microsoftDarCallback.js';
+import { handleMicrosoftActionEmailCallback } from '../services/actionEmail.js';
 import {
+  MS_ACTION_EMAIL_COOKIE,
   MS_MAIL_COOKIE,
   MS_OAUTH_COOKIE,
+  clearMicrosoftActionEmailCookie,
   clearMicrosoftMailOAuthCookie,
   clearMicrosoftOAuthCookie,
+  readMicrosoftActionEmailCookie,
   readMicrosoftMailOAuthCookie,
   readMicrosoftOAuthCookie,
   setMicrosoftOAuthCookie,
@@ -193,6 +198,9 @@ export function authRouter(
     const state = typeof req.query.state === 'string' ? req.query.state : '';
     const mail = readMicrosoftMailOAuthCookie(config, req.cookies?.[MS_MAIL_COOKIE]);
     if (state && mail && mail.state === state) return next();
+    // Same for an action email: counted by its own limiter when it started.
+    const act = readMicrosoftActionEmailCookie(config, req.cookies?.[MS_ACTION_EMAIL_COOKIE]);
+    if (state && act && act.state === state) return next();
     return authLimiter(req, res, next);
   };
 
@@ -244,6 +252,21 @@ export function authRouter(
     if (state && mail && mail.state === state) {
       clearMicrosoftMailOAuthCookie(config, res);
       await handleMicrosoftDarMailCallback(config, req, res, mail, code, msError, errorDescription);
+      return;
+    }
+
+    const act = readMicrosoftActionEmailCookie(config, req.cookies?.[MS_ACTION_EMAIL_COOKIE]);
+    if (state && act && act.state === state) {
+      clearMicrosoftActionEmailCookie(config, res);
+      await handleMicrosoftActionEmailCallback(
+        config,
+        req,
+        res,
+        act,
+        code,
+        msError,
+        errorDescription,
+      );
       return;
     }
 
@@ -303,6 +326,7 @@ export function authRouter(
 
     if (oauth) clearMicrosoftOAuthCookie(config, res);
     if (mail) clearMicrosoftMailOAuthCookie(config, res);
+    if (act) clearMicrosoftActionEmailCookie(config, res);
     req.log?.warn('Microsoft callback rejected: bad or missing OAuth state');
     msFailureRedirect(res);
   });
@@ -429,6 +453,16 @@ export function authRouter(
    * Effective permissions (FR-ACL-13, FR-ACL-21 / NFR-32): role and grid as before, plus Setup
    * children, create flags, `myTasksTabs` ([] when none) and `defaultTab` (null when none).
    */
+  /** Whether the "Email {name}" option shows, and whether it's usable (Microsoft-linked). */
+  router.get('/me/email-status', AUTHENTICATED, (req, res) => {
+    const me = currentUser(req);
+    const body: EmailStatusDto = {
+      enabled: config.actionEmailEnabled,
+      linked: Boolean(me.msOid && me.msTid),
+    };
+    res.json(body);
+  });
+
   router.get('/me/permissions', AUTHENTICATED, (req, res) => {
     res.json(myPermissionsSummary(currentRole(req), currentPermissions(req)));
   });

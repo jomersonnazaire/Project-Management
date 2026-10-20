@@ -92,6 +92,13 @@ const EnvSchema = z.object({
   MS_REDIRECT_URI: z.string().optional().default(''),
   MS_ALLOWED_TENANT_IDS: z.string().optional().default(''),
   MS_ALLOWED_DOMAINS: z.string().optional().default(''),
+  /**
+   * Email notifications (roadmap §4). Today this gates action emails only: after a follow-up, a
+   * task assignment or adding project members, the actor emails the people concerned from their
+   * own Outlook with delegated Mail.Send, the same flow as DAR Send. Off by default; it also
+   * needs Microsoft sign-in to be configured (msEnabled).
+   */
+  EMAIL_NOTIFICATIONS_ENABLED: bool(false),
 });
 
 type EnvConfig = z.infer<typeof EnvSchema>;
@@ -100,6 +107,8 @@ export type AppConfig = EnvConfig & {
   msEnabled: boolean;
   msAllowedTenantIds: string[];
   msAllowedDomains: string[];
+  /** EMAIL_NOTIFICATIONS_ENABLED and Microsoft sign-in configured. */
+  actionEmailEnabled: boolean;
 };
 
 function parseCsvList(raw: string): string[] {
@@ -130,7 +139,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const msEnabled = Boolean(
     msCore && msAllowedTenantIds.length > 0 && msAllowedDomains.length > 0 && msEdgeSecretOk,
   );
-  return { ...cfg, msEnabled, msAllowedTenantIds, msAllowedDomains };
+  const actionEmailEnabled = cfg.EMAIL_NOTIFICATIONS_ENABLED && msEnabled;
+  return { ...cfg, msEnabled, msAllowedTenantIds, msAllowedDomains, actionEmailEnabled };
 }
 
 /** HMAC key for short-lived OAuth state cookies (same shared secret as the Vercel edge proxy). */

@@ -16,6 +16,10 @@ import {
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
 import { ApiError, saveErrorMessage } from '../../api/client';
+import { joinNames, sendActionEmail, useWantsEmail } from '../../api/emailHooks';
+import { useAuth } from '../../auth/AuthContext';
+import { EmailCheckbox } from '../../components/EmailCheckbox';
+import { ErrorAlert } from '../../components/Feedback';
 import {
   taskCreate,
   taskPatch,
@@ -73,6 +77,15 @@ export function TaskFormModal({
   const [reviewerId, setReviewerId] = useState(task?.reviewer?.id ?? '');
   const [isMilestone, setIsMilestone] = useState(task?.isMilestone ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const { user } = useAuth();
+  // Action emails: the people newly given the task (owner or assignee), never me.
+  const before = new Set([task?.owner?.id, ...(task?.assignees ?? []).map((a) => a.id)]);
+  const newlyAssigned = [...new Set([ownerId, ...assigneeIds])].filter(
+    (id) => id && !before.has(id) && id !== user?.id,
+  );
+  const [emailAssigned, setEmailAssigned] = useState(true);
+  const wantsEmail = useWantsEmail(emailAssigned) && newlyAssigned.length > 0;
+  const [emailError, setEmailError] = useState<unknown>(null);
 
   const serverErrors = mutation.error instanceof ApiError ? mutation.error.fieldErrors() : {};
   const err = (k: string) => errors[k] ?? serverErrors[k];
@@ -117,7 +130,16 @@ export function TaskFormModal({
         ? taskPatch(task.id, { ...withAdds, version: task.version })
         : taskCreate(project.id, withAdds),
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
+          // Saved, with its in-app notifications; the email is extra (from my own Outlook).
+          if (wantsEmail && data.task) {
+            sendActionEmail({
+              kind: 'TASK_ASSIGNED',
+              taskId: data.task.id,
+              userIds: newlyAssigned,
+            }).catch(setEmailError);
+            return;
+          }
           if (!joining.length) return onClose();
           setConfirmation(
             `${joining.map((p) => p.name).join(', ')} added to ${project.name} and assigned.`,
@@ -405,6 +427,15 @@ export function TaskFormModal({
               )}
             </div>
           </div>
+          <EmailCheckbox
+            id="task-assigned-email"
+            names={joinNames(
+              newlyAssigned.map((id) => team.find((u) => u.id === id)?.name ?? '').filter(Boolean),
+            )}
+            checked={emailAssigned}
+            onChange={setEmailAssigned}
+          />
+          <ErrorAlert error={emailError} />
         </Modal.Body>
         <Modal.Footer>
           <Button variant="outline-secondary" onClick={onClose}>

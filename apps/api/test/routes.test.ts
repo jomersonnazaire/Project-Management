@@ -85,6 +85,7 @@ describe('Route policy table', () => {
       'POST /auth/mobile/logout public',
       'POST /auth/logout public',
       'GET /auth/me authenticated',
+      'GET /auth/me/email-status authenticated',
       'GET /auth/me/permissions authenticated',
       'POST /auth/invite/verify public',
       'POST /auth/setup-password public',
@@ -274,6 +275,7 @@ describe('Route policy table', () => {
       'GET /reports/project-status/export reports.export',
       'GET /reports/issues reports.view',
       'GET /reports/issues/export reports.export',
+      'POST /action-emails authenticated',
     ]);
   });
 });

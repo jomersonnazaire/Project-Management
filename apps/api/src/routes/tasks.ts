@@ -61,6 +61,7 @@ import { audit } from '../services/audit.js';
 import { loadCalendar } from '../services/calendar.js';
 import { taskRecordCounts } from '../services/taskRecords.js';
 import { notify } from '../services/notify.js';
+import { followUpRecipientIds } from '../services/actionEmail.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
 import {
   canAddProjectMembers,
@@ -290,6 +291,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
         author: nameRef(f.authorId),
         contact: f.contactId ? (contactMap.get(f.contactId.toString()) ?? null) : null,
         at: (f.at ?? new Date()).toISOString(),
+        emailedAt: f.emailedAt ? f.emailedAt.toISOString() : null,
       })),
       isMilestone: Boolean(t.isMilestone),
       overdue,
@@ -1375,12 +1377,7 @@ export function tasksRouter(registry: RouteRegistry) {
       project,
       taskId: task._id,
       actorId: currentUser(req)._id,
-      recipients: [
-        task.ownerId,
-        ...(task.assigneeIds ?? []),
-        task.approval?.reviewerId,
-        project.managerId,
-      ],
+      recipients: followUpRecipientIds(task, project),
     });
     await respondTask(req, res, project, task._id, 201);
   });

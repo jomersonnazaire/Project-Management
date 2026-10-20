@@ -20,6 +20,9 @@ import { HandoverModal } from '../../components/HandoverModal';
 import { useConfirm } from '../../components/ConfirmModal';
 import { useProjectPhases } from '../../api/issueHooks';
 import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
+import { joinNames, sendActionEmail, useWantsEmail } from '../../api/emailHooks';
+import { EmailCheckbox } from '../../components/EmailCheckbox';
+import { ErrorAlert } from '../../components/Feedback';
 
 /**
  * Edit a project (FR-PRJ-11..13): details, team, status, baseline dates (with a reason) and the
@@ -51,6 +54,18 @@ export function ProjectEditModal({
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmIssues, setConfirmIssues] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Action emails: only the people added in this save, never me.
+  const wasMember = new Set(project.members.map((m) => m.id));
+  const added = memberIds.filter((m) => m !== managerId && !wasMember.has(m) && m !== user?.id);
+  const [emailAdded, setEmailAdded] = useState(true);
+  const wantsEmail = useWantsEmail(emailAdded) && added.length > 0;
+  const [emailError, setEmailError] = useState<unknown>(null);
+  const saved = () => {
+    if (!wantsEmail) return onClose();
+    sendActionEmail({ kind: 'PROJECT_ADDED', projectId: project.id, userIds: added }).catch(
+      setEmailError,
+    );
+  };
 
   const datesChanged =
     startDate !== (project.startDate ?? '') || plannedEndDate !== (project.plannedEndDate ?? '');
@@ -130,7 +145,7 @@ export function ProjectEditModal({
       setHandover(body);
       return;
     }
-    update.mutate(body, { onSuccess: onClose });
+    update.mutate(body, { onSuccess: saved });
   };
 
   const managers = (people.data ?? []).filter(
@@ -304,6 +319,19 @@ export function ProjectEditModal({
                       />
                     ))}
                 </div>
+                <div className="mt-2">
+                  <EmailCheckbox
+                    id="project-added-email"
+                    names={joinNames(
+                      added
+                        .map((id) => (people.data ?? []).find((p) => p.id === id)?.name ?? '')
+                        .filter(Boolean),
+                    )}
+                    checked={emailAdded}
+                    onChange={setEmailAdded}
+                  />
+                  <ErrorAlert error={emailError} />
+                </div>
               </fieldset>
               <Form.Group className="col-12" controlId="edit-prj-desc">
                 <Form.Label>Description</Form.Label>
@@ -332,7 +360,7 @@ export function ProjectEditModal({
             onCancel={() => setHandover(null)}
             onConfirm={() =>
               update.mutate(handover, {
-                onSuccess: onClose,
+                onSuccess: saved,
                 onSettled: () => setHandover(null),
               })
             }
