@@ -7,7 +7,7 @@ export interface UserDto {
   name: string;
   email: string;
   systemRole: SystemRole;
-  jobRole: JobRole;
+  jobRole: JobRole | null;
   teamIds: string[];
   weeklyCapacityHours: number;
   /** Direct supervisor (doc 14 §5); null = "Supervisor needed" (FR-LV-10). */

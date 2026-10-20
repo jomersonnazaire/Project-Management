@@ -82,9 +82,29 @@ const EnvSchema = z.object({
   /** Lifetime of the write-only upload link given to the browser. */
   UPLOAD_LINK_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  /** Microsoft 365 sign-in (web). All must be set with non-empty allowlists or sign-in stays disabled. */
+  MS_TENANT_ID: z.string().optional().default(''),
+  MS_CLIENT_ID: z.string().optional().default(''),
+  MS_CLIENT_SECRET: z.string().optional().default(''),
+  MS_REDIRECT_URI: z.string().optional().default(''),
+  MS_ALLOWED_TENANT_IDS: z.string().optional().default(''),
+  MS_ALLOWED_DOMAINS: z.string().optional().default(''),
 });
 
-export type AppConfig = z.infer<typeof EnvSchema>;
+type EnvConfig = z.infer<typeof EnvSchema>;
+
+export type AppConfig = EnvConfig & {
+  msEnabled: boolean;
+  msAllowedTenantIds: string[];
+  msAllowedDomains: string[];
+};
+
+function parseCsvList(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = EnvSchema.safeParse(env);
@@ -96,5 +116,27 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cfg.COOKIE_SAMESITE === 'none' && !cfg.COOKIE_SECURE) {
     throw new Error('COOKIE_SAMESITE=none requires COOKIE_SECURE=true');
   }
-  return cfg;
+  const msAllowedTenantIds = parseCsvList(cfg.MS_ALLOWED_TENANT_IDS).map((t) => t.toLowerCase());
+  const msAllowedDomains = parseCsvList(cfg.MS_ALLOWED_DOMAINS).map((d) => d.toLowerCase());
+  const msCore =
+    cfg.MS_TENANT_ID.trim() &&
+    cfg.MS_CLIENT_ID.trim() &&
+    cfg.MS_CLIENT_SECRET.trim() &&
+    cfg.MS_REDIRECT_URI.trim();
+  const msEdgeSecretOk = (cfg.EDGE_PROXY_SECRET?.trim().length ?? 0) >= 32;
+  const msEnabled = Boolean(
+    msCore && msAllowedTenantIds.length > 0 && msAllowedDomains.length > 0 && msEdgeSecretOk,
+  );
+  return { ...cfg, msEnabled, msAllowedTenantIds, msAllowedDomains };
+}
+
+/** HMAC key for short-lived OAuth state cookies (same shared secret as the Vercel edge proxy). */
+export function oauthStateCookieSecret(config: AppConfig): string {
+  const secret = config.EDGE_PROXY_SECRET?.trim();
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      'EDGE_PROXY_SECRET must be set (32+ chars) for Microsoft sign-in state cookies',
+    );
+  }
+  return secret;
 }
