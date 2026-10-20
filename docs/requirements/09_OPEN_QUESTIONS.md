@@ -23,7 +23,7 @@ Questions marked ★ blocked development or design decisions. **All ★ question
 | Q-14 | May a PM approve a task they own (self-approval)? | Audit/compliance | Allowed and flagged in audit |
 | Q-15 | How should On Hold projects behave in health counts and time logging? | Dashboard accuracy | **✅ RESOLVED 2026-10-09 (Lean):** excluded from health counts; time logging blocked. |
 | Q-16 | Hosting preference for production and preview builds (Vercel/Netlify + Atlas, Azure, on-prem)? | Deployment and cost | Front end on Vercel/Netlify previews, API + MongoDB Atlas (APAC) |
-| Q-17 | Sign-in method: email/password only, or Google / Microsoft 365 single sign-on? | Auth implementation | Email/password in Phase 1, SSO later |
+| Q-17 | Sign-in method: email/password only, or Google / Microsoft 365 single sign-on? | Auth implementation | ~~Email/password in Phase 1, SSO later~~ **Superseded (2026-10-20, approved by Jonathan):** Microsoft 365 sign-in alongside email/password, per PR #27 (doc 14 §1). New Microsoft users from the allowed tenant and domain are auto-created as **Viewer** with `jobRole: null` and get 403 on the DAR (`/dar/*`) until an Admin assigns a role (doc 14 FR-SSO-04). |
 | Q-18 | Do you need multiple currencies/billing rates or cost tracking on time entries? | Not in blueprint; affects time data model | No; hours only |
 | Q-19 | Should evidence files have a retention period or size quota? | Storage cost | No retention limit; 25 MB per file |
 

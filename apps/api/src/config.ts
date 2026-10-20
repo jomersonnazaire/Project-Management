@@ -49,6 +49,9 @@ const EnvSchema = z.object({
   LOCKOUT_MINUTES: z.coerce.number().int().min(1).default(15),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
+  /** DAR Send's own limiter, per signed-in user (not shared with sign-in). */
+  DAR_SEND_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(30),
+  DAR_SEND_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
   /** Lifetime of first-time invite links (FR-AUTH-04). */
   INVITE_TTL_HOURS: z.coerce.number().int().min(1).default(72),
   /** Lifetime of password reset links (FR-AUTH-05). */

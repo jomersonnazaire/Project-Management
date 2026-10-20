@@ -74,15 +74,16 @@ export function NotificationBell() {
                   onClick={() => {
                     if (!n.read) mark.mutate(n.id);
                     setOpen(false);
-                    navigate(
-                      n.link
-                        ? n.link
-                        : n.issue
-                          ? `/issues/${n.issue.id}`
-                          : n.task && n.project
-                            ? `/projects/${n.project.id}?task=${n.task.id}`
-                            : `/projects/${n.project?.id ?? ''}`,
-                    );
+                    const target = n.link
+                      ? n.link
+                      : n.issue
+                        ? `/issues/${n.issue.id}`
+                        : n.task && n.project
+                          ? `/projects/${n.project.id}?task=${n.task.id}`
+                          : n.project?.id
+                            ? `/projects/${n.project.id}`
+                            : null;
+                    if (target) navigate(target);
                   }}
                 >
                   <span

@@ -44,3 +44,36 @@ export function useSaveReport() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dar', 'saved'] }),
   });
 }
+
+export interface DarSendStatus {
+  enabled: boolean;
+  reason: 'ms_disabled' | 'not_linked' | 'no_supervisor' | null;
+  canNotify: boolean;
+  to: { name: string; email: string } | null;
+  cc: string[];
+}
+
+export function useDarSendStatus() {
+  return useQuery({
+    queryKey: ['dar', 'send-status'],
+    queryFn: () => api<DarSendStatus>('/dar/send-status'),
+  });
+}
+
+export function useNotifySupervisor() {
+  return useMutation({
+    mutationFn: (savedId: string) =>
+      api<{ notified: number }>(`/dar/saved/${savedId}/notify-supervisor`, {
+        method: 'POST',
+        body: {},
+      }),
+  });
+}
+
+/** Starts Send (a CSRF-protected POST, D1); the API answers with the Microsoft URL to open. */
+export function useStartSend() {
+  return useMutation({
+    mutationFn: (savedId: string) =>
+      api<{ url: string }>(`/dar/saved/${savedId}/send`, { method: 'POST', body: {} }),
+  });
+}

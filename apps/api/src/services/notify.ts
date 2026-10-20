@@ -58,7 +58,7 @@ export async function notifyPersonal(input: {
   actorId: Id | null;
   recipients: (Id | null | undefined)[];
   message: string;
-  link: string;
+  link?: string | null;
 }): Promise<number> {
   const wanted = [
     ...new Set(input.recipients.filter((x): x is Id => Boolean(x)).map(String)),
@@ -75,7 +75,7 @@ export async function notifyPersonal(input: {
       type: input.type,
       actorId: input.actorId,
       message: input.message,
-      link: input.link,
+      link: input.link ?? null,
     })),
   );
   return active.length;

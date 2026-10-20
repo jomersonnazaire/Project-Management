@@ -16,9 +16,13 @@ import { clientIp } from '../middleware/clientIp.js';
 import { bearerToken, currentPermissions, currentRole, currentUser } from '../middleware/auth.js';
 import { SessionModel, UserModel } from '../models/index.js';
 import { buildMicrosoftLoginUrl, exchangeMicrosoftCode } from '../services/microsoftAuth.js';
+import { handleMicrosoftDarMailCallback } from '../services/microsoftDarCallback.js';
 import {
+  MS_MAIL_COOKIE,
   MS_OAUTH_COOKIE,
+  clearMicrosoftMailOAuthCookie,
   clearMicrosoftOAuthCookie,
+  readMicrosoftMailOAuthCookie,
   readMicrosoftOAuthCookie,
   setMicrosoftOAuthCookie,
 } from '../services/microsoftOAuthCookie.js';
@@ -147,47 +151,70 @@ export function authRouter(
     }
   });
 
-  router.get('/microsoft/callback', PUBLIC, authLimiter, async (req, res) => {
+  // The DAR Send leg of the callback (a valid signed mail cookie for this state) is counted by
+  // Send's own per-user limiter when it starts, so it doesn't use the sign-in bucket (D5).
+  const callbackLimiter: RequestHandler = (req, res, next) => {
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+    const mail = readMicrosoftMailOAuthCookie(config, req.cookies?.[MS_MAIL_COOKIE]);
+    if (state && mail && mail.state === state) return next();
+    return authLimiter(req, res, next);
+  };
+
+  router.get('/microsoft/callback', PUBLIC, callbackLimiter, async (req, res) => {
     if (!config.msEnabled) {
       msFailureRedirect(res);
       return;
     }
     const code = typeof req.query.code === 'string' ? req.query.code : '';
     const state = typeof req.query.state === 'string' ? req.query.state : '';
+    const msError = typeof req.query.error === 'string' ? req.query.error : '';
+    const errorDescription =
+      typeof req.query.error_description === 'string' ? req.query.error_description : '';
     const oauth = readMicrosoftOAuthCookie(config, req.cookies?.[MS_OAUTH_COOKIE]);
-    clearMicrosoftOAuthCookie(config, res);
-    if (!code || !state || !oauth || oauth.state !== state) {
-      req.log?.warn('Microsoft callback rejected: bad or missing OAuth state');
-      msFailureRedirect(res);
+    const mail = readMicrosoftMailOAuthCookie(config, req.cookies?.[MS_MAIL_COOKIE]);
+
+    if (code && state && oauth && oauth.state === state) {
+      clearMicrosoftOAuthCookie(config, res);
+      try {
+        const claims = await exchangeMicrosoftCode(config, code, oauth.codeVerifier, oauth.nonce);
+        const result = await resolveMicrosoftSignIn(config, claims);
+        if (!result.ok) {
+          req.log?.warn(
+            { reason: result.reason, tid: claims.tid, oid: claims.oid },
+            'Microsoft sign-in refused',
+          );
+          msFailureRedirect(res, result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed');
+          return;
+        }
+        const now = clockNow();
+        await UserModel.updateOne(
+          { _id: result.user._id },
+          { $set: { lastLoginAt: now, failedLogins: 0, lockedUntil: null } },
+        );
+        await createSession(config, result.user._id, req, res, ipOf(req));
+        res.redirect(config.WEB_APP_URL);
+      } catch (err) {
+        if (err instanceof Error && err.message === 'Missing email') {
+          req.log?.warn('Microsoft callback refused: no email claim');
+          msFailureRedirect(res, 'ms_no_email');
+          return;
+        }
+        req.log?.warn({ err }, 'Microsoft callback failed');
+        msFailureRedirect(res);
+      }
       return;
     }
-    try {
-      const claims = await exchangeMicrosoftCode(config, code, oauth.codeVerifier, oauth.nonce);
-      const result = await resolveMicrosoftSignIn(config, claims);
-      if (!result.ok) {
-        req.log?.warn(
-          { reason: result.reason, tid: claims.tid, oid: claims.oid },
-          'Microsoft sign-in refused',
-        );
-        msFailureRedirect(res, result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed');
-        return;
-      }
-      const now = clockNow();
-      await UserModel.updateOne(
-        { _id: result.user._id },
-        { $set: { lastLoginAt: now, failedLogins: 0, lockedUntil: null } },
-      );
-      await createSession(config, result.user._id, req, res, ipOf(req));
-      res.redirect(config.WEB_APP_URL);
-    } catch (err) {
-      if (err instanceof Error && err.message === 'Missing email') {
-        req.log?.warn('Microsoft callback refused: no email claim');
-        msFailureRedirect(res, 'ms_no_email');
-        return;
-      }
-      req.log?.warn({ err }, 'Microsoft callback failed');
-      msFailureRedirect(res);
+
+    if (state && mail && mail.state === state) {
+      clearMicrosoftMailOAuthCookie(config, res);
+      await handleMicrosoftDarMailCallback(config, req, res, mail, code, msError, errorDescription);
+      return;
     }
+
+    if (oauth) clearMicrosoftOAuthCookie(config, res);
+    if (mail) clearMicrosoftMailOAuthCookie(config, res);
+    req.log?.warn('Microsoft callback rejected: bad or missing OAuth state');
+    msFailureRedirect(res);
   });
 
   router.post('/login', PUBLIC, authLimiter, async (req, res) => {

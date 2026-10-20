@@ -25,7 +25,9 @@ An account in the **Xceler8 Microsoft 365 tenant** with one of: Global Administr
 - `xms_edov` tells the API the email domain is verified (used for linking existing accounts).
 
 ## 4. API permissions
-Keep only Microsoft Graph delegated `openid`, `profile`, `email`. **Remove `User.Read`** (added by default). Click **Grant admin consent for Xceler8**.
+Keep Microsoft Graph delegated `openid`, `profile`, `email`, and **`Mail.Send`** (for DAR Send from the user's mailbox). **Remove `User.Read`** (added by default). Then click **Grant admin consent for Xceler8**, including for `Mail.Send`, and check every row shows "Granted". With admin consent in place, users aren't asked to approve `Mail.Send` when they first press **Send** on a saved DAR. Sign-in itself still asks only for `openid profile email`; `Mail.Send` is requested only when someone presses Send.
+- Microsoft always adds `openid profile offline_access` to the Send request, so a consent screen may say "Maintain access to data you have given it access to". The API uses the token once to send and never stores it.
+- Send attaches the saved report as a PDF of up to **2.5 MB**. Larger reports are refused before anything is sent (base64 adds about 33%, and Graph's `sendMail` request is capped at about 4 MB); users can export them instead.
 
 ## 5. Who may sign in
 1. **Identity > Applications > Enterprise applications > OpsTrack > Properties**: set **Assignment required?** to **Yes**. Save.
@@ -54,6 +56,7 @@ Add the same keys to `apps/api/.env` (never commit it), with `MS_REDIRECT_URI=ht
 3. An existing staff member with a matching company email signs in: their account is linked; their password still works.
 4. An unassigned user, a guest, or a personal Microsoft account: refused, nothing created.
 5. An Admin promotes new users and sets their job role in Users.
+6. Send a saved DAR from **Saved reports**; it arrives from your mailbox with the PDF attached and appears in your Sent Items.
 
 ## Behaviour summary
 - New users: Viewer, job role empty ("Not set"), active. Never Admin, never a client contact. Viewers can't log time until promoted.

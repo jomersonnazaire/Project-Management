@@ -24,12 +24,16 @@ export function RequireAuth() {
  */
 export function RequirePermission({
   any,
+  message,
   children,
 }: {
   any: [RecordType, AccessAction][];
+  message?: string;
   children: ReactNode;
 }) {
   const { permissions } = useAuth();
-  if (!any.some(([r, a]) => permissions?.[r]?.[a])) return <ForbiddenPage />;
+  if (!any.some(([r, a]) => permissions?.[r]?.[a])) {
+    return <ForbiddenPage message={message} />;
+  }
   return <>{children}</>;
 }
