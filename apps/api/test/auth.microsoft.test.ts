@@ -7,7 +7,10 @@ import {
   SessionModel,
   UserModel,
 } from '../src/models/index.js';
-import { readEmailFromIdTokenClaims, type MicrosoftIdClaims } from '../src/services/microsoftAuth.js';
+import {
+  readEmailFromIdTokenClaims,
+  type MicrosoftIdClaims,
+} from '../src/services/microsoftAuth.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
 
 const loginReq = (a: ReturnType<typeof makeApp>, email: string, password: string) =>
@@ -106,6 +109,30 @@ describe('Microsoft 365 sign-in', () => {
     expect(res.body.microsoft).toBe(false);
   });
 
+  it('providers: msEnabled false when EDGE_PROXY_SECRET empty (all MS_* set)', async () => {
+    const a = makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: '' });
+    expect((await request(a).get('/api/v1/auth/providers')).body.microsoft).toBe(false);
+    const loginRes = await request(a).get('/api/v1/auth/microsoft/login');
+    expect(loginRes.status).toBe(302);
+    expect(loginRes.headers.location).toMatch(/ms_signin_failed/);
+  });
+
+  it('providers: EDGE_PROXY_SECRET length gates msEnabled (31 off, 32 on)', async () => {
+    const short = 'e'.repeat(31);
+    const ok = 'e'.repeat(32);
+    expect(
+      (
+        await request(makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: short })).get(
+          '/api/v1/auth/providers',
+        )
+      ).body.microsoft,
+    ).toBe(false);
+    expect(
+      (await request(makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: ok })).get('/api/v1/auth/providers'))
+        .body.microsoft,
+    ).toBe(true);
+  });
+
   it('1 wrong tid: refused, no user created', async () => {
     const a = appMs();
     const claims = baseClaims();
@@ -160,9 +187,11 @@ describe('Microsoft 365 sign-in', () => {
     const claims = baseClaims(`newemail-${oidSeq}@${DOMAIN}`);
     claims.oid = msOid;
     await runCallback(a, claims);
-    expect(await ActivityLogModel.countDocuments({ action: { $in: ['sso_linked', 'sso_user_created'] } })).toBe(
-      0,
-    );
+    expect(
+      await ActivityLogModel.countDocuments({
+        action: { $in: ['sso_linked', 'sso_user_created'] },
+      }),
+    ).toBe(0);
   });
 
   it('3b returning user matched by msOid+msTid even if email changed', async () => {

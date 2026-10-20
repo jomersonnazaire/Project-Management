@@ -65,7 +65,6 @@ const EnvSchema = z.object({
    */
   EDGE_PROXY_SECRET: z
     .string()
-    .min(32, 'EDGE_PROXY_SECRET must be at least 32 characters')
     .optional()
     .or(z.literal('').transform(() => undefined)),
   /** IPv4 addresses in the same /N share one auth rate-limit bucket (IPv6 uses /56). */
@@ -123,7 +122,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     cfg.MS_CLIENT_ID.trim() &&
     cfg.MS_CLIENT_SECRET.trim() &&
     cfg.MS_REDIRECT_URI.trim();
-  const msEnabled = Boolean(msCore && msAllowedTenantIds.length > 0 && msAllowedDomains.length > 0);
+  const msEdgeSecretOk = (cfg.EDGE_PROXY_SECRET?.trim().length ?? 0) >= 32;
+  const msEnabled = Boolean(
+    msCore && msAllowedTenantIds.length > 0 && msAllowedDomains.length > 0 && msEdgeSecretOk,
+  );
   return { ...cfg, msEnabled, msAllowedTenantIds, msAllowedDomains };
 }
 
@@ -131,7 +133,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 export function oauthStateCookieSecret(config: AppConfig): string {
   const secret = config.EDGE_PROXY_SECRET?.trim();
   if (!secret || secret.length < 32) {
-    throw new Error('EDGE_PROXY_SECRET must be set (32+ chars) for Microsoft sign-in state cookies');
+    throw new Error(
+      'EDGE_PROXY_SECRET must be set (32+ chars) for Microsoft sign-in state cookies',
+    );
   }
   return secret;
 }

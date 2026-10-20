@@ -33,3 +33,4 @@ npm-debug.log*
 apps/api/deploy/
 
 ms365-test-output.txt
+.cursor/commands/
