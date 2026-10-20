@@ -75,8 +75,10 @@ describe('Route policy table', () => {
     expect(table).toEqual([
       'GET /health public',
       'GET /auth/providers public',
+      'GET /auth/mobile/microsoft/login public',
       'GET /auth/microsoft/login public',
       'GET /auth/microsoft/callback public',
+      'POST /auth/mobile/microsoft/exchange public',
       'POST /auth/login public',
       'POST /auth/mobile/login public',
       'POST /auth/mobile/refresh authenticated',

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'config.dart';
 import 'data/api_client.dart' show disconnectedMessage;
+import 'data/http_factory.dart';
+import 'data/ms_sign_in.dart';
 import 'router.dart';
 import 'state/providers.dart';
 import 'theme/app_theme.dart';
@@ -15,9 +17,45 @@ class XceleratePmApp extends ConsumerStatefulWidget {
 
 class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
   // Every resume refreshes the sliding 3-day session.
-  late final _life = AppLifecycleListener(
-    onResume: () => ref.read(authProvider.notifier).refreshSession(),
-  );
+  late final AppLifecycleListener _life;
+
+  @override
+  void initState() {
+    super.initState();
+    _life = AppLifecycleListener(
+      onResume: () => ref.read(authProvider.notifier).refreshSession(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bindMicrosoftLinks());
+  }
+
+  void _bindMicrosoftLinks() {
+    if (!mounted || AppConfig.demoMode || browserManagesCookies) return;
+    ref.read(msSignInProvider).bindDeepLinks(_onMicrosoftDeepLink).catchError((
+      Object _,
+    ) {
+      // No deep-link support on this device: the button still opens the browser.
+    });
+  }
+
+  Future<void> _onMicrosoftDeepLink(Uri uri) async {
+    if (!mounted) return;
+    String? message;
+    try {
+      final user = await ref.read(msSignInProvider).handle(uri);
+      if (user != null) {
+        if (mounted) ref.read(msSignInErrorProvider.notifier).set(null);
+        await ref.read(authProvider.notifier).loginWithMicrosoftResult(user);
+      }
+    } on MicrosoftSignInFailure catch (e) {
+      message = e.message;
+    } catch (_) {
+      // Never leave the user on a silent failure.
+      message = msFailedMessage;
+    }
+    if (message != null && mounted) {
+      ref.read(msSignInErrorProvider.notifier).set(message);
+    }
+  }
 
   @override
   void dispose() {

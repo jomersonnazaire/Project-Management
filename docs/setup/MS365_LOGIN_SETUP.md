@@ -58,6 +58,11 @@ Add the same keys to `apps/api/.env` (never commit it), with `MS_REDIRECT_URI=ht
 5. An Admin promotes new users and sets their job role in Users.
 6. Send a saved DAR from **Saved reports**; it arrives from your mailbox with the PDF attached and appears in your Sent Items.
 
+## Mobile app
+The OpsTrack mobile app opens the **system browser** at the API mobile login route (`/api/v1/auth/mobile/microsoft/login` with PKCE). Microsoft redirects to the **same** web callback (`MS_REDIRECT_URI`, proxied to the API on Vercel). No extra Entra redirect URI and no new App Service settings. After sign-in, the callback sends the user back to the app at `opstrack://auth/microsoft` with a one-time code; the app exchanges it for a bearer session at `POST /api/v1/auth/mobile/microsoft/exchange`.
+
+End-to-end sign-in on a physical device needs the deployed API and Vercel (a phone cannot reach `localhost:5173`). Local mobile runs rely on the automated API and Flutter tests for this flow.
+
 ## Behaviour summary
 - New users: Viewer, job role empty ("Not set"), active. Never Admin, never a client contact. Viewers can't log time until promoted.
 - Matching: by Microsoft object ID + tenant ID; first-time link to an existing account by verified company email only.

@@ -17,5 +17,9 @@ void main() {
         .map((m) => m[1])
         .toList();
     expect(perms, ['android.permission.INTERNET']);
+    expect(main, contains('flutter_deeplinking_enabled'));
+    expect(main, contains('android:value="false"'));
+    expect(main, contains('android:scheme="opstrack"'));
+    expect(main, contains('android:host="auth"'));
   });
 }

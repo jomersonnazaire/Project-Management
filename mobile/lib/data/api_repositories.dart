@@ -80,6 +80,16 @@ class ApiAuthRepository implements AuthRepository {
   @override
   Future<void> setupPassword(String token, String password) =>
       api.post('/auth/setup-password', {'token': token, 'password': password});
+
+  @override
+  Future<bool> microsoftAvailable() async {
+    try {
+      final body = await api.get('/auth/providers');
+      return body['microsoft'] == true;
+    } on ApiException {
+      return false;
+    }
+  }
 }
 
 class ApiProjectRepository implements ProjectRepository {

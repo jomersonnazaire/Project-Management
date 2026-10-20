@@ -68,5 +68,18 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>FlutterDeepLinkingEnabled</key>
+		<false/>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleURLName</key>
+				<string>com.xceler8.opstrack.auth</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>opstrack</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>
