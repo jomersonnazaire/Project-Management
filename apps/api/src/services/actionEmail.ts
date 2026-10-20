@@ -1,4 +1,4 @@
-import { toDateOnly } from '@xc8/shared';
+import { ACTION_EMAIL_NOT_LINKED, toDateOnly, type ActionEmailStartDto } from '@xc8/shared';
 import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import type { AppConfig } from '../config.js';
@@ -15,10 +15,12 @@ import {
 } from './microsoftAuth.js';
 import {
   consumeMicrosoftMailState,
+  setMicrosoftActionEmailCookie,
   type ActionEmailKind,
   type MicrosoftActionEmailOAuthState,
 } from './microsoftOAuthCookie.js';
-import { projectRecipients } from './notify.js';
+import { buildMicrosoftLoginUrl } from './microsoftAuth.js';
+import { notify, projectRecipients } from './notify.js';
 
 type Id = Types.ObjectId;
 
@@ -85,6 +87,73 @@ export async function actionRecipients(
   }
   return projectRecipients({ project, actorId, recipients: ids });
 }
+
+/**
+ * Starts the Microsoft consent round trip for an action email: the signed state cookie names
+ * the kind, the item and the recipients (all worked out on the server). Returns the URL.
+ */
+export async function startActionEmail(
+  config: AppConfig,
+  res: Response,
+  me: { _id: Id; email: string },
+  item: {
+    kind: ActionEmailKind;
+    projectId: Id;
+    taskId?: Id | null;
+    followUpId?: string;
+    recipientIds: Id[];
+  },
+): Promise<string> {
+  const login = await buildMicrosoftLoginUrl(config, {
+    scopes: ['Mail.Send'],
+    loginHint: me.email,
+  });
+  setMicrosoftActionEmailCookie(config, res, {
+    codeVerifier: login.codeVerifier,
+    state: login.state,
+    nonce: login.nonce,
+    userId: me._id.toString(),
+    kind: item.kind,
+    projectId: item.projectId.toString(),
+    taskId: item.taskId ? item.taskId.toString() : '',
+    followUpId: item.followUpId ?? '',
+    recipientIds: item.recipientIds.map(String),
+  });
+  return login.url;
+}
+
+/**
+ * People a save added to a project: the in-app ADDED_TO_PROJECT notice always goes to them (the
+ * actor and inactive users excluded, as notify()). When the actor ticked "Email {name}", it also
+ * starts the email to exactly those people. `added` is the server's own before/after diff.
+ */
+export async function membersAdded(
+  config: AppConfig,
+  res: Response,
+  me: { _id: Id; email: string; msOid?: string | null; msTid?: string | null },
+  project: ProjectLike,
+  added: Id[],
+  emailOptIn: boolean | undefined,
+): Promise<ActionEmailStartDto | null> {
+  if (!added.length) return emailOptIn ? noEmail('NO_RECIPIENTS', 'Nobody to email.') : null;
+  await notify({ type: 'ADDED_TO_PROJECT', project, actorId: me._id, recipients: added });
+  if (!emailOptIn) return null;
+  if (!config.actionEmailEnabled) return noEmail('EMAIL_DISABLED', 'Emails are switched off.');
+  if (!me.msOid || !me.msTid) return noEmail('MICROSOFT_NOT_LINKED', ACTION_EMAIL_NOT_LINKED);
+  const people = await actionRecipients('PROJECT_ADDED', me._id, project, null, added.map(String));
+  if (!people.length) return noEmail('NO_RECIPIENTS', 'Nobody to email.');
+  const url = await startActionEmail(config, res, me, {
+    kind: 'PROJECT_ADDED',
+    projectId: project._id,
+    recipientIds: people.map((p) => p._id),
+  });
+  return { url, error: null, message: null, recipients: people.length };
+}
+
+const noEmail = (
+  error: NonNullable<ActionEmailStartDto['error']>,
+  message: string,
+): ActionEmailStartDto => ({ url: null, error, message, recipients: 0 });
 
 const oneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').trim();
 

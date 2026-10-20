@@ -490,6 +490,18 @@ const withMembers = (project: ProjectDoc, add: string[]): ProjectDoc =>
 
 /** One audit entry per person, as a project member add (same action as the project form). */
 async function auditMemberAdds(req: Request, project: ProjectDoc, add: string[], taskId: Id) {
+  // In-app "added you to" for people joining through the task form (they're also told they
+  // were assigned). Fresh members, since the project just gained them.
+  if (add.length) {
+    const fresh = await ProjectModel.findById(project._id).select('managerId memberIds').lean();
+    if (fresh)
+      await notify({
+        type: 'ADDED_TO_PROJECT',
+        project: fresh,
+        actorId: currentUser(req)._id,
+        recipients: add.map((a) => new Types.ObjectId(a)),
+      });
+  }
   for (const id of add) {
     await audit({
       actorId: currentUser(req)._id,

@@ -640,6 +640,11 @@ export const createProjectSchema = z
     /** The template version shown in the preview (EC-11): a newer version answers 409. */
     templateVersion: z.number().int().min(1).optional(),
     memberIds: z.array(objectId).max(200).default([]),
+    /**
+     * Action emails: also email the initial members (except the creator) from my own Outlook.
+     * The server works out who they are; the response carries the Microsoft URL to continue.
+     */
+    emailAddedMembers: z.boolean().optional(),
   })
   .refine((v) => v.plannedEndDate > v.startDate, {
     path: ['plannedEndDate'],
@@ -667,6 +672,11 @@ export const updateProjectSchema = z
     confirmClearContacts: z.boolean().optional(),
     /** EC-68: confirms the client change although issues keep contacts from the old client. */
     confirmIssueContacts: z.boolean().optional(),
+    /**
+     * Action emails: also email the people this save adds to the team, from my own Outlook. The
+     * server diffs the member list before and after the save; the client never names them.
+     */
+    emailAddedMembers: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;

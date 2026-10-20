@@ -84,6 +84,18 @@ export interface EmailStatusDto {
   linked: boolean;
 }
 
+/**
+ * How an action email started with a save went (`email` on the create/update project response).
+ * `url` is the Microsoft consent page to continue to; otherwise `error` says why not. The save
+ * itself and its in-app notifications always went through.
+ */
+export interface ActionEmailStartDto {
+  url: string | null;
+  error: 'EMAIL_DISABLED' | 'MICROSOFT_NOT_LINKED' | 'NO_RECIPIENTS' | null;
+  message: string | null;
+  recipients: number;
+}
+
 /** Shown next to the disabled "Email {name}" checkbox for unlinked users (Lean, 2026-10-20). */
 export const ACTION_EMAIL_NOT_LINKED = 'Link your Microsoft account to send emails.';
 

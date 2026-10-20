@@ -6,12 +6,14 @@ import {
   PROJECT_STATUSES,
   plural,
   END_AFTER_START,
+  type ActionEmailStartDto,
   type ProjectDto,
   type ProjectStatus,
   type UpdateProjectInput,
 } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError, saveErrorMessage } from '../../api/client';
 import { useClients } from '../../api/hooks';
 import { usePeople, useUpdateProject } from '../../api/projectHooks';
@@ -20,9 +22,8 @@ import { HandoverModal } from '../../components/HandoverModal';
 import { useConfirm } from '../../components/ConfirmModal';
 import { useProjectPhases } from '../../api/issueHooks';
 import { ProjectTypeSelect } from '../../components/ProjectTypeSelect';
-import { joinNames, sendActionEmail, useWantsEmail } from '../../api/emailHooks';
+import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
 import { EmailCheckbox } from '../../components/EmailCheckbox';
-import { ErrorAlert } from '../../components/Feedback';
 
 /**
  * Edit a project (FR-PRJ-11..13): details, team, status, baseline dates (with a reason) and the
@@ -54,17 +55,20 @@ export function ProjectEditModal({
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmIssues, setConfirmIssues] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  // Action emails: only the people added in this save, never me.
-  const wasMember = new Set(project.members.map((m) => m.id));
-  const added = memberIds.filter((m) => m !== managerId && !wasMember.has(m) && m !== user?.id);
+  // Action emails: who looks newly added, for the checkbox label only. The API works out who
+  // was really added (before/after the save) and only takes the opt-in.
+  const wasMember = new Set([...project.members.map((m) => m.id), project.managerId]);
+  const added = [managerId, ...memberIds].filter(
+    (m, i, all) => m && all.indexOf(m) === i && !wasMember.has(m) && m !== user?.id,
+  );
   const [emailAdded, setEmailAdded] = useState(true);
   const wantsEmail = useWantsEmail(emailAdded) && added.length > 0;
-  const [emailError, setEmailError] = useState<unknown>(null);
-  const saved = () => {
-    if (!wantsEmail) return onClose();
-    sendActionEmail({ kind: 'PROJECT_ADDED', projectId: project.id, userIds: added }).catch(
-      setEmailError,
-    );
+  const [, setParams] = useSearchParams();
+  const saved = ({ email }: { email?: ActionEmailStartDto }) => {
+    const next = continueSaveEmail(email);
+    if (next && 'redirected' in next) return;
+    if (next) setParams((p) => ({ ...Object.fromEntries(p), email_error: next.error }));
+    onClose();
   };
 
   const datesChanged =
@@ -120,6 +124,7 @@ export function ProjectEditModal({
       body.reason = reason.trim();
     }
     if (!Object.keys(body).length) return onClose();
+    if (wantsEmail) body.emailAddedMembers = true;
     // EC-96 / Q-69: leaving Planning with no phases is allowed after a confirm (UI only).
     if (
       body.status &&
@@ -330,7 +335,6 @@ export function ProjectEditModal({
                     checked={emailAdded}
                     onChange={setEmailAdded}
                   />
-                  <ErrorAlert error={emailError} />
                 </div>
               </fieldset>
               <Form.Group className="col-12" controlId="edit-prj-desc">

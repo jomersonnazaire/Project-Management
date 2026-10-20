@@ -63,7 +63,7 @@ const token = (oid: string, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-async function start(agent: Agent, body: Record<string, unknown>) {
+function nextLogin() {
   seq += 1;
   const state = `act-state-${seq}-${Date.now()}`;
   loginUrlMock.mockResolvedValueOnce({
@@ -72,11 +72,17 @@ async function start(agent: Agent, body: Record<string, unknown>) {
     state,
     nonce: `nonce-${seq}`,
   });
-  const res = await agent.post('/api/v1/action-emails').set(CSRF).send(body);
+  return state;
+}
+function actCookie(res: request.Response) {
   const setCookie = res.headers['set-cookie'] as unknown as string[] | string | undefined;
   const raw = (Array.isArray(setCookie) ? setCookie : [setCookie ?? '']).join('; ');
-  const cookie = /xc8_ms_act=([^;]+)/.exec(raw)?.[1] ?? '';
-  return { res, state, cookie };
+  return /xc8_ms_act=([^;]+)/.exec(raw)?.[1] ?? '';
+}
+async function start(agent: Agent, body: Record<string, unknown>) {
+  const state = nextLogin();
+  const res = await agent.post('/api/v1/action-emails').set(CSRF).send(body);
+  return { res, state, cookie: actCookie(res) };
 }
 const callback = (cookie: string, query: Record<string, string>) =>
   request(appOn)
@@ -178,18 +184,40 @@ describe('Unlinked actor (FE-02, FE-08, FA-02, FA-04, FA-05)', () => {
     });
     expect(ACTION_EMAIL_NOT_LINKED).toBe('Link your Microsoft account to send emails.');
 
-    // An unlinked PM assigning or adding members: action works, email refused.
+    // An unlinked PM assigning: action works, email refused.
     expect(
       await NotificationModel.countDocuments({ type: 'ASSIGNED', userId: w.member.user._id }),
     ).toBe(1);
-    for (const body of [
-      { kind: 'TASK_ASSIGNED', taskId: t.id, userIds: [w.member.user._id.toString()] },
-      { kind: 'PROJECT_ADDED', projectId: w.project.id, userIds: [w.member.user._id.toString()] },
-    ]) {
-      const r = await w.pm.agent.post('/api/v1/action-emails').set(CSRF).send(body);
-      expect(r.status).toBe(409);
-      expect(r.body.error.code).toBe('MICROSOFT_NOT_LINKED');
-    }
+    const r = await w.pm.agent
+      .post('/api/v1/action-emails')
+      .set(CSRF)
+      .send({ kind: 'TASK_ASSIGNED', taskId: t.id, userIds: [w.member.user._id.toString()] });
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe('MICROSOFT_NOT_LINKED');
+
+    // An unlinked PM adding a member and ticking email: saved, in-app sent, email refused.
+    const newbie = await createUser({ name: 'Nia New' });
+    const added = await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({
+        memberIds: [w.member.user._id.toString(), newbie._id.toString()],
+        emailAddedMembers: true,
+      });
+    expect(added.status).toBe(200);
+    expect(added.body.project.members.map((m: { id: string }) => m.id)).toContain(
+      newbie._id.toString(),
+    );
+    expect(added.body.email).toEqual({
+      url: null,
+      error: 'MICROSOFT_NOT_LINKED',
+      message: ACTION_EMAIL_NOT_LINKED,
+      recipients: 0,
+    });
+    expect(actCookie(added)).toBe('');
+    expect(
+      await NotificationModel.countDocuments({ type: 'ADDED_TO_PROJECT', userId: newbie._id }),
+    ).toBe(1);
     expect(loginUrlMock).not.toHaveBeenCalled();
     expect(spy).not.toHaveBeenCalled();
   });
@@ -424,32 +452,116 @@ describe('Task assigned (FA-01, FA-06, FA-07)', () => {
 });
 
 describe('Added to project (FA-03, FA-06, FA-08)', () => {
-  it('one email per added member with their own name; non-members and the adder get nothing', async () => {
-    const w = await world(appOn);
-    const oid = await link(w.pm.user._id);
+  const ids = (xs: { userId: unknown }[]) => xs.map((x) => String(x.userId)).sort();
+
+  it('in-app notice for exactly the people a save adds, always (flag off, no opt-in)', async () => {
+    const w = await world(appOff);
+    // Create: everyone on the initial team except the creator (here: the member).
+    const onCreate = await NotificationModel.find({
+      type: 'ADDED_TO_PROJECT',
+      projectId: w.project.id,
+    }).lean();
+    expect(ids(onCreate)).toEqual([w.member.user._id.toString()]);
+    expect(onCreate[0]!.actorId?.toString()).toBe(w.pm.user._id.toString());
+
+    // Edit: bulk add A and B next to the existing member (FA-03); only A and B (FA-08).
     const a = await createUser({ name: 'Ana Added' });
     const b = await createUser({ name: 'Ben Added' });
     const res = await w.pm.agent
       .patch(`/api/v1/projects/${w.project.id}`)
       .set(CSRF)
+      .send({ memberIds: [w.member.user._id.toString(), a._id.toString(), b._id.toString()] });
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBeUndefined();
+    const all = await NotificationModel.find({
+      type: 'ADDED_TO_PROJECT',
+      projectId: w.project.id,
+    }).lean();
+    expect(ids(all)).toEqual(
+      [w.member.user._id.toString(), a._id.toString(), b._id.toString()].sort(),
+    );
+
+    // Same list again, a removal, or the PM re-adding themself: nobody new, nothing new.
+    for (const memberIds of [
+      [w.member.user._id.toString(), a._id.toString(), b._id.toString()],
+      [a._id.toString()],
+      [a._id.toString(), w.pm.user._id.toString()],
+    ]) {
+      const r = await w.pm.agent
+        .patch(`/api/v1/projects/${w.project.id}`)
+        .set(CSRF)
+        .send({ memberIds });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+    }
+    expect(
+      await NotificationModel.countDocuments({ type: 'ADDED_TO_PROJECT', projectId: w.project.id }),
+    ).toBe(3);
+
+    // A new manager joins the team: they're added too.
+    const r = await w.admin.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({ managerId: w.pm2.user._id.toString() });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(
+      await NotificationModel.countDocuments({
+        type: 'ADDED_TO_PROJECT',
+        projectId: w.project.id,
+        userId: w.pm2.user._id,
+      }),
+    ).toBe(1);
+    // Never the actor; the flag off means no email part at all.
+    expect(
+      await NotificationModel.countDocuments({ type: 'ADDED_TO_PROJECT', userId: w.pm.user._id }),
+    ).toBe(0);
+    expect(loginUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('opting in with the flag off: saved and notified, email reported as switched off', async () => {
+    const w = await world(appOff);
+    await link(w.pm.user._id);
+    const a = await createUser({ name: 'Ana Added' });
+    const res = await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({ memberIds: [a._id.toString()], emailAddedMembers: true });
+    expect(res.status).toBe(200);
+    expect(res.body.email).toMatchObject({ url: null, error: 'EMAIL_DISABLED' });
+    expect(
+      await NotificationModel.countDocuments({ type: 'ADDED_TO_PROJECT', userId: a._id }),
+    ).toBe(1);
+    expect(loginUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('edit: one email per added member, worked out by the server (FA-03, FA-08)', async () => {
+    const w = await world(appOn);
+    const oid = await link(w.pm.user._id);
+    const a = await createUser({ name: 'Ana Added' });
+    const b = await createUser({ name: 'Ben Added' });
+    const state = nextLogin();
+    const res = await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
       .send({
         memberIds: [w.member.user._id.toString(), a._id.toString(), b._id.toString()],
+        emailAddedMembers: true,
       });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    const { state, cookie } = await start(w.pm.agent, {
-      kind: 'PROJECT_ADDED',
-      projectId: w.project.id,
-      userIds: [
-        a._id.toString(),
-        b._id.toString(),
-        w.pm.user._id.toString(),
-        w.outsider.user._id.toString(),
-      ],
+    expect(res.body.email).toEqual({
+      url: expect.stringContaining(state),
+      error: null,
+      message: null,
+      recipients: 2,
+    });
+    expect(loginUrlMock.mock.calls[0]?.[1]).toEqual({
+      scopes: ['Mail.Send'],
+      loginHint: w.pm.user.email,
     });
     mailExchangeMock.mockResolvedValueOnce(token(oid));
     const spy = graph();
-    const done = await callback(cookie, { code: 'c', state });
+    const done = await callback(actCookie(res), { code: 'c', state });
     expect(done.headers.location).toBe(`http://localhost:5173/projects/${w.project.id}?email=sent`);
+    // The existing member, the PM and outsiders get nothing (FA-08, FA-06).
     expect(sentTo(spy).sort()).toEqual([a.email, b.email].sort());
     const bodies = spy.mock.calls.map((c) => JSON.parse(String(c[1]!.body)).message);
     expect(bodies.map((m) => m.body.content).join()).toContain('Hi Ana Added,');
@@ -465,18 +577,106 @@ describe('Added to project (FA-03, FA-06, FA-08)', () => {
     expect(log?.meta).toEqual({ kind: 'PROJECT_ADDED', recipients: 2 });
   });
 
-  it('a Member who can’t add members can’t start it', async () => {
+  it('create: emails the initial team except the creator', async () => {
     const w = await world(appOn);
-    await link(w.member.user._id);
-    const res = await w.member.agent
-      .post('/api/v1/action-emails')
+    const oid = await link(w.pm.user._id);
+    const a = await createUser({ name: 'Ana Initial' });
+    const state = nextLogin();
+    const res = await w.pm.agent
+      .post('/api/v1/projects')
       .set(CSRF)
       .send({
-        kind: 'PROJECT_ADDED',
-        projectId: w.project.id,
-        userIds: [w.pm.user._id.toString()],
+        name: 'Second P',
+        projectTypeId: w.project.projectType.id,
+        clientId: w.acme.client.id,
+        managerId: w.pm.user._id.toString(),
+        memberIds: [w.member.user._id.toString(), a._id.toString(), w.pm.user._id.toString()],
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        emailAddedMembers: true,
       });
-    expect(res.status).toBe(403);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.email).toMatchObject({ error: null, recipients: 2 });
+    const pid = res.body.project.id as string;
+    expect(
+      ids(await NotificationModel.find({ type: 'ADDED_TO_PROJECT', projectId: pid }).lean()),
+    ).toEqual([w.member.user._id.toString(), a._id.toString()].sort());
+    mailExchangeMock.mockResolvedValueOnce(token(oid));
+    const spy = graph();
+    const done = await callback(actCookie(res), { code: 'c', state });
+    expect(done.headers.location).toBe(`http://localhost:5173/projects/${pid}?email=sent`);
+    expect(sentTo(spy).sort()).toEqual([w.member.user.email, a.email].sort());
+  });
+
+  it('a Graph failure still leaves the members added and notified, and is audited', async () => {
+    const w = await world(appOn);
+    const oid = await link(w.pm.user._id);
+    const a = await createUser({ name: 'Ana Added' });
+    const state = nextLogin();
+    const res = await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({ memberIds: [a._id.toString()], emailAddedMembers: true });
+    mailExchangeMock.mockResolvedValueOnce(token(oid));
+    graph(403);
+    const done = await callback(actCookie(res), { code: 'c', state });
+    expect(done.headers.location).toContain('email_error=send_forbidden');
+    const p = (await w.pm.agent.get(`/api/v1/projects/${w.project.id}`)).body.project;
+    expect(p.members.map((m: { id: string }) => m.id)).toContain(a._id.toString());
+    expect(
+      await NotificationModel.countDocuments({ type: 'ADDED_TO_PROJECT', userId: a._id }),
+    ).toBe(1);
+    const failed = await ActivityLogModel.findOne({
+      action: 'action_email_failed',
+      entityId: w.project.id,
+    }).lean();
+    expect(failed?.meta).toMatchObject({ kind: 'PROJECT_ADDED', reason: 'send_forbidden' });
+    expect(JSON.stringify(failed)).not.toContain(TOKEN);
+  });
+
+  it('the client can’t name who was added: PROJECT_ADDED and userIds are refused', async () => {
+    const w = await world(appOn);
+    await link(w.pm.user._id);
+    const direct = await w.pm.agent
+      .post('/api/v1/action-emails')
+      .set(CSRF)
+      .send({ kind: 'PROJECT_ADDED', projectId: w.project.id, userIds: [w.member.user._id] });
+    expect(direct.status).toBe(400);
+    const extra = await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({ emailAddedMembers: true, addedUserIds: [w.member.user._id.toString()] });
+    expect(extra.status).toBe(400);
+    // Opting in when nobody is new: no email, no notice.
+    const none = await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({ description: 'Same team', emailAddedMembers: true });
+    expect(none.status).toBe(200);
+    expect(none.body.email).toMatchObject({ url: null, error: 'NO_RECIPIENTS' });
+    expect(loginUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('people added through the task form get the in-app notice too', async () => {
+    const w = await world(appOff);
+    const t = await firstTask(w);
+    const t0 = (await w.pm.agent.get(`/api/v1/tasks/${t.id}`)).body.task;
+    const res = await w.pm.agent
+      .patch(`/api/v1/tasks/${t.id}`)
+      .set(CSRF)
+      .send({
+        version: t0.version,
+        ownerId: w.outsider.user._id.toString(),
+        addMemberIds: [w.outsider.user._id.toString()],
+      });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(
+      await NotificationModel.countDocuments({
+        type: 'ADDED_TO_PROJECT',
+        userId: w.outsider.user._id,
+        projectId: w.project.id,
+      }),
+    ).toBe(1);
   });
 });
 

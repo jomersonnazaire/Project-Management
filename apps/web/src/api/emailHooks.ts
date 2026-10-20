@@ -1,4 +1,4 @@
-import type { ActionEmailInput, EmailStatusDto } from '@xc8/shared';
+import type { ActionEmailInput, ActionEmailStartDto, EmailStatusDto } from '@xc8/shared';
 import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
 
@@ -20,6 +20,22 @@ export function useEmailStatus() {
 export async function sendActionEmail(body: ActionEmailInput) {
   const { url } = await api<{ url: string }>('/action-emails', { method: 'POST', body });
   window.location.assign(url);
+}
+
+/**
+ * After a project save that asked to email the people it added (`emailAddedMembers`): go to
+ * Microsoft when the API started the email, or hand back the `email_error` code to show on the
+ * project page. The API alone decided who was added. Returns null when there's nothing to do.
+ */
+export function continueSaveEmail(
+  email: ActionEmailStartDto | undefined,
+): { redirected: true } | { error: string } | null {
+  if (!email) return null;
+  if (email.url) {
+    window.location.assign(email.url);
+    return { redirected: true };
+  }
+  return email.error ? { error: email.error.toLowerCase() } : null;
 }
 
 /** True when the email should be sent with the action (flag on, linked, ticked). */

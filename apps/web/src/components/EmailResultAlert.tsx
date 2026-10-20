@@ -1,3 +1,4 @@
+import { ACTION_EMAIL_NOT_LINKED } from '@xc8/shared';
 import { Alert } from 'react-bootstrap';
 import { useSearchParams } from 'react-router-dom';
 
@@ -10,6 +11,8 @@ const ERRORS: Record<string, string> = {
   no_mailbox: 'Email not sent: your Microsoft account has no Outlook mailbox.',
   already_emailed: 'This follow-up was already emailed.',
   no_recipients: 'Email not sent: there was nobody to email.',
+  microsoft_not_linked: `Email not sent. ${ACTION_EMAIL_NOT_LINKED}`,
+  email_disabled: 'Email not sent: emails are switched off.',
 };
 
 /** Result of an action email after the Microsoft round trip (`?email=` / `?email_error=`). */
