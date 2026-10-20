@@ -126,3 +126,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const msEnabled = Boolean(msCore && msAllowedTenantIds.length > 0 && msAllowedDomains.length > 0);
   return { ...cfg, msEnabled, msAllowedTenantIds, msAllowedDomains };
 }
+
+/** HMAC key for short-lived OAuth state cookies (same shared secret as the Vercel edge proxy). */
+export function oauthStateCookieSecret(config: AppConfig): string {
+  const secret = config.EDGE_PROXY_SECRET?.trim();
+  if (!secret || secret.length < 32) {
+    throw new Error('EDGE_PROXY_SECRET must be set (32+ chars) for Microsoft sign-in state cookies');
+  }
+  return secret;
+}

@@ -1,7 +1,13 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClientContactModel, ClientModel, SessionModel, UserModel } from '../src/models/index.js';
-import type { MicrosoftIdClaims } from '../src/services/microsoftAuth.js';
+import {
+  ActivityLogModel,
+  ClientContactModel,
+  ClientModel,
+  SessionModel,
+  UserModel,
+} from '../src/models/index.js';
+import { readEmailFromIdTokenClaims, type MicrosoftIdClaims } from '../src/services/microsoftAuth.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
 
 const loginReq = (a: ReturnType<typeof makeApp>, email: string, password: string) =>
@@ -24,6 +30,7 @@ const MS_ENV: Record<string, string> = {
   MS_REDIRECT_URI: 'http://localhost:5173/api/auth/microsoft/callback',
   MS_ALLOWED_TENANT_IDS: TENANT,
   MS_ALLOWED_DOMAINS: DOMAIN,
+  EDGE_PROXY_SECRET: 'edge-secret-for-ms-oauth-tests-0123456789ab',
 };
 
 const baseClaims = (email?: string): MicrosoftIdClaims => {
@@ -84,9 +91,10 @@ async function runCallback(
 }
 
 describe('Microsoft 365 sign-in', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     exchangeMock.mockReset();
     loginUrlMock.mockReset();
+    await ActivityLogModel.deleteMany({ action: { $in: ['sso_user_created', 'sso_linked'] } });
   });
 
   it('providers: msEnabled false when allowlists empty', async () => {
@@ -125,9 +133,39 @@ describe('Microsoft 365 sign-in', () => {
       msTid: TENANT,
     });
     expect(String(res.headers['set-cookie'])).toMatch(/xc8_sid=/);
+    const audit = await ActivityLogModel.findOne({ action: 'sso_user_created' });
+    expect(audit?.meta).toMatchObject({
+      userId: user!._id.toString(),
+      msTid: TENANT,
+      email: claims.email,
+    });
   });
 
-  it('3 returning user matched by msOid+msTid even if email changed', async () => {
+  it('3 returning user matched by msOid+msTid writes no SSO audit', async () => {
+    const a = appMs();
+    const msOid = nextOid();
+    const oldEmail = `old-${oidSeq}@${DOMAIN}`;
+    await UserModel.create({
+      name: 'Linked MS',
+      email: oldEmail,
+      systemRole: 'MEMBER',
+      jobRole: 'DEVELOPER',
+      active: true,
+      mustChangePassword: false,
+      passwordHash: null,
+      authProvider: 'microsoft',
+      msOid,
+      msTid: TENANT,
+    });
+    const claims = baseClaims(`newemail-${oidSeq}@${DOMAIN}`);
+    claims.oid = msOid;
+    await runCallback(a, claims);
+    expect(await ActivityLogModel.countDocuments({ action: { $in: ['sso_linked', 'sso_user_created'] } })).toBe(
+      0,
+    );
+  });
+
+  it('3b returning user matched by msOid+msTid even if email changed', async () => {
     const a = appMs();
     const msOid = nextOid();
     const oldEmail = `old-${oidSeq}@${DOMAIN}`;
@@ -152,18 +190,22 @@ describe('Microsoft 365 sign-in', () => {
     expect(updated?.email).toBe(oldEmail);
   });
 
-  it('4 existing password user + xms_edov: linked, password still works', async () => {
+  it('4 existing password user, allowed domain: linked, password still works', async () => {
     const a = appMs();
     const user = await createUser({ email: `link@${DOMAIN}`, systemRole: 'MEMBER' });
-    const claims = baseClaims();
-    claims.email = user.email;
+    const claims = baseClaims(user.email);
     claims.oid = '33333333-3333-3333-3333-333333333333';
-    claims.xms_edov = true;
     const res = await runCallback(a, claims);
     expect(res.status).toBe(302);
     const linked = await UserModel.findById(user._id);
     expect(linked?.msOid).toBe(claims.oid);
     expect((await loginReq(a, user.email, PASSWORD)).status).toBe(200);
+    const audit = await ActivityLogModel.findOne({ action: 'sso_linked', entityId: user._id });
+    expect(audit?.meta).toMatchObject({
+      userId: user._id.toString(),
+      msTid: TENANT,
+      email: user.email,
+    });
   });
 
   it('5 existing user, domain allowed, xms_edov absent: linked', async () => {
@@ -409,6 +451,34 @@ describe('Microsoft 365 sign-in', () => {
       systemRole: 'MEMBER',
     });
     expect(bad.status).toBe(400);
+  });
+
+  it('refuses token with no email claim', async () => {
+    const a = appMs();
+    const email = `noemail-${oidSeq + 1}@${DOMAIN}`;
+    exchangeMock.mockRejectedValueOnce(new Error('Missing email'));
+    const res = await runCallback(a, baseClaims(email));
+    expect(res.headers.location).toMatch(/error=ms_no_email/);
+    expect(await UserModel.countDocuments({ email })).toBe(0);
+  });
+
+  it('ignores preferred_username when email claim is absent', () => {
+    expect(
+      readEmailFromIdTokenClaims({ preferred_username: `only@${DOMAIN}`, email: undefined }),
+    ).toBe('');
+  });
+
+  it('GET /api/users is 404; GET /api/auth/microsoft/login still works', async () => {
+    const a = appMs();
+    expect((await request(a).get('/api/users')).status).toBe(404);
+    loginUrlMock.mockResolvedValueOnce({
+      url: 'https://login.microsoftonline.com/mock',
+      codeVerifier: 'verifier-12345678901234567890123456789012',
+      state: 'state-abc',
+      nonce: 'nonce-xyz',
+    });
+    const res = await request(a).get('/api/auth/microsoft/login');
+    expect(res.status).toBe(302);
   });
 
   it('15 Viewer created via Microsoft cannot use time logging', async () => {

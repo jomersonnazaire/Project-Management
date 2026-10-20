@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { CookieOptions, Response } from 'express';
 import type { AppConfig } from '../config.js';
+import { oauthStateCookieSecret } from '../config.js';
 import { cookieOptions } from './sessions.js';
 
 export const MS_OAUTH_COOKIE = 'xc8_ms_oauth';
@@ -23,7 +24,7 @@ export function setMicrosoftOAuthCookie(
 ): void {
   const exp = Date.now() + TTL_MS;
   const payload = Buffer.from(JSON.stringify({ ...data, exp })).toString('base64url');
-  const sig = sign(config.MS_CLIENT_SECRET, payload);
+  const sig = sign(oauthStateCookieSecret(config), payload);
   const opts: CookieOptions = { ...cookieOptions(config), maxAge: TTL_MS, sameSite: 'lax' };
   res.cookie(MS_OAUTH_COOKIE, `${payload}.${sig}`, opts);
 }
@@ -36,7 +37,7 @@ export function readMicrosoftOAuthCookie(
   const i = raw.lastIndexOf('.');
   const payload = raw.slice(0, i);
   const sig = raw.slice(i + 1);
-  const expected = sign(config.MS_CLIENT_SECRET, payload);
+  const expected = sign(oauthStateCookieSecret(config), payload);
   try {
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);

@@ -50,9 +50,15 @@ export function LoginPage() {
 
   const reason = params.get('reason');
   const msError = params.get('error') === 'ms_signin_failed';
+  const msNoEmail = params.get('error') === 'ms_no_email';
   return (
     <AuthCard title="Sign in">
       <h4 className="mb-1">Sign in to {APP_NAME}</h4>
+      {msNoEmail && (
+        <Alert variant="danger" className="mt-3">
+          Your Microsoft account has no email address. Ask an admin to check your account.
+        </Alert>
+      )}
       {msError && (
         <Alert variant="danger" className="mt-3">
           We couldn&apos;t sign you in with Microsoft. Try again or use your email and password, or

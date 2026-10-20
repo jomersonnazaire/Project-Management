@@ -16,11 +16,10 @@ export interface MicrosoftIdClaims {
 
 const crypto = new CryptoProvider();
 
-function emailFromClaims(claims: Record<string, unknown>): string {
-  const preferred = claims.preferred_username;
-  if (typeof preferred === 'string' && preferred.includes('@')) return preferred.toLowerCase();
+/** ID token `email` claim only (never preferred_username). Exported for unit tests. */
+export function readEmailFromIdTokenClaims(claims: Record<string, unknown>): string {
   const email = claims.email;
-  if (typeof email === 'string' && email.includes('@')) return email.toLowerCase();
+  if (typeof email === 'string' && email.includes('@')) return email.trim().toLowerCase();
   return '';
 }
 
@@ -85,7 +84,7 @@ export async function exchangeMicrosoftCode(
   if (typeof tid !== 'string' || typeof oid !== 'string') {
     throw new Error('Missing oid or tid');
   }
-  const email = emailFromClaims(claims);
+  const email = readEmailFromIdTokenClaims(claims);
   if (!email) throw new Error('Missing email');
   return {
     oid,

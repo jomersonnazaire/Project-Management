@@ -1,6 +1,7 @@
 import type { AppConfig } from '../config.js';
 import { now as clockNow } from '../lib/clock.js';
 import { ClientContactModel, UserModel, type UserDoc } from '../models/index.js';
+import { audit } from './audit.js';
 import {
   type MicrosoftIdClaims,
   isAllowedEmailDomain,
@@ -21,9 +22,8 @@ function refuse(reason: string): MicrosoftSignInFailure {
   return { ok: false, reason };
 }
 
-function canLinkByEmail(claims: MicrosoftIdClaims, email: string, config: AppConfig): boolean {
-  if (!isAllowedEmailDomain(email, config)) return false;
-  return claims.xms_edov === true || isAllowedEmailDomain(email, config);
+function ssoMeta(userId: UserDoc['_id'], claims: MicrosoftIdClaims, email: string) {
+  return { userId: userId.toString(), msTid: claims.tid, email };
 }
 
 /**
@@ -34,6 +34,9 @@ export async function resolveMicrosoftSignIn(
   config: AppConfig,
   claims: MicrosoftIdClaims,
 ): Promise<MicrosoftSignInResult> {
+  const email = claims.email?.trim().toLowerCase() ?? '';
+  if (!email) return refuse('no_email');
+
   if (!isAllowedTenant(claims.tid, config)) {
     return refuse('tenant_not_allowed');
   }
@@ -47,16 +50,22 @@ export async function resolveMicrosoftSignIn(
     return { ok: true, user: byMs };
   }
 
-  const email = claims.email.toLowerCase();
   const existing = await UserModel.findOne({ email });
   if (existing) {
     if (!existing.active) return refuse('deactivated');
-    if (!canLinkByEmail(claims, email, config)) {
+    if (!isAllowedEmailDomain(email, config)) {
       return refuse('link_denied');
     }
     existing.msOid = claims.oid;
     existing.msTid = claims.tid;
     await existing.save();
+    await audit({
+      actorId: existing._id,
+      entityType: 'user',
+      entityId: existing._id,
+      action: 'sso_linked',
+      meta: ssoMeta(existing._id, claims, email),
+    });
     return { ok: true, user: existing };
   }
 
@@ -82,6 +91,13 @@ export async function resolveMicrosoftSignIn(
     lastLoginAt: now,
     failedLogins: 0,
     lockedUntil: null,
+  });
+  await audit({
+    actorId: user._id,
+    entityType: 'user',
+    entityId: user._id,
+    action: 'sso_user_created',
+    meta: ssoMeta(user._id, claims, email),
   });
   return { ok: true, user };
 }

@@ -152,8 +152,11 @@ export function createApp(
   for (const router of routers) api.use(router);
 
   app.use('/api/v1', api);
-  // OAuth redirect URIs are registered on the web origin as /api/auth/… (Vercel rewrite → API).
-  app.use('/api', api);
+  // Vercel rewrite: only Microsoft OAuth paths on /api (not the full API).
+  app.use('/api', (req, res, next) => {
+    if (!/^\/auth\/microsoft\/(login|callback)\/?$/i.test(req.path)) return next();
+    return api(req, res, next);
+  });
   app.get('/', (_req, res) => res.json({ name: 'xc8-projectmgmt-api', docs: '/api/v1/health' }));
   app.use(notFoundHandler);
   app.use(errorHandler);

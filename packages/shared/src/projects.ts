@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ProjectTypeRefDto } from './projectTypes.js';
-import { JOB_ROLES, type SystemRole } from './roles.js';
+import { JOB_ROLES, type JobRole, type SystemRole } from './roles.js';
 
 /**
  * Milestone 2: implementation templates, projects and tasks (doc 03 TPL/PRJ/TSK, doc 11 FR-PRJ-11..13).
@@ -1170,7 +1170,7 @@ export interface PersonDto {
   id: string;
   name: string;
   systemRole: string;
-  jobRole: string;
+  jobRole: JobRole | null;
 }
 
 /** POST /projects/:id/tasks/reorder: the new order of one phase's tasks (null = no phase). */

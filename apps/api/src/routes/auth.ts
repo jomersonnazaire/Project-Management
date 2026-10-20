@@ -120,8 +120,8 @@ export function authRouter(
   const ipOf = (req: Request) =>
     clientIp(req, { trustedHops: config.TRUST_PROXY_HOPS, edgeSecret: config.EDGE_PROXY_SECRET });
 
-  const msFailureRedirect = (res: Response) => {
-    res.redirect(`${config.WEB_APP_URL}/login?error=ms_signin_failed`);
+  const msFailureRedirect = (res: Response, code = 'ms_signin_failed') => {
+    res.redirect(`${config.WEB_APP_URL}/login?error=${code}`);
   };
 
   router.get('/providers', PUBLIC, (_req, res) => {
@@ -169,7 +169,7 @@ export function authRouter(
           { reason: result.reason, tid: claims.tid, oid: claims.oid },
           'Microsoft sign-in refused',
         );
-        msFailureRedirect(res);
+        msFailureRedirect(res, result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed');
         return;
       }
       const now = clockNow();
@@ -180,6 +180,11 @@ export function authRouter(
       await createSession(config, result.user._id, req, res, ipOf(req));
       res.redirect(config.WEB_APP_URL);
     } catch (err) {
+      if (err instanceof Error && err.message === 'Missing email') {
+        req.log?.warn('Microsoft callback refused: no email claim');
+        msFailureRedirect(res, 'ms_no_email');
+        return;
+      }
       req.log?.warn({ err }, 'Microsoft callback failed');
       msFailureRedirect(res);
     }

@@ -31,3 +31,5 @@ npm-debug.log*
 
 # API deploy bundle
 apps/api/deploy/
+
+ms365-test-output.txt
