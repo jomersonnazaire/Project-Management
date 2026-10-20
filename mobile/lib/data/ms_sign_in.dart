@@ -95,16 +95,14 @@ class MicrosoftSignIn {
     required this.api,
     MsPkceStorage? storage,
     LaunchUrlFn? launch,
-    UriLinkStream? links,
+    this._links,
     AppLinks? appLinks,
-    Future<Uri?> Function()? initialLink,
+    this._initialLink,
   }) : _storage = storage ?? FlutterMsPkceStorage(),
        _launch =
            launch ??
            ((uri) => launchUrl(uri, mode: LaunchMode.externalApplication)),
-       _appLinks = appLinks ?? AppLinks(),
-       _links = links,
-       _initialLink = initialLink;
+       _appLinks = appLinks ?? AppLinks();
 
   final ApiClient api;
   final MsPkceStorage _storage;
@@ -224,7 +222,10 @@ class MicrosoftSignIn {
         'code': code,
         'code_verifier': verifier,
       });
-      api.bearer = body['token'] as String;
+      final token = body['token'] as String;
+      // D6: never accept a client-portal token as a mobile session.
+      if (isPortalToken(token)) throw const FormatException('portal token');
+      api.bearer = token;
       await api.touch();
       return AppUser.fromJson(body['user'] as Map<String, dynamic>);
     } on ApiException catch (e) {
