@@ -117,16 +117,12 @@ describe('Microsoft 365 sign-in', () => {
     expect(loginRes.headers.location).toMatch(/ms_signin_failed/);
   });
 
-  it('providers: EDGE_PROXY_SECRET length gates msEnabled (31 off, 32 on)', async () => {
+  it('EDGE_PROXY_SECRET: 31 chars stops startup, 32 chars enables MS sign-in', async () => {
     const short = 'e'.repeat(31);
     const ok = 'e'.repeat(32);
-    expect(
-      (
-        await request(makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: short })).get(
-          '/api/v1/auth/providers',
-        )
-      ).body.microsoft,
-    ).toBe(false);
+    expect(() => makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: short })).toThrow(
+      /EDGE_PROXY_SECRET must be at least 32 characters/,
+    );
     expect(
       (await request(makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: ok })).get('/api/v1/auth/providers'))
         .body.microsoft,

@@ -43,7 +43,7 @@ Keep only Microsoft Graph delegated `openid`, `profile`, `email`. **Remove `User
 | `MS_ALLOWED_DOMAINS` | company email domains, comma-separated, e.g. `xceler8.com` |
 | `EDGE_PROXY_SECRET` | 32+ character secret (same value as on Vercel for the API proxy); signs the short-lived Microsoft sign-in state cookie |
 
-The API fails closed: if any of these is missing, `EDGE_PROXY_SECRET` is shorter than 32 characters, or either allowlist is empty, the Microsoft button is hidden and no one can sign in with Microsoft. Email login is unaffected.
+The API fails closed: if any of these is missing (including `EDGE_PROXY_SECRET`) or either allowlist is empty, the Microsoft button is hidden and no one can sign in with Microsoft. Email login is unaffected. A non-empty `EDGE_PROXY_SECRET` shorter than 32 characters is a configuration error: the API refuses to start.
 
 ## 7. Local development
 Add the same keys to `apps/api/.env` (never commit it), with `MS_REDIRECT_URI=http://localhost:5173/api/auth/microsoft/callback`, a dev client secret, and `EDGE_PROXY_SECRET` set to any random string of at least 32 characters. Start API + web as usual and open http://localhost:5173/login.

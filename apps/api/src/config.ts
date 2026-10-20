@@ -65,6 +65,7 @@ const EnvSchema = z.object({
    */
   EDGE_PROXY_SECRET: z
     .string()
+    .min(32, 'EDGE_PROXY_SECRET must be at least 32 characters')
     .optional()
     .or(z.literal('').transform(() => undefined)),
   /** IPv4 addresses in the same /N share one auth rate-limit bucket (IPv6 uses /56). */
