@@ -1,4 +1,6 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { Request, RequestHandler, Response } from 'express';
+import { z } from 'zod';
 import {
   changePasswordSchema,
   inviteTokenSchema,
@@ -14,7 +16,7 @@ import { parseBody } from '../lib/validate.js';
 import { now as clockNow } from '../lib/clock.js';
 import { clientIp } from '../middleware/clientIp.js';
 import { bearerToken, currentPermissions, currentRole, currentUser } from '../middleware/auth.js';
-import { SessionModel, UserModel } from '../models/index.js';
+import { MobileAuthCodeModel, SessionModel, UserModel } from '../models/index.js';
 import { buildMicrosoftLoginUrl, exchangeMicrosoftCode } from '../services/microsoftAuth.js';
 import { handleMicrosoftDarMailCallback } from '../services/microsoftDarCallback.js';
 import {
@@ -26,6 +28,14 @@ import {
   readMicrosoftOAuthCookie,
   setMicrosoftOAuthCookie,
 } from '../services/microsoftOAuthCookie.js';
+import {
+  CHALLENGE_RE,
+  CODE_TTL_MS,
+  PENDING_TTL_MS,
+  VERIFIER_RE,
+  appRedirect,
+  s256,
+} from '../services/microsoftMobile.js';
 import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
 import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
@@ -40,7 +50,7 @@ import {
   looksLikeBrowser,
   revokeUserSessions,
 } from '../services/sessions.js';
-import { sha256 } from '../services/tokens.js';
+import { newToken, sha256 } from '../services/tokens.js';
 
 const INVALID_CREDENTIALS = 'Email or password is incorrect.';
 const MOBILE_ONLY = new HttpError(
@@ -132,6 +142,32 @@ export function authRouter(
     res.json({ microsoft: config.msEnabled });
   });
 
+  router.get('/mobile/microsoft/login', PUBLIC, authLimiter, async (req, res) => {
+    const challenge = typeof req.query.code_challenge === 'string' ? req.query.code_challenge : '';
+    const method =
+      typeof req.query.code_challenge_method === 'string' ? req.query.code_challenge_method : '';
+    if (!config.msEnabled || !CHALLENGE_RE.test(challenge) || method !== 'S256') {
+      res.redirect(appRedirect({ error: 'ms_signin_failed' }));
+      return;
+    }
+    try {
+      const login = await buildMicrosoftLoginUrl(config);
+      const now = clockNow();
+      await MobileAuthCodeModel.create({
+        phase: 'pending',
+        keyHash: sha256(login.state),
+        codeChallenge: challenge,
+        msCodeVerifier: login.codeVerifier,
+        nonce: login.nonce,
+        expiresAt: new Date(now.getTime() + PENDING_TTL_MS),
+      });
+      res.redirect(login.url);
+    } catch (err) {
+      req.log?.warn({ err }, 'Microsoft mobile login redirect failed');
+      res.redirect(appRedirect({ error: 'ms_signin_failed' }));
+    }
+  });
+
   router.get('/microsoft/login', PUBLIC, authLimiter, async (req, res) => {
     if (!config.msEnabled) {
       msFailureRedirect(res);
@@ -211,10 +247,115 @@ export function authRouter(
       return;
     }
 
+    if (state) {
+      const now = clockNow();
+      const pending = await MobileAuthCodeModel.findOneAndDelete({
+        phase: 'pending',
+        keyHash: sha256(state),
+        expiresAt: { $gt: now },
+      });
+      if (pending) {
+        if (msError) {
+          res.redirect(appRedirect({ error: 'cancelled' }));
+          return;
+        }
+        if (!code) {
+          res.redirect(appRedirect({ error: 'ms_signin_failed' }));
+          return;
+        }
+        try {
+          const claims = await exchangeMicrosoftCode(
+            config,
+            code,
+            pending.msCodeVerifier!,
+            pending.nonce!,
+          );
+          const result = await resolveMicrosoftSignIn(config, claims);
+          if (!result.ok) {
+            req.log?.warn(
+              { reason: result.reason, tid: claims.tid, oid: claims.oid },
+              'Microsoft mobile sign-in refused',
+            );
+            const errCode = result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed';
+            res.redirect(appRedirect({ error: errCode }));
+            return;
+          }
+          const oneTime = newToken();
+          await MobileAuthCodeModel.create({
+            phase: 'code',
+            keyHash: sha256(oneTime),
+            codeChallenge: pending.codeChallenge,
+            userId: result.user._id,
+            expiresAt: new Date(now.getTime() + CODE_TTL_MS),
+          });
+          res.redirect(appRedirect({ code: oneTime }));
+        } catch (err) {
+          if (err instanceof Error && err.message === 'Missing email') {
+            res.redirect(appRedirect({ error: 'ms_no_email' }));
+            return;
+          }
+          req.log?.warn({ err }, 'Microsoft mobile callback failed');
+          res.redirect(appRedirect({ error: 'ms_signin_failed' }));
+        }
+        return;
+      }
+    }
+
     if (oauth) clearMicrosoftOAuthCookie(config, res);
     if (mail) clearMicrosoftMailOAuthCookie(config, res);
     req.log?.warn('Microsoft callback rejected: bad or missing OAuth state');
     msFailureRedirect(res);
+  });
+
+  const mobileExchangeSchema = z.strictObject({
+    code: z.string().min(20).max(200),
+    code_verifier: z.string().regex(VERIFIER_RE),
+  });
+
+  router.post('/mobile/microsoft/exchange', PUBLIC, authLimiter, async (req, res) => {
+    if (looksLikeBrowser(req)) throw MOBILE_ONLY;
+    const parsed = mobileExchangeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest('Sign-in expired. Try again.', undefined, 'INVALID_CODE');
+    }
+    if (!config.msEnabled) {
+      throw badRequest('Sign-in expired. Try again.', undefined, 'INVALID_CODE');
+    }
+    const { code, code_verifier } = parsed.data;
+    const now = clockNow();
+    const doc = await MobileAuthCodeModel.findOneAndDelete({
+      phase: 'code',
+      keyHash: sha256(code),
+      expiresAt: { $gt: now },
+    });
+    let challengeOk = false;
+    if (doc) {
+      const got = Buffer.from(s256(code_verifier));
+      const want = Buffer.from(doc.codeChallenge);
+      challengeOk = got.length === want.length && timingSafeEqual(got, want);
+    }
+    if (!doc || !challengeOk) {
+      throw badRequest('Sign-in expired. Try again.', undefined, 'INVALID_CODE');
+    }
+    const user = await UserModel.findById(doc.userId);
+    if (!user || !user.active) {
+      throw new HttpError(
+        403,
+        'ACCOUNT_DEACTIVATED',
+        'This account is deactivated. Contact your administrator.',
+      );
+    }
+    await UserModel.updateOne(
+      { _id: user._id },
+      { $set: { lastLoginAt: now, failedLogins: 0, lockedUntil: null } },
+    );
+    const { token, expiresAt } = await createMobileSession(config, user._id, req, ipOf(req));
+    res.json({
+      user: toUserDto(user),
+      permissions: await permissionsFor(user.systemRole as SystemRole),
+      token,
+      expiresAt: expiresAt.toISOString(),
+    });
   });
 
   router.post('/login', PUBLIC, authLimiter, async (req, res) => {

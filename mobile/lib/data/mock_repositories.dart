@@ -429,6 +429,9 @@ class MockAuthRepository implements AuthRepository {
 
   @override
   Future<void> setupPassword(String token, String password) async {}
+
+  @override
+  Future<bool> microsoftAvailable() async => false;
 }
 
 class MockProjectRepository implements ProjectRepository {
