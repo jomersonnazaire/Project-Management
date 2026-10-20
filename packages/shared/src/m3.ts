@@ -696,6 +696,7 @@ export const NOTIFICATION_TYPES = [
   'TIMER_STOPPED',
   'LEAVE_RECORDED',
   'LEAVE_CANCELLED',
+  'DAR_READY',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -750,6 +751,7 @@ export const NOTIFICATION_VERBS: Record<NotificationType, string> = {
   TIMER_STOPPED: 'Timer stopped:',
   LEAVE_RECORDED: 'recorded leave',
   LEAVE_CANCELLED: 'cancelled leave',
+  DAR_READY: 'has a report ready',
 };
 
 // ---------- Project conversation (FR-CNV-01..08) ----------

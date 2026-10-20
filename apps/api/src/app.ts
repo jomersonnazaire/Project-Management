@@ -1,3 +1,4 @@
+import { DAR_SEND_RATE_LIMITED } from '@xc8/shared';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
@@ -110,6 +111,20 @@ export function createApp(
       ),
   });
 
+  // DAR Send has its own per-user limiter (D5): a Send must not use up the office's sign-in
+  // bucket, and sign-ins must not block Send. Same single-instance MemoryStore caveat (TD-01).
+  const darSendLimiter = rateLimit({
+    windowMs: config.DAR_SEND_RATE_LIMIT_WINDOW_MINUTES * 60_000,
+    limit: config.DAR_SEND_RATE_LIMIT_MAX,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    validate: false,
+    // Runs after the auth gate, so a user is always present.
+    keyGenerator: (req) => `dar-send:${String(req.auth?.user._id ?? 'anon')}`,
+    handler: (_req, _res, next) =>
+      next(new HttpError(429, 'DAR_SEND_RATE_LIMITED', DAR_SEND_RATE_LIMITED)),
+  });
+
   // Every route is declared with its access policy; the central gate checks it before any
   // handler runs, and requests matching no declared route are denied (doc 11 §8).
   const registry = new RouteRegistry();
@@ -134,7 +149,7 @@ export function createApp(
     settingsRouter(registry),
     ...timeRouter(registry),
     ...trackerRouter(registry),
-    ...darRouter(registry),
+    ...darRouter(config, registry, darSendLimiter),
     ...leaveRouter(registry),
     ...documentsRouter(config, registry, blobStore),
     documentRequestsRouter(registry),

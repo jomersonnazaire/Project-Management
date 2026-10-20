@@ -327,19 +327,24 @@ function pdfText(pdf: Buffer): string {
   return out.join(' ').replace(/\s+/g, ' ');
 }
 
-describe('TC-R06: no Send', () => {
-  it('has no send or email endpoint', async () => {
+describe('TC-R06: no free-form send', () => {
+  it('has no send-anywhere or email endpoint; saved Send takes no recipients', async () => {
     const s = await setup();
     await sampleDay(s);
     const saved = (await save(s.w.member.agent, '2026-10-13', '2026-10-13')).body.item;
-    for (const url of [
-      '/api/v1/dar/send',
-      `/api/v1/dar/saved/${saved.id}/send`,
-      '/api/v1/dar/email',
-    ])
+    for (const url of ['/api/v1/dar/send', '/api/v1/dar/email'])
       expect((await s.w.member.agent.post(url).set(CSRF).send({ to: 'x@y.example' })).status).toBe(
         404,
       );
+    // Doc 14 §N: Send exists only for a saved report, and the browser can't choose recipients.
+    expect(
+      (
+        await s.w.member.agent
+          .post(`/api/v1/dar/saved/${saved.id}/send`)
+          .set(CSRF)
+          .send({ to: 'x@y.example' })
+      ).status,
+    ).toBe(400);
   });
 });
 

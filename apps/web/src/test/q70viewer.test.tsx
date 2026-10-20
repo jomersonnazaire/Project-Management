@@ -36,12 +36,22 @@ describe('AC-56.1: Viewer has no Time or Tracker in the web app', () => {
     expect(screen.queryByRole('button', { name: /Time out/ })).not.toBeInTheDocument();
   });
 
-  for (const path of ['/time', '/dar', '/dar/saved', '/timesheets/review']) {
+  for (const path of ['/time', '/timesheets/review']) {
     it(`opening ${path} shows the no-access page, not an error`, async () => {
       viewerApi();
       renderAt(path, <App />);
       expect(await screen.findByText("You don't have access to this page")).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Log task time' })).not.toBeInTheDocument();
+    });
+  }
+
+  for (const path of ['/dar', '/dar/saved']) {
+    it(`opening ${path} shows the DAR role message`, async () => {
+      viewerApi();
+      renderAt(path, <App />);
+      expect(
+        await screen.findByText('Ask an Admin to assign your role to use DAR.'),
+      ).toBeInTheDocument();
     });
   }
 
