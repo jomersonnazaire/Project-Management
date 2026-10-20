@@ -86,6 +86,7 @@ export async function buildMicrosoftLoginUrl(
   return { url, codeVerifier: verifier, state, nonce };
 }
 
+/** Our own nonce check, kept alongside MSAL's (defence in depth). */
 function parseIdTokenBase(
   claims: Record<string, unknown>,
   expectedNonce: string,
@@ -119,6 +120,9 @@ export async function exchangeMicrosoftCode(
     codeVerifier,
     redirectUri: config.MS_REDIRECT_URI,
     scopes: DEFAULT_SCOPES,
+    // msal-node 6 checks the ID token's nonce itself and refuses a token that carries one when
+    // the request names none (nonce_mismatch). Pass the nonce we put in the auth URL.
+    nonce: expectedNonce,
   });
   const claims = (result?.idTokenClaims ?? {}) as Record<string, unknown>;
   const base = parseIdTokenBase(claims, expectedNonce);
@@ -145,6 +149,7 @@ export async function exchangeMicrosoftMailCode(
     codeVerifier,
     redirectUri: config.MS_REDIRECT_URI,
     scopes: MAIL_SCOPES,
+    nonce: expectedNonce,
   });
   const claims = (result?.idTokenClaims ?? {}) as Record<string, unknown>;
   const base = parseIdTokenBase(claims, expectedNonce);
