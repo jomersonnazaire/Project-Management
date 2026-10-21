@@ -287,7 +287,7 @@ export function authRouter(
         flow: 'dar',
         userId: d.userId,
         codeChallenge: mobileMail.codeChallenge,
-        base: { report: d.savedReportId },
+        base: { report: d.savedReportId, recipients: 0 },
       });
       await handleMicrosoftDarMailCallback(config, req, res, d, code, msError, errorDescription);
       return;

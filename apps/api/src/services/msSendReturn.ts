@@ -167,7 +167,7 @@ interface MobileReturn {
   flow: MobileSendFlow;
   userId: string;
   codeChallenge: string;
-  /** Ids (and defaults) for the confirm response; `flow` here is the public name. */
+  /** Ids and defaults (`flow` = the public name, `recipients: 0`) for the confirm response. */
   base: Record<string, ResultValue>;
 }
 
