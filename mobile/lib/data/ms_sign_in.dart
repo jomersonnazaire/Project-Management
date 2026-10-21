@@ -236,7 +236,10 @@ class MicrosoftSignIn {
         'code': code,
         'code_verifier': verifier,
       });
-      api.bearer = body['token'] as String;
+      final token = body['token'] as String;
+      // D6: never accept a client-portal token as a mobile session.
+      if (isPortalToken(token)) throw const FormatException('portal token');
+      api.bearer = token;
       await api.touch();
       return AppUser.fromJson(body['user'] as Map<String, dynamic>);
     } on ApiException catch (e) {

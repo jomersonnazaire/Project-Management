@@ -6,6 +6,7 @@ import '../data/action_email.dart';
 import '../data/dar_send.dart';
 import '../data/ms_sign_in.dart'
     show MsPkceStorage, MemoryMsPkceStorage, FlutterMsPkceStorage;
+import '../data/phases.dart';
 import '../data/access.dart';
 import '../data/models.dart' show Project, ProjectStatus;
 export '../data/access.dart' show PermissionGrid;
@@ -152,6 +153,17 @@ final darRepositoryProvider = Provider<DarRepository>(
     () => MockDarRepository(ref.watch(mockTrackerStoreProvider)),
   ),
 );
+final phaseRepositoryProvider = Provider<PhaseRepository>(
+  (ref) => _pick<PhaseRepository>(
+    ref,
+    () => ApiPhaseRepository(ref.watch(apiClientProvider)),
+    () => MockPhaseRepository(ref.watch(mockStoreProvider)),
+  ),
+);
+final phasesProvider = FutureProvider.family<List<PhaseInfo>, String>(
+  (ref, id) => ref.watch(phaseRepositoryProvider).phases(id),
+);
+
 final projectAdminRepositoryProvider = Provider<ProjectAdminRepository>(
   (ref) => _pick<ProjectAdminRepository>(
     ref,
@@ -162,14 +174,43 @@ final projectAdminRepositoryProvider = Provider<ProjectAdminRepository>(
 
 /// GET /auth/me/permissions → {record: {action: bool}}, parsed strictly. Demo: the m8-polish
 /// default rules for the demo user's role.
+/// Raw GET /auth/me/permissions (null in demo mode or signed out).
+final permissionsBodyProvider = FutureProvider<Map<String, dynamic>?>((
+  ref,
+) async {
+  final u = await ref.watch(authProvider.future);
+  if (u == null || AppConfig.demoMode) return null;
+  return ref.watch(apiClientProvider).get('/auth/me/permissions');
+});
+
 final permissionsProvider = FutureProvider<PermissionGrid>((ref) async {
   final u = await ref.watch(authProvider.future);
   if (u == null) return const {};
   if (AppConfig.demoMode) return defaultPermissions(u.systemRole);
-  return parsePermissions(
-    await ref.watch(apiClientProvider).get('/auth/me/permissions'),
-  );
+  return parsePermissions(await ref.watch(permissionsBodyProvider.future));
 });
+
+/// FR-ACL-21: allowed My tasks tabs (server `myTasksTabs`, else the same rule locally).
+/// Null while permissions load.
+final myTasksTabsProvider = Provider<List<String>?>((ref) {
+  final grid = ref.watch(permissionsProvider).value;
+  if (grid == null) return null;
+  return parseMyTasksTabs(ref.watch(permissionsBodyProvider).value) ??
+      myTasksTabsFor(grid);
+});
+
+/// D7: `canCreateProject` / `canCreateTask` from /auth/me/permissions, else the grid.
+bool canCreateProjectW(WidgetRef ref) {
+  final v = ref.watch(permissionsBodyProvider).value?['canCreateProject'];
+  return v is bool
+      ? v && canW(ref, 'projects', 'create')
+      : canW(ref, 'projects', 'create');
+}
+
+bool canCreateTaskW(WidgetRef ref) {
+  final v = ref.watch(permissionsBodyProvider).value?['canCreateTask'];
+  return v is bool ? v : true;
+}
 
 /// useCan(record, action). False while permissions load, so write controls never flash on.
 bool can(Ref ref, String record, String action) =>
@@ -237,6 +278,19 @@ final dayTimesheetProvider =
     FutureProvider.family<TrackerDay, (DateTime, String?)>(
       (ref, a) => ref.watch(trackerRepositoryProvider).day(a.$1, userId: a.$2),
     );
+
+/// Time-lock setting (either shape). Null when unknown (demo, 403, older API).
+final timeLockProvider = FutureProvider<TimeLockPolicy?>((ref) async {
+  if (AppConfig.demoMode) return const TimeLockPolicy(enabled: true);
+  try {
+    return TimeLockPolicy.fromJson(
+      await ref.watch(apiClientProvider).get('/settings/time-lock'),
+    );
+  } catch (_) {
+    return null;
+  }
+});
+
 final runningProvider = FutureProvider<Running>(
   (ref) => ref.watch(trackerRepositoryProvider).running(),
 );

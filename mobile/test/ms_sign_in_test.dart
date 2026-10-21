@@ -321,6 +321,31 @@ void main() {
     expect(find.byKey(const Key('loginMicrosoft')), findsOneWidget);
   });
 
+  test('a ptl_ (client portal) token from the exchange is rejected', () async {
+    final store = MemorySessionStore();
+    final api = ApiClient(
+      'http://api.test/api/v1',
+      store: store,
+      client: MockClient(
+        (req) async => http.Response(
+          jsonEncode({
+            'user': {'id': 'u1', 'email': 'a@x.com', 'name': 'A'},
+            'token': 'ptl_portal-token',
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      ),
+    );
+    final ms = MicrosoftSignIn(api: api, storage: await freshPkce());
+    await expectLater(
+      ms.handle(Uri.parse('opstrack://auth/microsoft?code=abc')),
+      throwsA(isA<MicrosoftSignInFailure>()),
+    );
+    expect(api.bearer, isNull);
+    expect(await store.read(), isNull);
+  });
+
   group('failed exchange shows a message and leaves no session', () {
     final cases = <String, (int?, String?, String)>{
       '400 expired or reused code': (400, 'INVALID_CODE', msExpiredMessage),
