@@ -7,8 +7,14 @@ import {
   type DarReportDto,
 } from '@xc8/shared';
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ActivityLogModel, NotificationModel, UserModel } from '../src/models/index.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setTestTime } from '../src/lib/clock.js';
+import {
+  ActivityLogModel,
+  NotificationModel,
+  SavedReportModel,
+  UserModel,
+} from '../src/models/index.js';
 import type * as DarExport from '../src/services/darExport.js';
 import {
   GraphSendError,
@@ -688,5 +694,168 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
       { $set: { at: new Date(Date.now() - 61 * 60 * 1000) } },
     );
     expect((await post(s1)).status).toBe(200);
+  });
+});
+
+describe('DAR sent status on saved reports', () => {
+  beforeEach(async () => {
+    loginUrlMock.mockReset();
+    mailExchangeMock.mockReset();
+    await ActivityLogModel.deleteMany({
+      action: { $in: ['report_sent', 'report_send_failed', 'dar_supervisor_notified'] },
+    });
+    await UserModel.deleteMany({});
+  });
+  afterEach(() => setTestTime(null));
+  // Times near the real clock, so sessions stay valid whenever the suite runs.
+  const soon = (minutes: number) => {
+    const d = new Date(Math.floor(Date.now() / 60_000) * 60_000 + minutes * 60_000);
+    return d.toISOString();
+  };
+
+  const listItem = async (agent: ReturnType<typeof request.agent>, id: string, q = '') => {
+    const res = await agent.get(`/api/v1/dar/saved${q}`);
+    expect(res.status).toBe(200);
+    return (res.body.items as { id: string }[]).find((i) => i.id === id) as
+      Record<string, unknown> | undefined;
+  };
+
+  async function sendOk(
+    a: Parameters<typeof request>[0],
+    agent: ReturnType<typeof request.agent>,
+    id: string,
+  ) {
+    const { state, cookie } = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    const fetchSpy = graph202();
+    const done = await callback(a, cookie, { code: 'c', state });
+    fetchSpy.mockRestore();
+    return done;
+  }
+
+  it('a new report is "not sent": the list and the item return null sent fields', async () => {
+    const { agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    expect(await listItem(agent, id)).toMatchObject({
+      sentAt: null,
+      sentBy: null,
+      sentRecipientCount: null,
+    });
+    const one = await agent.get(`/api/v1/dar/saved/${id}`);
+    expect(one.body.item).toMatchObject({ sentAt: null, sentBy: null, sentRecipientCount: null });
+  });
+
+  it('a successful send records sentAt, sentBy and the recipient count; a re-send updates sentAt', async () => {
+    const { a, agent, member } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const t1 = soon(1);
+    setTestTime(t1);
+    const done = await sendOk(a, agent, id);
+    expect(done.headers.location).toBe(`http://localhost:5173/dar/saved?sent=${id}`);
+    // To (supervisor) + 1 CC (the sender's own address is dropped from CC).
+    const expected = {
+      sentAt: t1,
+      sentBy: member._id.toString(),
+      sentRecipientCount: 2,
+    };
+    expect(await listItem(agent, id)).toMatchObject(expected);
+    expect((await agent.get(`/api/v1/dar/saved/${id}`)).body.item).toMatchObject(expected);
+    // Only the count is stored on the report, never the addresses.
+    const doc = await SavedReportModel.findById(id).lean();
+    expect(JSON.stringify({ ...doc, report: null })).not.toContain('@xceler8.example');
+
+    const t2 = soon(6);
+    setTestTime(t2);
+    await sendOk(a, agent, id);
+    expect(await listItem(agent, id)).toMatchObject({ sentAt: t2 });
+  });
+
+  it('a failed send records nothing and keeps an earlier successful send', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const { state, cookie } = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: 'ErrorAccessDenied' } }), { status: 403 }),
+      );
+    const done = await callback(a, cookie, { code: 'c', state });
+    fetchSpy.mockRestore();
+    expect(done.headers.location).toContain('send_error=');
+    expect(await listItem(agent, id)).toMatchObject({ sentAt: null, sentRecipientCount: null });
+    expect((await SavedReportModel.findById(id).lean())?.sentAt ?? null).toBeNull();
+
+    // Consent declined after a good send: the good send stays.
+    const t1 = soon(1);
+    setTestTime(t1);
+    await sendOk(a, agent, id);
+    const again = await startSend(agent, id);
+    await callback(a, again.cookie, { error: 'access_denied', state: again.state });
+    expect(await listItem(agent, id)).toMatchObject({ sentAt: t1 });
+  });
+
+  it('the mail is out even if recording fails: success redirect, audit fallback shows it sent', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const spy = vi.spyOn(SavedReportModel, 'updateOne').mockRejectedValueOnce(new Error('db blip'));
+    const done = await sendOk(a, agent, id);
+    spy.mockRestore();
+    expect(done.headers.location).toBe(`http://localhost:5173/dar/saved?sent=${id}`);
+    expect((await SavedReportModel.findById(id).lean())?.sentAt ?? null).toBeNull();
+    expect(await listItem(agent, id)).toMatchObject({ sentRecipientCount: 2 });
+    expect((await listItem(agent, id))?.sentAt).toEqual(expect.any(String));
+  });
+
+  it('reports sent before this change: a report_sent audit entry fills the status on read', async () => {
+    const { agent, member } = await setupLinkedMember();
+    const old = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const failed = await saveReport(agent, '2026-10-14', '2026-10-14');
+    const at = new Date('2026-10-20T02:00:00.000Z');
+    await ActivityLogModel.create([
+      {
+        actorId: member._id,
+        entityType: 'savedReport',
+        entityId: old,
+        action: 'report_sent',
+        meta: { to: 'sup@xceler8.example', cc: ['a@x.example', 'b@x.example'] },
+        at: new Date('2026-10-19T02:00:00.000Z'),
+      },
+      {
+        actorId: member._id,
+        entityType: 'savedReport',
+        entityId: old,
+        action: 'report_sent',
+        meta: { to: 'sup@xceler8.example', cc: ['a@x.example'] },
+        at,
+      },
+      {
+        actorId: member._id,
+        entityType: 'savedReport',
+        entityId: failed,
+        action: 'report_send_failed',
+        meta: { reason: 'no_mailbox' },
+        at,
+      },
+    ]);
+    expect(await listItem(agent, old)).toMatchObject({
+      sentAt: at.toISOString(),
+      sentBy: member._id.toString(),
+      sentRecipientCount: 2,
+    });
+    expect(await listItem(agent, failed)).toMatchObject({ sentAt: null });
+  });
+
+  it('the sent filter returns only sent or only not-sent reports', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const s = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const n = await saveReport(agent, '2026-10-14', '2026-10-14');
+    await sendOk(a, agent, s);
+    const ids = async (q: string) =>
+      ((await agent.get(`/api/v1/dar/saved${q}`)).body.items as { id: string }[]).map((i) => i.id);
+    expect(await ids('?sent=SENT')).toEqual([s]);
+    expect(await ids('?sent=NOT_SENT')).toEqual([n]);
+    expect((await ids('?sent=ALL')).sort()).toEqual([s, n].sort());
+    expect((await agent.get('/api/v1/dar/saved?sent=maybe')).status).toBe(400);
   });
 });

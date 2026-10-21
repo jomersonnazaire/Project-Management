@@ -95,6 +95,9 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
     let items = await toSavedDtos(user._id, docs as never);
     if (q.label === 'LATEST') items = items.filter((i) => i.tag === 'LATEST');
     if (q.label === 'EARLIER') items = items.filter((i) => i.tag === 'EARLIER');
+    // After the DTOs, so reports sent before the sent fields existed (audit fallback) count.
+    if (q.sent === 'SENT') items = items.filter((i) => i.sentAt !== null);
+    if (q.sent === 'NOT_SENT') items = items.filter((i) => i.sentAt === null);
     res.json({ items });
   });
 

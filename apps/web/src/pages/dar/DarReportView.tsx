@@ -1,5 +1,11 @@
 import {
   DAR_COLUMNS,
+  DAR_STATUS_NOT_SENT,
+  DAR_STATUS_SENT,
+  formatLongDate,
+  formatTime12,
+  phDateOf,
+  recipientCountLabel,
   darFooter,
   DAR_TITLE,
   moduleLabel,
@@ -80,4 +86,34 @@ export function SavedTagBadge({ tag }: { tag: SavedTag }) {
   if (tag === 'LATEST') return <span className="badge bg-label-success">{SAVED_LATEST}</span>;
   if (tag === 'EARLIER') return <span className="badge bg-label-secondary">{SAVED_EARLIER}</span>;
   return <span className="text-body-secondary">–</span>;
+}
+
+/** "Oct 21, 2026 · 9:52 AM (UTC+8)": Philippine time, labelled. */
+const sentOn = (iso: string) =>
+  `${formatLongDate(phDateOf(new Date(iso)))} · ${formatTime12(iso).replace(/^0/, '')} (UTC+8)`;
+
+/** Send status of a saved report: "Sent" + when (and to how many), or "Not sent". */
+export function SentStatus({
+  sentAt,
+  sentRecipientCount,
+}: {
+  sentAt: string | null;
+  sentRecipientCount: number | null;
+}) {
+  if (!sentAt) {
+    return (
+      <span className="badge bg-label-secondary" data-testid="dar-sent-status">
+        {DAR_STATUS_NOT_SENT}
+      </span>
+    );
+  }
+  return (
+    <span data-testid="dar-sent-status">
+      <span className="badge bg-label-success">{DAR_STATUS_SENT}</span>{' '}
+      <span className="small text-body-secondary text-nowrap">
+        {sentOn(sentAt)}
+        {sentRecipientCount ? ` · ${recipientCountLabel(sentRecipientCount)}` : ''}
+      </span>
+    </span>
+  );
 }

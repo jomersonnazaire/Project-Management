@@ -46,6 +46,9 @@ const item: SavedReportSummaryDto = {
   totalRendered: '01:00',
   tag: null,
   changedDates: [],
+  sentAt: null,
+  sentBy: null,
+  sentRecipientCount: null,
 };
 
 const SAM = { name: 'Supervisor Sam', email: 'sup@xceler8.example' };

@@ -41,7 +41,7 @@ import {
 import { useConfirm } from '../../components/ConfirmModal';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
-import { DarReportView, SavedTagBadge } from './DarReportView';
+import { DarReportView, SavedTagBadge, SentStatus } from './DarReportView';
 
 /** "Oct 3, 2026 · 9:10 AM" in Philippine time (mockup v0.8.7). */
 const savedOn = (iso: string) =>
@@ -312,7 +312,7 @@ function RecipientsLine({ report }: { report: DarReportDto }) {
 /** My saved reports (FR-DAR-11 to -16): private, read-only, newest first, no deletes. */
 export function SavedReportsPage() {
   const [params, setParams] = useSearchParams();
-  const [filters, setFilters] = useState<SavedFilters>({ label: 'ALL' });
+  const [filters, setFilters] = useState<SavedFilters>({ label: 'ALL', sent: 'ALL' });
   const [open, setOpen] = useState<string | null>(null);
   const list = useSavedReports(filters);
   // Read the return-from-Microsoft result once, so the message stays after the URL is cleaned.
@@ -323,7 +323,10 @@ export function SavedReportsPage() {
   const sendStatus = useDarSendStatus();
   const items = list.data ?? [];
   const filtered = Boolean(
-    filters.from || filters.to || (filters.label && filters.label !== 'ALL'),
+    filters.from ||
+    filters.to ||
+    (filters.label && filters.label !== 'ALL') ||
+    (filters.sent && filters.sent !== 'ALL'),
   );
   useEffect(() => {
     if (!params.get('sent') && !params.get('send_error')) return;
@@ -376,6 +379,19 @@ export function SavedReportsPage() {
                 <option value="EARLIER">Earlier version</option>
               </Form.Select>
             </Form.Group>
+            <Form.Group controlId="saved-sent">
+              <Form.Label className="small mb-0">Status</Form.Label>
+              <Form.Select
+                value={filters.sent ?? 'ALL'}
+                onChange={(e) =>
+                  setFilters({ ...filters, sent: e.target.value as SavedFilters['sent'] })
+                }
+              >
+                <option value="ALL">All</option>
+                <option value="SENT">Sent</option>
+                <option value="NOT_SENT">Not sent</option>
+              </Form.Select>
+            </Form.Group>
           </div>
           <p className="small text-body-secondary">
             Reports you saved, newest first. Each save is final and kept as a read-only copy. When
@@ -395,7 +411,11 @@ export function SavedReportsPage() {
           )}
           {list.data && items.length === 0 && filtered && (
             <EmptyState icon="bx-search" title="No saved reports match these filters">
-              <Button variant="link" className="p-0" onClick={() => setFilters({ label: 'ALL' })}>
+              <Button
+                variant="link"
+                className="p-0"
+                onClick={() => setFilters({ label: 'ALL', sent: 'ALL' })}
+              >
                 Clear filters
               </Button>
             </EmptyState>
@@ -410,6 +430,7 @@ export function SavedReportsPage() {
                     <th className="text-end">Activities</th>
                     <th className="text-end">Total hours</th>
                     <th>Label</th>
+                    <th>Status</th>
                     <th />
                   </tr>
                 </thead>
@@ -425,6 +446,9 @@ export function SavedReportsPage() {
                         {i.changedDates.length > 0 && (
                           <span className="badge bg-label-warning ms-1">Changed after saving</span>
                         )}
+                      </td>
+                      <td>
+                        <SentStatus sentAt={i.sentAt} sentRecipientCount={i.sentRecipientCount} />
                       </td>
                       <td className="text-end">
                         <Button size="sm" variant="outline-primary" onClick={() => setOpen(i.id)}>
@@ -567,6 +591,10 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
             )}
             {notifyError ? <ErrorAlert error={notifyError} /> : null}
             {confirmDialog}
+            <p className="small mb-2">
+              <span className="text-body-secondary">Status:</span>{' '}
+              <SentStatus sentAt={s.sentAt} sentRecipientCount={s.sentRecipientCount} />
+            </p>
             <p className="small">{savedCopyNote(savedOn(s.savedAt).replace(' ·', ','))}</p>
             {darExportName(s.report) !== DAR_EXPORT_NAME && (
               <p className="small text-body-secondary" data-testid="old-name-note">
