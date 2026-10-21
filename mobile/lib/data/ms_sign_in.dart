@@ -95,16 +95,14 @@ class MicrosoftSignIn {
     required this.api,
     MsPkceStorage? storage,
     LaunchUrlFn? launch,
-    UriLinkStream? links,
+    this._links,
     AppLinks? appLinks,
-    Future<Uri?> Function()? initialLink,
+    this._initialLink,
   }) : _storage = storage ?? FlutterMsPkceStorage(),
        _launch =
            launch ??
            ((uri) => launchUrl(uri, mode: LaunchMode.externalApplication)),
-       _appLinks = appLinks ?? AppLinks(),
-       _links = links,
-       _initialLink = initialLink;
+       _appLinks = appLinks ?? AppLinks();
 
   final ApiClient api;
   final MsPkceStorage _storage;

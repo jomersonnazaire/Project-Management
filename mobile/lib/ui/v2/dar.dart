@@ -8,6 +8,7 @@ import '../../data/tracker_models.dart';
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'dar_send_ui.dart';
 
 /// No export/share on mobile (decision d): PDF/Excel stay on the web app.
 class DarGenerateScreen extends ConsumerStatefulWidget {
@@ -563,6 +564,7 @@ class _SavedReportsScreenState extends ConsumerState<SavedReportsScreen> {
                                   Wrap(
                                     spacing: Space.xs,
                                     children: [
+                                      SentStatusBadge(report: r),
                                       if (r.tag == 'LATEST')
                                         StatusChip(
                                           label: 'Latest',
@@ -628,6 +630,8 @@ class SavedReportDetailScreen extends ConsumerWidget {
                 key: const Key('savedCopyNote'),
                 style: t.bodyMedium,
               ),
+              const SizedBox(height: Space.s),
+              DarSendCard(report: sr),
               for (final d in sr.changedDates)
                 Card(
                   color: sc.forReview.container,

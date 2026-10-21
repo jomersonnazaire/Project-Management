@@ -501,7 +501,15 @@ class SavedReport {
     this.tag,
     this.changedDates = const [],
     this.report,
+    this.sentKnown = false,
+    this.sentAt,
+    this.sentRecipientCount,
   });
+
+  /// PR #35: the API reports send status (`sentAt` present, even when null).
+  final bool sentKnown;
+  final DateTime? sentAt;
+  final int? sentRecipientCount;
   final String id;
   final DateTime savedAt, from, to;
   final int totalActivities;
@@ -524,6 +532,11 @@ class SavedReport {
     report: j['report'] is Map
         ? DarReport.fromJson(j['report'] as Map<String, dynamic>)
         : null,
+    sentKnown: j.containsKey('sentAt'),
+    sentAt: j['sentAt'] is String
+        ? DateTime.tryParse(j['sentAt'] as String)
+        : null,
+    sentRecipientCount: (j['sentRecipientCount'] as num?)?.toInt(),
   );
 }
 

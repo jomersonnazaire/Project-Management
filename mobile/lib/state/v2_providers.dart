@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+
+import '../data/dar_send.dart';
 import '../data/access.dart';
 import '../data/models.dart' show Project, ProjectStatus;
 export '../data/access.dart' show PermissionGrid;
@@ -61,6 +64,35 @@ final hoursRepositoryProvider = Provider<HoursRepository>(
     () => MockHoursRepository(ref.watch(mockTrackerStoreProvider)),
   ),
 );
+final darSendRepositoryProvider = Provider<DarSendRepository>(
+  (ref) => _pick<DarSendRepository>(
+    ref,
+    () => ApiDarSendRepository(ref.watch(apiClientProvider)),
+    () => MockDarSendRepository(),
+  ),
+);
+final darSendStatusProvider = FutureProvider<DarSendStatus>(
+  (ref) => ref.watch(darSendRepositoryProvider).status(),
+);
+
+/// Opens a URL in the system browser (Microsoft consent). Overridden in tests.
+final externalLauncherProvider = Provider<Future<bool> Function(Uri)>(
+  (ref) =>
+      (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
+);
+
+/// The latest `opstrack://ms/send-result` DAR outcome (set by the app's deep-link handler).
+class DarSendResultController extends Notifier<DarSendResult?> {
+  @override
+  DarSendResult? build() => null;
+  void set(DarSendResult? r) => state = r;
+}
+
+final darSendResultProvider =
+    NotifierProvider<DarSendResultController, DarSendResult?>(
+      DarSendResultController.new,
+    );
+
 final darRepositoryProvider = Provider<DarRepository>(
   (ref) => _pick<DarRepository>(
     ref,

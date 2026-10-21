@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'config.dart';
 import 'data/api_client.dart' show disconnectedMessage;
 import 'data/http_factory.dart';
+import 'data/dar_send.dart';
 import 'data/ms_sign_in.dart';
 import 'router.dart';
 import 'state/providers.dart';
+import 'state/v2_providers.dart' show darSendResultProvider;
 import 'theme/app_theme.dart';
 
 class XceleratePmApp extends ConsumerStatefulWidget {
@@ -39,6 +41,12 @@ class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
 
   Future<void> _onMicrosoftDeepLink(Uri uri) async {
     if (!mounted) return;
+    // PR #36: Microsoft send flows come back to opstrack://ms/send-result (not sign-in).
+    if (isSendResultLink(uri)) {
+      final r = DarSendResult.parse(uri);
+      if (r != null) ref.read(darSendResultProvider.notifier).set(r);
+      return;
+    }
     String? message;
     try {
       final user = await ref.read(msSignInProvider).handle(uri);
