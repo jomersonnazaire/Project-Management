@@ -100,8 +100,11 @@ interface MobileReturn {
   flow: MobileSendFlow;
   userId: string;
   codeChallenge: string;
-  base: Record<string, string>;
+  /** Ids (and defaults such as `recipients: 0`) for the confirm response. */
+  base: Record<string, ResultValue>;
 }
+
+type ResultValue = string | number;
 
 /** Marks this callback response as going back to the app (set before running the handler). */
 export function returnToMobile(res: Response, ret: MobileReturn): void {
@@ -110,12 +113,14 @@ export function returnToMobile(res: Response, ret: MobileReturn): void {
 
 /**
  * The end of a send: the web page as before, or, when the send started on mobile, the fixed app
- * address with a one-time code for the outcome (`params` are outcome params only).
+ * address with a one-time code for the outcome (`params` are outcome params only). `mobileExtra`
+ * (the recipients count) goes only into the mobile confirm response, never the web URL.
  */
 export function sendResultRedirect(
   res: Response,
   webUrl: string,
   params: Record<string, string>,
+  mobileExtra: Record<string, ResultValue> = {},
 ): void {
   const ret = res.locals.msSendReturn as MobileReturn | undefined;
   if (!ret) {
@@ -129,7 +134,7 @@ export function sendResultRedirect(
     flow: ret.flow,
     userId: new Types.ObjectId(ret.userId),
     codeChallenge: ret.codeChallenge,
-    data: { flow: ret.flow, ...ret.base, ...params },
+    data: { flow: ret.flow, ...ret.base, ...params, ...mobileExtra },
     expiresAt: new Date(clockNow().getTime() + RESULT_TTL_MS),
   }).then(
     () => res.redirect(`${MOBILE_MAIL_RETURN}?${new URLSearchParams({ code }).toString()}`),
@@ -155,7 +160,7 @@ export async function confirmMobileMailResult(
   code: string,
   codeVerifier: string,
   userId: Types.ObjectId,
-): Promise<Record<string, string> | null> {
+): Promise<Record<string, ResultValue> | null> {
   const doc = await MobileMailStateModel.findOneAndDelete({
     phase: 'result',
     keyHash: sha256(code),
@@ -163,5 +168,5 @@ export async function confirmMobileMailResult(
     expiresAt: { $gt: clockNow() },
   }).lean();
   if (!doc || !sameChallenge(codeVerifier, doc.codeChallenge)) return null;
-  return doc.data as Record<string, string>;
+  return doc.data as Record<string, ResultValue>;
 }

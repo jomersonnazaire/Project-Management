@@ -202,7 +202,8 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
 
     const ok = await confirm(bearer, oneTime);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
-    expect(ok.body).toEqual({ flow: 'dar', report: savedId, sent: savedId });
+    // No CC set: To only.
+    expect(ok.body).toEqual({ flow: 'dar', report: savedId, sent: savedId, recipients: 1 });
     // Single use.
     const again = await confirm(bearer, oneTime);
     expect(again.status).toBe(400);
@@ -317,6 +318,7 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
       flow: 'dar',
       report: savedId,
       send_error: 'consent_declined',
+      recipients: 0,
     });
 
     const b = await startDarMobile(bearer, savedId);
@@ -328,6 +330,7 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
       flow: 'dar',
       report: savedId,
       send_error: 'wrong_account',
+      recipients: 0,
     });
   });
 
@@ -353,6 +356,64 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
       expect((await post(body)).status, JSON.stringify(body)).toBe(400);
     }
     expect(loginUrlMock).not.toHaveBeenCalled();
+    expect(await MobileMailStateModel.countDocuments({})).toBe(0);
+  });
+
+  it('recipients counts every address in the sent message (To + CC), and 0 when Graph refuses', async () => {
+    const { oid, member, bearer, savedId } = await darMember();
+    await UserModel.updateOne(
+      { _id: member._id },
+      // Sender and duplicates are dropped by buildDarCc: To + 2 CC = 3.
+      { $set: { reportCc: ['cc1@xceler8.example', 'cc2@xceler8.example', member.email] } },
+    );
+    const a = await startDarMobile(bearer, savedId);
+    mailExchangeMock.mockResolvedValue(msToken(oid));
+    const spy = graph202();
+    const okCode = appCode(
+      (await callback({ code: CODE, state: a.state })).headers.location as string,
+    );
+    const msg = JSON.parse(String(spy.mock.calls[0]![1]!.body)).message;
+    expect(msg.toRecipients.length + msg.ccRecipients.length).toBe(3);
+    expect((await confirm(bearer, okCode)).body).toEqual({
+      flow: 'dar',
+      report: savedId,
+      sent: savedId,
+      recipients: 3,
+    });
+
+    spy.mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'ErrorAccessDenied' } }), { status: 403 }),
+    );
+    const b = await startDarMobile(bearer, savedId);
+    const failCode = appCode(
+      (await callback({ code: CODE, state: b.state })).headers.location as string,
+    );
+    expect((await confirm(bearer, failCode)).body).toEqual({
+      flow: 'dar',
+      report: savedId,
+      send_error: 'send_forbidden',
+      recipients: 0,
+    });
+  });
+
+  it('result_unavailable: the redirect is exactly opstrack://auth/mail?error=result_unavailable', async () => {
+    const { oid, bearer, savedId } = await darMember();
+    const orig = MobileMailStateModel.create.bind(MobileMailStateModel);
+    vi.spyOn(MobileMailStateModel, 'create').mockImplementation(((doc: { phase?: string }) =>
+      doc?.phase === 'result'
+        ? Promise.reject(new Error('db down'))
+        : orig(doc as never)) as never);
+    const { state } = await startDarMobile(bearer, savedId);
+    mailExchangeMock.mockResolvedValueOnce(msToken(oid));
+    graph202();
+    const done = await callback({ code: CODE, state });
+    expect(done.status).toBe(302);
+    // Nothing else: no code, no report id, no outcome.
+    expect(done.headers.location).toBe('opstrack://auth/mail?error=result_unavailable');
+    expect(done.headers.location).not.toContain(savedId);
+    expect(
+      await ActivityLogModel.countDocuments({ action: 'report_sent', entityId: savedId }),
+    ).toBe(1);
     expect(await MobileMailStateModel.countDocuments({})).toBe(0);
   });
 

@@ -21,9 +21,14 @@ import {
 import { consumeMicrosoftMailState, type MicrosoftMailOAuthState } from './microsoftOAuthCookie.js';
 import { sendResultRedirect } from './msSendReturn.js';
 
-function darSendRedirect(config: AppConfig, res: Response, params: Record<string, string>) {
+function darSendRedirect(
+  config: AppConfig,
+  res: Response,
+  params: Record<string, string>,
+  mobileExtra: Record<string, number> = {},
+) {
   const q = new URLSearchParams(params);
-  sendResultRedirect(res, `${config.WEB_APP_URL}/dar/saved?${q.toString()}`, params);
+  sendResultRedirect(res, `${config.WEB_APP_URL}/dar/saved?${q.toString()}`, params, mobileExtra);
 }
 
 async function failSend(
@@ -135,7 +140,8 @@ export async function handleMicrosoftDarMailCallback(
       action: 'report_sent',
       meta: { to: supervisor.email, cc, range, bytes },
     });
-    darSendRedirect(config, res, { sent: saved._id.toString() });
+    // Mobile confirm only: addresses Graph accepted (one message: To + CC).
+    darSendRedirect(config, res, { sent: saved._id.toString() }, { recipients: 1 + cc.length });
   } catch (err) {
     if (err instanceof GraphSendError) {
       const reason = graphSendFailureReason(err.status, err.code);
