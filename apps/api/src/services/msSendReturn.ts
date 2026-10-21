@@ -1,127 +1,128 @@
 import type { Response } from 'express';
-import type { AppConfig } from '../config.js';
+import { Types } from 'mongoose';
 import { now as clockNow } from '../lib/clock.js';
+import { HttpError } from '../lib/errors.js';
 import { bearerToken } from '../middleware/auth.js';
 import { MobileMailStateModel } from '../models/index.js';
-import {
-  setMicrosoftActionEmailCookie,
-  setMicrosoftMailOAuthCookie,
-  type MicrosoftActionEmailOAuthState,
-  type MicrosoftMailOAuthState,
-} from './microsoftOAuthCookie.js';
-import { sha256 } from './tokens.js';
+import type { MicrosoftMailOAuthState } from './microsoftOAuthCookie.js';
+import { newToken, sha256 } from './tokens.js';
 
 /**
- * Mobile return path for the Microsoft Mail.Send round trip (DAR Send, action emails).
+ * Mobile return path for the Microsoft Mail.Send round trip (DAR Send).
  *
- * The client never sends a return URL. A send started with the mobile bearer token (only a
- * mobile session can authenticate that way) keeps its state server-side and comes back to the
- * one fixed app address below; a send started with the web cookie works exactly as before.
- * Only outcome params go into the return URL, never a token, code or state.
+ * The app starts with POST /dar/saved/:id/send/mobile (bearer token; only a mobile session can
+ * authenticate that way). The OAuth state is kept server-side, not in a cookie. After the send,
+ * the callback returns to the one fixed app address below with a random one-time code (never a
+ * Microsoft token, code or the OAuth state); the app reads the outcome with
+ * POST /auth/mobile/mail/confirm, with its own bearer token. The client never sends a return URL.
  */
-export const MOBILE_SEND_RETURN = 'opstrack://ms/send-result';
-const TTL_MS = 10 * 60 * 1000;
+export const MOBILE_MAIL_RETURN = 'opstrack://auth/mail';
+const PENDING_TTL_MS = 10 * 60 * 1000;
+export const RESULT_TTL_MS = 5 * 60 * 1000;
 
-export type MobileSendFlow = 'dar' | 'action';
+export const MOBILE_SEND_ONLY = new HttpError(
+  403,
+  'MOBILE_ONLY',
+  'This send is only for the OpsTrack mobile app.',
+);
+
+export type MobileSendFlow = 'dar';
 
 /** True when the (already authenticated) request came from the mobile app's bearer session. */
 export function isMobileSend(res: Response): boolean {
   return bearerToken(res.req) !== null;
 }
 
-/** Keeps a DAR Send's OAuth state: cookie for web, server-side for mobile. */
-export async function storeDarMailState(
-  config: AppConfig,
-  res: Response,
-  data: MicrosoftMailOAuthState,
-): Promise<void> {
-  if (isMobileSend(res)) return saveMobile('dar', data);
-  setMicrosoftMailOAuthCookie(config, res, data);
-}
-
-/** Keeps an action email's OAuth state: cookie for web, server-side for mobile. */
-export async function storeActionMailState(
-  config: AppConfig,
-  res: Response,
-  data: MicrosoftActionEmailOAuthState,
-): Promise<void> {
-  if (isMobileSend(res)) return saveMobile('action', data);
-  setMicrosoftActionEmailCookie(config, res, data);
-}
-
-async function saveMobile(flow: MobileSendFlow, data: { state: string }): Promise<void> {
+/** Keeps a mobile DAR Send's OAuth state server-side (hashed key, single use, 10 minutes). */
+export async function saveMobileDarState(data: MicrosoftMailOAuthState): Promise<void> {
   const { state, ...rest } = data;
   await MobileMailStateModel.create({
+    phase: 'pending',
     keyHash: sha256(state),
-    flow,
+    flow: 'dar',
+    userId: new Types.ObjectId(data.userId),
     data: rest,
-    expiresAt: new Date(clockNow().getTime() + TTL_MS),
+    expiresAt: new Date(clockNow().getTime() + PENDING_TTL_MS),
   });
 }
 
-export type TakenMobileMailState =
-  | { flow: 'dar'; data: MicrosoftMailOAuthState }
-  | { flow: 'action'; data: MicrosoftActionEmailOAuthState };
-
 const str = (v: unknown): v is string => typeof v === 'string';
 
-/** Finds and deletes (single use) an unexpired mobile send state for this OAuth state. */
-export async function takeMobileMailState(state: string): Promise<TakenMobileMailState | null> {
+/** Finds and deletes (single use) an unexpired mobile DAR Send state for this OAuth state. */
+export async function takeMobileDarState(state: string): Promise<MicrosoftMailOAuthState | null> {
   if (!state) return null;
   const doc = await MobileMailStateModel.findOneAndDelete({
+    phase: 'pending',
+    flow: 'dar',
     keyHash: sha256(state),
     expiresAt: { $gt: clockNow() },
   }).lean();
   if (!doc) return null;
   const d = (doc.data ?? {}) as Record<string, unknown>;
-  if (!str(d.codeVerifier) || !str(d.nonce) || !str(d.userId)) return null;
-  const base = { codeVerifier: d.codeVerifier, nonce: d.nonce, userId: d.userId, state };
-  if (doc.flow === 'dar') {
-    if (!str(d.savedReportId)) return null;
-    return { flow: 'dar', data: { ...base, savedReportId: d.savedReportId } };
-  }
-  if (
-    (d.kind !== 'FOLLOW_UP' && d.kind !== 'TASK_ASSIGNED' && d.kind !== 'PROJECT_ADDED') ||
-    !str(d.projectId) ||
-    !str(d.taskId) ||
-    !str(d.followUpId) ||
-    !Array.isArray(d.recipientIds) ||
-    !d.recipientIds.every(str)
-  ) {
+  if (!str(d.codeVerifier) || !str(d.nonce) || !str(d.userId) || !str(d.savedReportId)) {
     return null;
   }
   return {
-    flow: 'action',
-    data: {
-      ...base,
-      kind: d.kind,
-      projectId: d.projectId,
-      taskId: d.taskId,
-      followUpId: d.followUpId,
-      recipientIds: d.recipientIds,
-    },
+    codeVerifier: d.codeVerifier,
+    nonce: d.nonce,
+    userId: d.userId,
+    savedReportId: d.savedReportId,
+    state,
   };
 }
 
-/** Marks this callback response as going back to the app, with the item's ids as base params. */
-export function returnToMobile(res: Response, base: Record<string, string>): void {
-  res.locals.msSendReturn = base;
+interface MobileReturn {
+  flow: MobileSendFlow;
+  userId: string;
+  base: Record<string, string>;
+}
+
+/** Marks this callback response as going back to the app (set before running the handler). */
+export function returnToMobile(res: Response, ret: MobileReturn): void {
+  res.locals.msSendReturn = ret;
 }
 
 /**
- * The end of a send: the web page as before, or the fixed app address when the send started on
- * mobile. `params` are outcome params only (sent / send_error / email / email_error).
+ * The end of a send: the web page as before, or, when the send started on mobile, the fixed app
+ * address with a one-time code for the outcome (`params` are outcome params only).
  */
 export function sendResultRedirect(
   res: Response,
   webUrl: string,
   params: Record<string, string>,
 ): void {
-  const base = res.locals.msSendReturn as Record<string, string> | undefined;
-  if (!base) {
+  const ret = res.locals.msSendReturn as MobileReturn | undefined;
+  if (!ret) {
     res.redirect(webUrl);
     return;
   }
-  const q = new URLSearchParams({ ...base, ...params });
-  res.redirect(`${MOBILE_SEND_RETURN}?${q.toString()}`);
+  const code = newToken();
+  MobileMailStateModel.create({
+    phase: 'result',
+    keyHash: sha256(code),
+    flow: ret.flow,
+    userId: new Types.ObjectId(ret.userId),
+    data: { flow: ret.flow, ...ret.base, ...params },
+    expiresAt: new Date(clockNow().getTime() + RESULT_TTL_MS),
+  }).then(
+    () => res.redirect(`${MOBILE_MAIL_RETURN}?${new URLSearchParams({ code }).toString()}`),
+    (err: unknown) => {
+      res.req.log?.warn({ err }, 'Mobile send result could not be stored');
+      res.redirect(`${MOBILE_MAIL_RETURN}?error=result_unavailable`);
+    },
+  );
+}
+
+/** The outcome for this one-time code, only for the user who started the send (single use). */
+export async function confirmMobileMailResult(
+  code: string,
+  userId: Types.ObjectId,
+): Promise<Record<string, string> | null> {
+  const doc = await MobileMailStateModel.findOneAndDelete({
+    phase: 'result',
+    keyHash: sha256(code),
+    userId,
+    expiresAt: { $gt: clockNow() },
+  }).lean();
+  return doc ? (doc.data as Record<string, string>) : null;
 }

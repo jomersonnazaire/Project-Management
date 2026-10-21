@@ -42,7 +42,11 @@ import {
   s256,
 } from '../services/microsoftMobile.js';
 import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
-import { returnToMobile, takeMobileMailState } from '../services/msSendReturn.js';
+import {
+  confirmMobileMailResult,
+  returnToMobile,
+  takeMobileDarState,
+} from '../services/msSendReturn.js';
 import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
 import { toUserDto } from '../services/dto.js';
@@ -271,28 +275,20 @@ export function authRouter(
       return;
     }
 
-    // A send started from the mobile app: state kept server-side (single use), result goes
-    // back to the fixed opstrack:// address. Same handlers, so the state/nonce checks still hold.
-    const mobileMail = await takeMobileMailState(state);
-    if (mobileMail?.flow === 'dar') {
-      const d = mobileMail.data;
-      returnToMobile(res, { flow: 'dar', report: d.savedReportId });
-      await handleMicrosoftDarMailCallback(config, req, res, d, code, msError, errorDescription);
-      return;
-    }
-    if (mobileMail?.flow === 'action') {
-      const d = mobileMail.data;
+    // A DAR Send started from the mobile app: state kept server-side (single use); the result
+    // goes back to the fixed opstrack:// address. Same handler, so state/nonce checks still hold.
+    const mobileDar = await takeMobileDarState(state);
+    if (mobileDar) {
       returnToMobile(res, {
-        flow: 'action',
-        kind: d.kind,
-        project: d.projectId,
-        ...(d.taskId ? { task: d.taskId } : {}),
+        flow: 'dar',
+        userId: mobileDar.userId,
+        base: { report: mobileDar.savedReportId },
       });
-      await handleMicrosoftActionEmailCallback(
+      await handleMicrosoftDarMailCallback(
         config,
         req,
         res,
-        d,
+        mobileDar,
         code,
         msError,
         errorDescription,
@@ -359,6 +355,21 @@ export function authRouter(
     if (act) clearMicrosoftActionEmailCookie(config, res);
     req.log?.warn('Microsoft callback rejected: bad or missing OAuth state');
     msFailureRedirect(res);
+  });
+
+  /**
+   * Mobile DAR Send: the app reads the outcome of its send with the one-time code from the
+   * opstrack://auth/mail deep link. Bearer only, the same user who started it, single use.
+   */
+  const mobileMailConfirmSchema = z.strictObject({ code: z.string().min(20).max(200) });
+  router.post('/mobile/mail/confirm', AUTHENTICATED, async (req, res) => {
+    if (!bearerToken(req)) throw MOBILE_ONLY;
+    const { code } = parseBody(mobileMailConfirmSchema, req);
+    const result = await confirmMobileMailResult(code, currentUser(req)._id);
+    if (!result) {
+      throw new HttpError(400, 'INVALID_CODE', 'This send result has expired or was already read.');
+    }
+    res.json(result);
   });
 
   const mobileExchangeSchema = z.strictObject({

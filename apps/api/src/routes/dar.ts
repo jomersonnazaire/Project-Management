@@ -27,7 +27,8 @@ import { buildDar, toSavedDto, toSavedDtos } from '../services/dar.js';
 import { darSendStatusPayload, resolveDarSupervisor } from '../services/darSend.js';
 import { darFileName, darToPdf, darToXlsx } from '../services/darExport.js';
 import { buildMicrosoftLoginUrl } from '../services/microsoftAuth.js';
-import { storeDarMailState } from '../services/msSendReturn.js';
+import { setMicrosoftMailOAuthCookie } from '../services/microsoftOAuthCookie.js';
+import { MOBILE_SEND_ONLY, isMobileSend, saveMobileDarState } from '../services/msSendReturn.js';
 import { notifyPersonal } from '../services/notify.js';
 
 const formatParam = z.enum(['pdf', 'xlsx']);
@@ -151,7 +152,18 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
 
   // Send starts with a POST (CSRF header + Origin allow-list, D1) and returns the Microsoft
   // URL; the browser then navigates there. Its own per-user limiter (D5).
+  // Mobile Send (bearer only): same checks, the OAuth state is kept server-side instead of a
+  // cookie and the callback returns to the app (services/msSendReturn.ts).
+  r.post('/saved/:id/send/mobile', perm('activities', 'view'), sendLimiter, async (req, res) => {
+    if (!isMobileSend(res)) throw MOBILE_SEND_ONLY;
+    await startSend(req, res, true);
+  });
+
   r.post('/saved/:id/send', perm('activities', 'view'), sendLimiter, async (req, res) => {
+    await startSend(req, res, false);
+  });
+
+  async function startSend(req: Request, res: Response, mobile: boolean) {
     parseBody(z.strictObject({}), req);
     const doc = await ownSaved(req);
     const user = await UserModel.findById(currentUser(req)._id);
@@ -174,15 +186,17 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
       scopes: ['Mail.Send'],
       loginHint: user.email,
     });
-    await storeDarMailState(config, res, {
+    const mailState = {
       codeVerifier: login.codeVerifier,
       state: login.state,
       nonce: login.nonce,
       userId: user._id.toString(),
       savedReportId: doc._id.toString(),
-    });
+    };
+    if (mobile) await saveMobileDarState(mailState);
+    else setMicrosoftMailOAuthCookie(config, res, mailState);
     res.json({ url: login.url });
-  });
+  }
 
   r.post('/saved/:id/notify-supervisor', perm('activities', 'view'), async (req, res) => {
     parseBody(z.strictObject({}), req);
