@@ -271,8 +271,8 @@ void main() {
       client: MockClient((_) async => http.Response('{}', 500)),
     );
     final ms = MicrosoftSignIn(api: api, storage: storage);
-    expect(
-      () => ms.handle(Uri.parse('opstrack://auth/microsoft?code=x')),
+    await expectLater(
+      ms.handle(Uri.parse('opstrack://auth/microsoft?code=x')),
       throwsA(isA<MicrosoftSignInFailure>()),
     );
     await storage.write(
@@ -282,8 +282,9 @@ void main() {
         'createdAt': DateTime.utc(2020).toIso8601String(),
       }),
     );
-    expect(
-      () => ms.handle(Uri.parse('opstrack://auth/microsoft?code=y')),
+    // QA D3: awaited, so a missing TTL check actually fails this test.
+    await expectLater(
+      ms.handle(Uri.parse('opstrack://auth/microsoft?code=y')),
       throwsA(
         isA<MicrosoftSignInFailure>().having(
           (e) => e.message,
@@ -292,6 +293,23 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('QA D3: a stored ptl_ token is not restored on restart', () async {
+    final store = MemorySessionStore();
+    final now = DateTime.now().toUtc();
+    await store.write(
+      StoredSession({ApiClient.bearerKey: 'ptl_portal-token'}, now),
+    );
+    final api = ApiClient('http://api.test/api/v1', store: store);
+    await api.restoreSession();
+    expect(api.bearer, isNull);
+    final ok = ApiClient('http://api.test/api/v1', store: store);
+    await store.write(
+      StoredSession({ApiClient.bearerKey: 'mob_real-token'}, now),
+    );
+    expect(await ok.restoreSession(), isTrue);
+    expect(ok.bearer, 'mob_real-token');
   });
 
   test('ignores other schemes and hosts', () async {
