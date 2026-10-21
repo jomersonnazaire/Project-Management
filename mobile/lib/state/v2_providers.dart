@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/dar_send.dart';
+import '../data/ms_sign_in.dart'
+    show MsPkceStorage, MemoryMsPkceStorage, FlutterMsPkceStorage;
 import '../data/access.dart';
 import '../data/models.dart' show Project, ProjectStatus;
 export '../data/access.dart' show PermissionGrid;
@@ -81,7 +83,20 @@ final externalLauncherProvider = Provider<Future<bool> Function(Uri)>(
       (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
 );
 
-/// The latest `opstrack://ms/send-result` DAR outcome (set by the app's deep-link handler).
+/// Where the per-send PKCE verifier is kept (secure storage; overridden in tests/demo).
+final darMailPkceStorageProvider = Provider<MsPkceStorage>(
+  (ref) => AppConfig.demoMode ? MemoryMsPkceStorage() : FlutterMsPkceStorage(),
+);
+
+/// The mobile DAR send round trip (PKCE per send + `opstrack://auth/mail` confirm).
+final darMailSendProvider = Provider<DarMailSend>(
+  (ref) => DarMailSend(
+    repo: ref.watch(darSendRepositoryProvider),
+    storage: ref.watch(darMailPkceStorageProvider),
+  ),
+);
+
+/// The latest confirmed DAR outcome (set by the app's `opstrack://auth/mail` handler).
 class DarSendResultController extends Notifier<DarSendResult?> {
   @override
   DarSendResult? build() => null;

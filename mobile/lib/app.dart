@@ -8,7 +8,8 @@ import 'data/dar_send.dart';
 import 'data/ms_sign_in.dart';
 import 'router.dart';
 import 'state/providers.dart';
-import 'state/v2_providers.dart' show darSendResultProvider;
+import 'state/v2_providers.dart'
+    show darMailSendProvider, darSendResultProvider;
 import 'theme/app_theme.dart';
 
 class XceleratePmApp extends ConsumerStatefulWidget {
@@ -41,10 +42,18 @@ class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
 
   Future<void> _onMicrosoftDeepLink(Uri uri) async {
     if (!mounted) return;
-    // PR #36: Microsoft send flows come back to opstrack://ms/send-result (not sign-in).
-    if (isSendResultLink(uri)) {
-      final r = DarSendResult.parse(uri);
-      if (r != null) ref.read(darSendResultProvider.notifier).set(r);
+    // PR #36: a mobile DAR Send comes back to opstrack://auth/mail?code=… (60 s, single use):
+    // trade the code in straight away; only the confirm response can say "sent".
+    if (isMailReturnLink(uri)) {
+      final r = await ref.read(darMailSendProvider).handle(uri);
+      if (r == null || !mounted) return;
+      ref.read(darSendResultProvider.notifier).set(r);
+      if (r.reportId.isNotEmpty) {
+        final router = ref.read(routerProvider);
+        final here = router.routeInformationProvider.value.uri.path;
+        final target = '/dar/saved/${r.reportId}';
+        if (here != target) router.push(target);
+      }
       return;
     }
     String? message;

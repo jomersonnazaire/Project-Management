@@ -21,13 +21,10 @@ void main() {
     expect(main, contains('android:value="false"'));
     expect(main, contains('android:scheme="opstrack"'));
     expect(main, contains('android:host="auth"'));
-    // DAR Send / action emails return to opstrack://ms/send-result.
-    expect(
-      main,
-      contains(
-        '<data android:scheme="opstrack" android:host="ms" android:path="/send-result" />',
-      ),
-    );
+    // opstrack://auth/mail (DAR Send) is covered by the host-only auth filter: no path filter,
+    // and no other send-result address.
+    expect(main, isNot(contains('android:path')));
+    expect(main, isNot(contains('android:host="ms"')));
     // iOS registers the whole opstrack scheme, which covers both hosts.
     final plist = File('ios/Runner/Info.plist').readAsStringSync();
     expect(plist, contains('<string>opstrack</string>'));

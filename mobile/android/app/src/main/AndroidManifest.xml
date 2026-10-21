@@ -34,15 +34,9 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="opstrack" android:host="auth" />
+                <!-- Covers opstrack://auth/microsoft (sign-in) and opstrack://auth/mail (DAR Send, PR #36). -->
             </intent-filter>
-            <!-- Microsoft send flows (DAR Send, action emails) return here (API PR #36). -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="opstrack" android:host="ms" android:path="/send-result" />
-            </intent-filter>
-        </activity>
+            </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -61,6 +61,11 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
   void initState() {
     super.initState();
     _life;
+    // A result that arrived before this screen was built (cold start from the link).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final r = mounted ? ref.read(darSendResultProvider) : null;
+      if (r != null) _onResult(r);
+    });
   }
 
   @override
@@ -79,6 +84,8 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
     _resumeTimer?.cancel();
     _resumeTimer = Timer(const Duration(seconds: 3), () async {
       if (!mounted || !_awaiting) return;
+      // The confirm result is on its way.
+      if (ref.read(darMailSendProvider).busy) return;
       final confirmed = await _sentConfirmed();
       if (!mounted || !_awaiting) return;
       setState(() {
@@ -114,30 +121,22 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
         : 'Report sent to $to from your Outlook.';
   }
 
-  Future<void> _onResult(DarSendResult r) async {
-    if (r.reportId != _id) return;
+  /// From the app's confirm call (POST /auth/mobile/mail/confirm), never from a bare link.
+  void _onResult(DarSendResult r) {
+    if (r.reportId.isNotEmpty && r.reportId != _id) return;
+    if (r.reportId.isEmpty && !_awaiting) return;
     ref.read(darSendResultProvider.notifier).set(null);
     _resumeTimer?.cancel();
-    if (!r.sent) {
-      setState(() {
-        _awaiting = false;
-        _info = null;
-        _error = darSendMessage(r.reason);
-      });
-      ref.invalidate(savedReportProvider(_id));
-      return;
-    }
-    // The link carries no proof, so confirm with the server when it can tell us.
-    final confirmed = await _sentConfirmed();
-    if (!mounted) return;
+    ref.invalidate(savedReportProvider(_id));
+    ref.invalidate(savedReportsProvider);
     setState(() {
       _awaiting = false;
-      if (confirmed == false) {
-        _info = null;
-        _error = darNoResult;
-      } else {
+      if (r.sent) {
         _error = null;
         _info = _sentMessage();
+      } else {
+        _info = null;
+        _error = darSendMessage(r.reason);
       }
     });
   }
@@ -185,7 +184,7 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
       _info = null;
     });
     try {
-      final url = await ref.read(darSendRepositoryProvider).start(_id);
+      final url = await ref.read(darMailSendProvider).begin(_id);
       final opened = await ref.read(externalLauncherProvider)(url);
       if (!mounted) return;
       setState(() {

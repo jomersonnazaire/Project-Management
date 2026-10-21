@@ -14,19 +14,6 @@ import 'package:xc8_pm/state/providers.dart';
 
 import 'helpers.dart';
 
-class MemoryMsPkceStorage implements MsPkceStorage {
-  final map = <String, String>{};
-
-  @override
-  Future<void> delete(String key) async => map.remove(key);
-
-  @override
-  Future<String?> read(String key) async => map[key];
-
-  @override
-  Future<void> write(String key, String value) async => map[key] = value;
-}
-
 const _verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
 
 Future<MemoryMsPkceStorage> freshPkce() async {

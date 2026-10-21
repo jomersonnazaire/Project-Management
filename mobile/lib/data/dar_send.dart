@@ -1,13 +1,17 @@
-import 'models.dart';
+import 'dart:convert';
+
 import 'api_client.dart';
+import 'models.dart' show ApiException;
+import 'ms_sign_in.dart' show MsPkceStorage, FlutterMsPkceStorage, PkcePair;
 
 /// DAR Send from mobile (FR-DAR-20, PR #29 + mobile return path PR #36).
 ///
-/// Flow: GET /dar/send-status → POST /dar/saved/:id/send `{}` → `{url}` → open the Microsoft URL
-/// in the system browser → the API callback sends from the user's own Outlook and returns to
-/// `opstrack://ms/send-result?flow=dar&report=<id>&sent=<id>` or `…&send_error=<reason>`.
-/// The deep link carries only the outcome (no token or code), so the app re-reads the saved
-/// report (`sentAt`, PR #35) to confirm a success when the API provides it.
+/// Flow: GET /dar/send-status → [DarMailSend.begin] makes a PKCE pair per send, stores the
+/// verifier (10 min) and POSTs `/dar/saved/:id/send/mobile` with the S256 challenge → `{url}` →
+/// Microsoft in the system browser → the API sends from the user's own Outlook and returns to
+/// `opstrack://auth/mail?code=<one-time code>` (60 s, single use, same user). [DarMailSend.handle]
+/// trades the code in straight away with POST /auth/mobile/mail/confirm `{code, code_verifier}`.
+/// Only the confirm response can say "sent"; the link on its own is never proof.
 
 /// GET /dar/send-status.
 class DarSendStatus {
@@ -43,7 +47,7 @@ class DarSendStatus {
   }
 }
 
-/// `opstrack://ms/send-result` for a DAR send.
+/// The confirmed outcome of a DAR send (or why it couldn't be confirmed).
 class DarSendResult {
   const DarSendResult({
     required this.reportId,
@@ -52,29 +56,41 @@ class DarSendResult {
   });
   final String reportId;
   final bool sent;
+
+  /// A `send_error` reason from the API, or [noResult] / [expired] / [wrongUser].
   final String? reason;
 
-  /// Parses a DAR send-result link; null for any other link.
-  static DarSendResult? parse(Uri uri) {
-    if (!isSendResultLink(uri)) return null;
-    final q = uri.queryParameters;
-    if (q['flow'] != 'dar') return null;
-    final report = q['report'] ?? q['sent'];
-    if (report == null || report.isEmpty) return null;
-    final err = q['send_error'];
-    if (err != null && err.isNotEmpty) {
+  static const noResult = 'no_result';
+  static const expired = 'expired';
+  static const wrongUser = 'wrong_user';
+
+  /// The POST /auth/mobile/mail/confirm body: `{flow:'dar', report, sent}` or
+  /// `{flow:'dar', report, send_error}` (PR #36 458fcab). Anything else is not a success.
+  static DarSendResult fromConfirm(
+    Map<String, dynamic> b, {
+    String? fallbackReport,
+  }) {
+    final report = '${b['report'] ?? fallbackReport ?? ''}';
+    final err = b['send_error'];
+    if (b['flow'] != 'dar') {
+      return DarSendResult(reportId: report, sent: false, reason: noResult);
+    }
+    if (err is String && err.isNotEmpty) {
       return DarSendResult(reportId: report, sent: false, reason: err);
     }
-    if (q['sent'] == report) return DarSendResult(reportId: report, sent: true);
-    return DarSendResult(reportId: report, sent: false, reason: 'send_failed');
+    final sent = b['sent'];
+    if (sent is String && sent.isNotEmpty && sent == report) {
+      return DarSendResult(reportId: report, sent: true);
+    }
+    return DarSendResult(reportId: report, sent: false, reason: noResult);
   }
 }
 
-/// `opstrack://ms/send-result` (PR #36): the return address for every Microsoft send flow.
-bool isSendResultLink(Uri uri) =>
+/// `opstrack://auth/mail` (PR #36): the fixed return address for a mobile DAR Send.
+bool isMailReturnLink(Uri uri) =>
     uri.scheme == 'opstrack' &&
-    uri.host == 'ms' &&
-    (uri.path == '/send-result' || uri.path == 'send-result');
+    uri.host == 'auth' &&
+    (uri.path == '/mail' || uri.path == 'mail');
 
 const darPasswordOnly =
     'Link your Microsoft account to send emails. You can export this report on the web or notify your supervisor.';
@@ -87,12 +103,18 @@ const darRateLimited =
     "You've pressed Send too many times. Wait 15 minutes and try again, or export the report on the web and send it yourself.";
 const darNotifyRecent =
     'You already notified your supervisor about this report in the last hour. You can notify them again later.';
+const darSendExpired = 'Send expired. Try again.';
+const darWrongUser =
+    "This send was started from a different OpsTrack account, so we can't show its result. Sign in with the account that pressed Send.";
 const darNoResult =
     "We didn't get a result back from Microsoft, so the report may not have been sent. Press Send to try again.";
 
 /// Friendly message for a send-status reason, a 409 SEND_UNAVAILABLE reason, or a deep-link
 /// `send_error` (unknown reasons are treated as `send_failed`, per PR #36).
 String darSendMessage(String? reason) => switch (reason) {
+  DarSendResult.noResult || 'result_unavailable' => darNoResult,
+  DarSendResult.expired => darSendExpired,
+  DarSendResult.wrongUser => darWrongUser,
   'not_linked' => darPasswordOnly,
   'no_supervisor' => darNoSupervisor,
   'ms_disabled' || 'not_enabled' => darMsDisabled,
@@ -134,8 +156,14 @@ String darApiErrorMessage(ApiException e) {
 abstract interface class DarSendRepository {
   Future<DarSendStatus> status();
 
-  /// POST /dar/saved/:id/send → the Microsoft URL to open.
-  Future<Uri> start(String savedId);
+  /// POST /dar/saved/:id/send/mobile with the S256 challenge → the Microsoft URL to open.
+  Future<Uri> start(String savedId, {required String codeChallenge});
+
+  /// POST /auth/mobile/mail/confirm → the raw outcome body.
+  Future<Map<String, dynamic>> confirm(
+    String code, {
+    required String codeVerifier,
+  });
 
   /// POST /dar/saved/:id/notify-supervisor → whether a notice was created.
   Future<bool> notifySupervisor(String savedId);
@@ -150,8 +178,11 @@ class ApiDarSendRepository implements DarSendRepository {
       DarSendStatus.fromJson(await api.get('/dar/send-status'));
 
   @override
-  Future<Uri> start(String savedId) async {
-    final b = await api.post('/dar/saved/$savedId/send', const {});
+  Future<Uri> start(String savedId, {required String codeChallenge}) async {
+    final b = await api.post('/dar/saved/$savedId/send/mobile', {
+      'code_challenge': codeChallenge,
+      'code_challenge_method': 'S256',
+    });
     final url = b['url'];
     final uri = url is String ? Uri.tryParse(url) : null;
     if (uri == null || uri.scheme != 'https') {
@@ -161,10 +192,120 @@ class ApiDarSendRepository implements DarSendRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> confirm(
+    String code, {
+    required String codeVerifier,
+  }) => api.post('/auth/mobile/mail/confirm', {
+    'code': code,
+    'code_verifier': codeVerifier,
+  });
+
+  @override
   Future<bool> notifySupervisor(String savedId) async {
     final b = await api.post('/dar/saved/$savedId/notify-supervisor', const {});
     final n = b['notified'];
     return n is bool ? n : (n is num && n > 0);
+  }
+}
+
+const _mailPkceKey = 'opstrack.ms_mail_pkce';
+const _mailPkceTtl = Duration(minutes: 10);
+
+/// One mobile DAR send round trip: PKCE per send (reusing the sign-in plumbing), then the
+/// `opstrack://auth/mail` return link traded in with confirm. Links are handled one at a time
+/// and a code is only ever tried once.
+class DarMailSend {
+  DarMailSend({
+    required this.repo,
+    MsPkceStorage? storage,
+    DateTime Function()? now,
+  }) : _storage = storage ?? FlutterMsPkceStorage(),
+       _now = now ?? DateTime.now;
+  final DarSendRepository repo;
+  final MsPkceStorage _storage;
+  final DateTime Function() _now;
+  final _seen = <String>{};
+  Future<void> _queue = Future.value();
+  int _inFlight = 0;
+
+  /// A return link is being confirmed right now.
+  bool get busy => _inFlight > 0;
+
+  /// New PKCE pair; verifier stored (10 min) before the API is asked for the Microsoft URL.
+  Future<Uri> begin(String savedId) async {
+    final pkce = PkcePair.generate();
+    await _storage.write(
+      _mailPkceKey,
+      jsonEncode({
+        'verifier': pkce.verifier,
+        'report': savedId,
+        'createdAt': _now().toUtc().toIso8601String(),
+      }),
+    );
+    try {
+      return await repo.start(savedId, codeChallenge: pkce.challenge);
+    } catch (_) {
+      await _storage.delete(_mailPkceKey);
+      rethrow;
+    }
+  }
+
+  /// Handles an `opstrack://auth/mail` link; null for any other link or a repeated code.
+  Future<DarSendResult?> handle(Uri uri) {
+    if (!isMailReturnLink(uri)) return Future.value(null);
+    _inFlight++;
+    final run = _queue.then((_) => _handle(uri));
+    _queue = run.then<void>((_) {}, onError: (Object _) {});
+    return run.whenComplete(() => _inFlight--);
+  }
+
+  Future<DarSendResult?> _handle(Uri uri) async {
+    final code = uri.queryParameters['code'];
+    if (code != null && code.isNotEmpty && !_seen.add(code)) return null;
+    final raw = await _storage.read(_mailPkceKey);
+    await _storage.delete(_mailPkceKey);
+    String? verifier, report;
+    DateTime? created;
+    if (raw != null) {
+      try {
+        final j = jsonDecode(raw) as Map<String, dynamic>;
+        verifier = j['verifier'] as String?;
+        report = j['report'] as String?;
+        created = DateTime.tryParse('${j['createdAt']}');
+      } catch (_) {}
+    }
+    final rep = report ?? '';
+    // No code (forged, or ?error=result_unavailable): never "sent".
+    if (code == null || code.isEmpty) {
+      return DarSendResult(
+        reportId: rep,
+        sent: false,
+        reason: DarSendResult.noResult,
+      );
+    }
+    if (verifier == null ||
+        created == null ||
+        _now().toUtc().difference(created.toUtc()) > _mailPkceTtl) {
+      return DarSendResult(
+        reportId: rep,
+        sent: false,
+        reason: DarSendResult.expired,
+      );
+    }
+    try {
+      final b = await repo.confirm(code, codeVerifier: verifier);
+      return DarSendResult.fromConfirm(b, fallbackReport: report);
+    } on ApiException catch (e) {
+      final reason = switch (e.status) {
+        400 ||
+        404 ||
+        410 => DarSendResult.expired, // INVALID_CODE: expired or reused
+        403 => DarSendResult.wrongUser,
+        401 => DarSendResult.wrongUser,
+        _ => DarSendResult.noResult,
+      };
+      return DarSendResult(reportId: rep, sent: false, reason: reason);
+    }
   }
 }
 
@@ -181,15 +322,38 @@ class MockDarSendRepository implements DarSendRepository {
   DarSendStatus current;
   final started = <String>[];
   final notified = <String>[];
+  final challenges = <String>[];
+
+  /// Confirm calls as (code, verifier); [confirmBody] / [confirmError] decide the answer.
+  final confirms = <(String, String)>[];
+  Map<String, dynamic>? confirmBody;
+  ApiException? confirmError;
+
+  @override
+  Future<Map<String, dynamic>> confirm(
+    String code, {
+    required String codeVerifier,
+  }) async {
+    confirms.add((code, codeVerifier));
+    if (confirmError != null) throw confirmError!;
+    return confirmBody ??
+        {
+          'flow': 'dar',
+          'report': started.lastOrNull,
+          'sent': started.lastOrNull,
+        };
+  }
+
   ApiException? startError, notifyError;
 
   @override
   Future<DarSendStatus> status() async => current;
 
   @override
-  Future<Uri> start(String savedId) async {
+  Future<Uri> start(String savedId, {required String codeChallenge}) async {
     if (startError != null) throw startError!;
     started.add(savedId);
+    challenges.add(codeChallenge);
     return Uri.parse('https://login.microsoftonline.com/mock?report=$savedId');
   }
 
