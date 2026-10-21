@@ -1,10 +1,13 @@
 import type { Response } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { Types } from 'mongoose';
+import { z } from 'zod';
 import { now as clockNow } from '../lib/clock.js';
 import { HttpError } from '../lib/errors.js';
 import { bearerToken } from '../middleware/auth.js';
 import { MobileMailStateModel } from '../models/index.js';
 import type { MicrosoftMailOAuthState } from './microsoftOAuthCookie.js';
+import { CHALLENGE_RE, CODE_TTL_MS, VERIFIER_RE, s256 } from './microsoftMobile.js';
 import { newToken, sha256 } from './tokens.js';
 
 /**
@@ -14,11 +17,26 @@ import { newToken, sha256 } from './tokens.js';
  * authenticate that way). The OAuth state is kept server-side, not in a cookie. After the send,
  * the callback returns to the one fixed app address below with a random one-time code (never a
  * Microsoft token, code or the OAuth state); the app reads the outcome with
- * POST /auth/mobile/mail/confirm, with its own bearer token. The client never sends a return URL.
+ * POST /auth/mobile/mail/confirm, with its own bearer token and the PKCE verifier matching the
+ * challenge it sent at the start. The deep link alone never proves a send. The client never
+ * sends a return URL.
  */
 export const MOBILE_MAIL_RETURN = 'opstrack://auth/mail';
 const PENDING_TTL_MS = 10 * 60 * 1000;
-export const RESULT_TTL_MS = 5 * 60 * 1000;
+/** The one-time result code lives 60 seconds, as the mobile sign-in exchange code. */
+export const RESULT_TTL_MS = CODE_TTL_MS;
+
+/** Start body: the app's PKCE challenge (S256). No return URL can be given. */
+export const mobileSendSchema = z.strictObject({
+  code_challenge: z.string().regex(CHALLENGE_RE),
+  code_challenge_method: z.literal('S256'),
+});
+
+/** Confirm body: the one-time code from the deep link and the app's PKCE verifier. */
+export const mobileMailConfirmSchema = z.strictObject({
+  code: z.string().min(20).max(200),
+  code_verifier: z.string().regex(VERIFIER_RE),
+});
 
 export const MOBILE_SEND_ONLY = new HttpError(
   403,
@@ -34,13 +52,17 @@ export function isMobileSend(res: Response): boolean {
 }
 
 /** Keeps a mobile DAR Send's OAuth state server-side (hashed key, single use, 10 minutes). */
-export async function saveMobileDarState(data: MicrosoftMailOAuthState): Promise<void> {
+export async function saveMobileDarState(
+  data: MicrosoftMailOAuthState,
+  codeChallenge: string,
+): Promise<void> {
   const { state, ...rest } = data;
   await MobileMailStateModel.create({
     phase: 'pending',
     keyHash: sha256(state),
     flow: 'dar',
     userId: new Types.ObjectId(data.userId),
+    codeChallenge,
     data: rest,
     expiresAt: new Date(clockNow().getTime() + PENDING_TTL_MS),
   });
@@ -49,7 +71,9 @@ export async function saveMobileDarState(data: MicrosoftMailOAuthState): Promise
 const str = (v: unknown): v is string => typeof v === 'string';
 
 /** Finds and deletes (single use) an unexpired mobile DAR Send state for this OAuth state. */
-export async function takeMobileDarState(state: string): Promise<MicrosoftMailOAuthState | null> {
+export async function takeMobileDarState(
+  state: string,
+): Promise<(MicrosoftMailOAuthState & { codeChallenge: string }) | null> {
   if (!state) return null;
   const doc = await MobileMailStateModel.findOneAndDelete({
     phase: 'pending',
@@ -68,12 +92,14 @@ export async function takeMobileDarState(state: string): Promise<MicrosoftMailOA
     userId: d.userId,
     savedReportId: d.savedReportId,
     state,
+    codeChallenge: doc.codeChallenge,
   };
 }
 
 interface MobileReturn {
   flow: MobileSendFlow;
   userId: string;
+  codeChallenge: string;
   base: Record<string, string>;
 }
 
@@ -102,6 +128,7 @@ export function sendResultRedirect(
     keyHash: sha256(code),
     flow: ret.flow,
     userId: new Types.ObjectId(ret.userId),
+    codeChallenge: ret.codeChallenge,
     data: { flow: ret.flow, ...ret.base, ...params },
     expiresAt: new Date(clockNow().getTime() + RESULT_TTL_MS),
   }).then(
@@ -113,9 +140,20 @@ export function sendResultRedirect(
   );
 }
 
-/** The outcome for this one-time code, only for the user who started the send (single use). */
+function sameChallenge(verifier: string, challenge: string): boolean {
+  const a = Buffer.from(s256(verifier));
+  const b = Buffer.from(challenge);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * The outcome for this one-time code: only for the user who started the send, only with the
+ * PKCE verifier for the challenge given at the start (S256, constant-time compare). Single use:
+ * the code is spent by any attempt from that user, right or wrong verifier.
+ */
 export async function confirmMobileMailResult(
   code: string,
+  codeVerifier: string,
   userId: Types.ObjectId,
 ): Promise<Record<string, string> | null> {
   const doc = await MobileMailStateModel.findOneAndDelete({
@@ -124,5 +162,6 @@ export async function confirmMobileMailResult(
     userId,
     expiresAt: { $gt: clockNow() },
   }).lean();
-  return doc ? (doc.data as Record<string, string>) : null;
+  if (!doc || !sameChallenge(codeVerifier, doc.codeChallenge)) return null;
+  return doc.data as Record<string, string>;
 }

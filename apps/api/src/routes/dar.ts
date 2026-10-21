@@ -28,7 +28,12 @@ import { darSendStatusPayload, resolveDarSupervisor } from '../services/darSend.
 import { darFileName, darToPdf, darToXlsx } from '../services/darExport.js';
 import { buildMicrosoftLoginUrl } from '../services/microsoftAuth.js';
 import { setMicrosoftMailOAuthCookie } from '../services/microsoftOAuthCookie.js';
-import { MOBILE_SEND_ONLY, isMobileSend, saveMobileDarState } from '../services/msSendReturn.js';
+import {
+  MOBILE_SEND_ONLY,
+  isMobileSend,
+  mobileSendSchema,
+  saveMobileDarState,
+} from '../services/msSendReturn.js';
 import { notifyPersonal } from '../services/notify.js';
 
 const formatParam = z.enum(['pdf', 'xlsx']);
@@ -156,15 +161,17 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
   // cookie and the callback returns to the app (services/msSendReturn.ts).
   r.post('/saved/:id/send/mobile', perm('activities', 'view'), sendLimiter, async (req, res) => {
     if (!isMobileSend(res)) throw MOBILE_SEND_ONLY;
-    await startSend(req, res, true);
+    const pkce = parseBody(mobileSendSchema, req);
+    await startSend(req, res, pkce.code_challenge);
   });
 
   r.post('/saved/:id/send', perm('activities', 'view'), sendLimiter, async (req, res) => {
-    await startSend(req, res, false);
+    parseBody(z.strictObject({}), req);
+    await startSend(req, res, null);
   });
 
-  async function startSend(req: Request, res: Response, mobile: boolean) {
-    parseBody(z.strictObject({}), req);
+  /** `mobileChallenge`: the app's PKCE S256 challenge for a mobile Send; null for web. */
+  async function startSend(req: Request, res: Response, mobileChallenge: string | null) {
     const doc = await ownSaved(req);
     const user = await UserModel.findById(currentUser(req)._id);
     if (!user) throw notFound();
@@ -193,7 +200,7 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
       userId: user._id.toString(),
       savedReportId: doc._id.toString(),
     };
-    if (mobile) await saveMobileDarState(mailState);
+    if (mobileChallenge) await saveMobileDarState(mailState, mobileChallenge);
     else setMicrosoftMailOAuthCookie(config, res, mailState);
     res.json({ url: login.url });
   }

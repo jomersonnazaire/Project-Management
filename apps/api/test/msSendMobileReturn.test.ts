@@ -27,6 +27,10 @@ const TID = '11111111-1111-1111-1111-111111111111';
 const TOKEN = 'mock-mail-access-token-never-in-url';
 const CODE = 'auth-code-from-microsoft-never-in-url';
 const VERIFIER = 'verifier-mobile-mail-1234567890123456789012345';
+// App-side PKCE for the result code: RFC 7636 Appendix B test vector.
+const APP_VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+const APP_CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+const PKCE = { code_challenge: APP_CHALLENGE, code_challenge_method: 'S256' };
 
 const loginUrlMock = vi.fn();
 const mailExchangeMock = vi.fn();
@@ -107,8 +111,16 @@ function appCode(location: string) {
   expect(Object.keys(params)).toEqual(['code']);
   return params.code!;
 }
-const confirm = (bearer: string | null, code: string, cookie?: string) => {
-  const r = request(app).post('/api/v1/auth/mobile/mail/confirm').set(CSRF).send({ code });
+const confirm = (
+  bearer: string | null,
+  code: string,
+  body: Record<string, unknown> = { code_verifier: APP_VERIFIER },
+  cookie?: string,
+) => {
+  const r = request(app)
+    .post('/api/v1/auth/mobile/mail/confirm')
+    .set(CSRF)
+    .send({ code, ...body });
   if (bearer) r.set('Authorization', `Bearer ${bearer}`);
   if (cookie) r.set('Cookie', cookie);
   return r;
@@ -135,7 +147,7 @@ async function startDarMobile(bearer: string, savedId: string) {
     .post(`/api/v1/dar/saved/${savedId}/send/mobile`)
     .set(CSRF)
     .set('Authorization', `Bearer ${bearer}`)
-    .send({});
+    .send(PKCE);
   return { res, state };
 }
 
@@ -160,6 +172,7 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     const doc = await MobileMailStateModel.findOne({ phase: 'pending' }).lean();
     expect(doc?.keyHash).toBe(sha256(state));
     expect(doc?.flow).toBe('dar');
+    expect(doc?.codeChallenge).toBe(APP_CHALLENGE);
     expect(JSON.stringify(doc)).not.toContain(state);
 
     mailExchangeMock.mockResolvedValueOnce(msToken(oid));
@@ -167,6 +180,7 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     const done = await callback({ code: CODE, state });
     expect(done.status).toBe(302);
     const loc = done.headers.location as string;
+    expect(loc).toMatch(/^opstrack:\/\/auth\/mail\?code=[A-Za-z0-9_-]+$/);
     const oneTime = appCode(loc);
     expectNoSecrets(loc, state);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -182,6 +196,8 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     // The result record is keyed by the code's hash and holds no Microsoft token.
     const result = await MobileMailStateModel.findOne({ phase: 'result' }).lean();
     expect(result?.keyHash).toBe(sha256(oneTime));
+    expect(result?.codeChallenge).toBe(APP_CHALLENGE);
+    expect(JSON.stringify(result)).not.toContain(oneTime);
     expect(JSON.stringify(result)).not.toContain(TOKEN);
 
     const ok = await confirm(bearer, oneTime);
@@ -207,24 +223,57 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     const web = await agent
       .post('/api/v1/auth/mobile/mail/confirm')
       .set(CSRF)
-      .send({ code: oneTime });
+      .send({ code: oneTime, code_verifier: APP_VERIFIER });
     expect(web.status).toBe(403);
     expect((await confirm(otherBearer, oneTime)).status).toBe(400);
     // Still there for the right user.
     expect((await confirm(bearer, oneTime)).body.sent).toBe(savedId);
   });
 
-  it('confirm: an expired result is refused', async () => {
+  it('confirm: the one-time code expires after 60 seconds', async () => {
     const { oid, bearer, savedId } = await darMember();
+    const t0 = Date.now();
+    setTestTime(t0);
     const { state } = await startDarMobile(bearer, savedId);
-    mailExchangeMock.mockResolvedValueOnce(msToken(oid));
+    mailExchangeMock.mockResolvedValue(msToken(oid));
     graph202();
     const oneTime = appCode((await callback({ code: CODE, state })).headers.location as string);
-    await MobileMailStateModel.updateOne(
-      { phase: 'result' },
-      { $set: { expiresAt: new Date(Date.now() - 1000) } },
+    const result = await MobileMailStateModel.findOne({ phase: 'result' }).lean();
+    expect(result?.expiresAt.getTime()).toBe(t0 + 60_000);
+    setTestTime(t0 + 61_000);
+    const late = await confirm(bearer, oneTime);
+    expect(late.status).toBe(400);
+    expect(late.body.error.code).toBe('INVALID_CODE');
+
+    // Within 60 seconds it works.
+    setTestTime(t0 + 120_000);
+    const b = await startDarMobile(bearer, savedId);
+    const code2 = appCode(
+      (await callback({ code: CODE, state: b.state })).headers.location as string,
     );
+    setTestTime(t0 + 120_000 + 59_000);
+    expect((await confirm(bearer, code2)).body.sent).toBe(savedId);
+  });
+
+  it('confirm: a wrong or missing PKCE verifier is refused, and the code is then spent', async () => {
+    const { oid, bearer, savedId } = await darMember();
+    const { state } = await startDarMobile(bearer, savedId);
+    mailExchangeMock.mockResolvedValue(msToken(oid));
+    graph202();
+    const oneTime = appCode((await callback({ code: CODE, state })).headers.location as string);
+    // Missing or malformed verifier: refused by the strict body, code not touched.
+    expect((await confirm(bearer, oneTime, {})).status).toBe(400);
+    expect((await confirm(bearer, oneTime, { code_verifier: 'short' })).status).toBe(400);
+    expect(await MobileMailStateModel.countDocuments({ phase: 'result' })).toBe(1);
+    // Well-formed but wrong verifier: INVALID_CODE, and the code is spent (no guessing).
+    const wrong = await confirm(bearer, oneTime, { code_verifier: 'x'.repeat(43) });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe('INVALID_CODE');
     expect((await confirm(bearer, oneTime)).status).toBe(400);
+    // The deep link alone never proved anything: the send is audited server-side only.
+    expect(
+      await ActivityLogModel.countDocuments({ action: 'report_sent', entityId: savedId }),
+    ).toBe(1);
   });
 
   it('single use: a replayed callback with the same state does not send and is rejected', async () => {
@@ -282,17 +331,27 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     });
   });
 
-  it('start: bearer only, and the client cannot choose a return address', async () => {
+  it('start: bearer only, PKCE S256 required, and the client cannot choose a return address', async () => {
     const { agent, bearer, savedId } = await darMember();
-    const web = await agent.post(`/api/v1/dar/saved/${savedId}/send/mobile`).set(CSRF).send({});
+    const web = await agent.post(`/api/v1/dar/saved/${savedId}/send/mobile`).set(CSRF).send(PKCE);
     expect(web.status).toBe(403);
     expect(web.body.error.code).toBe('MOBILE_ONLY');
-    const res = await request(app)
-      .post(`/api/v1/dar/saved/${savedId}/send/mobile`)
-      .set(CSRF)
-      .set('Authorization', `Bearer ${bearer}`)
-      .send({ returnUrl: 'https://evil.example/' });
-    expect(res.status).toBe(400);
+    const post = (body: Record<string, unknown>) =>
+      request(app)
+        .post(`/api/v1/dar/saved/${savedId}/send/mobile`)
+        .set(CSRF)
+        .set('Authorization', `Bearer ${bearer}`)
+        .send(body);
+    for (const body of [
+      {},
+      { code_challenge: APP_CHALLENGE },
+      { code_challenge: APP_CHALLENGE, code_challenge_method: 'plain' },
+      { code_challenge: 'too-short', code_challenge_method: 'S256' },
+      { ...PKCE, returnUrl: 'https://evil.example/' },
+      { ...PKCE, redirect_uri: 'opstrack://elsewhere' },
+    ]) {
+      expect((await post(body)).status, JSON.stringify(body)).toBe(400);
+    }
     expect(loginUrlMock).not.toHaveBeenCalled();
     expect(await MobileMailStateModel.countDocuments({})).toBe(0);
   });

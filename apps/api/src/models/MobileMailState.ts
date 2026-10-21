@@ -6,8 +6,8 @@ import { Schema, model, type InferSchemaType } from 'mongoose';
  *   API cookie, so the same data is kept here, keyed by the SHA-256 of the OAuth state (the raw
  *   state is not stored). 10 minutes, single use.
  * - `result`: the outcome of that send, keyed by the SHA-256 of a one-time code that the app
- *   reads back with its own bearer token (POST /auth/mobile/mail/confirm). Holds no Microsoft
- *   token. 5 minutes, single use.
+ *   reads back with its own bearer token and PKCE verifier (POST /auth/mobile/mail/confirm).
+ *   Holds no Microsoft token. 60 seconds, single use.
  */
 const mobileMailStateSchema = new Schema(
   {
@@ -15,6 +15,8 @@ const mobileMailStateSchema = new Schema(
     keyHash: { type: String, required: true, unique: true },
     flow: { type: String, enum: ['dar', 'action'], required: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    /** The app's PKCE S256 challenge; confirm needs the matching verifier. */
+    codeChallenge: { type: String, required: true },
     /** pending: the cookie payload without `state`. result: the outcome params. */
     data: { type: Schema.Types.Mixed, required: true },
     expiresAt: { type: Date, required: true },

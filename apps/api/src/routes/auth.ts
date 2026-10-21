@@ -44,6 +44,7 @@ import {
 import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
 import {
   confirmMobileMailResult,
+  mobileMailConfirmSchema,
   returnToMobile,
   takeMobileDarState,
 } from '../services/msSendReturn.js';
@@ -282,6 +283,7 @@ export function authRouter(
       returnToMobile(res, {
         flow: 'dar',
         userId: mobileDar.userId,
+        codeChallenge: mobileDar.codeChallenge,
         base: { report: mobileDar.savedReportId },
       });
       await handleMicrosoftDarMailCallback(
@@ -359,13 +361,13 @@ export function authRouter(
 
   /**
    * Mobile DAR Send: the app reads the outcome of its send with the one-time code from the
-   * opstrack://auth/mail deep link. Bearer only, the same user who started it, single use.
+   * opstrack://auth/mail deep link and its PKCE verifier. Bearer only, the same user who started
+   * it, single use, 60 seconds.
    */
-  const mobileMailConfirmSchema = z.strictObject({ code: z.string().min(20).max(200) });
   router.post('/mobile/mail/confirm', AUTHENTICATED, async (req, res) => {
     if (!bearerToken(req)) throw MOBILE_ONLY;
-    const { code } = parseBody(mobileMailConfirmSchema, req);
-    const result = await confirmMobileMailResult(code, currentUser(req)._id);
+    const { code, code_verifier } = parseBody(mobileMailConfirmSchema, req);
+    const result = await confirmMobileMailResult(code, code_verifier, currentUser(req)._id);
     if (!result) {
       throw new HttpError(400, 'INVALID_CODE', 'This send result has expired or was already read.');
     }
