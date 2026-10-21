@@ -114,7 +114,15 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
     }
   }
 
-  String _sentMessage() {
+  String _sentMessage([DarSendResult? r]) {
+    final names = r?.recipientNames ?? const <String>[];
+    final n = r?.recipientCount;
+    if (names.isNotEmpty) {
+      return 'Report sent to ${joinNames(names)} from your Outlook.';
+    }
+    if (n != null && n > 0) {
+      return 'Report sent to $n ${n == 1 ? 'recipient' : 'recipients'} from your Outlook.';
+    }
     final to = ref.read(darSendStatusProvider).value?.to?.name;
     return to == null || to.isEmpty
         ? 'Report sent from your Outlook.'
@@ -133,7 +141,7 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
       _awaiting = false;
       if (r.sent) {
         _error = null;
-        _info = _sentMessage();
+        _info = _sentMessage(r);
       } else {
         _info = null;
         _error = darSendMessage(r.reason);
@@ -356,4 +364,10 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
       ),
     );
   }
+}
+
+/// "A", "A and B", "A, B and C" (web joinNames).
+String joinNames(List<String> names) {
+  if (names.length <= 1) return names.join();
+  return '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 }

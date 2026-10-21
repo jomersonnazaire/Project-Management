@@ -110,7 +110,11 @@ void main() {
           "We couldn't confirm whether the report was sent. Check its Sent status before sending again.",
         );
         expect(repo.confirms, isEmpty);
-        expect(store.map, isEmpty);
+        expect(
+          store.map,
+          isNotEmpty,
+          reason: 'kept: a real link may still come',
+        );
       },
     );
 
@@ -132,7 +136,7 @@ void main() {
       }
     });
 
-    test('expired or reused code (400 INVALID_CODE) → send expired', () async {
+    test('QA E2: INVALID_CODE while a send is pending → check Sent status, verifier kept', () async {
       final m = mk();
       await m.begin('sr1');
       repo.confirmError = ApiException(
@@ -141,11 +145,75 @@ void main() {
         code: 'INVALID_CODE',
       );
       final r = (await m.handle(link('?code=$code')))!;
+      expect((r.reportId, r.sent), ('sr1', false));
+      expect(r.reason, DarSendResult.resultUnavailable);
       expect(
-        (r.reportId, r.sent, r.reason),
-        ('sr1', false, DarSendResult.expired),
+        darSendMessage(r.reason),
+        "We couldn't confirm whether the report was sent. Check its Sent status before sending again.",
       );
-      expect(darSendMessage(r.reason), 'Send expired. Try again.');
+      expect(store.map, isNotEmpty, reason: 'kept until a 200 or 10 minutes');
+    });
+
+    test('QA E2: a forged code first does not spoil the real result', () async {
+      final m = mk();
+      await m.begin('sr1');
+      repo.confirmError = ApiException('x', status: 400, code: 'INVALID_CODE');
+      final forged = (await m.handle(link('?code=forged-forged-forged-0000')))!;
+      expect(forged.sent, isFalse);
+      repo.confirmError = null;
+      repo.confirmBody = {'flow': 'dar', 'report': 'sr1', 'sent': 'sr1'};
+      final real = (await m.handle(link('?code=$code')))!;
+      expect((real.reportId, real.sent), ('sr1', true));
+      expect(repo.confirms.map((c) => c.$1), [
+        'forged-forged-forged-0000',
+        code,
+      ]);
+      expect(store.map, isEmpty, reason: 'cleared after the 200');
+    });
+
+    test('QA E2: no pending verifier (missing or already used) → check Sent status', () async {
+      final m = mk();
+      await m.begin('sr1');
+      repo.confirmBody = {'flow': 'dar', 'report': 'sr1', 'sent': 'sr1'};
+      expect((await m.handle(link('?code=$code')))!.sent, isTrue);
+      final again = (await m.handle(link('?code=${code}2')))!;
+      expect(again.reason, DarSendResult.resultUnavailable);
+      expect(repo.confirms, hasLength(1));
+      final none = (await mk().handle(link('?code=$code')))!;
+      expect(none.reason, DarSendResult.resultUnavailable);
+      expect(darSendMessage(none.reason), darResultUnavailable);
+      expect(repo.confirms, isEmpty);
+    });
+
+    test('QA E1: a confirm for another report is not this send', () async {
+      final m = mk();
+      await m.begin('sr1');
+      repo.confirmBody = {'flow': 'dar', 'report': 'other', 'sent': 'other'};
+      final r = (await m.handle(link('?code=$code')))!;
+      expect((r.reportId, r.sent), ('sr1', false));
+      expect(r.reason, DarSendResult.resultUnavailable);
+    });
+
+    test('sent confirm with optional recipients (count or list)', () async {
+      for (final (recipients, count, names) in <(Object?, int?, List<String>)>[
+        (2, 2, []),
+        (
+          ['Queen Reyes', 'mark@xceler8.example'],
+          2,
+          ['Queen Reyes', 'mark@xceler8.example'],
+        ),
+        (null, null, []),
+      ]) {
+        final r = DarSendResult.fromConfirm({
+          'flow': 'dar',
+          'report': 'sr1',
+          'sent': 'sr1',
+          'recipients': ?recipients,
+        }, startedReport: 'sr1');
+        expect(r.sent, isTrue);
+        expect(r.recipientCount, count);
+        expect(r.recipientNames, names);
+      }
     });
 
     test('the same code twice is tried once', () async {
@@ -160,35 +228,41 @@ void main() {
     });
 
     test(
-      'verifier older than 10 minutes or missing → expired, no confirm',
+      'verifier older than 10 minutes → Send expired, cleared, no confirm',
       () async {
         final m = mk();
         await m.begin('sr1');
         now = now.add(const Duration(minutes: 11));
-        expect(
-          (await m.handle(link('?code=$code')))!.reason,
-          DarSendResult.expired,
-        );
-        expect(
-          (await m.handle(link('?code=${code}2')))!.reason,
-          DarSendResult.expired,
-        );
+        final r = (await m.handle(link('?code=$code')))!;
+        expect(r.reason, DarSendResult.expired);
+        expect(darSendMessage(r.reason), 'Send expired. Try again.');
+        expect(store.map, isEmpty);
         expect(repo.confirms, isEmpty);
       },
     );
 
-    test('wrong user (403) → not sent, wrong-account copy', () async {
-      final m = mk();
-      await m.begin('sr1');
-      repo.confirmError = ApiException(
-        'Forbidden',
-        status: 403,
-        code: 'FORBIDDEN',
-      );
-      final r = (await m.handle(link('?code=$code')))!;
-      expect((r.sent, r.reason), (false, DarSendResult.wrongUser));
-      expect(darSendMessage(r.reason), darWrongUser);
-    });
+    test(
+      'QA G1: other schemes, hosts and paths are ignored, verifier kept',
+      () async {
+        final m = mk();
+        await m.begin('sr1');
+        for (final u in [
+          'opstrack://other/mail?code=x',
+          'opstrack://ms/mail?code=x',
+          'opstrack://auth/mailx?code=x',
+          'opstrack://auth/?code=x',
+          'myapp://auth/mail?code=x',
+        ]) {
+          expect(await m.handle(Uri.parse(u)), isNull, reason: u);
+        }
+        expect(
+          isMailReturnLink(Uri.parse('opstrack://auth/mail?code=x')),
+          isTrue,
+        );
+        expect(store.map, isNotEmpty);
+        expect(repo.confirms, isEmpty);
+      },
+    );
 
     test('other links are ignored', () async {
       final m = mk();
@@ -250,6 +324,11 @@ void main() {
         expect(darSendMessage(r), isNot(darSendMessage('weird')), reason: r);
       }
       expect(darSendMessage('not_linked'), darPasswordOnly);
+      // QA G2: Lean's exact wording, not just the constant.
+      expect(
+        darPasswordOnly,
+        'Link your Microsoft account to send emails. You can export this report on the web or notify your supervisor.',
+      );
       expect(
         darSendMessage('no_supervisor'),
         'Ask an Admin to set your supervisor.',
@@ -462,6 +541,34 @@ void main() {
       expect(find.textContaining("You didn't allow OpsTrack"), findsOneWidget);
     });
 
+    testWidgets('sent with recipients from confirm names them', (tester) async {
+      final c = await pump(tester, _linked);
+      repo.confirmBody = {
+        'flow': 'dar',
+        'report': 'sr1',
+        'sent': 'sr1',
+        'recipients': ['Queen Reyes', 'mark@xceler8.example'],
+      };
+      await showCard(tester);
+      await tester.tap(find.byKey(const Key('darSend')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('darSendContinue')));
+      await tester.pumpAndSettle();
+      final r = await c
+          .read(darMailSendProvider)
+          .handle(
+            Uri.parse('opstrack://auth/mail?code=one-time-code-0123456789'),
+          );
+      c.read(darSendResultProvider.notifier).set(r);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Report sent to Queen Reyes and mark@xceler8.example from your Outlook.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('a forged link (no code) shows no result, never sent', (
       tester,
     ) async {
@@ -519,23 +626,31 @@ void main() {
       },
     );
 
-    testWidgets('expired code shows Send expired', (tester) async {
-      final c = await pump(tester, _linked);
-      repo.confirmError = ApiException('x', status: 400, code: 'INVALID_CODE');
-      await showCard(tester);
-      await tester.tap(find.byKey(const Key('darSend')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('darSendContinue')));
-      await tester.pumpAndSettle();
-      final r = await c
-          .read(darMailSendProvider)
-          .handle(
-            Uri.parse('opstrack://auth/mail?code=one-time-code-0123456789'),
-          );
-      c.read(darSendResultProvider.notifier).set(r);
-      await tester.pumpAndSettle();
-      expect(find.text('Send expired. Try again.'), findsOneWidget);
-    });
+    testWidgets(
+      'INVALID_CODE while pending → check Sent status, not Send expired',
+      (tester) async {
+        final c = await pump(tester, _linked);
+        repo.confirmError = ApiException(
+          'x',
+          status: 400,
+          code: 'INVALID_CODE',
+        );
+        await showCard(tester);
+        await tester.tap(find.byKey(const Key('darSend')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('darSendContinue')));
+        await tester.pumpAndSettle();
+        final r = await c
+            .read(darMailSendProvider)
+            .handle(
+              Uri.parse('opstrack://auth/mail?code=one-time-code-0123456789'),
+            );
+        c.read(darSendResultProvider.notifier).set(r);
+        await tester.pumpAndSettle();
+        expect(find.text(darResultUnavailable), findsOneWidget);
+        expect(find.text('Send expired. Try again.'), findsNothing);
+      },
+    );
 
     testWidgets('a result for another report is ignored', (tester) async {
       final c = await pump(tester, _linked);

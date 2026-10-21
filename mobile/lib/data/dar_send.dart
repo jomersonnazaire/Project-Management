@@ -53,25 +53,43 @@ class DarSendResult {
     required this.reportId,
     required this.sent,
     this.reason,
+    this.recipientCount,
+    this.recipientNames = const [],
   });
   final String reportId;
   final bool sent;
 
-  /// A `send_error` reason from the API, or [noResult] / [expired] / [wrongUser].
+  /// A `send_error` reason from the API, or [noResult] / [expired] / [wrongUser] /
+  /// [resultUnavailable].
   final String? reason;
+
+  /// Optional `recipients` on a sent confirm (To plus accepted CCs): a count or a list.
+  final int? recipientCount;
+  final List<String> recipientNames;
 
   static const noResult = 'no_result';
   static const expired = 'expired';
   static const wrongUser = 'wrong_user';
   static const resultUnavailable = 'result_unavailable';
 
-  /// The POST /auth/mobile/mail/confirm body: `{flow:'dar', report, sent}` or
-  /// `{flow:'dar', report, send_error}` (PR #36 458fcab). Anything else is not a success.
+  /// The POST /auth/mobile/mail/confirm body: `{flow:'dar', report, sent[, recipients]}` or
+  /// `{flow:'dar', report, send_error}` (PR #36). Anything else is not a success.
+  /// QA E1: when this phone started a send ([startedReport]), the answer must be for that
+  /// report; otherwise it can't confirm this send.
   static DarSendResult fromConfirm(
     Map<String, dynamic> b, {
-    String? fallbackReport,
+    String? startedReport,
   }) {
-    final report = '${b['report'] ?? fallbackReport ?? ''}';
+    final got = b['report'] is String ? b['report'] as String : null;
+    final mine = startedReport != null && startedReport.isNotEmpty;
+    if (mine && got != startedReport) {
+      return DarSendResult(
+        reportId: startedReport,
+        sent: false,
+        reason: resultUnavailable,
+      );
+    }
+    final report = got ?? startedReport ?? '';
     final err = b['send_error'];
     if (b['flow'] != 'dar') {
       return DarSendResult(reportId: report, sent: false, reason: noResult);
@@ -81,7 +99,23 @@ class DarSendResult {
     }
     final sent = b['sent'];
     if (sent is String && sent.isNotEmpty && sent == report) {
-      return DarSendResult(reportId: report, sent: true);
+      final r = b['recipients'];
+      final names = [
+        if (r is List)
+          for (final x in r)
+            if (x is String && x.isNotEmpty)
+              x
+            else if (x is Map && '${x['name'] ?? x['email'] ?? ''}'.isNotEmpty)
+              '${x['name'] ?? x['email']}',
+      ];
+      return DarSendResult(
+        reportId: report,
+        sent: true,
+        recipientCount: r is num
+            ? r.toInt()
+            : (r is List ? names.length : null),
+        recipientNames: names,
+      );
     }
     return DarSendResult(reportId: report, sent: false, reason: noResult);
   }
@@ -266,8 +300,9 @@ class DarMailSend {
   Future<DarSendResult?> _handle(Uri uri) async {
     final code = uri.queryParameters['code'];
     if (code != null && code.isNotEmpty && !_seen.add(code)) return null;
+    // QA E2: the verifier stays until a 200 confirm or its 10 minutes run out, so a forged link
+    // that arrives first can't spoil the real result.
     final raw = await _storage.read(_mailPkceKey);
-    await _storage.delete(_mailPkceKey);
     String? verifier, report;
     DateTime? created;
     if (raw != null) {
@@ -279,45 +314,41 @@ class DarMailSend {
       } catch (_) {}
     }
     final rep = report ?? '';
+    DarSendResult fail(String reason) =>
+        DarSendResult(reportId: rep, sent: false, reason: reason);
+    final pendingTooOld =
+        created != null &&
+        _now().toUtc().difference(created.toUtc()) > _mailPkceTtl;
+    if (raw != null && (verifier == null || created == null || pendingTooOld)) {
+      await _storage.delete(_mailPkceKey);
+    }
     // The API sent the user back but couldn't store the result: the email may have gone out.
     if ((code == null || code.isEmpty) &&
         uri.queryParameters['error'] == DarSendResult.resultUnavailable) {
-      return DarSendResult(
-        reportId: rep,
-        sent: false,
-        reason: DarSendResult.resultUnavailable,
-      );
+      return fail(DarSendResult.resultUnavailable);
     }
     // No code (forged link): never "sent".
-    if (code == null || code.isEmpty) {
-      return DarSendResult(
-        reportId: rep,
-        sent: false,
-        reason: DarSendResult.noResult,
-      );
-    }
-    if (verifier == null ||
-        created == null ||
-        _now().toUtc().difference(created.toUtc()) > _mailPkceTtl) {
-      return DarSendResult(
-        reportId: rep,
-        sent: false,
-        reason: DarSendResult.expired,
-      );
+    if (code == null || code.isEmpty) return fail(DarSendResult.noResult);
+    // The 10-minute send window passed: start again.
+    if (verifier != null && pendingTooOld) return fail(DarSendResult.expired);
+    // No pending send on this phone (missing or already used): can't tell, so check Sent status.
+    if (verifier == null || created == null) {
+      return fail(DarSendResult.resultUnavailable);
     }
     try {
       final b = await repo.confirm(code, codeVerifier: verifier);
-      return DarSendResult.fromConfirm(b, fallbackReport: report);
+      await _storage.delete(
+        _mailPkceKey,
+      ); // 200: the server answered for this send
+      return DarSendResult.fromConfirm(b, startedReport: report);
     } on ApiException catch (e) {
       final reason = switch (e.status) {
-        400 ||
-        404 ||
-        410 => DarSendResult.expired, // INVALID_CODE: expired or reused
-        403 => DarSendResult.wrongUser,
-        401 => DarSendResult.wrongUser,
+        // INVALID_CODE (expired, reused, forged) while a send is pending: unknown outcome.
+        400 || 404 || 410 => DarSendResult.resultUnavailable,
+        403 || 401 => DarSendResult.wrongUser,
         _ => DarSendResult.noResult,
       };
-      return DarSendResult(reportId: rep, sent: false, reason: reason);
+      return fail(reason);
     }
   }
 }
