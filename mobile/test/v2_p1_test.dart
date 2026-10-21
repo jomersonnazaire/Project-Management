@@ -158,18 +158,25 @@ void main() {
       },
     );
 
-    testWidgets('quick activity requires a title and activity type', (t) async {
-      await pumpApp(t, location: '/tasks');
-      await tapKey(t, 'quickActivityButton');
-      await tapKey(t, 'entrySave');
-      expect(find.text('Add a title.'), findsOneWidget);
-      expect(find.text('Choose an activity type.'), findsOneWidget);
-      await t.enterText(find.byKey(const Key('entryTitle')), 'Inbox triage');
-      await pickMenu(t, 'entryActivityType', 'Integration');
-      await tapKey(t, 'entrySave');
-      expect(find.byKey(const Key('runningTimerBar')), findsOneWidget);
-      expect(find.text('Inbox triage'), findsWidgets);
-    });
+    testWidgets(
+      'quick activity requires a title; Quick Activity type preselected',
+      (t) async {
+        await pumpApp(t, location: '/tasks');
+        await tapKey(t, 'quickActivityButton');
+        await tapKey(t, 'entrySave');
+        expect(find.text('Add a title.'), findsOneWidget);
+        expect(find.text('Choose an activity type.'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('entryActivityType_aq')),
+          findsOneWidget,
+        );
+        await t.enterText(find.byKey(const Key('entryTitle')), 'Inbox triage');
+        await pickMenu(t, 'entryActivityType', 'Integration');
+        await tapKey(t, 'entrySave');
+        expect(find.byKey(const Key('runningTimerBar')), findsOneWidget);
+        expect(find.text('Inbox triage'), findsWidgets);
+      },
+    );
   });
 
   group('Day timesheet', () {
@@ -217,7 +224,14 @@ void main() {
             '${(w.key! as ValueKey).value}'.startsWith('rowTimeOut_'),
       );
       expect(running, findsOneWidget);
+      await t.ensureVisible(running);
+      await t.pumpAndSettle();
       await t.tap(running);
+      await t.pumpAndSettle();
+      await t.drag(
+        find.byKey(const Key('dayTimesheet')),
+        const Offset(0, 2000),
+      );
       await t.pumpAndSettle();
       expect(
         t.widget<FilledButton>(find.byKey(const Key('submitDay'))).onPressed,
@@ -258,7 +272,7 @@ void main() {
         await go(2);
         expect(
           find.text(
-            "🔒 Oct 2 wasn't submitted. It was locked as it stood at the weekly lock.",
+            "🔒 Oct 2 wasn't submitted. It locked as it stood. You can edit a day's entries until the end of the second day after it. For example, Oct 13 locks at 12:00 AM PHT on Oct 16.",
           ),
           findsOneWidget,
         );
@@ -299,7 +313,7 @@ void main() {
         c.read(selectedDayProvider.notifier).set(DateTime(2026, 10, 10));
         await t.pumpAndSettle();
         await tapKey(t, 'addEntry');
-        expect(find.text('Add entry'), findsWidgets);
+        expect(find.text('Log task time'), findsWidgets);
         await tapKey(t, 'entrySave');
         expect(find.text('Choose a task or Quick activity.'), findsOneWidget);
         expect(find.text('Enter the time in.'), findsOneWidget);
@@ -503,8 +517,9 @@ void main() {
       await tapKey(t, 'newProjectFab');
       expect(find.byKey(const Key('newProjectScreen')), findsOneWidget);
       await tapKey(t, 'projectSave');
+      // M8: the template is optional.
+      expect(find.text('Choose a template.'), findsNothing);
       for (final m in [
-        'Choose a template.',
         'Project name is required.',
         'Project code is required.',
         'Choose a client.',

@@ -7,6 +7,7 @@ import 'app.dart' show DisconnectedScreen;
 import 'ui/widgets/permission_gate.dart';
 
 import 'state/providers.dart';
+import 'state/v2_providers.dart' show canW;
 import 'ui/screens/auth_screens.dart';
 import 'ui/screens/home_screens.dart';
 import 'ui/screens/project_screens.dart';
@@ -195,21 +196,43 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/leave',
-        builder: (_, s) =>
-            LeaveScreen(initialTab: s.uri.queryParameters['tab']),
+        builder: (_, s) => PermissionGate(
+          record: 'leave',
+          action: 'view',
+          child: LeaveScreen(initialTab: s.uri.queryParameters['tab']),
+        ),
       ),
-      GoRoute(path: '/dar', builder: (_, _) => const DarGenerateScreen()),
+      GoRoute(
+        path: '/dar',
+        builder: (_, _) => const PermissionGate(
+          record: 'activities',
+          action: 'view',
+          child: DarGenerateScreen(),
+        ),
+      ),
       GoRoute(
         path: '/dar/saved',
-        builder: (_, _) => const SavedReportsScreen(),
+        builder: (_, _) => PermissionGate(
+          record: 'activities',
+          action: 'view',
+          child: const SavedReportsScreen(),
+        ),
       ),
       GoRoute(
         path: '/dar/saved/:id',
-        builder: (_, s) => SavedReportDetailScreen(id: s.pathParameters['id']!),
+        builder: (_, s) => PermissionGate(
+          record: 'activities',
+          action: 'view',
+          child: SavedReportDetailScreen(id: s.pathParameters['id']!),
+        ),
       ),
       GoRoute(
         path: '/timesheet-review',
-        builder: (_, _) => const TimesheetReviewScreen(),
+        builder: (_, _) => PermissionGate(
+          record: 'activities',
+          action: 'view',
+          child: const TimesheetReviewScreen(),
+        ),
       ),
       GoRoute(
         path: '/notifications',
@@ -261,7 +284,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/day',
-                builder: (_, _) => const DayTimesheetScreen(),
+                builder: (_, _) => PermissionGate(
+                  record: 'activities',
+                  action: 'view',
+                  child: const DayTimesheetScreen(),
+                ),
               ),
             ],
           ),
@@ -276,63 +303,72 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.shell});
   final StatefulNavigationShell shell;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: shell,
-    bottomNavigationBar: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const RunningTimerBar(),
-        NavigationBarTheme(
-          data: NavigationBarTheme.of(context).copyWith(
-            labelTextStyle: WidgetStatePropertyAll(
-              Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11),
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Q-70 B: no activity tracker access (Viewer) → no Day timesheet tab or timer bar.
+    final tracker = canW(ref, 'activities', 'view');
+    final branches = [0, 1, 2, if (tracker) 3, 4];
+    final selected = branches.indexOf(shell.currentIndex);
+    return Scaffold(
+      body: shell,
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (tracker) const RunningTimerBar(),
+          NavigationBarTheme(
+            data: NavigationBarTheme.of(context).copyWith(
+              labelTextStyle: WidgetStatePropertyAll(
+                Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11),
+              ),
+            ),
+            child: NavigationBar(
+              key: const Key('bottomNav'),
+              selectedIndex: selected < 0 ? 0 : selected,
+              onDestinationSelected: (i) => shell.goBranch(
+                branches[i],
+                initialLocation: branches[i] == shell.currentIndex,
+              ),
+              destinations: [
+                const NavigationDestination(
+                  key: Key('nav_home'),
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: 'Home',
+                ),
+                const NavigationDestination(
+                  key: Key('nav_projects'),
+                  icon: Icon(Icons.folder_outlined),
+                  selectedIcon: Icon(Icons.folder),
+                  label: 'Projects',
+                ),
+                const NavigationDestination(
+                  key: Key('nav_tasks'),
+                  icon: Icon(Icons.task_alt_outlined),
+                  selectedIcon: Icon(Icons.task_alt),
+                  label: 'My tasks',
+                ),
+                if (tracker)
+                  const NavigationDestination(
+                    key: Key('nav_day'),
+                    icon: Icon(Icons.schedule_outlined),
+                    selectedIcon: Icon(Icons.schedule),
+                    label: 'Day timesheet',
+                  ),
+                const NavigationDestination(
+                  key: Key('nav_more'),
+                  icon: Icon(Icons.menu),
+                  selectedIcon: Icon(Icons.menu_open),
+                  label: 'More',
+                ),
+              ],
             ),
           ),
-          child: NavigationBar(
-            key: const Key('bottomNav'),
-            selectedIndex: shell.currentIndex,
-            onDestinationSelected: (i) =>
-                shell.goBranch(i, initialLocation: i == shell.currentIndex),
-            destinations: const [
-              NavigationDestination(
-                key: Key('nav_home'),
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Home',
-              ),
-              NavigationDestination(
-                key: Key('nav_projects'),
-                icon: Icon(Icons.folder_outlined),
-                selectedIcon: Icon(Icons.folder),
-                label: 'Projects',
-              ),
-              NavigationDestination(
-                key: Key('nav_tasks'),
-                icon: Icon(Icons.task_alt_outlined),
-                selectedIcon: Icon(Icons.task_alt),
-                label: 'My tasks',
-              ),
-              NavigationDestination(
-                key: Key('nav_day'),
-                icon: Icon(Icons.schedule_outlined),
-                selectedIcon: Icon(Icons.schedule),
-                label: 'Day timesheet',
-              ),
-              NavigationDestination(
-                key: Key('nav_more'),
-                icon: Icon(Icons.menu),
-                selectedIcon: Icon(Icons.menu_open),
-                label: 'More',
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }

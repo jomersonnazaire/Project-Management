@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/api_client.dart' show isPortalToken;
 import '../../data/models.dart' show ApiException;
 import '../../state/p3_providers.dart';
 
@@ -101,7 +102,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.status == 429) {
-        showError(context, e.message); // rate limited → SnackBar
+        // Rate limited → SnackBar with a friendly message.
+        showError(
+          context,
+          'Too many sign-in attempts. Wait a few minutes, then try again.',
+        );
       } else {
         setState(() => _error = e.message);
       }
@@ -247,7 +252,9 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   final _pw = TextEditingController();
   final _confirm = TextEditingController();
   bool _busy = false;
-  late final Future<Map<String, dynamic>> _info = widget.token.isEmpty
+  // D6: client-portal (`ptl_`) tokens are web-only; never accept them here.
+  late final Future<Map<String, dynamic>> _info =
+      widget.token.isEmpty || isPortalToken(widget.token)
       ? Future.error(Exception())
       : ref.read(p3RepositoryProvider).verifyInvite(widget.token);
 

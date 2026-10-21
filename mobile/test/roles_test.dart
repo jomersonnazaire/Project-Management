@@ -127,8 +127,13 @@ void main() {
 
       testWidgets('hours, issues, documents, conversation', (t) async {
         await pumpApp(t, role: role, location: '/day');
-        await tapKey(t, 'hoursListSegment');
-        expect(has('hoursLogTime'), want('hoursLogTime'));
+        if (role == 'VIEWER') {
+          // Q-70 B: Viewers have no tracker; /day is blocked.
+          expect(has('noAccessScreen'), isTrue);
+        } else {
+          await tapKey(t, 'hoursListSegment');
+          expect(has('hoursLogTime'), want('hoursLogTime'));
+        }
         await pumpApp(t, role: role, location: '/issues');
         expect(has('raiseIssue'), want('raiseIssue'));
         await pumpApp(t, role: role, location: '/projects/p1/documents');

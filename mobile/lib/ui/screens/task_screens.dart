@@ -175,16 +175,18 @@ class _ActionBar extends ConsumerWidget {
         padding: const EdgeInsets.all(Space.m),
         child: Row(
           children: [
-            Expanded(
-              flex: 2,
-              child: OutlinedButton.icon(
-                key: const Key('taskTimeIn'),
-                icon: const Icon(Icons.play_arrow_outlined),
-                label: const FitLabel('Time in'),
-                onPressed: () => timeInOnTask(context, ref, task.id),
+            if (canW(ref, 'activities', 'create')) ...[
+              Expanded(
+                flex: 2,
+                child: OutlinedButton.icon(
+                  key: const Key('taskTimeIn'),
+                  icon: const Icon(Icons.play_arrow_outlined),
+                  label: const FitLabel('Time in'),
+                  onPressed: () => timeInOnTask(context, ref, task.id),
+                ),
               ),
-            ),
-            const SizedBox(width: Space.m - 4),
+              const SizedBox(width: Space.m - 4),
+            ],
             Expanded(
               flex: 3,
               child: FilledButton(
@@ -404,6 +406,7 @@ class _LogTimeScreenState extends ConsumerState<LogTimeScreen> {
       initialDate: _day,
       firstDate: DateTime(_today.year - 1),
       lastDate: _today, // no future dates
+      selectableDayPredicate: (d) => !d.isAfter(_today),
     );
     if (d != null) _selectDay(d);
   }
