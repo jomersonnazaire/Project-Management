@@ -86,13 +86,7 @@ void main() {
     });
 
     test('forged links never count as sent and call nothing', () async {
-      for (final q in [
-        '',
-        '?sent=sr1',
-        '?report=sr1&sent=sr1',
-        '?error=result_unavailable',
-        '?code=',
-      ]) {
+      for (final q in ['', '?sent=sr1', '?report=sr1&sent=sr1', '?code=']) {
         final m = mk();
         await m.begin('sr1');
         final r = (await m.handle(link(q)))!;
@@ -102,6 +96,23 @@ void main() {
         expect(repo.confirms, isEmpty, reason: q);
       }
     });
+
+    test(
+      '?error=result_unavailable → check Sent status copy, no confirm',
+      () async {
+        final m = mk();
+        await m.begin('sr1');
+        final r = (await m.handle(link('?error=result_unavailable')))!;
+        expect((r.reportId, r.sent), ('sr1', false));
+        expect(r.reason, DarSendResult.resultUnavailable);
+        expect(
+          darSendMessage(r.reason),
+          "We couldn't confirm whether the report was sent. Check its Sent status before sending again.",
+        );
+        expect(repo.confirms, isEmpty);
+        expect(store.map, isEmpty);
+      },
+    );
 
     test('confirm body that does not prove a send is not sent', () async {
       for (final body in <Map<String, dynamic>>[
@@ -469,6 +480,44 @@ void main() {
       expect(find.byKey(const Key('darSendInfo')), findsNothing);
       expect(repo.confirms, isEmpty);
     });
+
+    testWidgets(
+      'result_unavailable: copy + report refreshed so the badge updates',
+      (tester) async {
+        final c = await pump(tester, _linked);
+        await showCard(tester);
+        await tester.tap(find.byKey(const Key('darSend')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('darSendContinue')));
+        await tester.pumpAndSettle();
+        // Meanwhile the server recorded the send (as if the email did go out).
+        final saved = c.read(mockTrackerStoreProvider).saved;
+        final i = saved.indexWhere((r) => r.id == 'sr1');
+        final o = saved[i];
+        saved[i] = SavedReport(
+          id: o.id,
+          savedAt: o.savedAt,
+          from: o.from,
+          to: o.to,
+          totalActivities: o.totalActivities,
+          totalRendered: o.totalRendered,
+          tag: o.tag,
+          changedDates: o.changedDates,
+          sentKnown: true,
+          sentAt: DateTime.utc(2026, 10, 21, 2, 30),
+          sentRecipientCount: 2,
+        );
+        final r = await c
+            .read(darMailSendProvider)
+            .handle(Uri.parse('opstrack://auth/mail?error=result_unavailable'));
+        c.read(darSendResultProvider.notifier).set(r);
+        await tester.pumpAndSettle();
+        expect(find.text(darResultUnavailable), findsOneWidget);
+        expect(find.byKey(const Key('darSendInfo')), findsNothing);
+        expect(find.text(sentStatusLabel(saved[i])), findsOneWidget);
+        expect(find.byKey(const Key('sentStatus_sr1')), findsOneWidget);
+      },
+    );
 
     testWidgets('expired code shows Send expired', (tester) async {
       final c = await pump(tester, _linked);

@@ -312,12 +312,15 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(child: Text('Email this report', style: t.titleSmall)),
-                SentStatusBadge(report: widget.report),
-              ],
-            ),
+            Text('Email this report', style: t.titleSmall),
+            // Own line: "Sent · <date, time> (UTC+8) · N recipients" is too long to share a row.
+            if (widget.report.sentKnown) ...[
+              const SizedBox(height: Space.xs),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: SentStatusBadge(report: widget.report),
+              ),
+            ],
             const SizedBox(height: Space.s),
             body,
             if (_info != null)

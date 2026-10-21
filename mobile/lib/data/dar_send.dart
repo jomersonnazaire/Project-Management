@@ -63,6 +63,7 @@ class DarSendResult {
   static const noResult = 'no_result';
   static const expired = 'expired';
   static const wrongUser = 'wrong_user';
+  static const resultUnavailable = 'result_unavailable';
 
   /// The POST /auth/mobile/mail/confirm body: `{flow:'dar', report, sent}` or
   /// `{flow:'dar', report, send_error}` (PR #36 458fcab). Anything else is not a success.
@@ -106,13 +107,16 @@ const darNotifyRecent =
 const darSendExpired = 'Send expired. Try again.';
 const darWrongUser =
     "This send was started from a different OpsTrack account, so we can't show its result. Sign in with the account that pressed Send.";
+const darResultUnavailable =
+    "We couldn't confirm whether the report was sent. Check its Sent status before sending again.";
 const darNoResult =
     "We didn't get a result back from Microsoft, so the report may not have been sent. Press Send to try again.";
 
 /// Friendly message for a send-status reason, a 409 SEND_UNAVAILABLE reason, or a deep-link
 /// `send_error` (unknown reasons are treated as `send_failed`, per PR #36).
 String darSendMessage(String? reason) => switch (reason) {
-  DarSendResult.noResult || 'result_unavailable' => darNoResult,
+  DarSendResult.noResult => darNoResult,
+  DarSendResult.resultUnavailable => darResultUnavailable,
   DarSendResult.expired => darSendExpired,
   DarSendResult.wrongUser => darWrongUser,
   'not_linked' => darPasswordOnly,
@@ -275,7 +279,16 @@ class DarMailSend {
       } catch (_) {}
     }
     final rep = report ?? '';
-    // No code (forged, or ?error=result_unavailable): never "sent".
+    // The API sent the user back but couldn't store the result: the email may have gone out.
+    if ((code == null || code.isEmpty) &&
+        uri.queryParameters['error'] == DarSendResult.resultUnavailable) {
+      return DarSendResult(
+        reportId: rep,
+        sent: false,
+        reason: DarSendResult.resultUnavailable,
+      );
+    }
+    // No code (forged link): never "sent".
     if (code == null || code.isEmpty) {
       return DarSendResult(
         reportId: rep,

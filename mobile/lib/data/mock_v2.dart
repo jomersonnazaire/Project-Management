@@ -950,6 +950,9 @@ class MockDarRepository implements DarRepository {
       totalRendered: r.totalRendered,
       tag: r.tag,
       changedDates: r.changedDates,
+      sentKnown: r.sentKnown,
+      sentAt: r.sentAt,
+      sentRecipientCount: r.sentRecipientCount,
       report: DarReport(
         userName: rep.userName,
         supervisor: rep.supervisor,
