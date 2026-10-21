@@ -20,6 +20,7 @@ import {
   type MicrosoftActionEmailOAuthState,
 } from './microsoftOAuthCookie.js';
 import { buildMicrosoftLoginUrl } from './microsoftAuth.js';
+import { mobileEmailChallenge, saveMobileActionState, sendResultRedirect } from './msSendReturn.js';
 import { notify, projectRecipients } from './notify.js';
 
 type Id = Types.ObjectId;
@@ -108,7 +109,7 @@ export async function startActionEmail(
     scopes: ['Mail.Send'],
     loginHint: me.email,
   });
-  setMicrosoftActionEmailCookie(config, res, {
+  const mailState = {
     codeVerifier: login.codeVerifier,
     state: login.state,
     nonce: login.nonce,
@@ -118,7 +119,12 @@ export async function startActionEmail(
     taskId: item.taskId ? item.taskId.toString() : '',
     followUpId: item.followUpId ?? '',
     recipientIds: item.recipientIds.map(String),
-  });
+  };
+  // Started from the app (POST /action-emails/mobile or emailReturn 'mobile'): state kept
+  // server-side with the app's PKCE challenge; otherwise the web cookie, unchanged.
+  const challenge = mobileEmailChallenge(res);
+  if (challenge) await saveMobileActionState(mailState, challenge);
+  else setMicrosoftActionEmailCookie(config, res, mailState);
   return login.url;
 }
 
@@ -244,9 +250,14 @@ export async function handleMicrosoftActionEmailCallback(
   const taskId = st.taskId ? new Types.ObjectId(st.taskId) : null;
   const followUpId = st.followUpId ? new Types.ObjectId(st.followUpId) : null;
   const base = config.WEB_APP_URL.replace(/\/+$/, '');
-  const back = (params: Record<string, string>) => {
+  const back = (params: Record<string, string>, mobileExtra: Record<string, number> = {}) => {
     const q = new URLSearchParams({ ...(st.taskId ? { task: st.taskId } : {}), ...params });
-    res.redirect(`${base}/projects/${st.projectId}?${q.toString()}`);
+    sendResultRedirect(
+      res,
+      `${base}/projects/${st.projectId}?${q.toString()}`,
+      params,
+      mobileExtra,
+    );
   };
   const entity = taskId
     ? { entityType: 'task', entityId: taskId }
@@ -365,5 +376,5 @@ export async function handleMicrosoftActionEmailCallback(
     action: 'action_email_sent',
     meta: { ...meta, recipients: sent },
   });
-  back(sent === to.length ? { email: 'sent' } : { email: 'partial' });
+  back(sent === to.length ? { email: 'sent' } : { email: 'partial' }, { recipients: sent });
 }

@@ -151,3 +151,25 @@ export const actionEmailSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 export type ActionEmailInput = z.infer<typeof actionEmailSchema>;
+
+/**
+ * Mobile Microsoft send flows (DAR Send, action emails): the app's own PKCE pair. The challenge
+ * (base64url SHA-256 of the verifier, 43 chars, S256 only) goes with the start; the verifier
+ * with POST /auth/mobile/mail/confirm. The client never gives a return URL.
+ */
+export const MOBILE_CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
+export const mobilePkceFields = {
+  code_challenge: z.string().regex(MOBILE_CODE_CHALLENGE_RE),
+  code_challenge_method: z.literal('S256'),
+};
+
+/** POST /action-emails/mobile: the follow-up email from the app (bearer token only). */
+export const actionEmailMobileSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('FOLLOW_UP'),
+    taskId: objectIdSchema,
+    followUpId: objectIdSchema,
+    ...mobilePkceFields,
+  }),
+]);
+export type ActionEmailMobileInput = z.infer<typeof actionEmailMobileSchema>;
