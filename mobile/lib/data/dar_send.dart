@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'action_email.dart';
 import 'api_client.dart';
 import 'models.dart' show ApiException;
 import 'ms_sign_in.dart' show MsPkceStorage, FlutterMsPkceStorage, PkcePair;
@@ -269,27 +270,92 @@ class DarMailSend {
   /// A return link is being confirmed right now.
   bool get busy => _inFlight > 0;
 
-  /// New PKCE pair; verifier stored (10 min) before the API is asked for the Microsoft URL.
+  /// A fresh PKCE pair for one email (DAR Send or an action email).
+  PkcePair newPair() => PkcePair.generate();
+
+  /// Stores the pending send (verifier, flow and ids; 10 minutes). One pending send at a time.
+  Future<void> remember(
+    PkcePair pkce, {
+    required String flow,
+    String? report,
+    String? project,
+    String? task,
+    String? followUp,
+    int total = 0,
+  }) => _storage.write(
+    _mailPkceKey,
+    jsonEncode({
+      'verifier': pkce.verifier,
+      'flow': flow,
+      'report': ?report,
+      'project': ?project,
+      'task': ?task,
+      'followUp': ?followUp,
+      'total': total,
+      'createdAt': _now().toUtc().toIso8601String(),
+    }),
+  );
+
+  /// Drops the pending send (a save that started no email, or a failed start).
+  Future<void> forget() => _storage.delete(_mailPkceKey);
+
+  /// DAR Send: new PKCE pair; verifier stored (10 min) before the API is asked for the URL.
   Future<Uri> begin(String savedId) async {
-    final pkce = PkcePair.generate();
-    await _storage.write(
-      _mailPkceKey,
-      jsonEncode({
-        'verifier': pkce.verifier,
-        'report': savedId,
-        'createdAt': _now().toUtc().toIso8601String(),
-      }),
-    );
+    final pkce = newPair();
+    await remember(pkce, flow: 'dar', report: savedId);
     try {
       return await repo.start(savedId, codeChallenge: pkce.challenge);
     } catch (_) {
-      await _storage.delete(_mailPkceKey);
+      await forget();
       rethrow;
     }
   }
 
-  /// Handles an `opstrack://auth/mail` link; null for any other link or a repeated code.
-  Future<DarSendResult?> handle(Uri uri) {
+  /// Follow-up email (PR #37): POST /action-emails/mobile with a fresh challenge.
+  Future<EmailStart> beginFollowUp(
+    ActionEmailRepository actions, {
+    required String taskId,
+    required String followUpId,
+    String? projectId,
+  }) async {
+    final pkce = newPair();
+    await remember(
+      pkce,
+      flow: 'action_email',
+      project: projectId,
+      task: taskId,
+      followUp: followUpId,
+    );
+    try {
+      final s = await actions.followUp(
+        taskId,
+        followUpId,
+        codeChallenge: pkce.challenge,
+      );
+      await remember(
+        pkce,
+        flow: 'action_email',
+        project: projectId,
+        task: taskId,
+        followUp: followUpId,
+        total: s.recipients,
+      );
+      return s;
+    } catch (_) {
+      await forget();
+      rethrow;
+    }
+  }
+
+  /// DAR results only (see [handleAny]); null for any other link, flow or a repeated code.
+  Future<DarSendResult?> handle(Uri uri) async {
+    final r = await handleAny(uri);
+    return r is DarSendResult ? r : null;
+  }
+
+  /// Handles an `opstrack://auth/mail` link: a [DarSendResult] or an [ActionEmailResult],
+  /// routed by the pending send's `flow`. Null for any other link or a repeated code.
+  Future<Object?> handleAny(Uri uri) {
     if (!isMailReturnLink(uri)) return Future.value(null);
     _inFlight++;
     final run = _queue.then((_) => _handle(uri));
@@ -297,25 +363,41 @@ class DarMailSend {
     return run.whenComplete(() => _inFlight--);
   }
 
-  Future<DarSendResult?> _handle(Uri uri) async {
+  Future<Object?> _handle(Uri uri) async {
     final code = uri.queryParameters['code'];
     if (code != null && code.isNotEmpty && !_seen.add(code)) return null;
     // QA E2: the verifier stays until a 200 confirm or its 10 minutes run out, so a forged link
     // that arrives first can't spoil the real result.
     final raw = await _storage.read(_mailPkceKey);
-    String? verifier, report;
+    String? verifier, report, project, task, followUp;
+    var flow = 'dar';
+    var total = 0;
     DateTime? created;
     if (raw != null) {
       try {
         final j = jsonDecode(raw) as Map<String, dynamic>;
         verifier = j['verifier'] as String?;
+        flow = (j['flow'] as String?) ?? 'dar';
         report = j['report'] as String?;
+        project = j['project'] as String?;
+        task = j['task'] as String?;
+        followUp = j['followUp'] as String?;
+        total = (j['total'] as num?)?.toInt() ?? 0;
         created = DateTime.tryParse('${j['createdAt']}');
       } catch (_) {}
     }
-    final rep = report ?? '';
-    DarSendResult fail(String reason) =>
-        DarSendResult(reportId: rep, sent: false, reason: reason);
+    final action = actionEmailFlows.contains(flow);
+    Object fail(String reason) => action
+        ? ActionEmailResult(
+            flow: flow,
+            projectId: project,
+            taskId: task,
+            followUpId: followUp,
+            sent: false,
+            total: total,
+            reason: reason,
+          )
+        : DarSendResult(reportId: report ?? '', sent: false, reason: reason);
     final pendingTooOld =
         created != null &&
         _now().toUtc().difference(created.toUtc()) > _mailPkceTtl;
@@ -340,11 +422,24 @@ class DarMailSend {
       await _storage.delete(
         _mailPkceKey,
       ); // 200: the server answered for this send
+      if (action) {
+        return ActionEmailResult.fromConfirm(
+          b,
+          flow: flow,
+          projectId: project,
+          taskId: task,
+          followUpId: followUp,
+          total: total,
+        );
+      }
       return DarSendResult.fromConfirm(b, startedReport: report);
     } on ApiException catch (e) {
       final reason = switch (e.status) {
-        // INVALID_CODE (expired, reused, forged) while a send is pending: unknown outcome.
-        400 || 404 || 410 => DarSendResult.resultUnavailable,
+        // INVALID_CODE (expired, reused, forged) while a send is pending: DAR can't tell
+        // (QA E2); action emails show "expired, try again" (PR #37 contract).
+        400 ||
+        404 ||
+        410 => action ? DarSendResult.expired : DarSendResult.resultUnavailable,
         403 || 401 => DarSendResult.wrongUser,
         _ => DarSendResult.noResult,
       };

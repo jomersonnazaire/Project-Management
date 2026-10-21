@@ -8,8 +8,15 @@ import 'data/dar_send.dart';
 import 'data/ms_sign_in.dart';
 import 'router.dart';
 import 'state/providers.dart';
+import 'data/action_email.dart' show ActionEmailResult;
+import 'state/p2_providers.dart' show taskExtrasProvider;
 import 'state/v2_providers.dart'
-    show darMailSendProvider, darSendResultProvider;
+    show
+        EmailBanner,
+        darMailSendProvider,
+        darSendResultProvider,
+        emailBannerProvider;
+import 'ui/v2/action_email_ui.dart' show EmailResultBanner;
 import 'theme/app_theme.dart';
 
 class XceleratePmApp extends ConsumerStatefulWidget {
@@ -45,15 +52,10 @@ class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
     // PR #36: a mobile DAR Send comes back to opstrack://auth/mail?code=… (60 s, single use):
     // trade the code in straight away; only the confirm response can say "sent".
     if (isMailReturnLink(uri)) {
-      final r = await ref.read(darMailSendProvider).handle(uri);
-      if (r == null || !mounted) return;
-      ref.read(darSendResultProvider.notifier).set(r);
-      if (r.reportId.isNotEmpty) {
-        final router = ref.read(routerProvider);
-        final here = router.routeInformationProvider.value.uri.path;
-        final target = '/dar/saved/${r.reportId}';
-        if (here != target) router.push(target);
-      }
+      await handleMailLink(
+        ProviderScope.containerOf(context, listen: false),
+        uri,
+      );
       return;
     }
     String? message;
@@ -95,6 +97,7 @@ class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
         children: [
           if (AppConfig.demoMode) const DemoBanner(),
           if (!ref.watch(connectionProvider)) const DisconnectedBanner(),
+          const EmailResultBanner(),
           Expanded(child: child ?? const SizedBox()),
         ],
       ),
@@ -201,4 +204,26 @@ class DisconnectedScreen extends ConsumerWidget {
       ),
     ),
   );
+}
+
+/// `opstrack://auth/mail?…` (PR #36/#37): confirm straight away (60 s code) and route the
+/// result by flow: DAR → the saved report's card; action emails → the app-wide result banner.
+Future<void> handleMailLink(ProviderContainer c, Uri uri) async {
+  final any = await c.read(darMailSendProvider).handleAny(uri);
+  if (any == null) return;
+  if (any is ActionEmailResult) {
+    c
+        .read(emailBannerProvider.notifier)
+        .set(EmailBanner(any.message, ok: any.sent && !any.partial));
+    if (any.taskId != null) c.invalidate(taskExtrasProvider(any.taskId!));
+    return;
+  }
+  final r = any as DarSendResult;
+  c.read(darSendResultProvider.notifier).set(r);
+  if (r.reportId.isNotEmpty) {
+    final router = c.read(routerProvider);
+    final here = router.routeInformationProvider.value.uri.path;
+    final target = '/dar/saved/${r.reportId}';
+    if (here != target) router.push(target);
+  }
 }

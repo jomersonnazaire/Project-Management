@@ -10,6 +10,8 @@ import '../../state/p2_providers.dart';
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'action_email_ui.dart';
+import '../../data/action_email.dart' show EmailOnSave;
 
 /// Type chip on project cards/detail: name, "Not set", plus "Inactive".
 class ProjectTypeChip extends StatelessWidget {
@@ -96,6 +98,16 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   final _reason = TextEditingController();
   String? _template, _client, _type, _manager, _status;
   Set<String> _members = {};
+
+  /// Manager and members before this edit (for "Email new members").
+  Set<String> _wasMember = {};
+  bool _emailAdded = true;
+
+  Set<String> _added() {
+    final me = ref.read(authProvider).value?.id;
+    return {?_manager, ..._members}.difference({..._wasMember, ?me});
+  }
+
   DateTime? _start, _end;
   Map<String, String> _errors = {};
   bool _loaded = false, _busy = false;
@@ -126,6 +138,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             .read(projectExtrasRepositoryProvider)
             .extras(widget.projectId!);
         _members = {for (final m in x.members) m.id};
+        _wasMember = {..._members, ?p.managerId};
       }
       if (!mounted) return;
       setState(() {
@@ -240,15 +253,32 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
       status: _edit ? _status : null,
       memberIds: {..._members, ?_manager}.toList(),
     );
+    final pkce = wantsEmail(ref, _emailAdded) && _added().isNotEmpty
+        ? ref.read(darMailSendProvider).newPair()
+        : null;
+    final email = pkce == null ? null : EmailOnSave(pkce.challenge);
+    Future<void> mail(String projectId) async {
+      if (pkce == null) return;
+      await continueSaveEmail(
+        ref,
+        email,
+        pkce,
+        flow: 'project_added',
+        projectId: projectId,
+      );
+    }
+
     try {
       final repo = ref.read(projectAdminRepositoryProvider);
       if (_edit) {
-        await repo.update(widget.projectId!, input);
+        await repo.update(widget.projectId!, input, email: email);
+        await mail(widget.projectId!);
         ref.invalidate(projectProvider(widget.projectId!));
         ref.invalidate(projectsProvider);
         if (mounted) popOrGo(context, '/projects/${widget.projectId}');
       } else {
-        final id = await repo.create(input);
+        final id = await repo.create(input, email: email);
+        await mail(id);
         ref.invalidate(projectsProvider);
         if (mounted) context.go('/projects/$id');
       }
@@ -431,6 +461,13 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                       ),
                   ],
                 ),
+                if (_added().isNotEmpty)
+                  EmailCheckbox(
+                    key: const ValueKey('projectAddedEmail'),
+                    label: 'Email new members',
+                    value: _emailAdded,
+                    onChanged: (v) => setState(() => _emailAdded = v),
+                  ),
                 if (_edit) ...[
                   gap(),
                   DropdownMenu<String>(

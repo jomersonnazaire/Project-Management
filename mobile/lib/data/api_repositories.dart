@@ -1,3 +1,4 @@
+import 'action_email.dart';
 import 'api_client.dart';
 import 'http_factory.dart';
 import 'models.dart';
@@ -123,7 +124,11 @@ class ApiProjectRepository implements ProjectRepository {
           .toList();
 
   @override
-  Future<Task> createTask(String projectId, NewTask t) async {
+  Future<Task> createTask(
+    String projectId,
+    NewTask t, {
+    EmailOnSave? email,
+  }) async {
     final body = await api.post('/projects/$projectId/tasks', {
       'name': t.name,
       if (t.phase != null && t.phase!.isNotEmpty) 'phase': t.phase,
@@ -138,7 +143,9 @@ class ApiProjectRepository implements ProjectRepository {
       'assigneeIds': t.assigneeIds,
       'dependsOn': t.dependsOn,
       if (t.reviewerId != null) 'reviewerId': t.reviewerId,
+      ...?email?.fields('emailNewAssignees'),
     });
+    email?.start = EmailStart.fromJson(body['email']);
     return Task.fromJson(body['task'] as Map<String, dynamic>);
   }
 }

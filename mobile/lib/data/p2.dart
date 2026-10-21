@@ -1,4 +1,5 @@
 // P2 (m8-polish): leave, task actions, project detail extras. Models, repositories, mocks.
+import 'action_email.dart';
 import 'api_client.dart';
 import 'mock_repositories.dart';
 import 'models.dart';
@@ -480,8 +481,12 @@ abstract interface class TaskActionsRepository {
   Future<void> requestChanges(String taskId, int version, String comment);
   Future<void> uploadEvidence(String taskId, PickedFile file);
   Future<void> deleteEvidence(String taskId, String evidenceId);
-  Future<void> addFollowUp(String taskId, String note);
-  Future<void> update(String taskId, TaskEdit edit);
+
+  /// Returns the new follow-up's id (for "Email the team").
+  Future<String?> addFollowUp(String taskId, String note);
+
+  /// [email]: "Email new assignees" (PR #37); filled from the save response.
+  Future<void> update(String taskId, TaskEdit edit, {EmailOnSave? email});
   Future<List<HistoryItem>> history(String taskId);
   Future<void> delete(String taskId);
   Future<List<NamedRef>> projectPeople(String projectId);
@@ -675,11 +680,29 @@ class ApiTaskActionsRepository implements TaskActionsRepository {
   Future<void> deleteEvidence(String taskId, String evidenceId) =>
       api.delete('/tasks/$taskId/evidence/$evidenceId');
   @override
-  Future<void> addFollowUp(String taskId, String note) =>
-      api.post('/tasks/$taskId/follow-ups', {'note': note.trim()});
+  Future<String?> addFollowUp(String taskId, String note) async {
+    final b = await api.post('/tasks/$taskId/follow-ups', {
+      'note': note.trim(),
+    });
+    final fus = (b['task'] as Map?)?['followUps'];
+    return fus is List && fus.isNotEmpty && fus.last is Map
+        ? '${(fus.last as Map)['id']}'
+        : null;
+  }
+
   @override
-  Future<void> update(String taskId, TaskEdit edit) =>
-      api.patch('/tasks/$taskId', edit.toJson());
+  Future<void> update(
+    String taskId,
+    TaskEdit edit, {
+    EmailOnSave? email,
+  }) async {
+    final b = await api.patch('/tasks/$taskId', {
+      ...edit.toJson(),
+      ...?email?.fields('emailNewAssignees'),
+    });
+    email?.start = EmailStart.fromJson(b['email']);
+  }
+
   @override
   Future<List<HistoryItem>> history(String taskId) async => [
     for (final i in _items(await api.get('/tasks/$taskId/history')))
@@ -1205,7 +1228,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
   }
 
   @override
-  Future<void> addFollowUp(String taskId, String note) async {
+  Future<String?> addFollowUp(String taskId, String note) async {
     if (note.trim().isEmpty) {
       throw ApiException(
         'Note is required.',
@@ -1214,22 +1237,29 @@ class MockTaskActionsRepository implements TaskActionsRepository {
       );
     }
     final e = _get(taskId);
+    final id = 'f${e.followUps.length + 10}';
     _x[taskId] = _with(
       e,
       followUps: [
         ...e.followUps,
         FollowUp(
-          id: 'f${e.followUps.length + 10}',
+          id: id,
           note: note.trim(),
           author: 'Jomerson Nazaire',
           at: DateTime.utc(2026, 10, 11, 6),
         ),
       ],
     );
+    return id;
   }
 
   @override
-  Future<void> update(String taskId, TaskEdit d) async {
+  Future<void> update(String taskId, TaskEdit d, {EmailOnSave? email}) async {
+    if (email != null) {
+      final before = {?_get(taskId).ownerId, ..._get(taskId).assigneeIds};
+      final added = {?d.ownerId, ...?d.assigneeIds}.difference(before).length;
+      email.start = mockSaveEmail('emailNewAssignees', added);
+    }
     if (d.name != null && d.name!.trim().isEmpty) {
       throw ApiException(
         'Task name is required.',

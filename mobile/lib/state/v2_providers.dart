@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/action_email.dart';
 import '../data/dar_send.dart';
 import '../data/ms_sign_in.dart'
     show MsPkceStorage, MemoryMsPkceStorage, FlutterMsPkceStorage;
@@ -95,6 +96,42 @@ final darMailSendProvider = Provider<DarMailSend>(
     storage: ref.watch(darMailPkceStorageProvider),
   ),
 );
+
+/// Action emails (API PR #37).
+final actionEmailRepositoryProvider = Provider<ActionEmailRepository>(
+  (ref) => _pick<ActionEmailRepository>(
+    ref,
+    () => ApiActionEmailRepository(ref.watch(apiClientProvider)),
+    () => MockActionEmailRepository(),
+  ),
+);
+
+/// GET /auth/me/email-status; any failure hides the email options.
+final emailStatusProvider = FutureProvider<EmailStatus>((ref) async {
+  try {
+    return await ref.watch(actionEmailRepositoryProvider).status();
+  } catch (_) {
+    return const EmailStatus(enabled: false, linked: false);
+  }
+});
+
+/// App-wide result line for action emails (start problems and confirmed outcomes).
+class EmailBanner {
+  const EmailBanner(this.text, {this.ok = false});
+  final String text;
+  final bool ok;
+}
+
+class EmailBannerController extends Notifier<EmailBanner?> {
+  @override
+  EmailBanner? build() => null;
+  void set(EmailBanner? b) => state = b;
+}
+
+final emailBannerProvider =
+    NotifierProvider<EmailBannerController, EmailBanner?>(
+      EmailBannerController.new,
+    );
 
 /// The latest confirmed DAR outcome (set by the app's `opstrack://auth/mail` handler).
 class DarSendResultController extends Notifier<DarSendResult?> {

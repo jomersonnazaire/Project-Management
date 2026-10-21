@@ -114,20 +114,8 @@ class _DarSendCardState extends ConsumerState<DarSendCard> {
     }
   }
 
-  String _sentMessage([DarSendResult? r]) {
-    final names = r?.recipientNames ?? const <String>[];
-    final n = r?.recipientCount;
-    if (names.isNotEmpty) {
-      return 'Report sent to ${joinNames(names)} from your Outlook.';
-    }
-    if (n != null && n > 0) {
-      return 'Report sent to $n ${n == 1 ? 'recipient' : 'recipients'} from your Outlook.';
-    }
-    final to = ref.read(darSendStatusProvider).value?.to?.name;
-    return to == null || to.isEmpty
-        ? 'Report sent from your Outlook.'
-        : 'Report sent to $to from your Outlook.';
-  }
+  /// PR #36 6cff0c6: `recipients` = To plus CCs. "Sent to N people" only for N >= 1.
+  String _sentMessage([DarSendResult? r]) => darSentMessage(r?.recipientCount);
 
   /// From the app's confirm call (POST /auth/mobile/mail/confirm), never from a bare link.
   void _onResult(DarSendResult r) {
@@ -371,3 +359,8 @@ String joinNames(List<String> names) {
   if (names.length <= 1) return names.join();
   return '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 }
+
+/// "Sent to 3 people" / "Sent to 1 person", or "Sent" when the count is missing or 0.
+String darSentMessage(int? n) => n == null || n < 1
+    ? 'Sent.'
+    : 'Sent to $n ${n == 1 ? 'person' : 'people'}.';

@@ -512,10 +512,7 @@ void main() {
       expect(repo.confirms.single.$1, 'one-time-code-0123456789');
       c.read(darSendResultProvider.notifier).set(r);
       await tester.pumpAndSettle();
-      expect(
-        find.text('Report sent to Queen Reyes from your Outlook.'),
-        findsOneWidget,
-      );
+      expect(find.text('Sent.'), findsOneWidget);
       expect(find.text('Send'), findsOneWidget);
     });
 
@@ -541,33 +538,67 @@ void main() {
       expect(find.textContaining("You didn't allow OpsTrack"), findsOneWidget);
     });
 
-    testWidgets('sent with recipients from confirm names them', (tester) async {
-      final c = await pump(tester, _linked);
-      repo.confirmBody = {
-        'flow': 'dar',
-        'report': 'sr1',
-        'sent': 'sr1',
-        'recipients': ['Queen Reyes', 'mark@xceler8.example'],
-      };
-      await showCard(tester);
-      await tester.tap(find.byKey(const Key('darSend')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('darSendContinue')));
-      await tester.pumpAndSettle();
-      final r = await c
-          .read(darMailSendProvider)
-          .handle(
-            Uri.parse('opstrack://auth/mail?code=one-time-code-0123456789'),
-          );
-      c.read(darSendResultProvider.notifier).set(r);
-      await tester.pumpAndSettle();
-      expect(
-        find.text(
-          'Report sent to Queen Reyes and mark@xceler8.example from your Outlook.',
-        ),
-        findsOneWidget,
-      );
-    });
+    for (final (recipients, text) in <(Object?, String)>[
+      (3, 'Sent to 3 people.'),
+      (1, 'Sent to 1 person.'),
+      (0, 'Sent.'),
+      (null, 'Sent.'),
+    ]) {
+      testWidgets('sent with recipients=$recipients shows "$text"', (
+        tester,
+      ) async {
+        final c = await pump(tester, _linked);
+        repo.confirmBody = {
+          'flow': 'dar',
+          'report': 'sr1',
+          'sent': 'sr1',
+          'recipients': ?recipients,
+        };
+        await showCard(tester);
+        await tester.tap(find.byKey(const Key('darSend')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('darSendContinue')));
+        await tester.pumpAndSettle();
+        final r = await c
+            .read(darMailSendProvider)
+            .handle(
+              Uri.parse('opstrack://auth/mail?code=one-time-code-0123456789'),
+            );
+        c.read(darSendResultProvider.notifier).set(r);
+        await tester.pumpAndSettle();
+        expect(find.text(text), findsOneWidget);
+        expect(find.textContaining('Sent to 0'), findsNothing);
+      });
+    }
+
+    testWidgets(
+      'send_error with recipients:0 → error copy, never "Sent to 0"',
+      (tester) async {
+        final c = await pump(tester, _linked);
+        repo.confirmBody = {
+          'flow': 'dar',
+          'report': 'sr1',
+          'send_error': 'send_forbidden',
+          'recipients': 0,
+        };
+        await showCard(tester);
+        await tester.tap(find.byKey(const Key('darSend')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('darSendContinue')));
+        await tester.pumpAndSettle();
+        final r = await c
+            .read(darMailSendProvider)
+            .handle(
+              Uri.parse('opstrack://auth/mail?code=one-time-code-0123456789'),
+            );
+        c.read(darSendResultProvider.notifier).set(r);
+        await tester.pumpAndSettle();
+        expect(find.text(darSendMessage('send_forbidden')), findsOneWidget);
+        expect(find.textContaining('Sent to'), findsNothing);
+        expect(find.text('Sent.'), findsNothing);
+        expect(find.byKey(const Key('darSendInfo')), findsNothing);
+      },
+    );
 
     testWidgets('a forged link (no code) shows no result, never sent', (
       tester,
