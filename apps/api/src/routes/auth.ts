@@ -42,6 +42,7 @@ import {
   s256,
 } from '../services/microsoftMobile.js';
 import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
+import { returnToMobile, takeMobileMailState } from '../services/msSendReturn.js';
 import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
 import { toUserDto } from '../services/dto.js';
@@ -263,6 +264,35 @@ export function authRouter(
         req,
         res,
         act,
+        code,
+        msError,
+        errorDescription,
+      );
+      return;
+    }
+
+    // A send started from the mobile app: state kept server-side (single use), result goes
+    // back to the fixed opstrack:// address. Same handlers, so the state/nonce checks still hold.
+    const mobileMail = await takeMobileMailState(state);
+    if (mobileMail?.flow === 'dar') {
+      const d = mobileMail.data;
+      returnToMobile(res, { flow: 'dar', report: d.savedReportId });
+      await handleMicrosoftDarMailCallback(config, req, res, d, code, msError, errorDescription);
+      return;
+    }
+    if (mobileMail?.flow === 'action') {
+      const d = mobileMail.data;
+      returnToMobile(res, {
+        flow: 'action',
+        kind: d.kind,
+        project: d.projectId,
+        ...(d.taskId ? { task: d.taskId } : {}),
+      });
+      await handleMicrosoftActionEmailCallback(
+        config,
+        req,
+        res,
+        d,
         code,
         msError,
         errorDescription,

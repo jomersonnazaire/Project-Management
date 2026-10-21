@@ -27,7 +27,7 @@ import { buildDar, toSavedDto, toSavedDtos } from '../services/dar.js';
 import { darSendStatusPayload, resolveDarSupervisor } from '../services/darSend.js';
 import { darFileName, darToPdf, darToXlsx } from '../services/darExport.js';
 import { buildMicrosoftLoginUrl } from '../services/microsoftAuth.js';
-import { setMicrosoftMailOAuthCookie } from '../services/microsoftOAuthCookie.js';
+import { storeDarMailState } from '../services/msSendReturn.js';
 import { notifyPersonal } from '../services/notify.js';
 
 const formatParam = z.enum(['pdf', 'xlsx']);
@@ -174,7 +174,7 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
       scopes: ['Mail.Send'],
       loginHint: user.email,
     });
-    setMicrosoftMailOAuthCookie(config, res, {
+    await storeDarMailState(config, res, {
       codeVerifier: login.codeVerifier,
       state: login.state,
       nonce: login.nonce,

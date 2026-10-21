@@ -19,10 +19,11 @@ import {
   msalMailFailureReason,
 } from './microsoftAuth.js';
 import { consumeMicrosoftMailState, type MicrosoftMailOAuthState } from './microsoftOAuthCookie.js';
+import { sendResultRedirect } from './msSendReturn.js';
 
 function darSendRedirect(config: AppConfig, res: Response, params: Record<string, string>) {
   const q = new URLSearchParams(params);
-  res.redirect(`${config.WEB_APP_URL}/dar/saved?${q.toString()}`);
+  sendResultRedirect(res, `${config.WEB_APP_URL}/dar/saved?${q.toString()}`, params);
 }
 
 async function failSend(

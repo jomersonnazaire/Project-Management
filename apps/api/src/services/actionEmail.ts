@@ -15,11 +15,11 @@ import {
 } from './microsoftAuth.js';
 import {
   consumeMicrosoftMailState,
-  setMicrosoftActionEmailCookie,
   type ActionEmailKind,
   type MicrosoftActionEmailOAuthState,
 } from './microsoftOAuthCookie.js';
 import { buildMicrosoftLoginUrl } from './microsoftAuth.js';
+import { sendResultRedirect, storeActionMailState } from './msSendReturn.js';
 import { notify, projectRecipients } from './notify.js';
 
 type Id = Types.ObjectId;
@@ -108,7 +108,7 @@ export async function startActionEmail(
     scopes: ['Mail.Send'],
     loginHint: me.email,
   });
-  setMicrosoftActionEmailCookie(config, res, {
+  await storeActionMailState(config, res, {
     codeVerifier: login.codeVerifier,
     state: login.state,
     nonce: login.nonce,
@@ -246,7 +246,7 @@ export async function handleMicrosoftActionEmailCallback(
   const base = config.WEB_APP_URL.replace(/\/+$/, '');
   const back = (params: Record<string, string>) => {
     const q = new URLSearchParams({ ...(st.taskId ? { task: st.taskId } : {}), ...params });
-    res.redirect(`${base}/projects/${st.projectId}?${q.toString()}`);
+    sendResultRedirect(res, `${base}/projects/${st.projectId}?${q.toString()}`, params);
   };
   const entity = taskId
     ? { entityType: 'task', entityId: taskId }
