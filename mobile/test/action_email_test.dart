@@ -118,10 +118,11 @@ void main() {
           email: e1,
         );
         expect(calls[0].url.path, '/api/v1/projects/p1/tasks');
-        expect(sent(0), containsPair('emailNewAssignees', true));
-        expect(sent(0), containsPair('emailReturn', 'mobile'));
-        expect(sent(0), containsPair('code_challenge', 'a' * 43));
-        expect(sent(0), containsPair('code_challenge_method', 'S256'));
+        // G6: task create, all four.
+        expect(sent(0)['emailNewAssignees'], true);
+        expect(sent(0)['emailReturn'], 'mobile');
+        expect(sent(0)['code_challenge'], 'a' * 43);
+        expect(sent(0)['code_challenge_method'], 'S256');
         expect(e1.start!.recipients, 2);
 
         final e2 = EmailOnSave('b' * 43);
@@ -134,7 +135,11 @@ void main() {
           (calls[1].method, calls[1].url.path),
           ('PATCH', '/api/v1/tasks/t9'),
         );
+        // G6: task edit, all four.
         expect(sent(1)['emailNewAssignees'], true);
+        expect(sent(1)['emailReturn'], 'mobile');
+        expect(sent(1)['code_challenge'], 'b' * 43);
+        expect(sent(1)['code_challenge_method'], 'S256');
         expect(e2.start!.url, isNotNull);
 
         final e3 = EmailOnSave('c' * 43);
@@ -142,18 +147,27 @@ void main() {
           const ProjectInput(name: 'P', memberIds: ['u2']),
           email: e3,
         );
-        expect(sent(2), containsPair('emailAddedMembers', true));
-        expect(sent(2), containsPair('emailReturn', 'mobile'));
+        // G6: project create, all four.
+        expect(calls[2].url.path, '/api/v1/projects');
+        expect(sent(2)['emailAddedMembers'], true);
+        expect(sent(2)['emailReturn'], 'mobile');
+        expect(sent(2)['code_challenge'], 'c' * 43);
+        expect(sent(2)['code_challenge_method'], 'S256');
         final e4 = EmailOnSave('d' * 43);
         await ApiProjectAdminRepository(a).update(
           'p9',
           const ProjectInput(name: 'P', memberIds: ['u2']),
           email: e4,
         );
+        // G6: project edit, all four.
         expect(
-          (calls[3].method, sent(3)['emailAddedMembers']),
-          ('PATCH', true),
+          (calls[3].method, calls[3].url.path),
+          ('PATCH', '/api/v1/projects/p9'),
         );
+        expect(sent(3)['emailAddedMembers'], true);
+        expect(sent(3)['emailReturn'], 'mobile');
+        expect(sent(3)['code_challenge'], 'd' * 43);
+        expect(sent(3)['code_challenge_method'], 'S256');
       },
     );
 
@@ -471,6 +485,55 @@ void main() {
       },
     );
 
+    test('G3: same ids but another flow is not this email', () {
+      final r = ActionEmailResult.fromConfirm(
+        {
+          'flow': 'action_email',
+          'project': 'p1',
+          'task': 't1',
+          'email': 'sent',
+        },
+        flow: 'task_assigned',
+        projectId: 'p1',
+        taskId: 't1',
+      );
+      expect((r.sent, r.reason), (false, 'result_unavailable'));
+    });
+
+    test('G4: another follow-up id on the same task is not this email', () {
+      final r = ActionEmailResult.fromConfirm(
+        {
+          'flow': 'action_email',
+          'project': 'p1',
+          'task': 't1',
+          'followUp': 'f2',
+          'email': 'sent',
+        },
+        flow: 'action_email',
+        projectId: 'p1',
+        taskId: 't1',
+        followUpId: 'f1',
+      );
+      expect((r.sent, r.reason), (false, 'result_unavailable'));
+    });
+
+    test('G5: partial never shows "N of M" unless M > N', () {
+      String msg(int n, int total) => ActionEmailResult(
+        flow: 'task_assigned',
+        sent: true,
+        partial: true,
+        recipients: n,
+        total: total,
+      ).message;
+      expect(msg(2, 3), "Some emails couldn't be sent. Emailed 2 of 3 people.");
+      expect(msg(2, 2), "Some emails couldn't be sent. Emailed 2 people.");
+      expect(msg(3, 2), "Some emails couldn't be sent. Emailed 3 people.");
+      expect(msg(1, 0), "Some emails couldn't be sent. Emailed 1 person.");
+      for (final t in [msg(2, 2), msg(3, 2)]) {
+        expect(t, isNot(contains(' of ')));
+      }
+    });
+
     test('DAR still routes to DAR', () async {
       final m = mk();
       await m.begin('sr1');
@@ -552,6 +615,27 @@ void main() {
       await tester.tap(find.byKey(const Key('emailResultDismiss')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('emailResultBanner')), findsNothing);
+    });
+
+    testWidgets('G4: a fully sent follow-up is not marked partly emailed', (
+      tester,
+    ) async {
+      final c = await pump(tester, location: '/tasks/t4/history');
+      await tester.enterText(find.byKey(const Key('followUpField')), 'Full');
+      await tester.tap(find.byKey(const Key('addFollowUp')));
+      await tester.pumpAndSettle();
+      repo.confirmBody = {
+        'flow': 'action_email',
+        'project': 'p1',
+        'task': 't4',
+        'followUp': actions.followUps.single.$2,
+        'email': 'sent',
+        'recipients': 2,
+      };
+      await handleMailLink(c, _link);
+      await tester.pumpAndSettle();
+      expect(c.read(partlyEmailedFollowUpsProvider), isEmpty);
+      expect(find.textContaining("some couldn't be sent"), findsNothing);
     });
 
     testWidgets('follow-up unticked: saved, no email', (tester) async {
@@ -677,6 +761,48 @@ void main() {
         expect(launched, isEmpty);
       },
     );
+
+    testWidgets('G6: ticked task create sends all four', (tester) async {
+      final got = <Map<String, Object>>[];
+      mockSaveEmail = (f, n, e) {
+        got.add(e.fields(f));
+        return urlMockSaveEmail(f, n, e);
+      };
+      await pump(tester, location: '/projects/p1/tasks/new');
+      await tester.enterText(find.byKey(const Key('taskNameField')), 'Mail me');
+      await show(tester, find.byKey(const Key('taskAssignee_u3')));
+      await tester.tap(find.byKey(const Key('taskAssignee_u3')));
+      await tester.pumpAndSettle();
+      expect(find.text('Email Mark Kim'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('saveTask')));
+      await tester.pumpAndSettle();
+      expect(got, hasLength(1));
+      expect(got.single['emailNewAssignees'], true);
+      expect(got.single['emailReturn'], 'mobile');
+      expect(got.single['code_challenge'] as String, hasLength(43));
+      expect(got.single['code_challenge_method'], 'S256');
+      expect(launched.single.query, 'emailNewAssignees');
+    });
+
+    testWidgets('G6: ticked project edit sends all four', (tester) async {
+      final got = <Map<String, Object>>[];
+      mockSaveEmail = (f, n, e) {
+        got.add(e.fields(f));
+        return urlMockSaveEmail(f, n, e);
+      };
+      await pump(tester, location: '/projects/p1/edit');
+      await show(tester, find.byKey(const Key('projectMember_u2')));
+      await tester.tap(find.byKey(const Key('projectMember_u2')));
+      await tester.pumpAndSettle();
+      await show(tester, find.byKey(const Key('projectSave')));
+      await tester.tap(find.byKey(const Key('projectSave')));
+      await tester.pumpAndSettle();
+      expect(got, hasLength(1));
+      expect(got.single['emailAddedMembers'], true);
+      expect(got.single['emailReturn'], 'mobile');
+      expect(got.single['code_challenge'] as String, hasLength(43));
+      expect(got.single['code_challenge_method'], 'S256');
+    });
 
     testWidgets('Queen #1: unticked project save sends no email fields', (
       tester,
