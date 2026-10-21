@@ -15,7 +15,7 @@ import '../widgets/common.dart';
 import '../widgets/permission_gate.dart';
 import 'dependencies.dart';
 import 'action_email_ui.dart';
-import '../../data/action_email.dart' show EmailOnSave;
+import '../../data/action_email.dart' show EmailOnSave, partlyEmailedLabel;
 
 void refreshTask(WidgetRef ref, Task t) {
   invalidateTask(ref, t);
@@ -984,6 +984,7 @@ class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
     final id = widget.task.id;
     final x = ref.watch(taskExtrasProvider(id)).value;
     final h = ref.watch(taskHistoryProvider(id)).value ?? const <HistoryItem>[];
+    final partly = ref.watch(partlyEmailedFollowUpsProvider);
     final items = <({DateTime at, String title, String sub, String action})>[
       for (final f in x?.followUps ?? const <FollowUp>[])
         (
@@ -993,6 +994,10 @@ class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
             ?f.author,
             if (f.contact != null) 'to ${f.contact}',
             _when(f.at),
+            if (partly.contains(f.id))
+              partlyEmailedLabel
+            else if (f.emailedAt != null)
+              'Emailed',
           ].join(' · '),
           action: 'follow_up',
         ),

@@ -251,16 +251,23 @@ class FollowUp {
     this.author,
     this.contact,
     required this.at,
+    this.emailedAt,
   });
   final String id, note;
   final String? author, contact;
   final DateTime at;
+
+  /// PR #34/#37: set once the follow-up was emailed (also after a partial send).
+  final DateTime? emailedAt;
   factory FollowUp.fromJson(Map<String, dynamic> j) => FollowUp(
     id: '${j['id']}',
     note: '${j['note']}',
     author: (j['author'] as Map?)?['name'] as String?,
     contact: (j['contact'] as Map?)?['name'] as String?,
     at: DateTime.tryParse('${j['at']}') ?? DateTime(2026),
+    emailedAt: j['emailedAt'] is String
+        ? DateTime.tryParse(j['emailedAt'] as String)
+        : null,
   );
 }
 
@@ -1258,7 +1265,7 @@ class MockTaskActionsRepository implements TaskActionsRepository {
     if (email != null) {
       final before = {?_get(taskId).ownerId, ..._get(taskId).assigneeIds};
       final added = {?d.ownerId, ...?d.assigneeIds}.difference(before).length;
-      email.start = mockSaveEmail('emailNewAssignees', added);
+      email.start = mockSaveEmail('emailNewAssignees', added, email);
     }
     if (d.name != null && d.name!.trim().isEmpty) {
       throw ApiException(

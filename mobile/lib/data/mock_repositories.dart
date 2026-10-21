@@ -477,6 +477,7 @@ class MockProjectRepository implements ProjectRepository {
       email.start = mockSaveEmail(
         'emailNewAssignees',
         {?n.ownerId, ...n.assigneeIds}.length,
+        email,
       );
     }
     final t = Task(

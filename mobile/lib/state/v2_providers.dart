@@ -134,6 +134,19 @@ final emailBannerProvider =
       EmailBannerController.new,
     );
 
+/// Follow-ups whose email went out only in part this session. The server keeps them emailed
+/// (`emailedAt`, so a resend is 409 ALREADY_EMAILED); the app shows partial wording.
+class PartlyEmailedController extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+  void add(String followUpId) => state = {...state, followUpId};
+}
+
+final partlyEmailedFollowUpsProvider =
+    NotifierProvider<PartlyEmailedController, Set<String>>(
+      PartlyEmailedController.new,
+    );
+
 /// The latest confirmed DAR outcome (set by the app's `opstrack://auth/mail` handler).
 class DarSendResultController extends Notifier<DarSendResult?> {
   @override

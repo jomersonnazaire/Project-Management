@@ -1003,6 +1003,7 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
       email.start = mockSaveEmail(
         'emailAddedMembers',
         (p.memberIds ?? const []).length,
+        email,
       );
     }
     final types = MockTrackerStore.projectTypes;
@@ -1054,6 +1055,7 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
       email.start = mockSaveEmail(
         'emailAddedMembers',
         (p.memberIds ?? const []).length,
+        email,
       );
     }
     if (p.memberIds != null) {

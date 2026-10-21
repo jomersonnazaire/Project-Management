@@ -14,11 +14,39 @@ import 'package:xc8_pm/data/ms_sign_in.dart';
 import 'package:xc8_pm/data/p2.dart';
 import 'package:xc8_pm/data/v2_repositories.dart';
 import 'package:xc8_pm/state/v2_providers.dart';
+import 'package:xc8_pm/ui/v2/action_email_ui.dart' show followUpAlreadyEmailed;
 
 import 'helpers.dart';
 
 const _code = 'one-time-code-0123456789abcdef';
 final _link = Uri.parse('opstrack://auth/mail?code=$_code');
+
+const _emailKeys = [
+  'emailNewAssignees',
+  'emailAddedMembers',
+  'emailReturn',
+  'code_challenge',
+  'code_challenge_method',
+];
+
+/// Queen #1: a ticked box sends the flag AND emailReturn:'mobile' AND both PKCE fields.
+void expectEmailFields(
+  Map<String, dynamic> body,
+  String flag,
+  String challenge,
+) {
+  expect(body[flag], true, reason: flag);
+  expect(body['emailReturn'], 'mobile');
+  expect(body['code_challenge'], challenge);
+  expect(body['code_challenge_method'], 'S256');
+}
+
+/// …and an unticked box sends none of them.
+void expectNoEmailFields(Map<String, dynamic> body) {
+  for (final k in _emailKeys) {
+    expect(body.containsKey(k), isFalse, reason: k);
+  }
+}
 
 void main() {
   tearDown(() => mockSaveEmail = demoMockSaveEmail);
@@ -129,23 +157,28 @@ void main() {
       },
     );
 
-    test('saves without email send none of the email fields', () async {
-      final a = api(
-        (q) => {
-          'task': {'id': 't9', 'name': 'T', 'projectId': 'p1'},
-        },
-      );
-      await ApiTaskActionsRepository(a)
-          .update('t9', const TaskEdit(version: 1));
-      for (final k in [
-        'emailNewAssignees',
-        'emailReturn',
-        'code_challenge',
-        'code_challenge_method',
-      ]) {
-        expect(sent(0).containsKey(k), isFalse, reason: k);
-      }
-    });
+    test(
+      'saves without email send none of the email fields (all four)',
+      () async {
+        final a = api(
+          (q) => {
+            'task': {'id': 't9', 'name': 'T', 'projectId': 'p1'},
+            'project': {'id': 'p9'},
+          },
+        );
+        await ApiProjectRepository(a)
+            .createTask('p1', const NewTask(name: 'T'));
+        await ApiTaskActionsRepository(a)
+            .update('t9', const TaskEdit(version: 1));
+        await ApiProjectAdminRepository(a)
+            .create(const ProjectInput(name: 'P'));
+        await ApiProjectAdminRepository(a)
+            .update('p9', const ProjectInput(name: 'P'));
+        for (var i = 0; i < 4; i++) {
+          expectNoEmailFields(sent(i));
+        }
+      },
+    );
 
     test('save email with url null keeps the server message', () {
       final s = EmailStart.fromJson({
@@ -188,7 +221,7 @@ void main() {
           'Email not sent. Link your Microsoft account to send emails.',
         ),
         ('PROJECT_ARCHIVED', 'Email not sent: this project is archived.'),
-        ('ALREADY_EMAILED', 'This follow-up was already emailed.'),
+        ('ALREADY_EMAILED', alreadyEmailedMessage),
         ('NO_RECIPIENTS', 'Email not sent: there was nobody to email.'),
       ]) {
         expect(
@@ -390,6 +423,54 @@ void main() {
       expect(repo.confirms, isEmpty);
     });
 
+    test('M comes from the start response, N from confirm', () async {
+      final m = mk();
+      actions.recipients = 3; // start: {url, recipients: 3}
+      await m.beginFollowUp(actions, taskId: 't1', followUpId: 'f1');
+      repo.confirmBody = {
+        'flow': 'action_email',
+        'task': 't1',
+        'followUp': 'f1',
+        'email': 'partial',
+        'recipients': 2, // confirm: emails actually sent
+      };
+      final r = await m.handleAny(_link) as ActionEmailResult;
+      expect((r.recipients, r.total), (2, 3));
+      expect(r.message, "Some emails couldn't be sent. Emailed 2 of 3 people.");
+      // Saves: M from the save's email.recipients, kept with the verifier.
+      final p = m.newPair();
+      await m.remember(p, flow: 'project_added', project: 'p1', total: 4);
+      repo.confirmBody = {
+        'flow': 'project_added',
+        'project': 'p1',
+        'email': 'partial',
+        'recipients': 1,
+      };
+      final s = await m.handleAny(
+        Uri.parse('opstrack://auth/mail?code=${_code}2'),
+      ) as ActionEmailResult;
+      expect(s.message, "Some emails couldn't be sent. Emailed 1 of 4 people.");
+    });
+
+    test(
+      'Queen #2: an emailed or partly emailed follow-up is never emailed again',
+      () {
+        final fus = [
+          FollowUp.fromJson({
+            'id': 'f1',
+            'note': 'a',
+            'emailedAt': '2026-10-21T02:00:00Z',
+          }),
+          FollowUp.fromJson({'id': 'f2', 'note': 'b', 'emailedAt': null}),
+          FollowUp.fromJson({'id': 'f3', 'note': 'c'}),
+        ];
+        expect(fus[0].emailedAt, isNotNull);
+        expect(followUpAlreadyEmailed({}, fus, 'f1'), isTrue);
+        expect(followUpAlreadyEmailed({}, fus, 'f2'), isFalse);
+        expect(followUpAlreadyEmailed({'f3'}, fus, 'f3'), isTrue);
+      },
+    );
+
     test('DAR still routes to DAR', () async {
       final m = mk();
       await m.begin('sr1');
@@ -493,7 +574,12 @@ void main() {
       await tester.enterText(find.byKey(const Key('followUpField')), 'Again');
       await tester.tap(find.byKey(const Key('addFollowUp')));
       await tester.pumpAndSettle();
-      expect(find.text('This follow-up was already emailed.'), findsOneWidget);
+      expect(
+        find.text(
+          "This follow-up was already emailed, so it wasn't sent again.",
+        ),
+        findsOneWidget,
+      );
       expect(launched, isEmpty);
     });
 
@@ -555,10 +641,105 @@ void main() {
       );
     });
 
+    testWidgets(
+      'Queen #1: ticked task save sends all three; unticked sends none',
+      (tester) async {
+        final got = <Map<String, Object>>[];
+        mockSaveEmail = (f, n, e) {
+          got.add(e.fields(f));
+          return urlMockSaveEmail(f, n, e);
+        };
+        await pump(tester, location: '/tasks/t4/edit');
+        await show(tester, find.byKey(const Key('assignee_u3')));
+        await tester.tap(find.byKey(const Key('assignee_u3')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('taskSave')));
+        await tester.pumpAndSettle();
+        expect(got, hasLength(1));
+        expectEmailFields(
+          got.single,
+          'emailNewAssignees',
+          got.single['code_challenge'] as String,
+        );
+        expect(got.single['code_challenge'] as String, hasLength(43));
+
+        got.clear();
+        launched.clear();
+        await pump(tester, location: '/tasks/t4/edit');
+        await show(tester, find.byKey(const Key('assignee_u3')));
+        await tester.tap(find.byKey(const Key('assignee_u3')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Email Mark Kim'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('taskSave')));
+        await tester.pumpAndSettle();
+        expect(got, isEmpty, reason: 'no email fields when unticked');
+        expect(launched, isEmpty);
+      },
+    );
+
+    testWidgets('Queen #1: unticked project save sends no email fields', (
+      tester,
+    ) async {
+      final got = <Map<String, Object>>[];
+      mockSaveEmail = (f, n, e) {
+        got.add(e.fields(f));
+        return urlMockSaveEmail(f, n, e);
+      };
+      await pump(tester, location: '/projects/p1/edit');
+      await show(tester, find.byKey(const Key('projectMember_u2')));
+      await tester.tap(find.byKey(const Key('projectMember_u2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Email new members'));
+      await tester.pumpAndSettle();
+      await show(tester, find.byKey(const Key('projectSave')));
+      await tester.tap(find.byKey(const Key('projectSave')));
+      await tester.pumpAndSettle();
+      expect(got, isEmpty);
+      expect(launched, isEmpty);
+    });
+
+    testWidgets(
+      'Queen #2: partial follow-up shows partial wording and is not offered again',
+      (tester) async {
+        final c = await pump(tester, location: '/tasks/t4/history');
+        await tester.enterText(
+          find.byKey(const Key('followUpField')),
+          'Chased',
+        );
+        await tester.tap(find.byKey(const Key('addFollowUp')));
+        await tester.pumpAndSettle();
+        final fu = actions.followUps.single.$2;
+        repo.confirmBody = {
+          'flow': 'action_email',
+          'project': 'p1',
+          'task': 't4',
+          'followUp': fu,
+          'email': 'partial',
+          'recipients': 1,
+        };
+        await handleMailLink(c, _link);
+        await tester.pumpAndSettle();
+        expect(
+          find.text("Some emails couldn't be sent. Emailed 1 of 2 people."),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Emailed the team'), findsNothing);
+        expect(c.read(partlyEmailedFollowUpsProvider), {fu});
+        expect(
+          find.textContaining("Emailed · some couldn't be sent"),
+          findsOneWidget,
+        );
+        // The only email option is for a new note; the partly sent one has none.
+        expect(find.text('Email the team'), findsOneWidget);
+        expect(actions.followUps, hasLength(1));
+      },
+    );
+
     testWidgets('task save with url null shows the message, save kept', (
       tester,
     ) async {
-      mockSaveEmail = (f, n) => const EmailStart(
+      mockSaveEmail = (f, n, e) => const EmailStart(
         error: 'NO_RECIPIENTS',
         message: 'Nobody new to email.',
       );

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/action_email.dart';
 import '../../data/models.dart' show ApiException;
+import '../../data/p2.dart' show FollowUp;
 import '../../data/ms_sign_in.dart' show PkcePair;
+import '../../state/p2_providers.dart' show taskExtrasProvider;
 import '../../state/v2_providers.dart';
 
 /// "Email …" under an action (web EmailCheckbox): hidden while the feature is off, disabled with
@@ -103,6 +105,15 @@ Future<void> startFollowUpEmail(
   required String followUpId,
   String? projectId,
 }) async {
+  // A follow-up is emailed once (a partial send counts): never start it again.
+  if (followUpAlreadyEmailed(
+    ref.read(partlyEmailedFollowUpsProvider),
+    ref.read(taskExtrasProvider(taskId)).value?.followUps ?? const [],
+    followUpId,
+  )) {
+    _banner(ref, alreadyEmailedMessage);
+    return;
+  }
   try {
     final s = await ref
         .read(darMailSendProvider)
@@ -166,3 +177,13 @@ class EmailResultBanner extends ConsumerWidget {
     );
   }
 }
+
+/// True when this follow-up was already emailed (server `emailedAt`, or a partial send this
+/// session): the app never offers or starts its email again.
+bool followUpAlreadyEmailed(
+  Set<String> partly,
+  List<FollowUp> followUps,
+  String followUpId,
+) =>
+    partly.contains(followUpId) ||
+    followUps.any((f) => f.id == followUpId && f.emailedAt != null);

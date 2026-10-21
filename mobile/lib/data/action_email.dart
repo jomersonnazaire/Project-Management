@@ -60,12 +60,18 @@ class EmailOnSave {
   };
 }
 
+const alreadyEmailedMessage =
+    "This follow-up was already emailed, so it wasn't sent again.";
+
+/// Follow-ups emailed only in part keep `emailedAt` on the server; shown with this suffix.
+const partlyEmailedLabel = "Emailed · some couldn't be sent";
+
 /// Copy for a start error code (409 on /action-emails/mobile, or `email.error` on a save).
 String actionEmailStartMessage(String? code) => switch (code?.toUpperCase()) {
   'EMAIL_DISABLED' => 'Email not sent: emails are switched off.',
   'MICROSOFT_NOT_LINKED' => 'Email not sent. $actionEmailNotLinked',
   'PROJECT_ARCHIVED' => 'Email not sent: this project is archived.',
-  'ALREADY_EMAILED' => 'This follow-up was already emailed.',
+  'ALREADY_EMAILED' => alreadyEmailedMessage,
   'NO_RECIPIENTS' => 'Email not sent: there was nobody to email.',
   'MOBILE_ONLY' => 'Email not sent. Sign in again and try again.',
   _ => "Email not sent. Try again.",
@@ -217,7 +223,7 @@ String actionEmailResultMessage(ActionEmailResult r) {
     'project_archived' => 'Email not sent: this project is archived.',
     'no_recipients' ||
     'no_address' => 'Email not sent: there was nobody to email.',
-    'already_emailed' => 'This follow-up was already emailed.',
+    'already_emailed' => alreadyEmailedMessage,
     'no_mailbox' =>
       'Email not sent: your Microsoft account has no Outlook mailbox.',
     'send_forbidden' =>
@@ -307,16 +313,17 @@ class MockActionEmailRepository implements ActionEmailRepository {
 }
 
 /// Demo/tests: what a mock save answers for `email`. Demo mode never opens Microsoft.
-EmailStart Function(String flag, int recipients) mockSaveEmail =
-    demoMockSaveEmail;
+EmailStart Function(String flag, int recipients, EmailOnSave email)
+mockSaveEmail = demoMockSaveEmail;
 
 const demoEmailMessage = 'Demo mode: no email was sent.';
 
-EmailStart demoMockSaveEmail(String flag, int recipients) =>
+EmailStart demoMockSaveEmail(String flag, int recipients, EmailOnSave email) =>
     const EmailStart(error: 'EMAIL_DISABLED', message: demoEmailMessage);
 
 /// Tests: a save that starts an email (fake Microsoft URL).
-EmailStart urlMockSaveEmail(String flag, int recipients) => EmailStart(
-  url: Uri.parse('https://login.microsoftonline.com/mock?$flag'),
-  recipients: recipients,
-);
+EmailStart urlMockSaveEmail(String flag, int recipients, EmailOnSave email) =>
+    EmailStart(
+      url: Uri.parse('https://login.microsoftonline.com/mock?$flag'),
+      recipients: recipients,
+    );

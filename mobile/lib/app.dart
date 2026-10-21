@@ -15,7 +15,8 @@ import 'state/v2_providers.dart'
         EmailBanner,
         darMailSendProvider,
         darSendResultProvider,
-        emailBannerProvider;
+        emailBannerProvider,
+        partlyEmailedFollowUpsProvider;
 import 'ui/v2/action_email_ui.dart' show EmailResultBanner;
 import 'theme/app_theme.dart';
 
@@ -215,6 +216,9 @@ Future<void> handleMailLink(ProviderContainer c, Uri uri) async {
     c
         .read(emailBannerProvider.notifier)
         .set(EmailBanner(any.message, ok: any.sent && !any.partial));
+    if (any.flow == 'action_email' && any.partial && any.followUpId != null) {
+      c.read(partlyEmailedFollowUpsProvider.notifier).add(any.followUpId!);
+    }
     if (any.taskId != null) c.invalidate(taskExtrasProvider(any.taskId!));
     return;
   }
