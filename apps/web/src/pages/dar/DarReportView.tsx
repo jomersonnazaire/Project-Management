@@ -1,7 +1,9 @@
+import { useId } from 'react';
 import {
   DAR_COLUMNS,
   DAR_STATUS_NOT_SENT,
   DAR_STATUS_SENT,
+  DAR_SENT_NOTE,
   formatLongDate,
   formatTime12,
   phDateOf,
@@ -88,9 +90,9 @@ export function SavedTagBadge({ tag }: { tag: SavedTag }) {
   return <span className="text-body-secondary">–</span>;
 }
 
-/** "Oct 21, 2026 · 9:52 AM (UTC+8)": Philippine time, labelled. */
+/** "Oct 21, 2026 · 9:52 AM (PH)": Philippine time, labelled like "Saved on (PH)". */
 const sentOn = (iso: string) =>
-  `${formatLongDate(phDateOf(new Date(iso)))} · ${formatTime12(iso).replace(/^0/, '')} (UTC+8)`;
+  `${formatLongDate(phDateOf(new Date(iso)))} · ${formatTime12(iso).replace(/^0/, '')} (PH)`;
 
 /** Send status of a saved report: "Sent" + when (and to how many), or "Not sent". */
 export function SentStatus({
@@ -100,6 +102,7 @@ export function SentStatus({
   sentAt: string | null;
   sentRecipientCount: number | null;
 }) {
+  const noteId = `dar-sent-note-${useId()}`;
   if (!sentAt) {
     return (
       <span className="badge bg-label-secondary" data-testid="dar-sent-status">
@@ -109,7 +112,18 @@ export function SentStatus({
   }
   return (
     <span data-testid="dar-sent-status">
-      <span className="badge bg-label-success">{DAR_STATUS_SENT}</span>{' '}
+      {/* Hover note (title) for mouse users; focusable and described for keyboard and screen readers. */}
+      <span
+        className="badge bg-label-success"
+        title={DAR_SENT_NOTE}
+        tabIndex={0}
+        aria-describedby={noteId}
+      >
+        {DAR_STATUS_SENT}
+      </span>
+      <span id={noteId} className="visually-hidden">
+        {DAR_SENT_NOTE}
+      </span>{' '}
       <span className="small text-body-secondary text-nowrap">
         {sentOn(sentAt)}
         {sentRecipientCount ? ` · ${recipientCountLabel(sentRecipientCount)}` : ''}

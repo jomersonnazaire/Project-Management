@@ -86,6 +86,8 @@ export const DAR_COLUMNS = [
 export const SAVED_LATEST = 'Latest';
 export const DAR_STATUS_SENT = 'Sent';
 export const DAR_STATUS_NOT_SENT = 'Not sent';
+/** Hover note on the Sent badge: Graph accepted it; delivery isn't confirmed. */
+export const DAR_SENT_NOTE = 'Accepted by Microsoft for delivery';
 /** "1 recipient" / "3 recipients" */
 export const recipientCountLabel = (n: number) => `${n} recipient${n === 1 ? '' : 's'}`;
 export const SAVED_EARLIER = 'Earlier version';

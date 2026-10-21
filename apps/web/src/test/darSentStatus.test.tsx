@@ -1,6 +1,11 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DAR_EXPORT_NAME, type DarReportDto, type SavedReportSummaryDto } from '@xc8/shared';
+import {
+  DAR_EXPORT_NAME,
+  DAR_SENT_NOTE,
+  type DarReportDto,
+  type SavedReportSummaryDto,
+} from '@xc8/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import type { DarSendStatus } from '../api/darHooks';
@@ -41,7 +46,7 @@ const base: SavedReportSummaryDto = {
   sentBy: null,
   sentRecipientCount: null,
 };
-// 01:52 UTC is 9:52 AM in UTC+8.
+// 01:52 UTC is 9:52 AM Philippine time (UTC+8).
 const sent = {
   ...base,
   id: 's1',
@@ -78,14 +83,21 @@ function routes() {
 }
 
 describe('Saved reports: sent status', () => {
-  it('shows "Sent" with the UTC+8 date, time and recipient count, or "Not sent"', async () => {
+  it('shows "Sent" with the PH date, time and recipient count, or "Not sent"', async () => {
     routes();
     renderAt('/dar/saved', <App />);
     const rows = await screen.findAllByRole('row');
     expect(rows[0]).toHaveTextContent('Status');
     const s1 = within(rows[1]!).getByTestId('dar-sent-status');
-    expect(s1).toHaveTextContent('Sent Oct 21, 2026 · 9:52 AM (UTC+8) · 2 recipients');
-    expect(within(s1).getByText('Sent')).toHaveClass('badge', 'bg-label-success');
+    expect(s1).toHaveTextContent('Oct 21, 2026 · 9:52 AM (PH) · 2 recipients');
+    expect(s1).not.toHaveTextContent('UTC+8');
+    const badge = within(s1).getByText('Sent');
+    expect(badge).toHaveClass('badge', 'bg-label-success');
+    // Hover note, also reachable by keyboard and screen readers.
+    expect(DAR_SENT_NOTE).toBe('Accepted by Microsoft for delivery');
+    expect(badge).toHaveAttribute('title', DAR_SENT_NOTE);
+    expect(badge).toHaveAttribute('tabindex', '0');
+    expect(badge).toHaveAccessibleDescription(DAR_SENT_NOTE);
     const s2 = within(rows[2]!).getByTestId('dar-sent-status');
     expect(s2).toHaveTextContent(/^Not sent$/);
     expect(s2).toHaveClass('badge', 'bg-label-secondary');
@@ -97,9 +109,10 @@ describe('Saved reports: sent status', () => {
     const rows = await screen.findAllByRole('row');
     await userEvent.click(within(rows[1]!).getByRole('button', { name: 'View' }));
     const dialog = await screen.findByRole('dialog');
-    expect(await within(dialog).findByTestId('dar-sent-status')).toHaveTextContent(
-      'Sent Oct 21, 2026 · 9:52 AM (UTC+8) · 2 recipients',
-    );
+    const status = await within(dialog).findByTestId('dar-sent-status');
+    expect(status).toHaveTextContent('Oct 21, 2026 · 9:52 AM (PH) · 2 recipients');
+    expect(within(status).getByText('Sent')).toHaveAttribute('title', DAR_SENT_NOTE);
+    expect(within(status).getByText('Sent')).toHaveAccessibleDescription(DAR_SENT_NOTE);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     await userEvent.click(within(rows[2]!).getByRole('button', { name: 'View' }));
     const d2 = await screen.findByRole('dialog');
