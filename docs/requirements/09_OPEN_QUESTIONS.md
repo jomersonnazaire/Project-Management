@@ -95,4 +95,6 @@ Document management questions Q-20 to Q-25 are in [10 §9](10_DOCUMENT_MANAGEMEN
 | DAR CC outside our domain (doc 17 Q-106, CR-17) | **Not blocked; any email address is allowed.** Format still checked, up to 5 addresses, duplicates removed, Admin-only and audited (FR-DAR-17). | doc 14 FR-DAR-01; Q-02 above; doc 01 |
 | PR merges | **#26, then #42, approved for merge** (record only). | doc 17 §4 |
 | Microsoft sign-in | **Live** on web (PRs #27, #32) and mobile (PR #28); see Q-17 above. Not changed by this round. | — |
-| Still open | Doc 17 CR-14 (the bot's edits to docs on `main`, including "approved by Jonathan"), Q-88, Q-89, Q-91, the rest of Q-92 (M8 catch-up), Q-93 to Q-100 and Q-102 to Q-105. | doc 17 §2 |
+| Auto-created Viewers' job role (doc 17 Q-91, CR-02; Jomerson, 2026-10-22, 8:38 PM SGT) | **Decided:** they start with **no job role**, and an Admin sets it from Users. | doc 03 FR-USR-01 exception; doc 14 FR-SSO-04 |
+| Mobile Microsoft sign-in (doc 17 CR-03, Q-92 sign-in part; Jomerson, 2026-10-22, 8:38 PM SGT) | **Decided:** it already works (Jomerson confirmed 9 sign-ins), and PR #41 uses it as it is. | doc 14 §G |
+| Still open | Doc 17 CR-14 (the bot's edits to docs on `main`, including "approved by Jonathan"), Q-88, Q-89, Q-91, *(Q-91 decided at 8:38 PM SGT, see above)* the rest of Q-92 (M8 catch-up), Q-93 to Q-100 and Q-102 to Q-105. | doc 17 §2 |

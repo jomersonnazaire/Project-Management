@@ -17,7 +17,7 @@ Priority uses MoSCoW. "Server" means the rule must be enforced by the backend AP
 ## USR · Users, roles, teams
 | ID | Requirement | BR | Pri |
 |----|-------------|----|-----|
-| FR-USR-01 | User record: name, email (unique), job role, system role, teams, weekly capacity hours (default 40), active flag. | BR-04 | Must |
+| FR-USR-01 | User record: name, email (unique), job role, system role, teams, weekly capacity hours (default 40), active flag. **Exception (doc 17 Q-91, Jomerson, 2026-10-22, 8:38 PM SGT):** a Viewer auto-created by Microsoft sign-in (doc 14 FR-SSO-04) may have **no job role** (`jobRole: null`, shown "Not set") until an Admin sets it from Users. Every other user still needs a job role. | BR-04 | Must |
 | FR-USR-02 | System roles: Admin, Project Manager, Member, Viewer. Permission matrix in 07 §4. | BR-12 | Must |
 | FR-USR-03 | Job roles (descriptive): Consultant, Developer, Researcher/BA, Support, QA/Tester, Technical/Data Specialist, Project Manager. | BR-04 | Must |
 | FR-USR-04 | Teams (Consulting, Development, Support, QA, Technical…) are admin-managed; a user can be in several teams. | BR-04 | Must |
