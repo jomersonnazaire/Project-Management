@@ -50,32 +50,79 @@ export const darResendConfirmMessage = (state: 'sent' | 'unknown') =>
     ? "Your last send of this report couldn't be confirmed. Check your Outlook Sent Items first. Send it again anyway?"
     : 'You sent this report a few minutes ago. Send it again?';
 
-const DAR_SEND_GENERIC =
-  "We couldn't send your report: {reason}. Try again, or export it and send it yourself.";
+/** First sentence of every failed-send message (web banner, 409 SEND_UNAVAILABLE). */
+export const DAR_NOT_SENT = "Your report wasn't sent.";
+/** Any send error code without its own line: never show the raw code. */
+export const DAR_SEND_FAILURE_GENERIC =
+  'Something went wrong. Try again, or export the report and send it yourself.';
+const DAR_NOT_ENABLED_LINE =
+  "Sending reports isn't turned on. Export the report and send it yourself.";
 
+/** The line after "Your report wasn't sent." for each `send_error` / SEND_UNAVAILABLE reason. */
+const DAR_SEND_FAILURE_LINES: Readonly<Record<string, string>> = {
+  ms_auth_failed: 'Microsoft sign-in failed, so nothing was sent. Try again.',
+  send_forbidden:
+    "Your Microsoft account isn't allowed to send email from OpsTrack. Ask your Admin to allow it.",
+  bad_recipient: "Your supervisor's email address isn't valid. Ask your Admin to check it.",
+  graph_unavailable: "Microsoft isn't responding right now. Try again in a few minutes.",
+  not_found: "We couldn't find this saved report. Refresh the page and try again.",
+  not_enabled: DAR_NOT_ENABLED_LINE,
+  ms_disabled: DAR_NOT_ENABLED_LINE,
+  // Codes that already had their own wording (web and mobile): kept, so the user knows what to do.
+  no_mailbox: 'This Microsoft account has no mailbox. Use Export instead.',
+  no_supervisor: 'Ask an Admin to set your supervisor.',
+  consent_declined:
+    "You didn't allow OpsTrack to send email as you. Press Send again and choose Accept, or export the report.",
+  admin_consent_required:
+    'Your organisation needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.',
+  wrong_account: 'Pick the same Microsoft account you use for OpsTrack.',
+  too_large: DAR_TOO_LARGE,
+  not_linked: DAR_PASSWORD_ONLY,
+  rate_limited: DAR_SEND_RATE_LIMITED,
+};
+
+/** The reason's own line, or the generic one; never the raw code. */
+export function darSendFailureLine(reason: string | null | undefined): string {
+  return (
+    (reason && Object.hasOwn(DAR_SEND_FAILURE_LINES, reason) && DAR_SEND_FAILURE_LINES[reason]) ||
+    DAR_SEND_FAILURE_GENERIC
+  );
+}
+
+/** "Your report wasn't sent. {line}" for a failed send. */
+export const darSendFailureMessage = (reason: string | null | undefined) =>
+  `${DAR_NOT_SENT} ${darSendFailureLine(reason)}`;
+
+/**
+ * Short text for a reason without the "wasn't sent" lead-in (hints such as no_supervisor);
+ * result_unavailable is not a failure and gets the "check Sent Items" text.
+ */
 export function darSendError(reason: string): string {
-  switch (reason) {
-    case 'no_mailbox':
-      return 'This Microsoft account has no mailbox. Use Export instead.';
-    case 'no_supervisor':
-      return 'Ask an Admin to set your supervisor.';
-    case 'consent_declined':
-      return "You didn't allow OpsTrack to send email as you, so nothing was sent. Press Send again and choose Accept, or export the report.";
-    case 'admin_consent_required':
-      return 'Your organisation needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.';
-    case 'wrong_account':
-      return 'Pick the same Microsoft account you use for OpsTrack.';
-    case 'too_large':
-      return DAR_TOO_LARGE;
-    case 'not_linked':
-      return DAR_PASSWORD_ONLY;
-    case 'rate_limited':
-      return DAR_SEND_RATE_LIMITED;
-    case 'result_unavailable':
-      return DAR_SEND_UNCONFIRMED;
-    default:
-      return DAR_SEND_GENERIC.replace('{reason}', reason.replaceAll('_', ' '));
-  }
+  if (reason === 'result_unavailable') return DAR_SEND_UNCONFIRMED;
+  return darSendFailureLine(reason);
+}
+
+/** One person a send went to, as recorded when Graph accepted it. */
+export interface DarSendRecipient {
+  name: string;
+  email: string;
+}
+
+/** GET /dar/saved/:id/send-result: who the last confirmed send of this report went to. */
+export interface DarSendResultDto {
+  sentAt: string;
+  from: string;
+  to: string;
+  recipient: DarSendRecipient;
+  cc: DarSendRecipient[];
+}
+
+/** "Report for Oct 13, 2026 sent to Supervisor Sam (sup@…). CC: Cee One." */
+export function darSentBanner(
+  r: Pick<DarSendResultDto, 'from' | 'to' | 'recipient' | 'cc'>,
+): string {
+  const head = `Report for ${darEmailRange(r.from, r.to)} sent to ${r.recipient.name} (${r.recipient.email}).`;
+  return r.cc.length ? `${head} CC: ${r.cc.map((c) => c.name).join(', ')}.` : head;
 }
 
 export function darSentMessage(supervisorName: string, ccCount: number): string {

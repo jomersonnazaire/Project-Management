@@ -3,7 +3,7 @@ import {
   DAR_RESEND_CONFIRM_WINDOW_MS,
   darRangeSchema,
   darResendConfirmMessage,
-  darSendError,
+  darSendFailureMessage,
   generatedRangeLabel,
   phDateOf,
   savedReportQuerySchema,
@@ -25,7 +25,13 @@ import {
   type SavedReport,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
-import { buildDar, lastDarSendAttempt, toSavedDto, toSavedDtos } from '../services/dar.js';
+import {
+  buildDar,
+  darSendResult,
+  lastDarSendAttempt,
+  toSavedDto,
+  toSavedDtos,
+} from '../services/dar.js';
 import { darSendStatusPayload, resolveDarSupervisor } from '../services/darSend.js';
 import { darFileName, darToPdf, darToXlsx } from '../services/darExport.js';
 import { buildMicrosoftLoginUrl } from '../services/microsoftAuth.js';
@@ -163,6 +169,14 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
     await sendFile(res, doc.report as DarReportDto, fmt);
   });
 
+  // The ?sent= banner: who the last confirmed send went to (owner only, NFR-25 scope).
+  r.get('/saved/:id/send-result', perm('activities', 'view'), async (req, res) => {
+    const doc = await ownSaved(req);
+    const result = await darSendResult(currentUser(req)._id, doc as never);
+    if (!result) throw notFound('This report has no confirmed send.');
+    res.json({ result });
+  });
+
   r.get('/send-status', perm('activities', 'view'), async (req, res) => {
     const user = await UserModel.findById(currentUser(req)._id);
     if (!user) throw notFound();
@@ -210,7 +224,7 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
         action: 'report_send_failed',
         meta: { reason, stage: 'start' },
       });
-      throw new HttpError(409, 'SEND_UNAVAILABLE', darSendError(reason), { reason });
+      throw new HttpError(409, 'SEND_UNAVAILABLE', darSendFailureMessage(reason), { reason });
     }
     // A timed-out send may have gone out; a quick second Send would be a duplicate email.
     const last = await lastDarSendAttempt(user._id, doc as never);

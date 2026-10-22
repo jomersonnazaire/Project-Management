@@ -4,9 +4,11 @@ import {
   DAR_PASSWORD_ONLY,
   DAR_SEND_HOW,
   DAR_SEND_RATE_LIMITED,
+  darEmailRange,
   darResendConfirmMessage,
   darSendError,
-  darSentMessage,
+  darSendFailureMessage,
+  darSentBanner,
   changedAfterSaveMessage,
   darRangeSchema,
   formatLongDate,
@@ -30,6 +32,7 @@ import { Link, NavLink, useSearchParams } from 'react-router-dom';
 import { ApiError, downloadFile } from '../../api/client';
 import {
   useDar,
+  useDarSendResult,
   useDarSendStatus,
   useNotifySupervisor,
   useSaveReport,
@@ -317,11 +320,11 @@ export function SavedReportsPage() {
   const [open, setOpen] = useState<string | null>(null);
   const list = useSavedReports(filters);
   // Read the return-from-Microsoft result once, so the message stays after the URL is cleaned.
-  const [{ sentId, sendError }] = useState(() => ({
+  const [{ sentId, sendError, reportId }] = useState(() => ({
     sentId: params.get('sent'),
     sendError: params.get('send_error'),
+    reportId: params.get('report'),
   }));
-  const sendStatus = useDarSendStatus();
   const items = list.data ?? [];
   const filtered = Boolean(
     filters.from ||
@@ -340,20 +343,14 @@ export function SavedReportsPage() {
       <Tabs active="saved" />
       <div className="card rounded-top-0">
         <div className="card-body">
-          {sentId && sendStatus.data?.to && (
-            <div className="alert alert-success py-2" role="status">
-              {darSentMessage(sendStatus.data.to.name, sendStatus.data.cc.length)}
-            </div>
-          )}
+          {sentId && <SentBanner savedId={sentId} />}
           {sendError === 'result_unavailable' && (
             <div className="alert alert-warning py-2" role="status" data-testid="dar-send-unknown">
               {darSendError(sendError)}
             </div>
           )}
           {sendError && sendError !== 'result_unavailable' && (
-            <div className="alert alert-danger py-2" role="alert">
-              {darSendError(sendError)}
-            </div>
+            <SendFailedBanner code={sendError} reportId={reportId} />
           )}
           <div className="d-flex flex-wrap gap-2 align-items-end mb-3">
             <Form.Group controlId="saved-from">
@@ -491,7 +488,102 @@ function darActionError(e: unknown): unknown {
   if (e instanceof ApiError && e.code === 'NOTIFY_RECENT') {
     return new ApiError(409, e.code, DAR_NOTIFY_RECENT);
   }
+  if (e instanceof ApiError && e.code === 'SEND_UNAVAILABLE') {
+    const reason = (e.details as { reason?: string } | undefined)?.reason;
+    return new ApiError(409, e.code, darSendFailureMessage(reason));
+  }
   return e;
+}
+
+const OPENING_MICROSOFT = 'Opening Microsoft…';
+
+/**
+ * Starts a Send and goes to Microsoft. A 409 ALREADY_SENT_OR_UNKNOWN (sent, or maybe sent, in
+ * the last 15 minutes) asks once more and retries with confirmResend. `opening` stays true
+ * until the browser leaves for Microsoft, or the send stops with an error or a cancel.
+ */
+function useSendReport() {
+  const startSend = useStartSend();
+  const [confirm, confirmDialog] = useConfirm();
+  const [error, setError] = useState<unknown>(null);
+  const [opening, setOpening] = useState(false);
+  const go = async (savedId: string, confirmResend: boolean) => {
+    const { url } = await startSend.mutateAsync({ savedId, confirmResend });
+    window.location.assign(url);
+  };
+  const send = async (savedId: string) => {
+    setError(null);
+    setOpening(true);
+    try {
+      await go(savedId, false);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'ALREADY_SENT_OR_UNKNOWN') {
+        const state =
+          (e.details as { state?: string } | undefined)?.state === 'unknown' ? 'unknown' : 'sent';
+        const again = await confirm({
+          title: 'Send this report again?',
+          body: darResendConfirmMessage(state),
+          confirmLabel: 'Send again',
+        });
+        if (!again) {
+          setOpening(false);
+          return;
+        }
+        try {
+          await go(savedId, true);
+        } catch (e2) {
+          setError(darActionError(e2));
+          setOpening(false);
+        }
+        return;
+      }
+      setError(darActionError(e));
+      setOpening(false);
+    }
+  };
+  return { send, opening: opening || startSend.isPending, error, confirmDialog };
+}
+
+/** ?sent=: who it went to, from the send itself (not today's supervisor lookup). */
+function SentBanner({ savedId }: { savedId: string }) {
+  const result = useDarSendResult(savedId);
+  if (result.isLoading) return null;
+  return (
+    <div className="alert alert-success py-2" role="status" data-testid="dar-send-sent">
+      {result.data ? darSentBanner(result.data) : 'Report sent.'}
+    </div>
+  );
+}
+
+/** ?send_error=: "Your report wasn't sent. …", which report, and Retry. */
+function SendFailedBanner({ code, reportId }: { code: string; reportId: string | null }) {
+  const saved = useSavedReport(reportId);
+  const { send, opening, error, confirmDialog } = useSendReport();
+  return (
+    <>
+      <div className="alert alert-danger py-2" role="alert" data-testid="dar-send-failed">
+        <div>{darSendFailureMessage(code)}</div>
+        {saved.data && (
+          <div className="small mt-1" data-testid="dar-send-failed-range">
+            Report: {darEmailRange(saved.data.from, saved.data.to)}
+          </div>
+        )}
+        {reportId && (
+          <Button
+            size="sm"
+            variant="outline-danger"
+            className="mt-2"
+            disabled={opening}
+            onClick={() => void send(reportId)}
+          >
+            {opening ? OPENING_MICROSOFT : 'Retry'}
+          </Button>
+        )}
+      </div>
+      {error ? <ErrorAlert error={error} /> : null}
+      {confirmDialog}
+    </>
+  );
 }
 
 function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) {
@@ -499,10 +591,9 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
   const s = q.data;
   const sendStatus = useDarSendStatus();
   const notify = useNotifySupervisor();
-  const startSend = useStartSend();
+  const sendFlow = useSendReport();
   const [confirm, confirmDialog] = useConfirm();
   const [notifyError, setNotifyError] = useState<unknown>(null);
-  const [sendError, setSendError] = useState<unknown>(null);
   const [notifyOk, setNotifyOk] = useState(false);
   const status = sendStatus.data;
   // Password-only users aren't offered Send at all (AC-57.4, FR-DAR-24).
@@ -520,31 +611,7 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
       confirmLabel: 'Send',
     });
     if (!ok) return;
-    setSendError(null);
-    try {
-      const { url } = await startSend.mutateAsync({ savedId: s.id });
-      window.location.assign(url);
-    } catch (e) {
-      // Sent (or maybe sent) less than 15 minutes ago: ask again before a possible duplicate.
-      if (e instanceof ApiError && e.code === 'ALREADY_SENT_OR_UNKNOWN') {
-        const state =
-          (e.details as { state?: string } | undefined)?.state === 'unknown' ? 'unknown' : 'sent';
-        const again = await confirm({
-          title: 'Send this report again?',
-          body: darResendConfirmMessage(state),
-          confirmLabel: 'Send again',
-        });
-        if (!again) return;
-        try {
-          const { url } = await startSend.mutateAsync({ savedId: s.id, confirmResend: true });
-          window.location.assign(url);
-        } catch (e2) {
-          setSendError(darActionError(e2));
-        }
-        return;
-      }
-      setSendError(darActionError(e));
-    }
+    await sendFlow.send(s.id);
   };
 
   const onNotify = async () => {
@@ -587,10 +654,10 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
                 <>
                   <Button
                     variant="primary"
-                    disabled={sendDisabled || startSend.isPending}
+                    disabled={sendDisabled || sendFlow.opening}
                     onClick={() => void onSend()}
                   >
-                    Send to supervisor
+                    {sendFlow.opening ? OPENING_MICROSOFT : 'Send to supervisor'}
                   </Button>
                   {sendHint && <span className="small text-body-secondary">{sendHint}</span>}
                 </>
@@ -611,7 +678,8 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
                 {!status.to && <> {darSendError('no_supervisor')}</>}
               </p>
             )}
-            {sendError ? <ErrorAlert error={sendError} /> : null}
+            {sendFlow.error ? <ErrorAlert error={sendFlow.error} /> : null}
+            {sendFlow.confirmDialog}
             {notifyOk && (
               <div className="alert alert-success py-2 small" role="status">
                 {DAR_NOTIFIED}

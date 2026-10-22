@@ -428,7 +428,10 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
     const s1 = await saveReport(pa, '2026-10-13', '2026-10-13');
     const nl = await pa.post(`/api/v1/dar/saved/${s1}/send`).set(CSRF).send({});
     expect(nl.status).toBe(409);
-    expect(nl.body.error).toMatchObject({ code: 'SEND_UNAVAILABLE', message: DAR_PASSWORD_ONLY });
+    expect(nl.body.error).toMatchObject({
+      code: 'SEND_UNAVAILABLE',
+      message: `Your report wasn't sent. ${DAR_PASSWORD_ONLY}`,
+    });
     expect((await failedAudit(s1))?.meta).toMatchObject({ reason: 'not_linked' });
 
     const { agent, member } = await setupLinkedMember();
@@ -436,7 +439,9 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
     const s2 = await saveReport(agent, '2026-10-13', '2026-10-13');
     const ns = await agent.post(`/api/v1/dar/saved/${s2}/send`).set(CSRF).send({});
     expect(ns.status).toBe(409);
-    expect(ns.body.error.message).toBe('Ask an Admin to set your supervisor.');
+    expect(ns.body.error.message).toBe(
+      "Your report wasn't sent. Ask an Admin to set your supervisor.",
+    );
     expect((await failedAudit(s2))?.meta).toMatchObject({ reason: 'no_supervisor' });
 
     const off = makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: '' });
@@ -455,7 +460,9 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
     pdfMock.mockImplementationOnce(async () => Buffer.alloc(DAR_MAX_PDF_BYTES + 1));
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const done = await callback(a, cookie, { code: 'c', state });
-    expect(done.headers.location).toBe('http://localhost:5173/dar/saved?send_error=too_large');
+    expect(done.headers.location).toBe(
+      `http://localhost:5173/dar/saved?send_error=too_large&report=${savedId}`,
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect((await failedAudit(savedId))?.meta).toMatchObject({
       reason: 'too_large',
@@ -477,7 +484,9 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
       }),
     );
     const done = await callback(a, cookie, { code: 'c', state });
-    expect(done.headers.location).toBe('http://localhost:5173/dar/saved?send_error=no_mailbox');
+    expect(done.headers.location).toBe(
+      `http://localhost:5173/dar/saved?send_error=no_mailbox&report=${savedId}`,
+    );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect((await failedAudit(savedId))?.meta).toMatchObject({
       reason: 'no_mailbox',
@@ -500,7 +509,7 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
       mailExchangeMock.mockResolvedValueOnce(goodToken(over));
       const done = await callback(a, cookie, { code: 'c', state });
       expect(done.headers.location).toBe(
-        'http://localhost:5173/dar/saved?send_error=wrong_account',
+        `http://localhost:5173/dar/saved?send_error=wrong_account&report=${savedId}`,
       );
     }
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -521,7 +530,7 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const done = await callback(a, cookie, { code: 'c', state });
     expect(done.headers.location).toBe(
-      'http://localhost:5173/dar/saved?send_error=consent_declined',
+      `http://localhost:5173/dar/saved?send_error=consent_declined&report=${savedId}`,
     );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect((await failedAudit(savedId))?.meta).toMatchObject({ reason: 'consent_declined' });
@@ -570,7 +579,9 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
     const fetchSpy = graph202();
     expect((await callback(a, cookie, { code: 'c', state })).headers.location).toContain('sent=');
     const replay = await callback(a, cookie, { code: 'c', state });
-    expect(replay.headers.location).toBe('http://localhost:5173/dar/saved?send_error=send_failed');
+    expect(replay.headers.location).toBe(
+      `http://localhost:5173/dar/saved?send_error=send_failed&report=${savedId}`,
+    );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(mailExchangeMock).toHaveBeenCalledTimes(1);
     expect((await failedAudit(savedId))?.meta).toMatchObject({ detail: 'state_reused' });
@@ -936,7 +947,7 @@ describe('DAR Send: Graph timeout is "unknown", not failed (no duplicate sends)'
     const done = await callback(a, cookie, { code: 'c', state });
     expect(spy).toHaveBeenCalledTimes(1); // never retried by the server
     expect(done.headers.location).toBe(
-      'http://localhost:5173/dar/saved?send_error=result_unavailable',
+      `http://localhost:5173/dar/saved?send_error=result_unavailable&report=${id}`,
     );
     expect(await failedAudit(id)).toBeNull();
     const unknown = await ActivityLogModel.findOne({
@@ -1057,5 +1068,107 @@ describe('DAR Send: Graph timeout is "unknown", not failed (no duplicate sends)'
     expect(doc?.sentAt ?? null).toBeNull();
     expect(await ActivityLogModel.countDocuments({ action: 'report_send_unknown' })).toBe(0);
     expect((await startSend(agent, id)).res.status).toBe(200);
+  });
+});
+
+describe('DAR Send result for the web banner (recipients as sent)', () => {
+  beforeEach(async () => {
+    loginUrlMock.mockReset();
+    mailExchangeMock.mockReset();
+    await ActivityLogModel.deleteMany({
+      action: { $in: ['report_sent', 'report_send_failed', 'report_send_unknown'] },
+    });
+    await UserModel.deleteMany({});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('GET /dar/saved/:id/send-result returns who it went to at send time, not today’s supervisor', async () => {
+    const { a, agent, member, supervisor } = await setupLinkedMember();
+    const cc1 = await createUser({ email: 'cc1@xceler8.example', name: 'Cee One' });
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    expect((await agent.get(`/api/v1/dar/saved/${id}/send-result`)).status).toBe(404);
+
+    const { state, cookie } = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    graph202();
+    const done = await callback(a, cookie, { code: 'c', state });
+    expect(done.headers.location).toBe(`http://localhost:5173/dar/saved?sent=${id}`);
+
+    const log = await ActivityLogModel.findOne({ action: 'report_sent', entityId: id }).lean();
+    expect(log?.meta).toMatchObject({
+      to: 'sup@xceler8.example',
+      toName: 'Supervisor Sam',
+      cc: ['cc1@xceler8.example'],
+      ccNames: ['Cee One'],
+    });
+
+    // The supervisor changes afterwards: the result still names who it was sent to.
+    const other = await createUser({ email: 'sup2@xceler8.example', name: 'Other Sup' });
+    await UserModel.updateOne({ _id: member._id }, { $set: { supervisorId: other._id } });
+    await UserModel.updateOne({ _id: cc1._id }, { $set: { name: 'Renamed Cee' } });
+    const res = await agent.get(`/api/v1/dar/saved/${id}/send-result`);
+    expect(res.status).toBe(200);
+    expect(res.body.result).toMatchObject({
+      from: '2026-10-13',
+      to: '2026-10-13',
+      recipient: { name: 'Supervisor Sam', email: supervisor.email },
+      cc: [{ name: 'Cee One', email: 'cc1@xceler8.example' }],
+    });
+    expect(typeof res.body.result.sentAt).toBe('string');
+  });
+
+  it('older report_sent entries without names fall back to the user’s name, then the address', async () => {
+    const { agent, member } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    await ActivityLogModel.create({
+      actorId: member._id,
+      entityType: 'savedReport',
+      entityId: id,
+      action: 'report_sent',
+      meta: { to: 'sup@xceler8.example', cc: ['outside@xceler8.example'], range: 'x', bytes: 1 },
+    });
+    const res = await agent.get(`/api/v1/dar/saved/${id}/send-result`);
+    expect(res.body.result.recipient).toEqual({
+      name: 'Supervisor Sam',
+      email: 'sup@xceler8.example',
+    });
+    expect(res.body.result.cc).toEqual([
+      { name: 'outside@xceler8.example', email: 'outside@xceler8.example' },
+    ]);
+  });
+
+  it('send-result is owner-only (404 for anyone else)', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const { state, cookie } = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    graph202();
+    await callback(a, cookie, { code: 'c', state });
+    const outsider = await createUser({ email: 'outsider@xceler8.example', systemRole: 'MEMBER' });
+    const oa = await login(a, outsider.email, PASSWORD);
+    expect((await oa.get(`/api/v1/dar/saved/${id}/send-result`)).status).toBe(404);
+  });
+
+  it('a failed send redirects with the report id (for the Retry banner); SEND_UNAVAILABLE never shows a raw code', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const { state, cookie } = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'ErrorAccessDenied' } }), { status: 403 }),
+    );
+    const done = await callback(a, cookie, { code: 'c', state });
+    expect(done.headers.location).toBe(
+      `http://localhost:5173/dar/saved?send_error=send_forbidden&report=${id}`,
+    );
+
+    const off = makeApp({ ...MS_ENV, EDGE_PROXY_SECRET: '' });
+    const oa = await login(off, 'mem@xceler8.example', PASSWORD);
+    const r = await oa.post(`/api/v1/dar/saved/${id}/send`).set(CSRF).send({});
+    expect(r.status).toBe(409);
+    expect(r.body.error.message).toBe(
+      "Your report wasn't sent. Sending reports isn't turned on. Export the report and send it yourself.",
+    );
+    expect(r.body.error.message).not.toMatch(/not_enabled|ms_disabled/);
   });
 });

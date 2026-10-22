@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DarRange, DarReportDto, SavedReportDto, SavedReportSummaryDto } from '@xc8/shared';
+import type {
+  DarRange,
+  DarReportDto,
+  DarSendResultDto,
+  SavedReportDto,
+  SavedReportSummaryDto,
+} from '@xc8/shared';
 import { api, qs } from './client';
 
 /** Data hooks for Milestone 6: the Daily Accomplishment Report (doc 14 §3, §14, §15). */
@@ -32,6 +38,17 @@ export function useSavedReport(id: string | null) {
     enabled: Boolean(id),
     queryKey: ['dar', 'saved', 'one', id],
     queryFn: () => api<{ item: SavedReportDto }>(`/dar/saved/${id}`).then((r) => r.item),
+  });
+}
+
+/** Who the last confirmed send of a saved report went to (the ?sent= banner). */
+export function useDarSendResult(id: string | null) {
+  return useQuery({
+    enabled: Boolean(id),
+    queryKey: ['dar', 'saved', 'send-result', id],
+    queryFn: () =>
+      api<{ result: DarSendResultDto }>(`/dar/saved/${id}/send-result`).then((r) => r.result),
+    retry: false,
   });
 }
 

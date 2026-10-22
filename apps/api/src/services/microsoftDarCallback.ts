@@ -34,6 +34,20 @@ function darSendRedirect(
   sendResultRedirect(res, `${config.WEB_APP_URL}/dar/saved?${q.toString()}`, params, mobileExtra);
 }
 
+/** Display names for these addresses (a user's name, or the address itself). */
+async function namesFor(emails: string[]): Promise<string[]> {
+  if (!emails.length) return [];
+  try {
+    const users = await UserModel.find({ email: { $in: emails } })
+      .select('name email')
+      .lean();
+    const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.name]));
+    return emails.map((e) => byEmail.get(e.toLowerCase()) ?? e);
+  } catch {
+    return emails;
+  }
+}
+
 const errorName = (e: unknown) => (e instanceof Error ? e.name : 'Error');
 
 async function failSend(
@@ -53,7 +67,11 @@ async function failSend(
       meta: { reason, ...meta },
     });
   }
-  darSendRedirect(config, res, { send_error: reason });
+  // The report id lets the page show which report failed and offer Retry.
+  darSendRedirect(config, res, {
+    send_error: reason,
+    ...(savedId ? { report: savedId.toString() } : {}),
+  });
 }
 
 export async function handleMicrosoftDarMailCallback(
@@ -155,7 +173,10 @@ export async function handleMicrosoftDarMailCallback(
           error: errorName(err.cause),
         },
       });
-      darSendRedirect(config, res, { send_error: 'result_unavailable' });
+      darSendRedirect(config, res, {
+        send_error: 'result_unavailable',
+        report: saved._id.toString(),
+      });
       return;
     }
     if (err instanceof GraphSendError) {
@@ -178,12 +199,14 @@ export async function handleMicrosoftDarMailCallback(
     req.log?.warn({ err }, 'DAR sent status not recorded');
   }
   const range = `${saved.from} to ${saved.to}`;
+  // Names of the people it went to, as they were at send time (the result banner shows them).
+  const ccNames = await namesFor(cc);
   await audit({
     actorId: user._id,
     entityType: 'savedReport',
     entityId: saved._id,
     action: 'report_sent',
-    meta: { to: supervisor.email, cc, range, bytes },
+    meta: { to: supervisor.email, toName: supervisor.name, cc, ccNames, range, bytes },
   });
   // Mobile confirm only: addresses Graph accepted (one message: To + CC).
   darSendRedirect(config, res, { sent: saved._id.toString() }, { recipients: 1 + cc.length });

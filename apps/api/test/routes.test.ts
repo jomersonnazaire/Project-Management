@@ -207,6 +207,7 @@ describe('Route policy table', () => {
       'POST /dar/saved activities.view',
       'GET /dar/saved/:id activities.view',
       'GET /dar/saved/:id/export/:format activities.view',
+      'GET /dar/saved/:id/send-result activities.view',
       'GET /dar/send-status activities.view',
       'POST /dar/saved/:id/send/mobile activities.edit (before scope)',
       'POST /dar/saved/:id/send activities.edit (before scope)',

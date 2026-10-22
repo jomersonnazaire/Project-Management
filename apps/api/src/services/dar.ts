@@ -6,6 +6,7 @@ import {
   phDateOf,
   toDateOnly,
   type DarDayDto,
+  type DarSendResultDto,
   type DarDayStatus,
   type DarReportDto,
   type DarRowDto,
@@ -317,4 +318,51 @@ export async function recordDarSendUnknown(savedId: Id, userId: Id, at: Date) {
 export async function toSavedDto(userId: Id, doc: SavedDoc): Promise<SavedReportDto> {
   const [summary] = await toSavedDtos(userId, [doc]);
   return { ...summary!, report: doc.report as DarReportDto };
+}
+
+/**
+ * Who the last confirmed send of this saved report went to, from its `report_sent` audit entry
+ * (written only after Graph accepted the mail): the addresses actually used, not today's
+ * supervisor. Names recorded at send time; older entries fall back to the user's current name,
+ * then to the address.
+ */
+export async function darSendResult(userId: Id, doc: SavedDoc): Promise<DarSendResultDto | null> {
+  const log = await ActivityLogModel.findOne({
+    entityType: 'savedReport',
+    entityId: doc._id,
+    action: 'report_sent',
+    actorId: userId,
+  })
+    .sort({ at: -1, _id: -1 })
+    .select('at meta')
+    .lean();
+  if (!log) return null;
+  const meta = (log.meta ?? {}) as {
+    to?: unknown;
+    toName?: unknown;
+    cc?: unknown;
+    ccNames?: unknown;
+  };
+  const toEmail = typeof meta.to === 'string' ? meta.to : '';
+  const ccEmails = Array.isArray(meta.cc) ? meta.cc.filter((e) => typeof e === 'string') : [];
+  const ccNames = Array.isArray(meta.ccNames) ? meta.ccNames : [];
+  const missing = [
+    ...(typeof meta.toName === 'string' ? [] : [toEmail]),
+    ...ccEmails.filter((_, i) => typeof ccNames[i] !== 'string'),
+  ].filter(Boolean);
+  const users = missing.length
+    ? await UserModel.find({ email: { $in: missing } })
+        .select('name email')
+        .lean()
+    : [];
+  const current = new Map(users.map((u) => [u.email.toLowerCase(), u.name]));
+  const nameOf = (email: string, recorded: unknown) =>
+    typeof recorded === 'string' ? recorded : (current.get(email.toLowerCase()) ?? email);
+  return {
+    sentAt: log.at.toISOString(),
+    from: doc.from,
+    to: doc.to,
+    recipient: { name: nameOf(toEmail, meta.toName), email: toEmail },
+    cc: ccEmails.map((email, i) => ({ name: nameOf(email, ccNames[i]), email })),
+  };
 }
