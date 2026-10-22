@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import type { AppConfig } from '../config.js';
+import { now as clockNow } from '../lib/clock.js';
 import { SavedReportModel, UserModel } from '../models/index.js';
 import { audit } from './audit.js';
+import { recordDarSent } from './dar.js';
 import {
   buildDarCc,
   GraphSendError,
@@ -124,24 +126,9 @@ export async function handleMicrosoftDarMailCallback(
   }
   const cc = buildDarCc(user, supervisor.email, user.email);
 
+  let bytes: number;
   try {
-    const { bytes } = await sendDarReportEmail(
-      token.accessToken,
-      user,
-      saved as never,
-      supervisor,
-      cc,
-    );
-    const range = `${saved.from} to ${saved.to}`;
-    await audit({
-      actorId: user._id,
-      entityType: 'savedReport',
-      entityId: saved._id,
-      action: 'report_sent',
-      meta: { to: supervisor.email, cc, range, bytes },
-    });
-    // Mobile confirm only: addresses Graph accepted (one message: To + CC).
-    darSendRedirect(config, res, { sent: saved._id.toString() }, { recipients: 1 + cc.length });
+    ({ bytes } = await sendDarReportEmail(token.accessToken, user, saved as never, supervisor, cc));
   } catch (err) {
     if (err instanceof GraphSendError) {
       const reason = graphSendFailureReason(err.status, err.code);
@@ -153,5 +140,23 @@ export async function handleMicrosoftDarMailCallback(
     }
     req.log?.warn({ err }, 'DAR Graph send failed');
     await failSend(config, res, 'graph_unavailable', userId, savedId);
+    return;
   }
+  // The mail is out: from here on nothing may turn this into a "failed" send. If recording the
+  // sent fields fails, the report_sent audit entry below still proves it (read as a fallback).
+  try {
+    await recordDarSent(saved._id, user._id, 1 + cc.length, clockNow());
+  } catch (err) {
+    req.log?.warn({ err }, 'DAR sent status not recorded');
+  }
+  const range = `${saved.from} to ${saved.to}`;
+  await audit({
+    actorId: user._id,
+    entityType: 'savedReport',
+    entityId: saved._id,
+    action: 'report_sent',
+    meta: { to: supervisor.email, cc, range, bytes },
+  });
+  // Mobile confirm only: addresses Graph accepted (one message: To + CC).
+  darSendRedirect(config, res, { sent: saved._id.toString() }, { recipients: 1 + cc.length });
 }

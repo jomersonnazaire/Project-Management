@@ -17,6 +17,7 @@ import {
 import type { Types } from 'mongoose';
 import { now as clockNow } from '../lib/clock.js';
 import {
+  ActivityLogModel,
   SavedReportModel,
   TimeEntryModel,
   TimesheetDayModel,
@@ -199,6 +200,7 @@ export async function toSavedDtos(userId: Id, docs: SavedDoc[]): Promise<SavedRe
   })
     .select('date changedAt')
     .lean();
+  const pastSends = await sentFromAudit(userId, docs);
   return docs.map((d) => {
     const grp = g.get(`${d.from}|${d.to}`);
     const tag: SavedTag =
@@ -220,8 +222,68 @@ export async function toSavedDtos(userId: Id, docs: SavedDoc[]): Promise<SavedRe
       totalRendered: formatHHMM(d.totalMinutes),
       tag,
       changedDates,
+      ...sentFields(d, pastSends.get(d._id.toString())),
     };
   });
+}
+
+interface SentRecord {
+  sentAt: Date;
+  sentBy: Id | null;
+  sentRecipientCount: number | null;
+}
+
+function sentFields(d: SavedDoc, fromAudit: SentRecord | undefined) {
+  const rec: SentRecord | undefined = d.sentAt
+    ? {
+        sentAt: d.sentAt,
+        sentBy: d.sentBy ?? null,
+        sentRecipientCount: d.sentRecipientCount ?? null,
+      }
+    : fromAudit;
+  return {
+    sentAt: rec ? rec.sentAt.toISOString() : null,
+    sentBy: rec?.sentBy ? rec.sentBy.toString() : null,
+    sentRecipientCount: rec ? rec.sentRecipientCount : null,
+  };
+}
+
+/**
+ * Reports sent before the sent fields existed: their latest `report_sent` audit entry (written
+ * only after Graph accepted the mail) is the proof. One indexed query per list.
+ */
+async function sentFromAudit(userId: Id, docs: SavedDoc[]): Promise<Map<string, SentRecord>> {
+  const ids = docs.filter((d) => !d.sentAt).map((d) => d._id);
+  const out = new Map<string, SentRecord>();
+  if (!ids.length) return out;
+  const logs = await ActivityLogModel.find({
+    entityType: 'savedReport',
+    entityId: { $in: ids },
+    action: 'report_sent',
+    actorId: userId,
+  })
+    .sort({ at: -1 })
+    .select('entityId actorId at meta')
+    .lean();
+  for (const l of logs) {
+    const key = l.entityId.toString();
+    if (out.has(key)) continue;
+    const cc = (l.meta as { cc?: unknown } | null)?.cc;
+    out.set(key, {
+      sentAt: l.at,
+      sentBy: l.actorId ?? null,
+      sentRecipientCount: 1 + (Array.isArray(cc) ? cc.length : 0),
+    });
+  }
+  return out;
+}
+
+/** Records a successful Send on the saved report; a re-send overwrites it. */
+export async function recordDarSent(savedId: Id, userId: Id, recipientCount: number, at: Date) {
+  await SavedReportModel.updateOne(
+    { _id: savedId, userId },
+    { $set: { sentAt: at, sentBy: userId, sentRecipientCount: recipientCount } },
+  );
 }
 
 export async function toSavedDto(userId: Id, doc: SavedDoc): Promise<SavedReportDto> {

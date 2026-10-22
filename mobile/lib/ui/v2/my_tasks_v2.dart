@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../data/models.dart';
 import '../../data/ph_time.dart';
 import '../../data/tracker_models.dart';
+import '../../state/providers.dart' show timeWeekProvider;
 import '../../state/v2_providers.dart';
 import '../../theme/app_theme.dart';
+import '../../data/access.dart' show resolveMyTasksTab, myTasksTabRules;
 import '../widgets/common.dart';
 import 'day_timesheet.dart';
 import 'entry_sheet.dart';
@@ -22,15 +24,67 @@ const myTaskTabs = [
 ];
 
 /// My tasks (01–02): 7 scrollable tabs. "Day timesheet" embeds the same DayTimesheetBody as the tab.
-class MyTasksV2Screen extends ConsumerStatefulWidget {
+/// Tabs follow GET /auth/me/permissions `myTasksTabs` (FR-ACL-21): e.g. a Viewer has no Today
+/// or Day timesheet tab. A deep link to a hidden tab opens the next allowed one.
+class MyTasksV2Screen extends ConsumerWidget {
   const MyTasksV2Screen({super.key, this.initialTab});
   final String? initialTab;
   @override
-  ConsumerState<MyTasksV2Screen> createState() => _MyTasksV2ScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final allowed = ref.watch(myTasksTabsProvider);
+    if (allowed == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final tabs = [
+      for (final t in myTaskTabs)
+        if (allowed.contains(t.$1)) t,
+    ];
+    if (tabs.isEmpty) {
+      return Scaffold(
+        key: const Key('myTasksScreen'),
+        appBar: AppBar(title: const Text('My tasks')),
+        body: const Center(child: Text("You don't have access to My tasks.")),
+      );
+    }
+    return _MyTasksTabs(
+      key: ValueKey(allowed.join(',')),
+      tabs: tabs,
+      initialTab: resolveMyTasksTab(
+        _alias(initialTab) ??
+            _defaultTab(ref.watch(permissionsBodyProvider).value),
+        allowed,
+      ),
+      wanted: _alias(initialTab),
+    );
+  }
 }
 
-class _MyTasksV2ScreenState extends ConsumerState<MyTasksV2Screen>
+/// QA B3: the API/web key `day-timesheet` is the mobile `day` tab.
+String? _alias(String? k) => k == 'day-timesheet' ? 'day' : k;
+
+/// D7 `defaultTab` (API key; `day-timesheet` → `day`).
+String? _defaultTab(Map<String, dynamic>? body) {
+  final d = body?['defaultTab'];
+  return d is String ? (d == 'day-timesheet' ? 'day' : d) : null;
+}
+
+class _MyTasksTabs extends ConsumerStatefulWidget {
+  const _MyTasksTabs({
+    super.key,
+    required this.tabs,
+    this.initialTab,
+    this.wanted,
+  });
+  final List<(String, String)> tabs;
+  final String? initialTab;
+  final String? wanted;
+  @override
+  ConsumerState<_MyTasksTabs> createState() => _MyTasksV2ScreenState();
+}
+
+class _MyTasksV2ScreenState extends ConsumerState<_MyTasksTabs>
     with SingleTickerProviderStateMixin {
+  List<(String, String)> get myTaskTabs => widget.tabs;
   late final TabController _tabs = TabController(
     length: myTaskTabs.length,
     vsync: this,
@@ -46,13 +100,31 @@ class _MyTasksV2ScreenState extends ConsumerState<MyTasksV2Screen>
   void initState() {
     super.initState();
     _tabs.addListener(() => setState(() {}));
+    _noticeIfDenied(widget.wanted);
+  }
+
+  /// D7: a deep link to a tab this user can't open lands on the next allowed tab
+  /// with a notice.
+  void _noticeIfDenied(String? wanted) {
+    if (wanted == null || !myTaskTabs.every((t) => t.$1 != wanted)) return;
+    if (!myTasksTabRules.any((r) => r.$1 == wanted)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          key: Key('noTabAccessNotice'),
+          content: Text("You don't have access to that view."),
+        ),
+      );
+    });
   }
 
   @override
-  void didUpdateWidget(MyTasksV2Screen old) {
+  void didUpdateWidget(_MyTasksTabs old) {
     super.didUpdateWidget(old);
-    if (widget.initialTab != old.initialTab && widget.initialTab != null) {
+    if (widget.wanted != old.wanted && widget.initialTab != null) {
       _tabs.index = _index(widget.initialTab);
+      _noticeIfDenied(widget.wanted);
     }
   }
 
@@ -157,7 +229,16 @@ class _TaskTab extends ConsumerWidget {
                 'due' => 'Nothing due today',
                 _ => 'No tasks here right now.',
               };
-        final logged = week.value?.fold<int>(0, (a, e) => a + e.minutes) ?? 0;
+        // D16 (QA B2): loggedTotal from GET /time (tasks + quick activities).
+        final today = ref.watch(todayPhProvider);
+        final tw = ref
+            .watch(
+              timeWeekProvider(DateTime(today.year, today.month, today.day)),
+            )
+            .value;
+        final logged = tw != null
+            ? (tw.logged * 60).round()
+            : week.value?.fold<int>(0, (a, e) => a + e.minutes) ?? 0;
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(myTasksV2Provider),
           child: ListView(
@@ -202,7 +283,7 @@ class _TaskTab extends ConsumerWidget {
                           minimumSize: const Size(0, 40),
                         ),
                         icon: const Icon(Icons.add),
-                        label: const FitLabel('Quick activity'),
+                        label: const FitLabel('Add quick activity'),
                         onPressed: () async {
                           if (await showEntrySheet(
                             context,
@@ -243,7 +324,7 @@ class _TaskTab extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: Space.s),
                   child: Text(
-                    'Use + Quick activity to time non-project work.',
+                    'Use Add quick activity to time non-project work.',
                     style: t.bodySmall,
                   ),
                 ),
@@ -312,6 +393,12 @@ class _Kpi extends StatelessWidget {
   );
 }
 
+const myTaskRoleLabels = {
+  'ACCOUNTABLE': 'Accountable',
+  'ASSIGNEE': 'Assignee',
+  'REVIEWER': 'Reviewer',
+};
+
 class _TaskRow extends ConsumerWidget {
   const _TaskRow({
     required this.task,
@@ -328,14 +415,21 @@ class _TaskRow extends ConsumerWidget {
       parts.add(
         task.section == 'AGING' ? 'Age ${task.ageDays ?? 0}d' : 'Planned today',
       );
-    } else if (task.dueDate != null) {
+    } else {
+      // D26: cards show Planned (before Due) and the caller's role.
+      if (task.plannedStart != null) {
+        parts.add('Planned ${shortDate(task.plannedStart!)}');
+      }
+    }
+    if (view != 'today' && task.dueDate != null) {
       parts.add(
         task.overdue
             ? '${task.daysLate}d late'
             : 'Due ${shortDate(task.dueDate!)}',
       );
     }
-    return parts.join(' · ');
+    final role = myTaskRoleLabels[task.role];
+    return '${parts.join(' · ')}${role == null ? '' : '\nRole: $role'}';
   }
 
   @override
@@ -347,7 +441,7 @@ class _TaskRow extends ConsumerWidget {
       key: Key('myTask_${task.id}'),
       onTap: () => context.push('/tasks/${task.id}'),
       title: Text(task.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(_sub(), maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(_sub(), maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 132),
         child: running

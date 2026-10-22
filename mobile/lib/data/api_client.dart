@@ -63,6 +63,7 @@ class ApiClient {
     if (s == null) return false;
     final c = Map.of(s.cookies);
     bearer = c.remove(bearerKey);
+    if (isPortalToken(bearer)) bearer = null; // D6: never a portal token
     _cookies
       ..clear()
       ..addAll(c);
@@ -172,9 +173,7 @@ class ApiClient {
               '${d['path']}': '${d['message'] ?? ''}',
       };
       throw ApiException(
-        res.statusCode == 404
-            ? 'Not found'
-            : (msg ?? 'Request failed (${res.statusCode}).'),
+        friendlyApiMessage(res.statusCode, code, msg),
         status: res.statusCode,
         code: code,
         fields: fields,
@@ -241,3 +240,39 @@ DateTime? _parseHttpDate(String s) {
     int.parse(m[6]!),
   );
 }
+
+/// Copy for M8 error codes (doc 16 / design delta). Server text otherwise.
+const apiCodeMessages = <String, String>{
+  'VIEW_ONLY': 'You can view this entry, but only its owner can change it.',
+  'ACTIVITY_IN_USE':
+      "Can't delete: this activity has logged time, documents and issues.",
+  'PROJECT_NOT_PLANNING':
+      'Phase details can only be changed while the project is in Planning.',
+  'TEMPLATE_NOT_PUBLISHED':
+      'This template is no longer available. Choose another or start blank.',
+  'TEMPLATE_CHANGED':
+      'This template has a newer version. Review the preview again.',
+  'DUPLICATE_NAME': 'A phase with this name already exists.',
+  'FUTURE_DATE': "Date can't be in the future.",
+};
+
+/// 404 copy: DEF-015 (a PM not on the project) and DEF-014 (an entry you can't view).
+const notFoundMessage =
+    "This isn't available. It may have been removed, or you're not on this project.";
+const rateLimitMessage =
+    'Too many attempts. Wait a few minutes, then try again.';
+
+String friendlyApiMessage(int status, String? code, String? serverMsg) {
+  if (code != null && apiCodeMessages.containsKey(code)) {
+    // Keep a specific server message (e.g. PHASE_NOT_EMPTY counts) when present.
+    return code == 'VIEW_ONLY' || serverMsg == null
+        ? apiCodeMessages[code]!
+        : serverMsg;
+  }
+  if (status == 404) return notFoundMessage;
+  if (status == 429) return rateLimitMessage;
+  return serverMsg ?? 'Request failed ($status).';
+}
+
+/// D6: client-portal session/invite tokens (`ptl_…`) are web-only.
+bool isPortalToken(String? t) => t != null && t.trim().startsWith('ptl_');

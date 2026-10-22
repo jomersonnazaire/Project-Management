@@ -258,7 +258,7 @@ class MockStore {
     notifications.addAll([
       AppNotification(
         id: 'n5',
-        title: 'Queen Reyes reopened your timesheet for Thu, Oct 8: "Add the client call." Make your changes and submit it again before the weekly lock.',
+        title: 'Queen Reyes reopened your timesheet for Thu, Oct 8: "Add the client call." Make your changes and submit it again before the day lock.',
         subtitle: '',
         read: false,
         at: DateTime(2026, 10, 11, 10),

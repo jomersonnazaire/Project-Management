@@ -212,6 +212,9 @@ const summary = (over: Partial<SavedReportSummaryDto>): SavedReportSummaryDto =>
   totalRendered: '18:50',
   tag: 'LATEST',
   changedDates: [],
+  sentAt: null,
+  sentBy: null,
+  sentRecipientCount: null,
   ...over,
 });
 
