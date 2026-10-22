@@ -28,6 +28,12 @@ import { darSendStatusPayload, resolveDarSupervisor } from '../services/darSend.
 import { darFileName, darToPdf, darToXlsx } from '../services/darExport.js';
 import { buildMicrosoftLoginUrl } from '../services/microsoftAuth.js';
 import { setMicrosoftMailOAuthCookie } from '../services/microsoftOAuthCookie.js';
+import {
+  MOBILE_SEND_ONLY,
+  isMobileSend,
+  mobileSendSchema,
+  saveMobileDarState,
+} from '../services/msSendReturn.js';
 import { notifyPersonal } from '../services/notify.js';
 
 const formatParam = z.enum(['pdf', 'xlsx']);
@@ -154,8 +160,21 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
 
   // Send starts with a POST (CSRF header + Origin allow-list, D1) and returns the Microsoft
   // URL; the browser then navigates there. Its own per-user limiter (D5).
+  // Mobile Send (bearer only): same checks, the OAuth state is kept server-side instead of a
+  // cookie and the callback returns to the app (services/msSendReturn.ts).
+  r.post('/saved/:id/send/mobile', perm('activities', 'view'), sendLimiter, async (req, res) => {
+    if (!isMobileSend(res)) throw MOBILE_SEND_ONLY;
+    const pkce = parseBody(mobileSendSchema, req);
+    await startSend(req, res, pkce.code_challenge);
+  });
+
   r.post('/saved/:id/send', perm('activities', 'view'), sendLimiter, async (req, res) => {
     parseBody(z.strictObject({}), req);
+    await startSend(req, res, null);
+  });
+
+  /** `mobileChallenge`: the app's PKCE S256 challenge for a mobile Send; null for web. */
+  async function startSend(req: Request, res: Response, mobileChallenge: string | null) {
     const doc = await ownSaved(req);
     const user = await UserModel.findById(currentUser(req)._id);
     if (!user) throw notFound();
@@ -177,15 +196,17 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
       scopes: ['Mail.Send'],
       loginHint: user.email,
     });
-    setMicrosoftMailOAuthCookie(config, res, {
+    const mailState = {
       codeVerifier: login.codeVerifier,
       state: login.state,
       nonce: login.nonce,
       userId: user._id.toString(),
       savedReportId: doc._id.toString(),
-    });
+    };
+    if (mobileChallenge) await saveMobileDarState(mailState, mobileChallenge);
+    else setMicrosoftMailOAuthCookie(config, res, mailState);
     res.json({ url: login.url });
-  });
+  }
 
   r.post('/saved/:id/notify-supervisor', perm('activities', 'view'), async (req, res) => {
     parseBody(z.strictObject({}), req);
