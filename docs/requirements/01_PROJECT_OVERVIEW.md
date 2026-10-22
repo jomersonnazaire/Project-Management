@@ -34,9 +34,9 @@ Phase 1 builds the reliable data foundation the AI phases depend on.
 - Gantt timeline view (Phase 2); the project detail "Timeline" tab is a placeholder.
 - Tickets / defect tracking, formal QA workflows (Phase 2).
 - Client portal or any client login (future, separate access level).
-- Any email to client contacts (Q-02 resolved: contacts tracked only). Internal password-reset email is still allowed.
+- Any email to client contacts (Q-02 resolved: contacts tracked only). Internal password-reset email is still allowed. *Exception (Jomerson, 2026-10-22, 8:29 PM SGT, doc 17 Q-106):* a user's DAR Send may CC any email address an Admin set on their profile, client contacts included.
 - In-app e-signature: deferred indefinitely (Jomerson, 2026-10-09). Documents are signed outside the app and uploaded (Q-20).
-- Mobile native apps.
+- Mobile native apps. *Exception (Jomerson, 2026-10-22, 8:29 PM SGT, doc 17 Q-92):* DAR Send and email notifications on mobile (PR #41) are in scope. #41 comes off hold once PR #42 is merged and is then rebased. Everything else on mobile stays on hold.
 - Multi-company (multi-tenant) SaaS; Phase 1 is for Xceler8 only (Q-01).
 - Seeded templates other than SAP Business One (Q-04); others can be built in-app.
 

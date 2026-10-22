@@ -76,7 +76,7 @@
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FR-NTF-01 | When a follow-up note is added to a task, notify the task's **owner, all assignees, the designated reviewer, and the project PM**, except the person who wrote it. | Must |
-| FR-NTF-02 | Channel: **in-app** (bell with unread count, notification list). Email is deferred to the External integrations stage (Q-28); build so a channel can be added later. | Must |
+| FR-NTF-02 | Channel: **in-app** (bell with unread count, notification list). Email is deferred to the External integrations stage (Q-28); build so a channel can be added later. *Note (Jomerson, 2026-10-22, 8:29 PM SGT, doc 17 CR-09, CR-13):* the action-email box ("Email {name}") is **ticked by default** (Q-101), and email notifications are in mobile scope (Q-92). Whether email is brought forward on web (Q-99), the sender (Q-100) and the production flag (Q-102) are still open, so the build stays behind `EMAIL_NOTIFICATIONS_ENABLED` (off) until then. | Must |
 | FR-NTF-03 | A notification reads e.g. "Maria P. added a follow-up on Client master data – Items" with the project name and time; clicking it opens the task and marks it read. "Mark all as read" is available. | Must |
 | FR-NTF-04 | Notifications respect access at read time: if a user loses access to the project, its notifications disappear from their list. | Must |
 | FR-NTF-05 | Also notify on: being assigned a task, a task sent For Review (to reviewer), approved or rejected (to owner). | Should |

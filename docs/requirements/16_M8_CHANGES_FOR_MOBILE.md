@@ -1,6 +1,6 @@
 # 16 — M8 changes for the mobile team
 
-**Status:** v0.2 (2026-10-14, SGT; v0.1 handoff 2026-10-13) · **For:** OpsTrack mobile team (mobile work on hold) · **Sources:** pm-app `m8-polish` git history and diffs; docs 03, 09, 11, 14, 15; `design/reviews/M8_DESIGN_REVIEW.md`.
+**Status:** v0.2 (2026-10-14, SGT; v0.1 handoff 2026-10-13) · **For:** OpsTrack mobile team (mobile work on hold, **except DAR Send and email notifications (PR #41), which are in scope** (Jomerson, 2026-10-22, 8:29 PM SGT, doc 17 Q-92, CR-13). #41 comes off hold once PR #42 is merged and is then rebased onto the merged branch. The mobile Send flow must handle the server's 409 "Already sent": today the app shows the server message as it is, and it points to the web; a full mobile confirm-and-resend step is part of #41) · **Sources:** pm-app `m8-polish` git history and diffs; docs 03, 09, 11, 14, 15; `design/reviews/M8_DESIGN_REVIEW.md`.
 
 All paths are under `/api/v1`. Errors use the usual shape `{ error: { code, message, details? } }`.
 
