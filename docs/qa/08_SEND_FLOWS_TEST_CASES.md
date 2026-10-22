@@ -6,6 +6,8 @@ Covers Microsoft 365 sign-in on web and mobile, DAR Send through Microsoft Graph
 IDs continue the per-milestone letter scheme in `docs/qa` (A–N, P–T and CP are taken; O is skipped). This set uses **TC-U01 to TC-U66**.
 
 ## Microsoft 365 sign-in: web (FR-SSO-01 to 05, PR #27, #32)
+
+> **2026-10-22 15:50 SGT:** Jomerson checked web Microsoft sign-in on his own tenant and it works. Cases still marked "needs Jomerson's tenant" in this section are covered at that smoke level only. Expected-FAIL cases (TC-U05 auto-created Viewer, TC-U12 silent relink) are spec questions and remain open (CR-02, CR-15).
 | ID | Case | Expected | Traces | Status |
 |---|---|---|---|---|
 | TC-U01 | `GET /auth/providers` with all `MS_*` set, allowlists filled and `EDGE_PROXY_SECRET` at 32+ characters; repeat with an empty tenant allowlist, an empty domain allowlist, and a 31-character secret | `{microsoft:true}` only in the fully configured case. Otherwise `false` and the login page shows no Microsoft button. With a 31-character secret the API refuses to start | FR-SSO-01, PR #27 | API (mock) |
@@ -29,6 +31,8 @@ IDs continue the per-milestone letter scheme in `docs/qa` (A–N, P–T and CP a
 | TC-U19 | Users list as Admin: a Microsoft-created or linked user with no password | Status **Active** (not Invited); job role "Not set" until an Admin sets it; filter Active/Invited correct | FR-USR, PR #27 | API + UI |
 
 ## Microsoft 365 sign-in: mobile (PR #28)
+
+> **2026-10-22 15:50 SGT:** Jomerson checked mobile Microsoft sign-in on his own tenant and it works (smoke level).
 | ID | Case | Expected | Traces | Status |
 |---|---|---|---|---|
 | TC-U20 | App → "Sign in with Microsoft" → browser → Microsoft → back to the app | `opstrack://auth/microsoft?code=…`; the app exchanges the code with its verifier at `POST /auth/mobile/microsoft/exchange` and gets a bearer session; lands on home | PR #28 | needs phone + Jomerson's tenant |
