@@ -1,6 +1,5 @@
 import {
   DAR_NOTIFY_RECENT,
-  DAR_RESEND_CONFIRM_WINDOW_MS,
   darRangeSchema,
   darResendConfirmMessage,
   darSendFailureMessage,
@@ -201,7 +200,7 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
   /**
    * `mobileChallenge`: the app's PKCE S256 challenge for a mobile Send; null for web.
    * `confirmResend`: the user confirmed sending again although the last send of this report was
-   * sent, or may have been (unknown result), less than 15 minutes ago.
+   * sent, or may have been (unknown result), at any time before (CR-16, UIE 6).
    */
   async function startSend(
     req: Request,
@@ -226,17 +225,17 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
       });
       throw new HttpError(409, 'SEND_UNAVAILABLE', darSendFailureMessage(reason), { reason });
     }
-    // A timed-out send may have gone out; a quick second Send would be a duplicate email.
+    // A report with a send on record (sent, or a timed-out send that may have gone out) is only
+    // sent again with an explicit confirm, however long ago that was (CR-16, UIE 6).
     const last = await lastDarSendAttempt(user._id, doc as never);
-    if (
-      last &&
-      !confirmResend &&
-      clockNow().getTime() - last.at.getTime() < DAR_RESEND_CONFIRM_WINDOW_MS
-    ) {
-      throw new HttpError(409, 'ALREADY_SENT_OR_UNKNOWN', darResendConfirmMessage(last.state), {
-        state: last.state,
-        lastAttemptAt: last.at.toISOString(),
-      });
+    if (last && !confirmResend) {
+      const lastAttemptAt = last.at.toISOString();
+      throw new HttpError(
+        409,
+        'ALREADY_SENT_OR_UNKNOWN',
+        darResendConfirmMessage(last.state, lastAttemptAt, { from: doc.from, to: doc.to }),
+        { state: last.state, lastAttemptAt },
+      );
     }
     const login = await buildMicrosoftLoginUrl(config, {
       scopes: ['Mail.Send'],

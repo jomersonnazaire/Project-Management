@@ -4,6 +4,8 @@ import {
   DAR_PASSWORD_ONLY,
   DAR_TOO_LARGE,
   darEmailRange,
+  darResendConfirmMessage,
+  formatPhDateTime,
   darSendError,
   darSendFailureMessage,
   darSentBanner,
@@ -98,6 +100,30 @@ describe('DAR Send result text (web banners)', () => {
     );
     expect(darSentBanner({ from: '2026-10-13', to: '2026-10-17', recipient, cc: [] })).toBe(
       'Report for Oct 13 to Oct 17, 2026 sent to Supervisor Sam (sup@xceler8.example).',
+    );
+  });
+});
+
+describe('re-send confirm (CR-16, UIE 6)', () => {
+  const range = { from: '2026-10-13', to: '2026-10-17' };
+  it('formats the last attempt in Asia/Manila', () => {
+    expect(formatPhDateTime('2026-10-13T09:20:00.000Z')).toBe('Oct 13, 2026, 5:20 PM');
+    expect(formatPhDateTime('2026-10-13T16:05:00.000Z')).toBe('Oct 14, 2026, 12:05 AM');
+    expect(formatPhDateTime('2026-10-14T04:00:00.000Z')).toBe('Oct 14, 2026, 12:00 PM');
+  });
+  it('sent state', () => {
+    expect(darResendConfirmMessage('sent', '2026-10-13T09:20:00.000Z', range)).toBe(
+      'Already sent on Oct 13, 2026, 5:20 PM: report for Oct 13 to Oct 17, 2026. Send it again?',
+    );
+  });
+  it('unknown state', () => {
+    expect(
+      darResendConfirmMessage('unknown', '2026-10-13T09:20:00.000Z', {
+        from: '2026-10-13',
+        to: '2026-10-13',
+      }),
+    ).toBe(
+      "We couldn't confirm your last send of the report for Oct 13, 2026 on Oct 13, 2026, 5:20 PM. Microsoft may already have sent it, so check your Outlook Sent Items. Send it again anyway?",
     );
   });
 });

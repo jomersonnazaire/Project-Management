@@ -967,7 +967,7 @@ describe('DAR Send: Graph timeout is "unknown", not failed (no duplicate sends)'
     });
   });
 
-  it('re-send within 15 minutes of an unknown result needs confirmResend; after 15 minutes it does not', async () => {
+  it('CR-16: a report with an unknown send always needs confirmResend, with no time window', async () => {
     const { a, agent } = await setupLinkedMember();
     const id = await saveReport(agent, '2026-10-13', '2026-10-13');
     const t0 = new Date('2026-10-22T03:00:00.000Z');
@@ -983,7 +983,10 @@ describe('DAR Send: Graph timeout is "unknown", not failed (no duplicate sends)'
     expect(blocked.res.status).toBe(409);
     expect(blocked.res.body.error).toEqual({
       code: 'ALREADY_SENT_OR_UNKNOWN',
-      message: darResendConfirmMessage('unknown'),
+      message: darResendConfirmMessage('unknown', t0.toISOString(), {
+        from: '2026-10-13',
+        to: '2026-10-13',
+      }),
       details: { state: 'unknown', lastAttemptAt: t0.toISOString() },
     });
     // Refused before Microsoft: no mail cookie, no login URL used.
@@ -1003,11 +1006,29 @@ describe('DAR Send: Graph timeout is "unknown", not failed (no duplicate sends)'
     expect(confirmed.res.status).toBe(200);
     expect(confirmed.res.body.url).toMatch(/^https:\/\/login\.microsoftonline\.com\//);
 
-    setTestTime(new Date(t0.getTime() + 15 * 60_000));
-    expect((await startSend(agent, id)).res.status).toBe(200);
+    // No 15-minute window: 15 minutes or hours later it still asks.
+    for (const later of [15 * 60_000, 3 * 3_600_000]) {
+      setTestTime(new Date(t0.getTime() + later));
+      const res = (await startSend(agent, id)).res;
+      expect(res.status, `+${later} ms`).toBe(409);
+      expect(res.body.error.details).toEqual({
+        state: 'unknown',
+        lastAttemptAt: t0.toISOString(),
+      });
+    }
+    // Weeks old (backdated on the record; the session would not survive a clock jump).
+    const old = new Date(t0.getTime() - 30 * 86_400_000);
+    await SavedReportModel.updateOne({ _id: id }, { $set: { sendUnknownAt: old } });
+    const stale = (await startSend(agent, id)).res;
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.details).toEqual({
+      state: 'unknown',
+      lastAttemptAt: old.toISOString(),
+    });
+    expect((await startSend(agent, id, { confirmResend: true })).res.status).toBe(200);
   });
 
-  it('a confirmed send after an unknown one clears it; a re-send soon after a sent one also needs the confirm', async () => {
+  it('a confirmed send after an unknown one clears it; a re-send of a sent report needs the confirm, however long ago', async () => {
     const { a, agent } = await setupLinkedMember();
     const id = await saveReport(agent, '2026-10-13', '2026-10-13');
     const t0 = new Date('2026-10-22T03:00:00.000Z');
@@ -1038,7 +1059,46 @@ describe('DAR Send: Graph timeout is "unknown", not failed (no duplicate sends)'
       state: 'sent',
       lastAttemptAt: t1.toISOString(),
     });
-    expect(again.res.body.error.message).toBe(darResendConfirmMessage('sent'));
+    expect(again.res.body.error.message).toBe(
+      darResendConfirmMessage('sent', t1.toISOString(), { from: '2026-10-13', to: '2026-10-13' }),
+    );
+    // 2026-10-22T03:02Z is 11:02 AM on Oct 22 in Manila.
+    expect(again.res.body.error.message).toBe(
+      'Already sent on Oct 22, 2026, 11:02 AM: report for Oct 13, 2026. Send it again?',
+    );
+
+    // Sent weeks ago (backdated on the record): still the confirm, with that date.
+    const old = new Date('2026-09-01T02:00:00.000Z');
+    await SavedReportModel.updateOne({ _id: id }, { $set: { sentAt: old } });
+    const weekLater = await startSend(agent, id);
+    expect(weekLater.res.status).toBe(409);
+    expect(weekLater.res.body.error).toEqual({
+      code: 'ALREADY_SENT_OR_UNKNOWN',
+      message: 'Already sent on Sep 1, 2026, 10:00 AM: report for Oct 13, 2026. Send it again?',
+      details: { state: 'sent', lastAttemptAt: old.toISOString() },
+    });
+  });
+
+  it('a report sent before the sent fields existed (audit fallback) also needs the confirm', async () => {
+    const { agent, member } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const at = new Date('2026-09-30T16:30:00.000Z'); // 12:30 AM on Oct 1 in Manila
+    await ActivityLogModel.create({
+      actorId: member._id,
+      entityType: 'savedReport',
+      entityId: id,
+      action: 'report_sent',
+      at,
+      meta: { to: 'sup@xceler8.example', cc: [], range: 'x', bytes: 1 },
+    });
+    const res = (await startSend(agent, id)).res;
+    expect(res.status).toBe(409);
+    expect(res.body.error).toEqual({
+      code: 'ALREADY_SENT_OR_UNKNOWN',
+      message: 'Already sent on Oct 1, 2026, 12:30 AM: report for Oct 13, 2026. Send it again?',
+      details: { state: 'sent', lastAttemptAt: at.toISOString() },
+    });
+    expect((await startSend(agent, id, { confirmResend: true })).res.status).toBe(200);
   });
 
   it('a definite failure (Graph 403, connection refused) records nothing and never blocks a re-send', async () => {

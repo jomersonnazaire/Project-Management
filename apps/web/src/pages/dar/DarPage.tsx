@@ -26,7 +26,7 @@ import {
   type DarRange,
   type DarReportDto,
 } from '@xc8/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Form, Modal, Table } from 'react-bootstrap';
 import { Link, NavLink, useSearchParams } from 'react-router-dom';
 import { ApiError, downloadFile } from '../../api/client';
@@ -344,13 +344,12 @@ export function SavedReportsPage() {
       <div className="card rounded-top-0">
         <div className="card-body">
           {sentId && <SentBanner savedId={sentId} />}
-          {sendError === 'result_unavailable' && (
-            <div className="alert alert-warning py-2" role="status" data-testid="dar-send-unknown">
-              {darSendError(sendError)}
-            </div>
-          )}
-          {sendError && sendError !== 'result_unavailable' && (
-            <SendFailedBanner code={sendError} reportId={reportId} />
+          {sendError && (
+            <SendResultBanner
+              code={sendError}
+              reportId={reportId}
+              unknown={sendError === 'result_unavailable'}
+            />
           )}
           <div className="d-flex flex-wrap gap-2 align-items-end mb-3">
             <Form.Group controlId="saved-from">
@@ -496,14 +495,26 @@ function darActionError(e: unknown): unknown {
 }
 
 const OPENING_MICROSOFT = 'Opening Microsoft…';
+const REPORT_DATES_UNAVAILABLE = 'Report dates unavailable';
+
+type SendTarget = { id: string; from?: string; to?: string };
+
+/** The To, CC and attachment confirm shown before any Send (and before Retry). */
+function sendConfirmBody(status: DarSendStatus): string {
+  const cc = status.cc.length ? status.cc.join(', ') : 'None';
+  return `To: ${status.to?.name ?? ''} · CC: ${cc} (Set by Admin). It's sent from your Microsoft 365 mailbox with the PDF attached. The first time, Microsoft may ask you to allow this.`;
+}
 
 /**
- * Starts a Send and goes to Microsoft. A 409 ALREADY_SENT_OR_UNKNOWN (sent, or maybe sent, in
- * the last 15 minutes) asks once more and retries with confirmResend. `opening` stays true
- * until the browser leaves for Microsoft, or the send stops with an error or a cancel.
+ * Starts a Send and goes to Microsoft. `confirmAndSend` first shows the To, CC and attachment
+ * confirm (used by "Send to supervisor" and by Retry, so neither goes straight to Microsoft).
+ * A 409 ALREADY_SENT_OR_UNKNOWN (a send on record at any time before, CR-16) asks once more and
+ * retries with confirmResend. `opening` stays true until the browser leaves for Microsoft, or the
+ * send stops with an error or a cancel.
  */
 function useSendReport() {
   const startSend = useStartSend();
+  const sendStatus = useDarSendStatus();
   const [confirm, confirmDialog] = useConfirm();
   const [error, setError] = useState<unknown>(null);
   const [opening, setOpening] = useState(false);
@@ -511,18 +522,24 @@ function useSendReport() {
     const { url } = await startSend.mutateAsync({ savedId, confirmResend });
     window.location.assign(url);
   };
-  const send = async (savedId: string) => {
+  const send = async (report: SendTarget) => {
     setError(null);
     setOpening(true);
     try {
-      await go(savedId, false);
+      await go(report.id, false);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'ALREADY_SENT_OR_UNKNOWN') {
-        const state =
-          (e.details as { state?: string } | undefined)?.state === 'unknown' ? 'unknown' : 'sent';
+        const d = e.details as { state?: string; lastAttemptAt?: string } | undefined;
+        const state = d?.state === 'unknown' ? 'unknown' : 'sent';
         const again = await confirm({
           title: 'Send this report again?',
-          body: darResendConfirmMessage(state),
+          body:
+            typeof d?.lastAttemptAt === 'string' && report.from && report.to
+              ? darResendConfirmMessage(state, d.lastAttemptAt, {
+                  from: report.from,
+                  to: report.to,
+                })
+              : e.message,
           confirmLabel: 'Send again',
         });
         if (!again) {
@@ -530,7 +547,7 @@ function useSendReport() {
           return;
         }
         try {
-          await go(savedId, true);
+          await go(report.id, true);
         } catch (e2) {
           setError(darActionError(e2));
           setOpening(false);
@@ -541,7 +558,30 @@ function useSendReport() {
       setOpening(false);
     }
   };
-  return { send, opening: opening || startSend.isPending, error, confirmDialog };
+  const confirmAndSend = async (report: SendTarget) => {
+    const status = sendStatus.data;
+    if (!status?.enabled || !status.to) {
+      setError(
+        new ApiError(409, 'SEND_UNAVAILABLE', darSendFailureMessage(status?.reason ?? null)),
+      );
+      return;
+    }
+    setError(null);
+    const ok = await confirm({
+      title: 'Send this report?',
+      body: sendConfirmBody(status),
+      confirmLabel: 'Send',
+    });
+    if (!ok) return;
+    await send(report);
+  };
+  return {
+    confirmAndSend,
+    statusLoading: sendStatus.isLoading,
+    opening: opening || startSend.isPending,
+    error,
+    confirmDialog,
+  };
 }
 
 /** ?sent=: who it went to, from the send itself (not today's supervisor lookup). */
@@ -555,26 +595,59 @@ function SentBanner({ savedId }: { savedId: string }) {
   );
 }
 
-/** ?send_error=: "Your report wasn't sent. …", which report, and Retry. */
-function SendFailedBanner({ code, reportId }: { code: string; reportId: string | null }) {
+/**
+ * ?send_error=: "Your report wasn't sent. …" (failed) or "We couldn't confirm …" (unknown), which
+ * report, and Retry. Keyboard focus moves here on load. Retry opens the same confirm as
+ * "Send to supervisor"; after an unknown result the API's 409 then asks "couldn't confirm".
+ */
+function SendResultBanner({
+  code,
+  reportId,
+  unknown,
+}: {
+  code: string;
+  reportId: string | null;
+  unknown: boolean;
+}) {
   const saved = useSavedReport(reportId);
-  const { send, opening, error, confirmDialog } = useSendReport();
+  const { confirmAndSend, statusLoading, opening, error, confirmDialog } = useSendReport();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  const range = saved.data
+    ? darEmailRange(saved.data.from, saved.data.to)
+    : saved.isLoading
+      ? null
+      : REPORT_DATES_UNAVAILABLE;
   return (
     <>
-      <div className="alert alert-danger py-2" role="alert" data-testid="dar-send-failed">
-        <div>{darSendFailureMessage(code)}</div>
-        {saved.data && (
-          <div className="small mt-1" data-testid="dar-send-failed-range">
-            Report: {darEmailRange(saved.data.from, saved.data.to)}
+      <div
+        ref={ref}
+        tabIndex={-1}
+        className={`alert ${unknown ? 'alert-warning' : 'alert-danger'} py-2`}
+        // A definite failure is announced at once; "couldn't confirm" is a warning (status).
+        role={unknown ? 'status' : 'alert'}
+        data-testid={unknown ? 'dar-send-unknown' : 'dar-send-failed'}
+      >
+        <div>{unknown ? darSendError(code) : darSendFailureMessage(code)}</div>
+        {range && (
+          <div
+            className="small mt-1"
+            data-testid={unknown ? 'dar-send-unknown-range' : 'dar-send-failed-range'}
+          >
+            {range === REPORT_DATES_UNAVAILABLE ? range : `Report: ${range}`}
           </div>
         )}
         {reportId && (
           <Button
             size="sm"
-            variant="outline-danger"
+            variant={unknown ? 'outline-dark' : 'outline-danger'}
             className="mt-2"
-            disabled={opening}
-            onClick={() => void send(reportId)}
+            disabled={opening || statusLoading}
+            onClick={() =>
+              void confirmAndSend({ id: reportId, from: saved.data?.from, to: saved.data?.to })
+            }
           >
             {opening ? OPENING_MICROSOFT : 'Retry'}
           </Button>
@@ -604,14 +677,7 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
 
   const onSend = async () => {
     if (!s || !status?.to) return;
-    const cc = status.cc.length ? status.cc.join(', ') : 'None';
-    const ok = await confirm({
-      title: 'Send this report?',
-      body: `To: ${status.to.name} · CC: ${cc} (Set by Admin). It's sent from your Microsoft 365 mailbox with the PDF attached. The first time, Microsoft may ask you to allow this.`,
-      confirmLabel: 'Send',
-    });
-    if (!ok) return;
-    await sendFlow.send(s.id);
+    await sendFlow.confirmAndSend(s);
   };
 
   const onNotify = async () => {

@@ -322,12 +322,30 @@ describe('Result after the Microsoft round trip', () => {
     setup({ enabled: true, linked: true });
     renderAt(`/projects/${PID}?email=sent`, <App />);
     expect(await screen.findByText('Email sent from your Outlook.')).toBeInTheDocument();
+    expect(screen.getByTestId('email-result')).toHaveAttribute('role', 'status');
   });
 
-  it('explains missing admin consent', async () => {
+  it('explains missing admin consent, as an alert (role=alert)', async () => {
     setup({ enabled: true, linked: true });
     renderAt(`/projects/${PID}?email_error=admin_consent_required`, <App />);
-    expect(await screen.findByTestId('email-result')).toHaveTextContent(/admin consent/);
+    const alert = await screen.findByTestId('email-result');
+    expect(alert).toHaveTextContent(/admin consent/);
+    expect(alert).toHaveAttribute('role', 'alert');
+  });
+
+  it.each(['send_forbidden', 'wrong_account', 'some_new_code'])(
+    'failure %s uses role=alert',
+    async (code) => {
+      setup({ enabled: true, linked: true });
+      renderAt(`/projects/${PID}?email_error=${code}`, <App />);
+      expect(await screen.findByTestId('email-result')).toHaveAttribute('role', 'alert');
+    },
+  );
+
+  it('a partial send is a success (role=status)', async () => {
+    setup({ enabled: true, linked: true });
+    renderAt(`/projects/${PID}?email=partial`, <App />);
+    expect(await screen.findByTestId('email-result')).toHaveAttribute('role', 'status');
   });
 
   it('an unconfirmed send (Graph timeout) says to check Sent Items, not that it failed', async () => {
@@ -338,5 +356,6 @@ describe('Result after the Microsoft round trip', () => {
       "We couldn't confirm the email was sent. Check your Outlook Sent Items before sending again.",
     );
     expect(alert).not.toHaveTextContent(/not sent/i);
+    expect(alert).toHaveAttribute('role', 'status');
   });
 });

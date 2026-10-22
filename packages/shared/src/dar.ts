@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Ref } from './projects.js';
+import { phDateOf, type Ref } from './projects.js';
 import { BRAND, EXPORT_FOOTER, PRE_BRAND_EXPORT_NAME, exportFooterFor } from './brand.js';
 
 /**
@@ -43,12 +43,22 @@ export const DAR_NOTIFY_RECENT =
  */
 export const DAR_SEND_UNCONFIRMED =
   "We couldn't confirm the send. Check your Outlook Sent Items before sending again.";
-/** Sending the same saved report again soon after a sent or unconfirmed send needs a confirm. */
-export const DAR_RESEND_CONFIRM_WINDOW_MS = 15 * 60 * 1000;
-export const darResendConfirmMessage = (state: 'sent' | 'unknown') =>
-  state === 'unknown'
-    ? "Your last send of this report couldn't be confirmed. Check your Outlook Sent Items first. Send it again anyway?"
-    : 'You sent this report a few minutes ago. Send it again?';
+/**
+ * CR-16 / UIE 6: sending a saved report that already has a send on record (sent, or an
+ * unconfirmed send) always needs an explicit confirm, however long ago it was.
+ * `lastAttemptAt` is the ISO time of that send (from the 409); it is shown in Asia/Manila.
+ */
+export function darResendConfirmMessage(
+  state: 'sent' | 'unknown',
+  lastAttemptAt: string,
+  range: { from: string; to: string },
+): string {
+  const when = formatPhDateTime(lastAttemptAt);
+  const r = darEmailRange(range.from, range.to);
+  return state === 'unknown'
+    ? `We couldn't confirm your last send of the report for ${r} on ${when}. Microsoft may already have sent it, so check your Outlook Sent Items. Send it again anyway?`
+    : `Already sent on ${when}: report for ${r}. Send it again?`;
+}
 
 /** First sentence of every failed-send message (web banner, 409 SEND_UNAVAILABLE). */
 export const DAR_NOT_SENT = "Your report wasn't sent.";
@@ -74,7 +84,7 @@ const DAR_SEND_FAILURE_LINES: Readonly<Record<string, string>> = {
   consent_declined:
     "You didn't allow OpsTrack to send email as you. Press Send again and choose Accept, or export the report.",
   admin_consent_required:
-    'Your organisation needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.',
+    'Your organization needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.',
   wrong_account: 'Pick the same Microsoft account you use for OpsTrack.',
   too_large: DAR_TOO_LARGE,
   not_linked: DAR_PASSWORD_ONLY,
@@ -290,6 +300,14 @@ export function darEmailRange(from: string, to: string): string {
   if (from.slice(0, 4) === to.slice(0, 4))
     return `${formatShortDate(from)} to ${formatLongDate(to)}`;
   return `${formatLongDate(from)} to ${formatLongDate(to)}`;
+}
+/** An instant in Asia/Manila (UTC+8, no daylight saving): "2026-10-13T09:20:00Z" → "Oct 13, 2026, 5:20 PM". */
+export function formatPhDateTime(iso: string): string {
+  const t = new Date(iso);
+  const h24 = new Date(t.getTime() + 8 * 3_600_000).getUTCHours();
+  const min = String(t.getUTCMinutes()).padStart(2, '0');
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${formatLongDate(phDateOf(t))}, ${h12}:${min} ${h24 < 12 ? 'AM' : 'PM'}`;
 }
 /** "2026-09-30" → "Sep 30" */
 export function formatShortDate(d: string): string {

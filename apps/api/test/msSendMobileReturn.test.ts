@@ -261,7 +261,7 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     expect((await confirm(bearer, code2)).body.sent).toBe(savedId);
   });
 
-  it('timeout: the app reads send_error=result_unavailable; a re-send within 15 min needs confirmResend', async () => {
+  it('timeout: the app reads send_error=result_unavailable; a re-send always needs confirmResend (CR-16)', async () => {
     const { oid, bearer, savedId } = await darMember();
     const t0 = Date.now();
     setTestTime(t0);
@@ -277,7 +277,8 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
       send_error: 'result_unavailable',
       recipients: 0,
     });
-    setTestTime(t0 + 60_000);
+    // No time window: a day later the app still has to confirm.
+    setTestTime(t0 + 86_400_000);
     const blocked = await startDarMobile(bearer, savedId);
     expect(blocked.res.status).toBe(409);
     expect(blocked.res.body.error).toMatchObject({

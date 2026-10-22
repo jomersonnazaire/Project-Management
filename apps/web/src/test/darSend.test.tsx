@@ -293,7 +293,7 @@ describe('return from Microsoft (?sent= and ?send_error=)', () => {
     ],
     [
       'admin_consent_required',
-      'Your organisation needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.',
+      'Your organization needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.',
     ],
     ['wrong_account', 'Pick the same Microsoft account you use for OpsTrack.'],
     ['too_large', DAR_TOO_LARGE],
@@ -324,7 +324,15 @@ describe('return from Microsoft (?sent= and ?send_error=)', () => {
     expect(await within(banner).findByTestId('dar-send-failed-range')).toHaveTextContent(
       'Report: Oct 13, 2026',
     );
-    await userEvent.click(within(banner).getByRole('button', { name: 'Retry' }));
+    await userEvent.click(await within(banner).findByRole('button', { name: 'Retry' }));
+    // Retry opens the same To, CC and attachment confirm as "Send to supervisor" first.
+    expect(
+      await screen.findByText(
+        "To: Supervisor Sam · CC: cc@xceler8.example (Set by Admin). It's sent from your Microsoft 365 mailbox with the PDF attached. The first time, Microsoft may ask you to allow this.",
+      ),
+    ).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([u, i]) => isSendPost(String(u), i))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     const busy = await within(banner).findByRole('button', { name: 'Opening Microsoft…' });
     expect(busy).toBeDisabled();
     release();
@@ -357,7 +365,8 @@ describe('return from Microsoft (?sent= and ?send_error=)', () => {
     );
     renderAt('/dar/saved?send_error=graph_unavailable&report=s1', <App />);
     const banner = await screen.findByTestId('dar-send-failed');
-    await userEvent.click(within(banner).getByRole('button', { name: 'Retry' }));
+    await userEvent.click(await within(banner).findByRole('button', { name: 'Retry' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
     expect(
       await screen.findByText(
         "Your report wasn't sent. Sending reports isn't turned on. Export the report and send it yourself.",
@@ -368,11 +377,37 @@ describe('return from Microsoft (?sent= and ?send_error=)', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
-  it('without a report id there is no Retry (older links)', async () => {
+  it('without a report id there is no Retry (older links), and the dates say unavailable', async () => {
     api('MEMBER', savedRoutes(linked));
     renderAt('/dar/saved?send_error=send_forbidden', <App />);
     const banner = await screen.findByTestId('dar-send-failed');
     expect(within(banner).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(banner).getByTestId('dar-send-failed-range')).toHaveTextContent(
+      /^Report dates unavailable$/,
+    );
+  });
+
+  it('if the report dates can\'t load, the banner says "Report dates unavailable"', async () => {
+    api(
+      'MEMBER',
+      savedRoutes(linked, (url) =>
+        /\/dar\/saved\/s1(\?|$)/.test(url)
+          ? { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found' } } }
+          : undefined,
+      ),
+    );
+    renderAt('/dar/saved?send_error=graph_unavailable&report=s1', <App />);
+    const banner = await screen.findByTestId('dar-send-failed');
+    expect(await within(banner).findByTestId('dar-send-failed-range')).toHaveTextContent(
+      /^Report dates unavailable$/,
+    );
+  });
+
+  it('on load, keyboard focus moves to the failure banner', async () => {
+    api('MEMBER', savedRoutes(linked));
+    renderAt('/dar/saved?send_error=graph_unavailable&report=s1', <App />);
+    const banner = await screen.findByTestId('dar-send-failed');
+    await waitFor(() => expect(banner).toHaveFocus());
   });
 
   it('the modal Send button says "Opening Microsoft…" and is disabled while starting', async () => {
@@ -394,13 +429,21 @@ describe('return from Microsoft (?sent= and ?send_error=)', () => {
 });
 
 describe('unconfirmed send (Graph timeout) and the re-send confirm', () => {
+  const LAST_ATTEMPT = '2026-10-13T09:20:00.000Z';
+  const SENT_CONFIRM =
+    'Already sent on Oct 13, 2026, 5:20 PM: report for Oct 13, 2026. Send it again?';
+  const UNKNOWN_CONFIRM =
+    "We couldn't confirm your last send of the report for Oct 13, 2026 on Oct 13, 2026, 5:20 PM. Microsoft may already have sent it, so check your Outlook Sent Items. Send it again anyway?";
   const resend409 = (state: 'sent' | 'unknown') => ({
     status: 409,
     body: {
       error: {
         code: 'ALREADY_SENT_OR_UNKNOWN',
-        message: darResendConfirmMessage(state),
-        details: { state, lastAttemptAt: '2026-10-13T09:20:00.000Z' },
+        message: darResendConfirmMessage(state, LAST_ATTEMPT, {
+          from: '2026-10-13',
+          to: '2026-10-13',
+        }),
+        details: { state, lastAttemptAt: LAST_ATTEMPT },
       },
     },
   });
@@ -414,6 +457,7 @@ describe('unconfirmed send (Graph timeout) and the re-send confirm', () => {
     const { router } = renderAt('/dar/saved?send_error=result_unavailable', <App />);
     expect(await screen.findByTestId('dar-send-unknown')).toHaveTextContent(DAR_SEND_UNCONFIRMED);
     expect(screen.getByTestId('dar-send-unknown')).toHaveClass('alert-warning');
+    expect(screen.getByTestId('dar-send-unknown')).toHaveAttribute('role', 'status');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/couldn't send your report/)).not.toBeInTheDocument();
     await waitFor(() => expect(router.state.location.search).toBe(''));
@@ -459,7 +503,7 @@ describe('unconfirmed send (Graph timeout) and the re-send confirm', () => {
       await within(dialog).findByRole('button', { name: 'Send to supervisor' }),
     );
     await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
-    expect(await screen.findByText(darResendConfirmMessage('unknown'))).toBeInTheDocument();
+    expect(await screen.findByText(UNKNOWN_CONFIRM)).toBeInTheDocument();
     expect(assign).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Send again' }));
     await waitFor(() =>
@@ -486,12 +530,79 @@ describe('unconfirmed send (Graph timeout) and the re-send confirm', () => {
       await within(dialog).findByRole('button', { name: 'Send to supervisor' }),
     );
     await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
-    expect(await screen.findByText(darResendConfirmMessage('sent'))).toBeInTheDocument();
+    expect(await screen.findByText(SENT_CONFIRM)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() =>
-      expect(screen.queryByText(darResendConfirmMessage('sent'))).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText(SENT_CONFIRM)).not.toBeInTheDocument());
     expect(sendPosts(fetch)).toHaveLength(1);
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('the unknown banner shows "Report: {range}" and takes focus on load', async () => {
+    api('MEMBER', savedRoutes(linked));
+    renderAt('/dar/saved?send_error=result_unavailable&report=s1', <App />);
+    const banner = await screen.findByTestId('dar-send-unknown');
+    expect(await within(banner).findByTestId('dar-send-unknown-range')).toHaveTextContent(
+      /^Report: Oct 13, 2026$/,
+    );
+    await waitFor(() => expect(banner).toHaveFocus());
+  });
+
+  it('Retry after an unknown result: To/CC confirm, then the "couldn\'t confirm" confirm, never straight to Microsoft', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    const fetch = api(
+      'MEMBER',
+      savedRoutes(linked, (url, init) => {
+        if (!(url.endsWith('/dar/saved/s1/send') && init?.method === 'POST')) return undefined;
+        const body = JSON.parse(String(init.body)) as { confirmResend?: boolean };
+        return body.confirmResend
+          ? { status: 200, body: { url: 'https://login.microsoftonline.com/mock' } }
+          : resend409('unknown');
+      }),
+    );
+    renderAt('/dar/saved?send_error=result_unavailable&report=s1', <App />);
+    const banner = await screen.findByTestId('dar-send-unknown');
+    await userEvent.click(await within(banner).findByRole('button', { name: 'Retry' }));
+    expect(
+      await screen.findByText(/^To: Supervisor Sam · CC: cc@xceler8\.example/),
+    ).toBeInTheDocument();
+    expect(sendPosts(fetch)).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByText(UNKNOWN_CONFIRM)).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Send again' }));
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('https://login.microsoftonline.com/mock'),
+    );
+    expect(sendPosts(fetch).map(([, i]) => JSON.parse(String(i!.body)))).toEqual([
+      {},
+      { confirmResend: true },
+    ]);
+  });
+
+  it('Retry after an unknown result: cancelling either confirm sends nothing more', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    const fetch = api(
+      'MEMBER',
+      savedRoutes(linked, (url, init) =>
+        url.endsWith('/dar/saved/s1/send') && init?.method === 'POST'
+          ? resend409('unknown')
+          : undefined,
+      ),
+    );
+    renderAt('/dar/saved?send_error=result_unavailable&report=s1', <App />);
+    const banner = await screen.findByTestId('dar-send-unknown');
+    await userEvent.click(await within(banner).findByRole('button', { name: 'Retry' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(sendPosts(fetch)).toHaveLength(0);
+    await userEvent.click(within(banner).getByRole('button', { name: 'Retry' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
+    expect(await screen.findByText(UNKNOWN_CONFIRM)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByText(UNKNOWN_CONFIRM)).not.toBeInTheDocument());
+    expect(sendPosts(fetch)).toHaveLength(1);
+    expect(assign).not.toHaveBeenCalled();
+    expect(within(banner).getByRole('button', { name: 'Retry' })).toBeEnabled();
   });
 });

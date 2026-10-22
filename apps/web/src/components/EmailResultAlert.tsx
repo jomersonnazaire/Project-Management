@@ -34,7 +34,8 @@ export function EmailResultAlert() {
       variant={error ? 'warning' : 'success'}
       dismissible
       onClose={dismiss}
-      role="status"
+      // Failures are announced at once (UIE); a success, or "couldn't confirm", is a polite status.
+      role={error && error !== 'result_unavailable' ? 'alert' : 'status'}
       data-testid="email-result"
     >
       {error

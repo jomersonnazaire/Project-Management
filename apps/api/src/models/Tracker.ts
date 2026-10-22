@@ -91,7 +91,7 @@ const savedReportSchema = new Schema(
     /**
      * Last Send whose result is unknown (Graph timed out or the connection dropped after the
      * request went out): it may or may not have gone. Cleared by the next confirmed send; a
-     * failed send never touches it. A re-send within 15 minutes of this or sentAt needs an
+     * failed send never touches it. Any re-send while this or sentAt is set needs an
      * explicit confirm.
      */
     sendUnknownAt: { type: Date, default: null },
