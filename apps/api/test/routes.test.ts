@@ -70,7 +70,7 @@ describe('Route policy table', () => {
     const entries = app.locals.routes as RouteEntry[];
     const table = entries.map((e) => {
       const p = e.policy;
-      return `${e.method} ${e.path} ${p.kind === 'permission' ? `${p.record}.${p.action}` : p.kind}`;
+      return `${e.method} ${e.path} ${p.kind === 'permission' ? `${p.record}.${p.action}${p.beforeScope ? ' (before scope)' : ''}` : p.kind}`;
     });
     expect(table).toEqual([
       'GET /health public',
@@ -208,9 +208,9 @@ describe('Route policy table', () => {
       'GET /dar/saved/:id activities.view',
       'GET /dar/saved/:id/export/:format activities.view',
       'GET /dar/send-status activities.view',
-      'POST /dar/saved/:id/send/mobile activities.view',
-      'POST /dar/saved/:id/send activities.view',
-      'POST /dar/saved/:id/notify-supervisor activities.view',
+      'POST /dar/saved/:id/send/mobile activities.edit (before scope)',
+      'POST /dar/saved/:id/send activities.edit (before scope)',
+      'POST /dar/saved/:id/notify-supervisor activities.edit (before scope)',
       'GET /leave/types leave.view',
       'GET /leave/types/all settings.view',
       'POST /leave/types settings.edit',

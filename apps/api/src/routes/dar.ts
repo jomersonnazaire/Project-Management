@@ -39,6 +39,13 @@ import {
 import { notifyPersonal } from '../services/notify.js';
 
 const formatParam = z.enum(['pdf', 'xlsx']);
+/**
+ * DAR Send and Notify supervisor email or notify someone else, so they need the tracker's write
+ * permission (activities.edit, as submitting a day), not just view. Viewers have no activities
+ * access (Q-70 B): 403, checked before the saved report is looked up (DEF-018), so a Viewer gets
+ * 403 even for an id that doesn't exist.
+ */
+const SEND_PERM = perm('activities', 'edit', { beforeScope: true });
 /** Send body: `confirmResend: true` after the 409 ALREADY_SENT_OR_UNKNOWN confirm. */
 const confirmResendField = { confirmResend: z.boolean().optional() };
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -166,13 +173,13 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
   // URL; the browser then navigates there. Its own per-user limiter (D5).
   // Mobile Send (bearer only): same checks, the OAuth state is kept server-side instead of a
   // cookie and the callback returns to the app (services/msSendReturn.ts).
-  r.post('/saved/:id/send/mobile', perm('activities', 'view'), sendLimiter, async (req, res) => {
+  r.post('/saved/:id/send/mobile', SEND_PERM, sendLimiter, async (req, res) => {
     if (!isMobileSend(res)) throw MOBILE_SEND_ONLY;
     const body = parseBody(mobileSendSchema.extend(confirmResendField), req);
     await startSend(req, res, body.code_challenge, body.confirmResend === true);
   });
 
-  r.post('/saved/:id/send', perm('activities', 'view'), sendLimiter, async (req, res) => {
+  r.post('/saved/:id/send', SEND_PERM, sendLimiter, async (req, res) => {
     const body = parseBody(z.strictObject(confirmResendField), req);
     await startSend(req, res, null, body.confirmResend === true);
   });
@@ -233,7 +240,7 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
     res.json({ url: login.url });
   }
 
-  r.post('/saved/:id/notify-supervisor', perm('activities', 'view'), async (req, res) => {
+  r.post('/saved/:id/notify-supervisor', SEND_PERM, async (req, res) => {
     parseBody(z.strictObject({}), req);
     const doc = await ownSaved(req);
     const user = await UserModel.findById(currentUser(req)._id);

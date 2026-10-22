@@ -19,19 +19,35 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 export type RoutePolicy =
   | { kind: 'public' }
   | { kind: 'authenticated' }
-  | { kind: 'permission'; record: RecordType; action: AccessAction };
+  | {
+      kind: 'permission';
+      record: RecordType;
+      action: AccessAction;
+      /**
+       * Refuse a role without `record.action` with 403 BEFORE the record scope check (and so
+       * before any lookup of the addressed record): the answer then depends only on the role,
+       * never on whether the id exists (DEF-018: a Viewer gets 403 on DAR Send / Notify even
+       * for a made-up id). Callers who hold the permission still get the scope 404 for records
+       * they can't see.
+       */
+      beforeScope?: boolean;
+    };
 
 export const PUBLIC: RoutePolicy = { kind: 'public' };
 export const AUTHENTICATED: RoutePolicy = { kind: 'authenticated' };
 
-export function perm(record: RecordType, action: AccessAction): RoutePolicy {
+export function perm(
+  record: RecordType,
+  action: AccessAction,
+  opts: { beforeScope?: boolean } = {},
+): RoutePolicy {
   if (!RECORD_TYPE_KEYS.includes(record) || !ACCESS_ACTIONS.includes(action)) {
     throw new Error(`Unknown permission ${record}.${action}`);
   }
   if (!actionApplies(record, action)) {
     throw new Error(`${action} doesn't apply to ${record}`);
   }
-  return { kind: 'permission', record, action };
+  return { kind: 'permission', record, action, ...(opts.beforeScope ? { beforeScope: true } : {}) };
 }
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
