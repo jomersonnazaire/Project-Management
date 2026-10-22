@@ -84,6 +84,12 @@ export const DAR_COLUMNS = [
   'Activity Remarks',
 ] as const;
 export const SAVED_LATEST = 'Latest';
+export const DAR_STATUS_SENT = 'Sent';
+export const DAR_STATUS_NOT_SENT = 'Not sent';
+/** Hover note on the Sent badge: Graph accepted it; delivery isn't confirmed. */
+export const DAR_SENT_NOTE = 'Accepted by Microsoft for delivery';
+/** "1 recipient" / "3 recipients" */
+export const recipientCountLabel = (n: number) => `${n} recipient${n === 1 ? '' : 's'}`;
 export const SAVED_EARLIER = 'Earlier version';
 
 const dateOnly = (label: string) =>
@@ -111,6 +117,7 @@ export const savedReportQuerySchema = z.strictObject({
   from: dateOnly('"Saved from"').optional(),
   to: dateOnly('"Saved to"').optional(),
   label: z.enum(['ALL', 'LATEST', 'EARLIER']).optional(),
+  sent: z.enum(['ALL', 'SENT', 'NOT_SENT']).optional(),
 });
 
 export type DarDayStatus = 'Submitted' | 'Not submitted' | 'Reopened';
@@ -181,6 +188,12 @@ export interface SavedReportSummaryDto {
   tag: SavedTag;
   /** Dates edited after this was saved (FR-DAR-13). */
   changedDates: string[];
+  /** Last successful Send (ISO), or null when it was never sent. */
+  sentAt: string | null;
+  /** Who sent it (user id); always the saver, since saved reports are private. */
+  sentBy: string | null;
+  /** How many people that send went to (To + CC). */
+  sentRecipientCount: number | null;
 }
 
 export interface SavedReportDto extends SavedReportSummaryDto {

@@ -16,6 +16,7 @@ export interface SavedFilters {
   from?: string;
   to?: string;
   label?: 'ALL' | 'LATEST' | 'EARLIER';
+  sent?: 'ALL' | 'SENT' | 'NOT_SENT';
 }
 
 export function useSavedReports(f: SavedFilters) {
