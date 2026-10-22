@@ -26,6 +26,7 @@ const config = {
   MS_CLIENT_ID: CLIENT_ID,
   MS_CLIENT_SECRET: 'msal-nonce-test-client-secret-not-real',
   MS_REDIRECT_URI: 'http://localhost:5173/api/auth/microsoft/callback',
+  msAllowedTenantIds: [TENANT],
 } as AppConfig;
 
 const b64url = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
@@ -140,18 +141,19 @@ vi.mock('@azure/msal-node', async (importOriginal) => {
 
 const { buildMicrosoftLoginUrl, exchangeMicrosoftCode, exchangeMicrosoftMailCode } =
   await import('../src/services/microsoftAuth.js');
-const { setMicrosoftJwksFetcherForTests, MS_JWKS_URL } =
-  await import('../src/services/msIdToken.js');
+const { setMicrosoftJwksForTests, msJwksUrl } = await import('../src/services/msIdToken.js');
 
 const jwksRequests: string[] = [];
 beforeAll(() => {
-  setMicrosoftJwksFetcherForTests(async (url) => {
-    jwksRequests.push(url);
-    const jwk = signingKeys.publicKey.export({ format: 'jwk' });
-    return { keys: [{ ...jwk, kid: KID, use: 'sig' }] };
+  setMicrosoftJwksForTests({
+    fetcher: async (url) => {
+      jwksRequests.push(url);
+      const jwk = signingKeys.publicKey.export({ format: 'jwk' });
+      return { keys: [{ ...jwk, kid: KID, use: 'sig' }] };
+    },
   });
 });
-afterAll(() => setMicrosoftJwksFetcherForTests(null));
+afterAll(() => setMicrosoftJwksForTests());
 
 afterEach(() => {
   current = fakeNetwork();
@@ -236,7 +238,7 @@ describe('sign-in ID token is verified (signature, issuer, audience) before any 
 
   it('a valid signed token passes; keys come from the Microsoft JWKS endpoint', async () => {
     await expect(run({})).resolves.toMatchObject({ tid: TENANT, oid: OID });
-    expect(jwksRequests.at(-1)).toBe(MS_JWKS_URL);
+    expect(jwksRequests.at(-1)).toBe(msJwksUrl(TENANT, CLIENT_ID));
   });
 
   it('an unsigned (alg none) token is refused', async () => {

@@ -47,6 +47,15 @@ Keep Microsoft Graph delegated `openid`, `profile`, `email`, and **`Mail.Send`**
 
 The API fails closed: if any of these is missing (including `EDGE_PROXY_SECRET`) or either allowlist is empty, the Microsoft button is hidden and no one can sign in with Microsoft. Email login is unaffected. A non-empty `EDGE_PROXY_SECRET` shorter than 32 characters is a configuration error: the API refuses to start.
 
+### ID token verification and signing keys
+The API checks every sign-in ID token itself before using any claim: RS256 signature, issuer `https://login.microsoftonline.com/{tid}/v2.0` (the token's own `tid`), audience = `MS_CLIENT_ID`, and expiry.
+
+- Signing keys come from the tenant's own endpoint, `https://login.microsoftonline.com/{tid}/discovery/v2.0/keys?appid={MS_CLIENT_ID}` (not `common`). `appid` makes this cover app-specific keys if a claims-mapping policy is ever added to the app registration.
+- Keys are fetched only for a `tid` listed in `MS_ALLOWED_TENANT_IDS`. A token from any other tenant is refused before any network call.
+- The App Service needs outbound HTTPS to `login.microsoftonline.com` (already required for sign-in).
+- Keys are cached in memory per tenant (per API instance). They are refreshed after about 24 hours, or once when a token names a key id (`kid`) that isn't cached (at most one such refresh every 5 minutes per tenant).
+- If a refresh fails or times out (10 seconds), the cached keys keep working and a warning is logged (`Microsoft signing keys refresh failed; using cached keys`, with the tenant id and error name only, never token data). Sign-in fails only when there are no cached keys at all, e.g. right after a restart while Microsoft is unreachable (`Microsoft signing keys fetch failed; no cached keys`).
+
 ## 7. Local development
 Add the same keys to `apps/api/.env` (never commit it), with `MS_REDIRECT_URI=http://localhost:5173/api/auth/microsoft/callback`, a dev client secret, and `EDGE_PROXY_SECRET` set to any random string of at least 32 characters. Start API + web as usual and open http://localhost:5173/login.
 
