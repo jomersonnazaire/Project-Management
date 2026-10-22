@@ -301,6 +301,16 @@ export function darEmailRange(from: string, to: string): string {
     return `${formatShortDate(from)} to ${formatLongDate(to)}`;
   return `${formatLongDate(from)} to ${formatLongDate(to)}`;
 }
+/**
+ * The mobile route's 409 ALREADY_SENT_OR_UNKNOWN text. The current app (PR #41) shows the API
+ * message as is and has no "send again" confirm yet, so it points to the web for a re-send.
+ */
+export function darMobileResendMessage(state: 'sent' | 'unknown', lastAttemptAt: string): string {
+  const when = formatPhDateTime(lastAttemptAt);
+  return state === 'unknown'
+    ? `We couldn't confirm your last send on ${when}. Microsoft may already have sent it, so check your Outlook Sent Items. To send it again, use OpsTrack on the web.`
+    : `Already sent on ${when}. To send it again, use OpsTrack on the web.`;
+}
 /** An instant in Asia/Manila (UTC+8, no daylight saving): "2026-10-13T09:20:00Z" → "Oct 13, 2026, 5:20 PM". */
 export function formatPhDateTime(iso: string): string {
   const t = new Date(iso);

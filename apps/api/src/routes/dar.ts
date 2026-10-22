@@ -1,6 +1,7 @@
 import {
   DAR_NOTIFY_RECENT,
   darRangeSchema,
+  darMobileResendMessage,
   darResendConfirmMessage,
   darSendFailureMessage,
   generatedRangeLabel,
@@ -233,7 +234,10 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
       throw new HttpError(
         409,
         'ALREADY_SENT_OR_UNKNOWN',
-        darResendConfirmMessage(last.state, lastAttemptAt, { from: doc.from, to: doc.to }),
+        // The mobile app shows this message as is (it has no re-send confirm yet).
+        mobileChallenge !== null
+          ? darMobileResendMessage(last.state, lastAttemptAt)
+          : darResendConfirmMessage(last.state, lastAttemptAt, { from: doc.from, to: doc.to }),
         { state: last.state, lastAttemptAt },
       );
     }

@@ -587,9 +587,21 @@ function useSendReport() {
 /** ?sent=: who it went to, from the send itself (not today's supervisor lookup). */
 function SentBanner({ savedId }: { savedId: string }) {
   const result = useDarSendResult(savedId);
-  if (result.isLoading) return null;
+  const ref = useRef<HTMLDivElement>(null);
+  const loaded = !result.isLoading;
+  // Keyboard focus moves here once it shows, like the failure and unknown banners.
+  useEffect(() => {
+    if (loaded) ref.current?.focus();
+  }, [loaded]);
+  if (!loaded) return null;
   return (
-    <div className="alert alert-success py-2" role="status" data-testid="dar-send-sent">
+    <div
+      ref={ref}
+      tabIndex={-1}
+      className="alert alert-success py-2"
+      role="status"
+      data-testid="dar-send-sent"
+    >
       {result.data ? darSentBanner(result.data) : 'Report sent.'}
     </div>
   );

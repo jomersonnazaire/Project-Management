@@ -263,6 +263,8 @@ describe('return from Microsoft (?sent= and ?send_error=)', () => {
       'Report for Oct 13, 2026 sent to Supervisor Sam (sup@xceler8.example). CC: Cee One, Cee Two.';
     expect(banner).toHaveTextContent(text);
     expect(banner).toHaveAttribute('role', 'status');
+    expect(banner).toHaveAttribute('tabindex', '-1');
+    await waitFor(() => expect(banner).toHaveFocus());
     expect(banner).not.toHaveTextContent('New Boss');
     await waitFor(() => expect(router.state.location.search).toBe(''));
     expect(screen.getByTestId('dar-send-sent')).toHaveTextContent(text);

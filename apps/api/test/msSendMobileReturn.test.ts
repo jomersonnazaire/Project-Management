@@ -1,7 +1,13 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetTestTime, setTestTime } from '../src/lib/clock.js';
-import { ActivityLogModel, MobileMailStateModel, UserModel } from '../src/models/index.js';
+import { darMobileResendMessage } from '@xc8/shared';
+import {
+  ActivityLogModel,
+  MobileMailStateModel,
+  SavedReportModel,
+  UserModel,
+} from '../src/models/index.js';
 import { MS_MAIL_COOKIE } from '../src/services/microsoftOAuthCookie.js';
 import { MOBILE_MAIL_RETURN } from '../src/services/msSendReturn.js';
 import { sha256 } from '../src/services/tokens.js';
@@ -281,14 +287,71 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     setTestTime(t0 + 86_400_000);
     const blocked = await startDarMobile(bearer, savedId);
     expect(blocked.res.status).toBe(409);
-    expect(blocked.res.body.error).toMatchObject({
+    expect(blocked.res.body.error).toEqual({
       code: 'ALREADY_SENT_OR_UNKNOWN',
+      message: darMobileResendMessage('unknown', new Date(t0).toISOString()),
       details: { state: 'unknown', lastAttemptAt: new Date(t0).toISOString() },
     });
+    // The text the current app shows as is: no web-only confirm wording, points to the web.
+    expect(blocked.res.body.error.message).toMatch(
+      /^We couldn't confirm your last send on [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M\. Microsoft may already have sent it, so check your Outlook Sent Items\. To send it again, use OpsTrack on the web\.$/,
+    );
     expect(await MobileMailStateModel.countDocuments({ phase: 'pending' })).toBe(0);
     const ok = await startDarMobile(bearer, savedId, { confirmResend: true });
     expect(ok.res.status).toBe(200);
     expect(await MobileMailStateModel.countDocuments({ phase: 'pending' })).toBe(1);
+  });
+
+  it('mobile 409 messages in Asia/Manila; confirmResend still accepted on the mobile route', async () => {
+    const { bearer, savedId } = await darMember();
+    // A send on record weeks ago (seeded on the record).
+    await SavedReportModel.updateOne(
+      { _id: savedId },
+      { $set: { sentAt: new Date('2026-10-13T09:20:00.000Z'), sentRecipientCount: 1 } },
+    );
+    const sent = await startDarMobile(bearer, savedId);
+    expect(sent.res.status).toBe(409);
+    expect(sent.res.body.error).toEqual({
+      code: 'ALREADY_SENT_OR_UNKNOWN',
+      message: 'Already sent on Oct 13, 2026, 5:20 PM. To send it again, use OpsTrack on the web.',
+      details: { state: 'sent', lastAttemptAt: '2026-10-13T09:20:00.000Z' },
+    });
+
+    // An unknown send after it (12:05 AM on Oct 14 in Manila) is the latest attempt.
+    await SavedReportModel.updateOne(
+      { _id: savedId },
+      { $set: { sendUnknownAt: new Date('2026-10-13T16:05:00.000Z') } },
+    );
+    const unknown = await startDarMobile(bearer, savedId, { confirmResend: false });
+    expect(unknown.res.status).toBe(409);
+    expect(unknown.res.body.error.message).toBe(
+      "We couldn't confirm your last send on Oct 14, 2026, 12:05 AM. Microsoft may already have sent it, so check your Outlook Sent Items. To send it again, use OpsTrack on the web.",
+    );
+    expect(unknown.res.body.error.details).toEqual({
+      state: 'unknown',
+      lastAttemptAt: '2026-10-13T16:05:00.000Z',
+    });
+    expect(await MobileMailStateModel.countDocuments({ phase: 'pending' })).toBe(0);
+
+    // Kept for a future app with a confirm: confirmResend: true starts the send.
+    const ok = await startDarMobile(bearer, savedId, { confirmResend: true });
+    expect(ok.res.status).toBe(200);
+    expect(ok.res.body.url).toMatch(/^https:\/\/login\.microsoftonline\.com\//);
+    expect(await MobileMailStateModel.countDocuments({ phase: 'pending' })).toBe(1);
+  });
+
+  it('the web 409 keeps the web confirm wording (not the mobile text)', async () => {
+    const { agent, savedId } = await darMember();
+    await SavedReportModel.updateOne(
+      { _id: savedId },
+      { $set: { sentAt: new Date('2026-10-13T09:20:00.000Z') } },
+    );
+    const res = await agent.post(`/api/v1/dar/saved/${savedId}/send`).set(CSRF).send({});
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toBe(
+      'Already sent on Oct 13, 2026, 5:20 PM: report for Oct 12 to Oct 16, 2026. Send it again?',
+    );
+    expect(res.body.error.message).not.toMatch(/use OpsTrack on the web/);
   });
 
   it('confirm: a wrong or missing PKCE verifier is refused, and the code is then spent', async () => {
