@@ -16,6 +16,7 @@
 | 09 | [Open Questions & Assumptions](09_OPEN_QUESTIONS.md) | Jomerson |
 | 10 | [Project Document Management](10_DOCUMENT_MANAGEMENT.md) | Everyone |
 | 16 | [M8 changes for mobile](16_M8_CHANGES_FOR_MOBILE.md) | Mobile team |
+| 17 | [Change requests (PRs #21 to #41)](17_CHANGE_REQUESTS.md) | Jomerson, Lean, Deven |
 
 **ID conventions:** `BR-xx` business requirement · `FR-<MOD>-xx` functional requirement · `US-xx` user story · `AC-xx.y` acceptance criterion (maps to `US-xx`) · `NFR-xx` non-functional · `EC-xx` edge case · `Q-xx` open question · `A-xx` assumption.
 
@@ -122,3 +123,4 @@ Every FR traces to a BR and every user story lists the FRs it covers, so QA can 
 - v0.4.27 / doc 11 (2026-10-13, 9:29 PM SGT): Q-82 to Q-86 as Rich's proposed defaults, pending Lean or Jomerson — Priority = existing severity (no new field); Closed issues show Resolved only if resolved before closing; invite as a one-time link shown once while there's no email (7 days, single use; needs Jomerson's security sign-off; UIE "Copy invite link" step if approved); re-inviting an active account forces a new password and ends sessions; portal controls, document sharing and client-facing go to whoever can edit the project (incl. co-PMs). New NFR-35: 20 failed sign-ins per IP in 15 minutes (Rich's number, for Lean to confirm). FR-ACL-30, 32, 33, 36; new AC-58.13 to 58.16, AC-59.4. Doc 15 (Deven's API contract draft) not edited.
 - **v1.2.24 (2026-10-13):** doc 14 EC-113 and Q-72 now say Admins and the Viewer's direct supervisor see existing Viewer leave.
 - v1.2.23 (2026-10-13, 10:52 PM SGT): doc 14 §G — confirmed against the code by Deven and Queen: timer starts with `POST /tracker/start` and stops with `POST /tracker/stop` (FR-ACT-02, FR-ACT-26, 409 `TIMER_RUNNING`); project create's only 422 is `INVALID_CLIENT`; 422 `INVALID_ACTIVITY_TYPE` belongs only to Project Type create and update.
+- **Doc 17 v0.2 (2026-10-22, 3:50 PM SGT):** new doc 17 — change requests CR-01 to CR-17 for work by Jonathan's bot on `main` (`cb3b48b..1f6492e`, plus PRs #27 and #29) and open PR #41: Microsoft 365 sign-in on web and mobile, auto-created Viewers, DAR Send from your own mailbox, sent status, action emails, "added you to" notice, mobile return path, mobile M8 catch-up, silent Microsoft relink, duplicate sends after a Graph timeout, external DAR CC addresses. All built and pending Jomerson's approval. New questions Q-87 to Q-106. Doc 14 §N US-57/AC-57.x clash with doc 11 and should be renumbered to US-60/AC-60.x. This README has no entries for doc 14 v1.2.25 to v1.2.28.

@@ -1,9 +1,13 @@
 # 17 — Change requests: Microsoft 365, DAR Send, action emails, mobile (PRs #21 to #41)
 
-**Status:** v0.1 draft (2026-10-22, 3:40 PM SGT) · **Author:** Business Analyst · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Status:** v0.2 draft (2026-10-22, 3:50 PM SGT) · **Author:** Business Analyst · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Scope:** what other accounts built on `main` from `cb3b48b` to `1f6492e`, plus PR #27 and PR #29 (merged just before `cb3b48b`) and open PR #41 (`feature/mobile-email-dar`, not merged). All the work came from Jonathan's bot (`JonathanBot/...` branches). The commits show as "Jonathan Esmalla" or "Jomerson Nazaire", and every one was made through the `jomersonnazaire` GitHub account.
 **Checked against:** docs 01 to 16 in this pack (doc 14 here is v1.2.25), `docs/FEATURES_AND_ROADMAP.md` (roadmap) and the copies of doc 14 (v1.2.28) and doc 09 on `main`, which these PRs changed.
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
+
+**Doc change log:**
+- v0.2 (2026-10-22, 3:50 PM SGT): added CR-15 (silent Microsoft relink), CR-16 (duplicate sends after a Graph timeout) and CR-17 (external DAR CC addresses), with Q-104 to Q-106. CR-01 now notes the sign-in audit gap (FR-SSO-09). Real account emails in the samples are replaced with generic placeholders (Jomerson's rule).
+- v0.1 (2026-10-22, 3:40 PM SGT): CR-01 to CR-14, Q-87 to Q-103.
 
 > **Every CR below is built, but none is approved.** No record in this pack shows that Jomerson approved any of it. The `main` copies of doc 14, doc 09 and the roadmap say **"approved by Jonathan"**, but Jonathan is not an approver anywhere in docs 01 to 16. Each CR needs Jomerson to approve it or send it back.
 
@@ -28,7 +32,7 @@
   - FR-SSO-01 placement differs: the button sits *below* the form, and FR-SSO-01 says *above*.
   - FR-SSO-02 is met in practice, but `MS_ALLOWED_TENANT_IDS` takes a comma-separated list (`config.ts:90`). That would allow more than one tenant, which contradicts "single tenant only".
   - FR-SSO-07 is partly met. The redirect is the fixed production web address, proxied to the API, and not the API address. After sign-in the API always returns to `WEB_APP_URL`, so "back to the site they started from" is not built.
-  - The build shows no sign-in audit with the method recorded, which FR-SSO-09 (Should) asks for. It only audits `sso_linked` and `sso_user_created`.
+  - **Sign-in audit gap (FR-SSO-09, Should):** Microsoft sign-ins, refused Microsoft sign-ins and successful password sign-ins are not written to the audit log, so the sign-in method isn't recorded anywhere. The only sign-in audit entries are `sso_linked` and `sso_user_created`. FR-SSO-09 should cover successes and refusals, with the method and the refusal reason.
   - The §11 messages ("isn't set up", "Wrong tenant", "Deactivated") are replaced by one generic message (`LoginPage.tsx:64`).
 - **Open questions:** Q-87 Does Jomerson lift the hold on Microsoft sign-in? Q-88 Must the tenant setting be limited to one ID? Q-89 Do the §11 messages stand, or does UIE accept the generic one?
 - **Status:** built, pending approval.
@@ -39,7 +43,7 @@
   - **Conflicts** with FR-SSO-04 and Q-37, which Jomerson decided on 2026-10-09 (§12, line 153: "only for users already in the app"). It also conflicts with EC-73 and FR-USR-01 (doc 03 line 20, where a user record has a job role).
   - The `main` copy of doc 14 rewrites FR-SSO-04 and Q-37 as "approved by Jonathan" and adds AC-57.8.
 - **Access impact:** a Viewer can read every project (doc 11 §6 matrix; FR-PMV-04). Any tenant member assigned to the Entra app therefore gets read access to all projects without an Admin invite. Q-37 exists to keep access deliberate, and this removes that. The only control left is Entra "Assignment required", which sits in the setup guide (`docs/setup/MS365_LOGIN_SETUP.md` §5) and not in the requirements.
-- **Data note:** each first sign-in adds a user record. The 2026-10-19 UAT cleanup kept 7 seed users plus `jom@gmail.com`, and any Microsoft sign-in since then may have added more. Deven should check the Users list for `authProvider: 'microsoft'` records.
+- **Data note:** each first sign-in adds a user record. The 2026-10-19 UAT cleanup kept the 7 seed users plus one password-only staff account, and any Microsoft sign-in since then may have added more. Deven should check the Users list for `authProvider: 'microsoft'` records.
 - **Open questions:** Q-90 Refuse unknown accounts (as Jomerson decided), or auto-create? If auto-create, as Viewer with read access to all projects, or with no project access until an Admin acts? Q-91 Is a user with no job role allowed (FR-USR-01)?
 - **Status:** built, pending approval. **Conflict.**
 
@@ -55,7 +59,7 @@
 - **M7 conflict, as asked:**
   - **The sending method fits Q-41.** "From the user's mailbox; recipients see it from the person" means delegated permission. Q-41 never says app-level (application) Mail.Send.
   - **It conflicts with §13/Q-49.** Jomerson's latest word was view and export only until the Microsoft sign-in item is taken off hold, and that hold was never lifted on record.
-  - **Delegated sending ties Send to a Microsoft-linked account.** Password-only users such as `jom@gmail.com` can never send. Q-38 says to keep passwords for those users.
+  - **Delegated sending ties Send to a Microsoft-linked account.** Password-only users (for example a staff user who signs in as `user@example.com`) can never send. Q-38 says to keep passwords for those users.
 - **Doc defect:** §N uses **US-57 and AC-57.1 to 57.8**, but doc 11 already uses those IDs for the client portal (doc 11 lines 258–269, cited in doc 15). The §N items need renumbering to the next free IDs (**US-60, AC-60.x**).
 - **Open questions:** Q-93 Does Jomerson confirm the delegated own-mailbox sender over a company or noreply sender? Q-94 Is the roadmap claim "admin consent granted Oct 21" confirmed by the tenant admin (A-19)?
 - **Status:** built, pending approval.
@@ -163,14 +167,42 @@
   - (e) This local pack is behind `main` and needs syncing once Jomerson decides.
 - **Status:** pending approval. Docs need correcting.
 
-## 2. New questions for Jomerson (Q-87 to Q-103)
-Q-87 Lift the Microsoft sign-in hold? · Q-88 One tenant ID only? · Q-89 §11 sign-in messages · Q-90 Auto-create or refuse unknown accounts? · Q-91 Users without a job role · Q-92 Is mobile in scope (sign-in, DAR, emails, M8 catch-up)? · Q-93 Delegated own-mailbox sender confirmed? · Q-94 Mail.Send admin consent confirmed? · Q-95 HTML DAR body before go-live? · Q-96 Saved copy showing stale recipients · Q-97 Manual or automatic supervisor notice · Q-98 Last send only, or send history? · Q-99 Bring email notifications forward? · Q-100 Action email sender · Q-101 Email box ticked by default? · Q-102 Who controls the email flag in production · Q-103 Keep the "added you to" notice?
+### CR-15 — Silent relinking of a Microsoft account (PR #27)
+- **What changed:** when a Microsoft account signs in and no user matches its Entra IDs (`oid` and `tid`), the user with the same email is linked to it (`microsoftSignIn.ts:53–61` at PR #27 head). That user's stored `msOid` and `msTid` are overwritten without checking whether a *different* Microsoft account was already linked. A different Microsoft account with the same email (for example after a mailbox is deleted and recreated, or a reused address) silently takes over the existing user and their access. The only trace is a routine `sso_linked` audit entry.
+- **Requirement it amends:** FR-SSO-04 says later sign-ins match on `oid` "so an email change in Entra doesn't break the link". It doesn't say what happens when a user who is already linked meets a different `oid` with the same email. EC-73 covers only the first link of a password user. **Proposed (new FR-SSO-11):** if the user already has a different `oid`/`tid` linked, refuse the Microsoft sign-in, leave the link unchanged, and write an audit entry (for example `sso_relink_refused` with the old and new IDs). An Admin clears or resets the link by hand, and that is audited too.
+- **Open questions:** Q-104 Should a different Microsoft account with the same email be refused and audited, so only an Admin can move the link? Or may it relink automatically?
+- **Status:** built, pending approval. **Unspecified, needs a decision.**
+
+### CR-16 — Duplicate DAR and action-email sends after a Graph timeout (PRs #29, #34; mobile #41)
+- **What changed:**
+  - The Graph `sendMail` call gives up after **20 seconds** (`graphMail.ts:92` at PR #29 head, `AbortSignal.timeout(20_000)`).
+  - If Microsoft had already accepted the mail, the send is still recorded as failed (`report_send_failed`, and the report stays "Not sent" under #35). Retrying sends the email **twice**.
+  - The confirm step has no "Already sent on {date}. Send again?" warning for a report that already went out.
+  - On mobile (#41), two quick taps can both start a send.
+  - Action emails (#34) use the same Graph path and have the same timeout risk.
+- **Requirement it amends:** FR-DAR-06 (re-send allowed, each send logged), FR-DAR-15 and the `main` §N FR-DAR-20 and FR-DAR-23 (send record). None of them covers an unknown outcome, duplicate protection or a re-send warning. **Proposed (new FR-DAR-28, and the same rule for action emails under FR-NTF-08):**
+  - (a) Each Send is idempotent: one user action sends at most one email, and repeated taps or a retried request with the same send ID don't send again.
+  - (b) A timeout or other unknown result is recorded and shown as **"Outcome unknown – check your Sent Items before sending again"**, not "Failed".
+  - (c) Sending a report that already shows Sent asks "Already sent on {date, time} (PH). Send again?" first.
+  - (d) The Send control is disabled while a send is in progress, on web and mobile.
+- **Open questions:** Q-105 Do we adopt idempotent Send, an "outcome unknown" status and an already-sent warning for DAR and action emails? Should an unknown outcome block a re-send until the user confirms?
+- **Status:** built, pending approval. **Gap, needs a decision.**
+
+### CR-17 — DAR CC addresses outside the company email domain (PR #29)
+- **What changed:** an Admin can set a user's Report CC list (`reportCc`, up to 5) to any valid email address, including addresses outside the company domain. Since #29, DAR Send emails those addresses from the user's own mailbox. The send copies at most 5 of them, drops duplicates, and leaves out the supervisor and the sender.
+- **Requirement it amends:** FR-DAR-01 ("up to 5 valid addresses") and FR-DAR-17 (CC only from the profile, changed only by Admins and audited). Neither limits the domain. Doc 09 Q-02 says no email to client contacts, and doc 01 lists "any email to client contacts" as out of scope. A CC to a client address would break that, and nothing stops it.
+- **Open questions:** Q-106 Should DAR CC addresses be limited to the company email domain(s), or are external addresses allowed? If allowed, which ones, and should client-contact addresses be refused?
+- **Status:** built, pending approval. **Unspecified, needs a decision.**
+
+## 2. New questions for Jomerson (Q-87 to Q-106)
+Q-87 Lift the Microsoft sign-in hold? · Q-88 One tenant ID only? · Q-89 §11 sign-in messages · Q-90 Auto-create or refuse unknown accounts? · Q-91 Users without a job role · Q-92 Is mobile in scope (sign-in, DAR, emails, M8 catch-up)? · Q-93 Delegated own-mailbox sender confirmed? · Q-94 Mail.Send admin consent confirmed? · Q-95 HTML DAR body before go-live? · Q-96 Saved copy showing stale recipients · Q-97 Manual or automatic supervisor notice · Q-98 Last send only, or send history? · Q-99 Bring email notifications forward? · Q-100 Action email sender · Q-101 Email box ticked by default? · Q-102 Who controls the email flag in production · Q-103 Keep the "added you to" notice? · Q-104 Refuse and audit a different Microsoft account with the same email? · Q-105 Idempotent Send, "outcome unknown" status and an already-sent warning? · Q-106 Company-domain-only DAR CC, or external addresses allowed?
 
 ## 3. Requirements to write once decided
 - **FR-SSO-04 (rewrite)** with the auto-create decision, plus **FR-SSO-10** for mobile Microsoft sign-in (deep link, one-time code, its messages).
 - **FR-DAR-20 to 27** (from `main` §N) once approved, with the user story and acceptance criteria renumbered to **US-60 / AC-60.1 to 60.8**. Rewrite **FR-DAR-12** (recipients at send time) and **FR-DAR-15** (send-status fields). Settle **FR-DAR-07** (HTML body) and FR-DAR-04b/§11 (manual Notify supervisor).
 - **FR-NTF-07** "added to project" in-app notice. **FR-NTF-08** action emails (events, recipients, sender, opt-in default, flag). **FR-NTF-02** amended, or kept and the build parked.
 - **Mobile scope** in doc 01 and the roadmap, plus mobile requirements (doc 16 or a new doc) for DAR Send and action emails.
+- **FR-SSO-11** refuse and audit a relink to a different Microsoft account (CR-15). **FR-SSO-09** widened to all sign-ins and refusals (CR-01). **FR-DAR-28** idempotent Send, unknown outcome and already-sent warning, also applied to action emails (CR-16). **FR-DAR-01 / FR-DAR-17** CC domain rule (CR-17).
 - **FR-ACT-17** reworded: location is set per day only.
 - **FR-USR-01** amended if a job role can be empty.
 - Edge cases to add: EC-128 (user removed in Entra keeps an open session up to 12 h), EC-129 (Microsoft user with no mailbox), EC-130 (a follow-up already emailed is not emailed again).
