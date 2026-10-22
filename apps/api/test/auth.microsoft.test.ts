@@ -11,7 +11,8 @@ import {
   readEmailFromIdTokenClaims,
   type MicrosoftIdClaims,
 } from '../src/services/microsoftAuth.js';
-import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
+import { emailLinkBasis } from '../src/services/microsoftSignIn.js';
+import { CSRF, PASSWORD, createUser, login, makeApp, testConfig, useDatabase } from './helpers.js';
 
 const loginReq = (a: ReturnType<typeof makeApp>, email: string, password: string) =>
   request(a).post('/api/v1/auth/login').set(CSRF).send({ email, password });
@@ -235,24 +236,90 @@ describe('Microsoft 365 sign-in', () => {
     });
   });
 
-  it('5 existing user, domain allowed, xms_edov absent: refused ms_email_unverified, not linked', async () => {
-    const a = appMs();
-    const user = await createUser({ email: `nodov@${DOMAIN}` });
-    const claims = baseClaims();
-    claims.email = user.email;
-    claims.oid = '44444444-4444-4444-4444-444444444444';
-    delete claims.xms_edov;
-    const res = await runCallback(a, claims);
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('http://localhost:5173/login?error=ms_email_unverified');
-    expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/xc8_sid=[^;]/);
-    expect((await UserModel.findById(user._id))?.msOid).toBeFalsy();
-    const refused = await ActivityLogModel.findOne({
-      action: 'sso_link_refused',
-      entityId: user._id,
+  describe('5 xms_edov missing: link only for our tenant and an allowed domain (Lean)', () => {
+    const OTHER_TENANT = '99999999-9999-9999-9999-999999999999';
+
+    it('our tenant, allowed domain: linked, audited as allowed_tenant_domain', async () => {
+      const a = appMs();
+      const user = await createUser({ email: `nodov-ok@${DOMAIN}` });
+      const claims = baseClaims(user.email);
+      delete claims.xms_edov;
+      const res = await runCallback(a, claims);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).not.toMatch(/error=/);
+      expect(String(res.headers['set-cookie'] ?? '')).toMatch(/xc8_sid=[^;]/);
+      const after = await UserModel.findById(user._id);
+      expect(after?.msOid).toBe(claims.oid);
+      expect(after?.msTid).toBe(TENANT);
+      const linked = await ActivityLogModel.findOne({ action: 'sso_linked', entityId: user._id });
+      expect(linked?.meta).toMatchObject({
+        msTid: TENANT,
+        emailVerifiedBy: 'allowed_tenant_domain',
+      });
     });
-    expect(refused?.reason).toBe('ms_email_unverified');
-    expect(await ActivityLogModel.countDocuments({ action: 'sso_linked' })).toBe(0);
+
+    it('another tenant: refused, not linked, no session', async () => {
+      const a = appMs();
+      const user = await createUser({ email: `nodov-tid@${DOMAIN}` });
+      const claims = baseClaims(user.email);
+      delete claims.xms_edov;
+      claims.tid = OTHER_TENANT;
+      const res = await runCallback(a, claims);
+      expect(res.headers.location).toMatch(/\/login\?error=ms_signin_failed$/);
+      expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/xc8_sid=[^;]/);
+      const after = await UserModel.findById(user._id);
+      expect(after?.msOid).toBeFalsy();
+      expect(after?.msTid).toBeFalsy();
+      expect(await ActivityLogModel.countDocuments({ action: 'sso_linked' })).toBe(0);
+    });
+
+    it('a domain that is not allowed: refused, not linked, no session', async () => {
+      // The user stays a seeded @xceler8.example account; only that domain is not allowed here.
+      const a = appMs({ MS_ALLOWED_DOMAINS: 'partner.xceler8.example' });
+      const user = await createUser({ email: `nodov-dom@${DOMAIN}` });
+      const claims = baseClaims(user.email);
+      delete claims.xms_edov;
+      const res = await runCallback(a, claims);
+      expect(res.headers.location).toMatch(/\/login\?error=ms_signin_failed$/);
+      expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/xc8_sid=[^;]/);
+      expect((await UserModel.findById(user._id))?.msOid).toBeFalsy();
+      expect(await ActivityLogModel.countDocuments({ action: 'sso_linked' })).toBe(0);
+    });
+
+    it('claim false (our tenant, allowed domain): refused ms_email_unverified, audited', async () => {
+      const a = appMs();
+      const user = await createUser({ email: `nodov-false@${DOMAIN}` });
+      const claims = baseClaims(user.email);
+      claims.xms_edov = false;
+      const res = await runCallback(a, claims);
+      expect(res.headers.location).toBe('http://localhost:5173/login?error=ms_email_unverified');
+      expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/xc8_sid=[^;]/);
+      expect((await UserModel.findById(user._id))?.msOid).toBeFalsy();
+      const refused = await ActivityLogModel.findOne({
+        action: 'sso_link_refused',
+        entityId: user._id,
+      });
+      expect(refused?.reason).toBe('ms_email_unverified');
+      expect(await ActivityLogModel.countDocuments({ action: 'sso_linked' })).toBe(0);
+    });
+
+    it('the fallback rule itself: missing claim needs both the tenant and the domain', () => {
+      const config = testConfig(MS_ENV);
+      const narrow = testConfig({ ...MS_ENV, MS_ALLOWED_DOMAINS: 'partner.xceler8.example' });
+      const c = (over: Partial<MicrosoftIdClaims>): MicrosoftIdClaims => {
+        const claims = { ...baseClaims(), ...over };
+        if (!('xms_edov' in over)) delete claims.xms_edov;
+        return claims;
+      };
+      const ours = `x@${DOMAIN}`;
+      expect(emailLinkBasis(c({ xms_edov: true }), ours, config)).toBe('xms_edov');
+      expect(emailLinkBasis(c({ xms_edov: false }), ours, config)).toBeNull();
+      expect(emailLinkBasis(c({}), ours, config)).toBe('allowed_tenant_domain');
+      expect(emailLinkBasis(c({ tid: OTHER_TENANT }), ours, config)).toBeNull();
+      expect(emailLinkBasis(c({}), ours, narrow)).toBeNull();
+      expect(emailLinkBasis(c({ tid: OTHER_TENANT }), ours, narrow)).toBeNull();
+      expect(emailLinkBasis(c({ xms_edov: true }), ours, narrow)).toBe('xms_edov');
+    });
   });
 
   it('5b existing user, xms_edov false: refused ms_email_unverified, not linked', async () => {

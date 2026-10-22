@@ -22,7 +22,7 @@ An account in the **Xceler8 Microsoft 365 tenant** with one of: Global Administr
 ## 3. Token claims
 **Token configuration > Add optional claim > ID**: add `email`, `xms_edov`, `acct`. Accept the prompt to enable the Microsoft Graph `email` permission.
 - `acct` is required: the API refuses sign-in unless `acct` is `0` (tenant member). Without it **every** Microsoft sign-in is refused.
-- `xms_edov` tells the API the email domain is verified (used for linking existing accounts).
+- `xms_edov` tells the API the email domain is verified (used for linking existing accounts). If the claim is missing (not configured), the API still links an existing account by email, but only when the verified ID token's `tid` is in `MS_ALLOWED_TENANT_IDS` and the email domain is in `MS_ALLOWED_DOMAINS`. If the claim is present and not `true`, linking is refused (`ms_email_unverified`).
 
 ## 4. API permissions
 Keep Microsoft Graph delegated `openid`, `profile`, `email`, and **`Mail.Send`** (for DAR Send from the user's mailbox). **Remove `User.Read`** (added by default). Then click **Grant admin consent for Xceler8**, including for `Mail.Send`, and check every row shows "Granted". With admin consent in place, users aren't asked to approve `Mail.Send` when they first press **Send** on a saved DAR. Sign-in itself still asks only for `openid profile email`; `Mail.Send` is requested only when someone presses Send.

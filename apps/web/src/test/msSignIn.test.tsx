@@ -10,7 +10,8 @@ const providers = (microsoft: boolean) => (url: string) =>
 const NO_EMAIL = /Your Microsoft account has no email address/;
 const FAILED = /couldn.t sign you in with Microsoft/;
 const MISMATCH = /already linked to a different Microsoft account/;
-const UNVERIFIED = /Microsoft couldn.t confirm your email address/;
+const UNVERIFIED =
+  "We couldn't link this Microsoft account to OpsTrack. Sign in with your Xceler8 work account, or use your email and password.";
 
 afterEach(() => vi.unstubAllGlobals());
 

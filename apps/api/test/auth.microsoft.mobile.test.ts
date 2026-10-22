@@ -336,7 +336,7 @@ describe('Microsoft 365 mobile sign-in', () => {
 
     const unverified = await createUser({ email: `m-nodov-${oidSeq}@${DOMAIN}` });
     const claims = baseClaims(unverified.email);
-    delete claims.xms_edov;
+    claims.xms_edov = false;
     mockMicrosoftStart('s-unverified');
     await mobileLoginStart(a);
     exchangeMock.mockResolvedValueOnce(claims);
@@ -350,6 +350,66 @@ describe('Microsoft 365 mobile sign-in', () => {
       await ActivityLogModel.find({ action: 'sso_link_refused' }).sort({ _id: 1 }).lean()
     ).map((e) => e.reason);
     expect(reasons).toEqual(['ms_account_mismatch', 'ms_email_unverified']);
+  });
+
+  it('8c xms_edov missing: links only for our tenant and an allowed domain (same rule as web)', async () => {
+    const start = async (a: ReturnType<typeof makeApp>, state: string, c: MicrosoftIdClaims) => {
+      mockMicrosoftStart(state);
+      await mobileLoginStart(a);
+      exchangeMock.mockResolvedValueOnce(c);
+      return (await mobileCallback(a, { state })).headers.location as string;
+    };
+    const noClaim = (email: string, over: Partial<MicrosoftIdClaims> = {}) => {
+      const c = { ...baseClaims(email), ...over };
+      delete c.xms_edov;
+      return c;
+    };
+
+    // Our tenant, allowed domain: linked, and the app gets a one-time code that works.
+    const ok = await createUser({ email: `m-nodov-ok-${oidSeq}@${DOMAIN}` });
+    const okClaims = noClaim(ok.email);
+    const okLoc = await start(appMs(), 's-nodov-ok', okClaims);
+    const code = parseAppCode(okLoc);
+    expect((await exchange(appMs(), code)).status).toBe(200);
+    expect((await UserModel.findById(ok._id))?.msOid).toBe(okClaims.oid);
+    expect(
+      (await ActivityLogModel.findOne({ action: 'sso_linked', entityId: ok._id }))?.meta,
+    ).toMatchObject({ emailVerifiedBy: 'allowed_tenant_domain' });
+
+    // Another tenant: refused.
+    const tid = await createUser({ email: `m-nodov-tid-${oidSeq}@${DOMAIN}` });
+    expect(
+      await start(
+        appMs(),
+        's-nodov-tid',
+        noClaim(tid.email, { tid: '99999999-9999-9999-9999-999999999999' }),
+      ),
+    ).toBe('opstrack://auth/microsoft?error=ms_signin_failed');
+    expect((await UserModel.findById(tid._id))?.msOid).toBeFalsy();
+
+    // A domain that isn't allowed (the account stays @xceler8.example; only the allow-list differs).
+    const dom = await createUser({ email: `m-nodov-dom-${oidSeq}@${DOMAIN}` });
+    expect(
+      await start(
+        appMs({ MS_ALLOWED_DOMAINS: 'partner.xceler8.example' }),
+        's-nodov-dom',
+        noClaim(dom.email),
+      ),
+    ).toBe('opstrack://auth/microsoft?error=ms_signin_failed');
+    expect((await UserModel.findById(dom._id))?.msOid).toBeFalsy();
+
+    // Claim false: refused with its own code.
+    const no = await createUser({ email: `m-dov-false-${oidSeq}@${DOMAIN}` });
+    expect(await start(appMs(), 's-dov-false', { ...baseClaims(no.email), xms_edov: false })).toBe(
+      'opstrack://auth/microsoft?error=ms_email_unverified',
+    );
+    expect((await UserModel.findById(no._id))?.msOid).toBeFalsy();
+
+    // Only the first one got a one-time code; only it was linked.
+    expect(await ActivityLogModel.countDocuments({ action: 'sso_linked' })).toBe(1);
+    expect(
+      (await ActivityLogModel.find({ action: 'sso_link_refused' }).lean()).map((e) => e.reason),
+    ).toEqual(['ms_email_unverified']);
   });
 
   it('9 access_denied → cancelled and pending removed', async () => {

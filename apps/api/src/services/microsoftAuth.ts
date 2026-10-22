@@ -1,5 +1,6 @@
 import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node';
 import type { AppConfig } from '../config.js';
+import { verifyMicrosoftIdToken } from './msIdToken.js';
 
 const DEFAULT_SCOPES = ['openid', 'profile', 'email'];
 const MAIL_SCOPES = ['Mail.Send'];
@@ -9,6 +10,7 @@ export interface MicrosoftIdClaims {
   tid: string;
   email: string;
   name: string;
+  /** true: Microsoft verified the email domain; false: present but not true; undefined: absent. */
   xms_edov?: boolean;
   acct?: number;
   idp?: string;
@@ -131,7 +133,11 @@ export async function exchangeMicrosoftCode(
     // the request names none (nonce_mismatch). Pass the nonce we put in the auth URL.
     nonce: expectedNonce,
   });
-  const claims = (result?.idTokenClaims ?? {}) as Record<string, unknown>;
+  // Every sign-in decision (tid allow-list, xms_edov or its tenant/domain fallback) uses only
+  // claims from the raw ID token after our own signature, issuer and audience checks; never
+  // MSAL's decoded copy alone and never anything the client sent.
+  if (!result?.idToken) throw new Error('Missing ID token');
+  const claims = await verifyMicrosoftIdToken(result.idToken, config);
   const base = parseIdTokenBase(claims, expectedNonce);
   const email = readEmailFromIdTokenClaims(claims);
   if (!email) throw new Error('Missing email');
@@ -139,7 +145,8 @@ export async function exchangeMicrosoftCode(
     ...base,
     email,
     name: nameFromClaims(claims, email),
-    xms_edov: claims.xms_edov === true,
+    // Three states: true, present but not true (false), or missing (undefined).
+    xms_edov: 'xms_edov' in claims ? claims.xms_edov === true : undefined,
     nonce: typeof claims.nonce === 'string' ? claims.nonce : undefined,
   };
 }

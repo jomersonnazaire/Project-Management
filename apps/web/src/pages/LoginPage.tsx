@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   APP_NAME,
+  MS_EMAIL_UNVERIFIED_MESSAGE,
   loginSchema,
   type LoginInput,
   type PermissionGrid,
@@ -69,8 +70,7 @@ export function LoginPage() {
       )}
       {msUnverified && (
         <Alert variant="danger" className="mt-3">
-          Microsoft couldn&apos;t confirm your email address, so we can&apos;t link it to your
-          account. Sign in with your email and password, or contact an Admin.
+          {MS_EMAIL_UNVERIFIED_MESSAGE}
         </Alert>
       )}
       {msError && (

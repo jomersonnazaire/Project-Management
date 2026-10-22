@@ -54,6 +54,28 @@ async function auditLinkRefused(
 }
 
 /**
+ * Why linking an existing user by email is allowed, or null to refuse (Lean: deploying must not
+ * depend on the app registration emitting xms_edov):
+ * - xms_edov present and true: Microsoft verified the email domain.
+ * - xms_edov present and not true: refuse.
+ * - xms_edov missing: only when the verified token's tid is in MS_ALLOWED_TENANT_IDS and the
+ *   email domain is in MS_ALLOWED_DOMAINS (our own tenant controls those addresses).
+ * `claims` must come from a verified ID token (signature, issuer, audience); see msIdToken.ts.
+ */
+export function emailLinkBasis(
+  claims: MicrosoftIdClaims,
+  email: string,
+  config: AppConfig,
+): 'xms_edov' | 'allowed_tenant_domain' | null {
+  if (claims.xms_edov === true) return 'xms_edov';
+  if (claims.xms_edov !== undefined) return null;
+  if (isAllowedTenant(claims.tid, config) && isAllowedEmailDomain(email, config)) {
+    return 'allowed_tenant_domain';
+  }
+  return null;
+}
+
+/**
  * Applies Microsoft sign-in rules 0–5: match, link, or create an internal user.
  * Caller must verify the ID token and nonce before invoking.
  */
@@ -90,7 +112,8 @@ export async function resolveMicrosoftSignIn(
       return refuse('link_denied');
     }
     // Linking by email trusts the email claim, so Microsoft must say it is verified.
-    if (claims.xms_edov !== true) {
+    const emailVerifiedBy = emailLinkBasis(claims, email, config);
+    if (!emailVerifiedBy) {
       await auditLinkRefused(existing._id, claims, email, 'ms_email_unverified');
       return refuse('ms_email_unverified');
     }
@@ -102,7 +125,7 @@ export async function resolveMicrosoftSignIn(
       entityType: 'user',
       entityId: existing._id,
       action: 'sso_linked',
-      meta: ssoMeta(existing._id, claims, email),
+      meta: { ...ssoMeta(existing._id, claims, email), emailVerifiedBy },
     });
     return { ok: true, user: existing };
   }

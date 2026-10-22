@@ -1,8 +1,10 @@
 /**
  * Runs the REAL msal-node token exchange (acquireTokenByCode), so MSAL's own ID-token nonce
  * check runs. Only the network is faked: MSAL's system.networkClient is swapped for an in-memory
- * client that serves the authority metadata and the token endpoint response with an unsigned
- * test ID token (MSAL doesn't verify signatures on the confidential-client code flow).
+ * client that serves the authority metadata and the token endpoint response with a test ID token
+ * signed (RS256) by a test key. MSAL doesn't verify signatures on the confidential-client code
+ * flow, so our own check (msIdToken.ts: signature, issuer, audience) runs on top and is tested
+ * here too, with signing keys served by a test JWKS fetcher.
  *
  * Regression for the production failure on 2026-10-20: msal-node 6 rejects an ID token that
  * carries a nonce when the request doesn't pass the expected nonce (ClientAuthError
@@ -10,7 +12,8 @@
  */
 import type * as Msal from '@azure/msal-node';
 import type { INetworkModule, NetworkResponse } from '@azure/msal-node';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { generateKeyPairSync, sign } from 'node:crypto';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AppConfig } from '../src/config.js';
 
 const TENANT = '22222222-2222-2222-2222-222222222222';
@@ -27,7 +30,12 @@ const config = {
 
 const b64url = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
 
-/** Unsigned (alg none) ID token; MSAL decodes it without checking a signature. */
+const KID = 'test-signing-key-1';
+const signingKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const otherKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
+let tokenMode: 'signed' | 'unsigned' | 'wrong-key' = 'signed';
+
+/** Test ID token, RS256-signed by the test key (or unsigned / signed by another key). */
 function idToken(claims: Record<string, unknown>): string {
   const now = Math.floor(Date.now() / 1000);
   const payload = {
@@ -42,7 +50,10 @@ function idToken(claims: Record<string, unknown>): string {
     ver: '2.0',
     ...claims,
   };
-  return `${b64url({ alg: 'none', typ: 'JWT' })}.${b64url(payload)}.`;
+  if (tokenMode === 'unsigned') return `${b64url({ alg: 'none', typ: 'JWT' })}.${b64url(payload)}.`;
+  const input = `${b64url({ alg: 'RS256', typ: 'JWT', kid: KID })}.${b64url(payload)}`;
+  const key = tokenMode === 'wrong-key' ? otherKeys.privateKey : signingKeys.privateKey;
+  return `${input}.${sign('RSA-SHA256', Buffer.from(input), key).toString('base64url')}`;
 }
 
 type Fake = {
@@ -129,9 +140,22 @@ vi.mock('@azure/msal-node', async (importOriginal) => {
 
 const { buildMicrosoftLoginUrl, exchangeMicrosoftCode, exchangeMicrosoftMailCode } =
   await import('../src/services/microsoftAuth.js');
+const { setMicrosoftJwksFetcherForTests, MS_JWKS_URL } =
+  await import('../src/services/msIdToken.js');
+
+const jwksRequests: string[] = [];
+beforeAll(() => {
+  setMicrosoftJwksFetcherForTests(async (url) => {
+    jwksRequests.push(url);
+    const jwk = signingKeys.publicKey.export({ format: 'jwk' });
+    return { keys: [{ ...jwk, kid: KID, use: 'sig' }] };
+  });
+});
+afterAll(() => setMicrosoftJwksFetcherForTests(null));
 
 afterEach(() => {
   current = fakeNetwork();
+  tokenMode = 'signed';
 });
 
 describe('real MSAL token exchange keeps the auth-URL nonce', () => {
@@ -196,5 +220,55 @@ describe('real MSAL token exchange keeps the auth-URL nonce', () => {
     await expect(
       exchangeMicrosoftMailCode(config, 'auth-code-4', 'v'.repeat(43), 'expected-nonce'),
     ).rejects.toThrow(/nonce/i);
+  });
+});
+
+describe('sign-in ID token is verified (signature, issuer, audience) before any claim is used', () => {
+  const run = (claims: Record<string, unknown>) => {
+    current.setIdTokenClaims({
+      nonce: 'n-1',
+      email: 'jonathan@xceler8.example',
+      acct: 0,
+      ...claims,
+    });
+    return exchangeMicrosoftCode(config, 'auth-code-v', 'v'.repeat(43), 'n-1');
+  };
+
+  it('a valid signed token passes; keys come from the Microsoft JWKS endpoint', async () => {
+    await expect(run({})).resolves.toMatchObject({ tid: TENANT, oid: OID });
+    expect(jwksRequests.at(-1)).toBe(MS_JWKS_URL);
+  });
+
+  it('an unsigned (alg none) token is refused', async () => {
+    tokenMode = 'unsigned';
+    await expect(run({})).rejects.toThrow(/not signed|algorithm/i);
+  });
+
+  it('a token signed by another key is refused', async () => {
+    tokenMode = 'wrong-key';
+    await expect(run({})).rejects.toThrow(/signature/i);
+  });
+
+  it('another audience is refused', async () => {
+    await expect(run({ aud: 'someone-elses-client-id' })).rejects.toThrow(/audience/i);
+  });
+
+  it('an issuer that does not match the token tid is refused', async () => {
+    await expect(run({ iss: `${HOST}/99999999-9999-9999-9999-999999999999/v2.0` })).rejects.toThrow(
+      /issuer/i,
+    );
+  });
+
+  it('an expired token is refused', async () => {
+    const past = Math.floor(Date.now() / 1000) - 7200;
+    await expect(run({ iat: past - 3600, nbf: past - 3600, exp: past })).rejects.toThrow(
+      /expired/i,
+    );
+  });
+
+  it('xms_edov keeps three states from the verified token: true, false, missing', async () => {
+    expect((await run({ xms_edov: true })).xms_edov).toBe(true);
+    expect((await run({ xms_edov: false })).xms_edov).toBe(false);
+    expect((await run({})).xms_edov).toBeUndefined();
   });
 });
