@@ -3,12 +3,12 @@
 ## Open questions for Jomerson
 Questions marked ★ blocked development or design decisions. **All ★ questions are resolved as of v0.3** (Jomerson accepted the proposed defaults on 2026-10-09). The rest can be answered during the build, and their proposed defaults apply until then.
 
-**Decisions in effect:** single company (Xceler8) in Phase 1 · client contacts are tracked only, with no emails to them · SAP B1 is the only seeded template · basic workload and effort variance reports stay in Phase 1 · documents are signed outside the app and the signed copy is uploaded.
+**Decisions in effect:** single company (Xceler8) in Phase 1 · client contacts are tracked only, with no emails to them (*exception, 2026-10-22: a DAR Report CC may be any address, client contacts included; doc 17 Q-106*) · SAP B1 is the only seeded template · basic workload and effort variance reports stay in Phase 1 · documents are signed outside the app and the signed copy is uploaded.
 
 | ID | Question | Why it matters | Proposed default |
 |----|----------|----------------|------------------|
 | Q-01 ★ | Who are the first users: Xceler8's own implementation team only, or will other companies use it (multi-tenant SaaS)? | Multi-tenancy changes the data model, auth, and billing | Single company (Xceler8) in Phase 1 **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
-| Q-02 ★ | Client interaction in Phase 1: contacts tracked only, or also email notifications/reminders to contacts? (blueprint §10) | Email needs a sending service and templates; affects password reset too | Tracked only; email used only for internal password reset **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
+| Q-02 ★ | Client interaction in Phase 1: contacts tracked only, or also email notifications/reminders to contacts? (blueprint §10) | Email needs a sending service and templates; affects password reset too | Tracked only; email used only for internal password reset **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** *Amended (Jomerson, 2026-10-22, 8:29 PM SGT):* DAR Send (Q-49 revised, doc 14 §13) emails the supervisor and Report CC list from the user's own mailbox, and any address may be a Report CC, client contacts included (doc 17 Q-106). The app still sends nothing to client contacts by itself. |
 | Q-03 | AI authority for Phase 2: recommendations only, automatic routine reminders, or broader automation with approval gates? (blueprint §10) | Shapes Phase 2 design; no impact on Phase 1 build | Recommendations only. **On hold (2026-10-13, 9:15 PM SGT):** Phase 2 waits until the whole app is built and working. |
 | Q-04 ★ | Which templates to seed at launch: SAP B1 only, or also Software/API, Cloud migration, General IT? | Someone must supply activities, estimates, durations | SAP B1 only, others created in-app later **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
 | Q-05 ★ | Keep the workload view and effort variance report in Phase 1 (mockup) or move them to Phase 2 (blueprint)? | Scope and timeline | Keep basic versions in Phase 1 **✅ RESOLVED 2026-10-09 (Jomerson): default accepted.** |
@@ -84,3 +84,15 @@ Document management questions Q-20 to Q-25 are in [10 §9](10_DOCUMENT_MANAGEMEN
 | Doc 11 portal questions | Q-73 to Q-76 set aside by Jomerson: build on the current defaults, no decision needed. New portal build defaults from Lean (Q-77 to Q-81), pending Jomerson. | doc 11 §10 |
 
 > **Q-09 confirmed by Jomerson (2026-10-13, 10:13 PM SGT):** example work date Oct 11 can be changed on Oct 12 and 13 and locks at 00:00 PHT on Oct 14; after that only an Admin reopening the day allows changes.
+
+## Decisions of 2026-10-22, 8:29 PM SGT (Jomerson, lead developer; doc 17 v0.3 §0a)
+| Item | Decision | Updated in |
+|------|----------|-----------|
+| Uninvited Microsoft accounts (doc 17 Q-90, CR-02) | **Keep auto-creating** allowed-tenant accounts with no user **as Viewer**; they are not refused. Viewer = internal read-only staff with no time, tracker, DAR or leave access (Q-70 B, Q-72 No). Jomerson confirms what doc 14 v1.2.26 recorded; Q-37 is superseded. | doc 14 FR-SSO-04, Q-37, FR-ACT-35 (v1.2.29) |
+| Action-email box (doc 17 Q-101, CR-09) | **Ticked by default** ("Email {name}", "Email the team", "Email new members"), as built. | doc 14 FR-ACT-35 note; roadmap §4 (already says ticked) |
+| DAR Send and Q-49 (doc 17 CR-04) | **Keep DAR Send. Q-49 revised:** DAR can be viewed, exported **and sent**, because the features were updated (PR #29). | doc 14 §13 Q-49 (v1.2.29) |
+| Mobile scope (doc 17 Q-92 part, CR-11, CR-13) | **Mobile DAR Send and email notifications (PR #41) are in scope.** #41 is off hold now that PR #42 is merged, and is rebased onto the merged branch. The mobile Send flow must handle the server's 409 "Already sent"; a full mobile confirm-and-resend step is part of #41. | doc 14 §G; doc 16 header; roadmap §4 |
+| DAR CC outside our domain (doc 17 Q-106, CR-17) | **Not blocked; any email address is allowed.** Format still checked, up to 5 addresses, duplicates removed, Admin-only and audited (FR-DAR-17). | doc 14 FR-DAR-01; Q-02 above; doc 01 |
+| PR merges | **#26, then #42, approved for merge** (record only). | doc 17 §4 |
+| Microsoft sign-in | **Live** on web (PRs #27, #32) and mobile (PR #28); see Q-17 above. Not changed by this round. | — |
+| Still open | Doc 17 CR-14 (the bot's edits to docs on `main`, including "approved by Jonathan"), Q-88, Q-89, Q-91, the rest of Q-92 (M8 catch-up), Q-93 to Q-100 and Q-102 to Q-105. | doc 17 §2 |
