@@ -37,6 +37,19 @@ export const DAR_SEND_RATE_LIMITED =
 export const DAR_NOTIFY_RECENT =
   'You already notified your supervisor about this report in the last hour. You can notify them again later.';
 
+/**
+ * Graph timed out or the connection dropped after the request went out: the mail may or may not
+ * have been sent. Not a failure; the saved report records the send as unknown.
+ */
+export const DAR_SEND_UNCONFIRMED =
+  "We couldn't confirm the send. Check your Outlook Sent Items before sending again.";
+/** Sending the same saved report again soon after a sent or unconfirmed send needs a confirm. */
+export const DAR_RESEND_CONFIRM_WINDOW_MS = 15 * 60 * 1000;
+export const darResendConfirmMessage = (state: 'sent' | 'unknown') =>
+  state === 'unknown'
+    ? "Your last send of this report couldn't be confirmed. Check your Outlook Sent Items first. Send it again anyway?"
+    : 'You sent this report a few minutes ago. Send it again?';
+
 const DAR_SEND_GENERIC =
   "We couldn't send your report: {reason}. Try again, or export it and send it yourself.";
 
@@ -58,6 +71,8 @@ export function darSendError(reason: string): string {
       return DAR_PASSWORD_ONLY;
     case 'rate_limited':
       return DAR_SEND_RATE_LIMITED;
+    case 'result_unavailable':
+      return DAR_SEND_UNCONFIRMED;
     default:
       return DAR_SEND_GENERIC.replace('{reason}', reason.replaceAll('_', ' '));
   }
@@ -86,6 +101,8 @@ export const DAR_COLUMNS = [
 export const SAVED_LATEST = 'Latest';
 export const DAR_STATUS_SENT = 'Sent';
 export const DAR_STATUS_NOT_SENT = 'Not sent';
+/** The last send timed out after it went out: it may or may not have been sent. */
+export const DAR_STATUS_UNCONFIRMED = 'Not confirmed';
 /** Hover note on the Sent badge: Graph accepted it; delivery isn't confirmed. */
 export const DAR_SENT_NOTE = 'Accepted by Microsoft for delivery';
 /** "1 recipient" / "3 recipients" */
@@ -194,6 +211,11 @@ export interface SavedReportSummaryDto {
   sentBy: string | null;
   /** How many people that send went to (To + CC). */
   sentRecipientCount: number | null;
+  /**
+   * When the last send could not be confirmed (Graph timeout or dropped connection after the
+   * request went out), ISO; null when there is no unconfirmed send after the last confirmed one.
+   */
+  sendUnknownAt: string | null;
 }
 
 export interface SavedReportDto extends SavedReportSummaryDto {

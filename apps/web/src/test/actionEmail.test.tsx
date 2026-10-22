@@ -329,4 +329,14 @@ describe('Result after the Microsoft round trip', () => {
     renderAt(`/projects/${PID}?email_error=admin_consent_required`, <App />);
     expect(await screen.findByTestId('email-result')).toHaveTextContent(/admin consent/);
   });
+
+  it('an unconfirmed send (Graph timeout) says to check Sent Items, not that it failed', async () => {
+    setup({ enabled: true, linked: true });
+    renderAt(`/projects/${PID}?email_error=result_unavailable`, <App />);
+    const alert = await screen.findByTestId('email-result');
+    expect(alert).toHaveTextContent(
+      "We couldn't confirm the email was sent. Check your Outlook Sent Items before sending again.",
+    );
+    expect(alert).not.toHaveTextContent(/not sent/i);
+  });
 });

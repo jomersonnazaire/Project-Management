@@ -141,13 +141,17 @@ async function darMember() {
   const bearer = await mobileToken(member.email);
   return { member, supervisor, oid, agent, bearer, savedId: saved.body.item.id as string };
 }
-async function startDarMobile(bearer: string, savedId: string) {
+async function startDarMobile(
+  bearer: string,
+  savedId: string,
+  extra: Record<string, unknown> = {},
+) {
   const state = nextLogin();
   const res = await request(app)
     .post(`/api/v1/dar/saved/${savedId}/send/mobile`)
     .set(CSRF)
     .set('Authorization', `Bearer ${bearer}`)
-    .send(PKCE);
+    .send({ ...PKCE, ...extra });
   return { res, state };
 }
 
@@ -248,12 +252,42 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
 
     // Within 60 seconds it works.
     setTestTime(t0 + 120_000);
-    const b = await startDarMobile(bearer, savedId);
+    // Sent 2 minutes ago: sending it again needs the explicit confirm.
+    const b = await startDarMobile(bearer, savedId, { confirmResend: true });
     const code2 = appCode(
       (await callback({ code: CODE, state: b.state })).headers.location as string,
     );
     setTestTime(t0 + 120_000 + 59_000);
     expect((await confirm(bearer, code2)).body.sent).toBe(savedId);
+  });
+
+  it('timeout: the app reads send_error=result_unavailable; a re-send within 15 min needs confirmResend', async () => {
+    const { oid, bearer, savedId } = await darMember();
+    const t0 = Date.now();
+    setTestTime(t0);
+    const { state } = await startDarMobile(bearer, savedId);
+    mailExchangeMock.mockResolvedValue(msToken(oid));
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+    );
+    const oneTime = appCode((await callback({ code: CODE, state })).headers.location as string);
+    expect((await confirm(bearer, oneTime)).body).toEqual({
+      flow: 'dar',
+      report: savedId,
+      send_error: 'result_unavailable',
+      recipients: 0,
+    });
+    setTestTime(t0 + 60_000);
+    const blocked = await startDarMobile(bearer, savedId);
+    expect(blocked.res.status).toBe(409);
+    expect(blocked.res.body.error).toMatchObject({
+      code: 'ALREADY_SENT_OR_UNKNOWN',
+      details: { state: 'unknown', lastAttemptAt: new Date(t0).toISOString() },
+    });
+    expect(await MobileMailStateModel.countDocuments({ phase: 'pending' })).toBe(0);
+    const ok = await startDarMobile(bearer, savedId, { confirmResend: true });
+    expect(ok.res.status).toBe(200);
+    expect(await MobileMailStateModel.countDocuments({ phase: 'pending' })).toBe(1);
   });
 
   it('confirm: a wrong or missing PKCE verifier is refused, and the code is then spent', async () => {
@@ -384,7 +418,7 @@ describe('Mobile DAR Send: opstrack://auth/mail + one-time code', () => {
     spy.mockResolvedValue(
       new Response(JSON.stringify({ error: { code: 'ErrorAccessDenied' } }), { status: 403 }),
     );
-    const b = await startDarMobile(bearer, savedId);
+    const b = await startDarMobile(bearer, savedId, { confirmResend: true });
     const failCode = appCode(
       (await callback({ code: CODE, state: b.state })).headers.location as string,
     );

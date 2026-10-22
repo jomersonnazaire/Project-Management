@@ -74,7 +74,10 @@ export function useNotifySupervisor() {
 /** Starts Send (a CSRF-protected POST, D1); the API answers with the Microsoft URL to open. */
 export function useStartSend() {
   return useMutation({
-    mutationFn: (savedId: string) =>
-      api<{ url: string }>(`/dar/saved/${savedId}/send`, { method: 'POST', body: {} }),
+    mutationFn: ({ savedId, confirmResend }: { savedId: string; confirmResend?: boolean }) =>
+      api<{ url: string }>(`/dar/saved/${savedId}/send`, {
+        method: 'POST',
+        body: confirmResend ? { confirmResend: true } : {},
+      }),
   });
 }

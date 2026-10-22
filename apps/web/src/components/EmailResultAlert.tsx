@@ -13,6 +13,8 @@ const ERRORS: Record<string, string> = {
   no_recipients: 'Email not sent: there was nobody to email.',
   microsoft_not_linked: `Email not sent. ${ACTION_EMAIL_NOT_LINKED}`,
   email_disabled: 'Email not sent: emails are switched off.',
+  result_unavailable:
+    "We couldn't confirm the email was sent. Check your Outlook Sent Items before sending again.",
 };
 
 /** Result of an action email after the Microsoft round trip (`?email=` / `?email_error=`). */

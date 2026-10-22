@@ -4,6 +4,7 @@ import {
   DAR_PASSWORD_ONLY,
   DAR_SEND_HOW,
   DAR_SEND_RATE_LIMITED,
+  darResendConfirmMessage,
   darSendError,
   darSentMessage,
   changedAfterSaveMessage,
@@ -344,7 +345,12 @@ export function SavedReportsPage() {
               {darSentMessage(sendStatus.data.to.name, sendStatus.data.cc.length)}
             </div>
           )}
-          {sendError && (
+          {sendError === 'result_unavailable' && (
+            <div className="alert alert-warning py-2" role="status" data-testid="dar-send-unknown">
+              {darSendError(sendError)}
+            </div>
+          )}
+          {sendError && sendError !== 'result_unavailable' && (
             <div className="alert alert-danger py-2" role="alert">
               {darSendError(sendError)}
             </div>
@@ -448,7 +454,11 @@ export function SavedReportsPage() {
                         )}
                       </td>
                       <td>
-                        <SentStatus sentAt={i.sentAt} sentRecipientCount={i.sentRecipientCount} />
+                        <SentStatus
+                          sentAt={i.sentAt}
+                          sentRecipientCount={i.sentRecipientCount}
+                          sendUnknownAt={i.sendUnknownAt}
+                        />
                       </td>
                       <td className="text-end">
                         <Button size="sm" variant="outline-primary" onClick={() => setOpen(i.id)}>
@@ -512,9 +522,27 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
     if (!ok) return;
     setSendError(null);
     try {
-      const { url } = await startSend.mutateAsync(s.id);
+      const { url } = await startSend.mutateAsync({ savedId: s.id });
       window.location.assign(url);
     } catch (e) {
+      // Sent (or maybe sent) less than 15 minutes ago: ask again before a possible duplicate.
+      if (e instanceof ApiError && e.code === 'ALREADY_SENT_OR_UNKNOWN') {
+        const state =
+          (e.details as { state?: string } | undefined)?.state === 'unknown' ? 'unknown' : 'sent';
+        const again = await confirm({
+          title: 'Send this report again?',
+          body: darResendConfirmMessage(state),
+          confirmLabel: 'Send again',
+        });
+        if (!again) return;
+        try {
+          const { url } = await startSend.mutateAsync({ savedId: s.id, confirmResend: true });
+          window.location.assign(url);
+        } catch (e2) {
+          setSendError(darActionError(e2));
+        }
+        return;
+      }
       setSendError(darActionError(e));
     }
   };
@@ -593,7 +621,11 @@ function SavedReportModal({ id, onClose }: { id: string; onClose: () => void }) 
             {confirmDialog}
             <p className="small mb-2">
               <span className="text-body-secondary">Status:</span>{' '}
-              <SentStatus sentAt={s.sentAt} sentRecipientCount={s.sentRecipientCount} />
+              <SentStatus
+                sentAt={s.sentAt}
+                sentRecipientCount={s.sentRecipientCount}
+                sendUnknownAt={s.sendUnknownAt}
+              />
             </p>
             <p className="small">{savedCopyNote(savedOn(s.savedAt).replace(' ·', ','))}</p>
             {darExportName(s.report) !== DAR_EXPORT_NAME && (

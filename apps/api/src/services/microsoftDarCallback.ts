@@ -4,7 +4,8 @@ import type { AppConfig } from '../config.js';
 import { now as clockNow } from '../lib/clock.js';
 import { SavedReportModel, UserModel } from '../models/index.js';
 import { audit } from './audit.js';
-import { recordDarSent } from './dar.js';
+import { recordDarSent, recordDarSendUnknown } from './dar.js';
+import { GraphSendUnknownError } from './graphMail.js';
 import {
   buildDarCc,
   GraphSendError,
@@ -32,6 +33,8 @@ function darSendRedirect(
   const q = new URLSearchParams(params);
   sendResultRedirect(res, `${config.WEB_APP_URL}/dar/saved?${q.toString()}`, params, mobileExtra);
 }
+
+const errorName = (e: unknown) => (e instanceof Error ? e.name : 'Error');
 
 async function failSend(
   config: AppConfig,
@@ -130,6 +133,31 @@ export async function handleMicrosoftDarMailCallback(
   try {
     ({ bytes } = await sendDarReportEmail(token.accessToken, user, saved as never, supervisor, cc));
   } catch (err) {
+    if (err instanceof GraphSendUnknownError) {
+      // The request may have reached Graph (timeout or dropped connection): the mail may be out.
+      // Not a failure: record it as unknown so a quick re-send needs a confirm.
+      req.log?.warn({ err: err.cause }, 'DAR Graph send result unknown');
+      try {
+        await recordDarSendUnknown(saved._id, user._id, clockNow());
+      } catch (recErr) {
+        req.log?.warn({ err: recErr }, 'DAR unknown send state not recorded');
+      }
+      await audit({
+        actorId: user._id,
+        entityType: 'savedReport',
+        entityId: saved._id,
+        action: 'report_send_unknown',
+        meta: {
+          reason: 'result_unavailable',
+          to: supervisor.email,
+          cc,
+          range: `${saved.from} to ${saved.to}`,
+          error: errorName(err.cause),
+        },
+      });
+      darSendRedirect(config, res, { send_error: 'result_unavailable' });
+      return;
+    }
     if (err instanceof GraphSendError) {
       const reason = graphSendFailureReason(err.status, err.code);
       await failSend(config, res, reason, userId, savedId, {

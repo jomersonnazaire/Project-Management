@@ -3,6 +3,8 @@ import {
   DAR_COLUMNS,
   DAR_STATUS_NOT_SENT,
   DAR_STATUS_SENT,
+  DAR_STATUS_UNCONFIRMED,
+  DAR_SEND_UNCONFIRMED,
   DAR_SENT_NOTE,
   formatLongDate,
   formatTime12,
@@ -98,11 +100,32 @@ const sentOn = (iso: string) =>
 export function SentStatus({
   sentAt,
   sentRecipientCount,
+  sendUnknownAt = null,
 }: {
   sentAt: string | null;
   sentRecipientCount: number | null;
+  /** Last send whose result is unknown (Graph timeout), newer than sentAt. */
+  sendUnknownAt?: string | null;
 }) {
   const noteId = `dar-sent-note-${useId()}`;
+  if (sendUnknownAt) {
+    return (
+      <span data-testid="dar-sent-status">
+        <span
+          className="badge bg-label-warning"
+          title={DAR_SEND_UNCONFIRMED}
+          tabIndex={0}
+          aria-describedby={noteId}
+        >
+          {DAR_STATUS_UNCONFIRMED}
+        </span>
+        <span id={noteId} className="visually-hidden">
+          {DAR_SEND_UNCONFIRMED}
+        </span>{' '}
+        <span className="small text-body-secondary text-nowrap">{sentOn(sendUnknownAt)}</span>
+      </span>
+    );
+  }
   if (!sentAt) {
     return (
       <span className="badge bg-label-secondary" data-testid="dar-sent-status">

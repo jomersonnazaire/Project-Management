@@ -6,7 +6,10 @@ import {
   DAR_NOTIFY_RECENT,
   DAR_PASSWORD_ONLY,
   DAR_SEND_RATE_LIMITED,
+  DAR_SEND_UNCONFIRMED,
+  DAR_STATUS_UNCONFIRMED,
   DAR_TOO_LARGE,
+  darResendConfirmMessage,
   type DarReportDto,
   type SavedReportSummaryDto,
 } from '@xc8/shared';
@@ -49,6 +52,7 @@ const item: SavedReportSummaryDto = {
   sentAt: null,
   sentBy: null,
   sentRecipientCount: null,
+  sendUnknownAt: null,
 };
 
 const SAM = { name: 'Supervisor Sam', email: 'sup@xceler8.example' };
@@ -245,5 +249,108 @@ describe('return from Microsoft (?sent= and ?send_error=)', () => {
     // The URL is cleaned, and the message stays.
     await waitFor(() => expect(router.state.location.search).toBe(''));
     expect(screen.getByRole('alert')).toHaveTextContent(text);
+  });
+});
+
+describe('unconfirmed send (Graph timeout) and the re-send confirm', () => {
+  const resend409 = (state: 'sent' | 'unknown') => ({
+    status: 409,
+    body: {
+      error: {
+        code: 'ALREADY_SENT_OR_UNKNOWN',
+        message: darResendConfirmMessage(state),
+        details: { state, lastAttemptAt: '2026-10-13T09:20:00.000Z' },
+      },
+    },
+  });
+  const sendPosts = (fetch: ReturnType<typeof api>) =>
+    fetch.mock.calls.filter(
+      ([u, i]) => String(u).endsWith('/dar/saved/s1/send') && i?.method === 'POST',
+    );
+
+  it('?send_error=result_unavailable is a warning to check Sent Items, not a failure', async () => {
+    api('MEMBER', savedRoutes(linked));
+    const { router } = renderAt('/dar/saved?send_error=result_unavailable', <App />);
+    expect(await screen.findByTestId('dar-send-unknown')).toHaveTextContent(DAR_SEND_UNCONFIRMED);
+    expect(screen.getByTestId('dar-send-unknown')).toHaveClass('alert-warning');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/couldn't send your report/)).not.toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+    expect(screen.getByTestId('dar-send-unknown')).toBeInTheDocument();
+  });
+
+  it('a report whose last send is unknown shows "Not confirmed"', async () => {
+    api(
+      'MEMBER',
+      savedRoutes(linked, (url) =>
+        url.includes('/dar/saved') && !url.includes('/dar/saved/s1')
+          ? {
+              status: 200,
+              body: { items: [{ ...item, sendUnknownAt: '2026-10-13T09:20:00.000Z' }] },
+            }
+          : undefined,
+      ),
+    );
+    renderAt('/dar/saved', <App />);
+    expect(await screen.findByText(DAR_STATUS_UNCONFIRMED)).toBeInTheDocument();
+    expect(screen.getByText(DAR_STATUS_UNCONFIRMED)).toHaveAttribute('title', DAR_SEND_UNCONFIRMED);
+  });
+
+  it('409 ALREADY_SENT_OR_UNKNOWN asks again; "Send again" retries with confirmResend: true', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    let posts = 0;
+    const fetch = api(
+      'MEMBER',
+      savedRoutes(linked, (url, init) => {
+        if (url.endsWith('/dar/saved/s1/send') && init?.method === 'POST') {
+          posts += 1;
+          return posts === 1
+            ? resend409('unknown')
+            : { status: 200, body: { url: 'https://login.microsoftonline.com/mock' } };
+        }
+        return undefined;
+      }),
+    );
+    renderAt('/dar/saved', <App />);
+    const dialog = await openSaved();
+    await userEvent.click(
+      await within(dialog).findByRole('button', { name: 'Send to supervisor' }),
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
+    expect(await screen.findByText(darResendConfirmMessage('unknown'))).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Send again' }));
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('https://login.microsoftonline.com/mock'),
+    );
+    const bodies = sendPosts(fetch).map(([, i]) => JSON.parse(String(i!.body)));
+    expect(bodies).toEqual([{}, { confirmResend: true }]);
+  });
+
+  it('cancelling the re-send confirm sends nothing more', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    const fetch = api(
+      'MEMBER',
+      savedRoutes(linked, (url, init) =>
+        url.endsWith('/dar/saved/s1/send') && init?.method === 'POST'
+          ? resend409('sent')
+          : undefined,
+      ),
+    );
+    renderAt('/dar/saved', <App />);
+    const dialog = await openSaved();
+    await userEvent.click(
+      await within(dialog).findByRole('button', { name: 'Send to supervisor' }),
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
+    expect(await screen.findByText(darResendConfirmMessage('sent'))).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByText(darResendConfirmMessage('sent'))).not.toBeInTheDocument(),
+    );
+    expect(sendPosts(fetch)).toHaveLength(1);
+    expect(assign).not.toHaveBeenCalled();
   });
 });

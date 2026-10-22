@@ -1,6 +1,8 @@
 import {
   DAR_NOTIFY_RECENT,
+  DAR_RESEND_CONFIRM_WINDOW_MS,
   darRangeSchema,
+  darResendConfirmMessage,
   darSendError,
   generatedRangeLabel,
   phDateOf,
@@ -23,7 +25,7 @@ import {
   type SavedReport,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
-import { buildDar, toSavedDto, toSavedDtos } from '../services/dar.js';
+import { buildDar, lastDarSendAttempt, toSavedDto, toSavedDtos } from '../services/dar.js';
 import { darSendStatusPayload, resolveDarSupervisor } from '../services/darSend.js';
 import { darFileName, darToPdf, darToXlsx } from '../services/darExport.js';
 import { buildMicrosoftLoginUrl } from '../services/microsoftAuth.js';
@@ -37,6 +39,8 @@ import {
 import { notifyPersonal } from '../services/notify.js';
 
 const formatParam = z.enum(['pdf', 'xlsx']);
+/** Send body: `confirmResend: true` after the 409 ALREADY_SENT_OR_UNKNOWN confirm. */
+const confirmResendField = { confirmResend: z.boolean().optional() };
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /** Default range: today (FR-DAR-02). */
@@ -164,17 +168,26 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
   // cookie and the callback returns to the app (services/msSendReturn.ts).
   r.post('/saved/:id/send/mobile', perm('activities', 'view'), sendLimiter, async (req, res) => {
     if (!isMobileSend(res)) throw MOBILE_SEND_ONLY;
-    const pkce = parseBody(mobileSendSchema, req);
-    await startSend(req, res, pkce.code_challenge);
+    const body = parseBody(mobileSendSchema.extend(confirmResendField), req);
+    await startSend(req, res, body.code_challenge, body.confirmResend === true);
   });
 
   r.post('/saved/:id/send', perm('activities', 'view'), sendLimiter, async (req, res) => {
-    parseBody(z.strictObject({}), req);
-    await startSend(req, res, null);
+    const body = parseBody(z.strictObject(confirmResendField), req);
+    await startSend(req, res, null, body.confirmResend === true);
   });
 
-  /** `mobileChallenge`: the app's PKCE S256 challenge for a mobile Send; null for web. */
-  async function startSend(req: Request, res: Response, mobileChallenge: string | null) {
+  /**
+   * `mobileChallenge`: the app's PKCE S256 challenge for a mobile Send; null for web.
+   * `confirmResend`: the user confirmed sending again although the last send of this report was
+   * sent, or may have been (unknown result), less than 15 minutes ago.
+   */
+  async function startSend(
+    req: Request,
+    res: Response,
+    mobileChallenge: string | null,
+    confirmResend: boolean,
+  ) {
     const doc = await ownSaved(req);
     const user = await UserModel.findById(currentUser(req)._id);
     if (!user) throw notFound();
@@ -191,6 +204,18 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
         meta: { reason, stage: 'start' },
       });
       throw new HttpError(409, 'SEND_UNAVAILABLE', darSendError(reason), { reason });
+    }
+    // A timed-out send may have gone out; a quick second Send would be a duplicate email.
+    const last = await lastDarSendAttempt(user._id, doc as never);
+    if (
+      last &&
+      !confirmResend &&
+      clockNow().getTime() - last.at.getTime() < DAR_RESEND_CONFIRM_WINDOW_MS
+    ) {
+      throw new HttpError(409, 'ALREADY_SENT_OR_UNKNOWN', darResendConfirmMessage(last.state), {
+        state: last.state,
+        lastAttemptAt: last.at.toISOString(),
+      });
     }
     const login = await buildMicrosoftLoginUrl(config, {
       scopes: ['Mail.Send'],
@@ -230,7 +255,7 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
         entityType: 'savedReport',
         entityId: doc._id,
         action: 'dar_supervisor_notified',
-        at: { $gt: new Date(Date.now() - NOTIFY_WINDOW_MS) },
+        at: { $gt: new Date(clockNow().getTime() - NOTIFY_WINDOW_MS) },
       });
       if (recent) throw conflict(DAR_NOTIFY_RECENT, 'NOTIFY_RECENT');
       res.json({ notified: await notifySupervisorOnce(user, supervisor, doc) });

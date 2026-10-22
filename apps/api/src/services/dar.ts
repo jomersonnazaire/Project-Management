@@ -241,11 +241,32 @@ function sentFields(d: SavedDoc, fromAudit: SentRecord | undefined) {
         sentRecipientCount: d.sentRecipientCount ?? null,
       }
     : fromAudit;
+  const unknownAt =
+    d.sendUnknownAt && (!rec || d.sendUnknownAt > rec.sentAt) ? d.sendUnknownAt : null;
   return {
     sentAt: rec ? rec.sentAt.toISOString() : null,
     sentBy: rec?.sentBy ? rec.sentBy.toString() : null,
     sentRecipientCount: rec ? rec.sentRecipientCount : null,
+    sendUnknownAt: unknownAt ? unknownAt.toISOString() : null,
   };
+}
+
+/**
+ * The latest Send of this saved report that went out or may have gone out (sent, or unknown
+ * after a Graph timeout), or null. Failed sends don't count.
+ */
+export async function lastDarSendAttempt(
+  userId: Id,
+  doc: SavedDoc,
+): Promise<{ at: Date; state: 'sent' | 'unknown' } | null> {
+  const fromAudit = doc.sentAt
+    ? undefined
+    : (await sentFromAudit(userId, [doc])).get(doc._id.toString());
+  const sentAt = doc.sentAt ?? fromAudit?.sentAt ?? null;
+  const unknownAt = doc.sendUnknownAt ?? null;
+  if (unknownAt && (!sentAt || unknownAt > sentAt)) return { at: unknownAt, state: 'unknown' };
+  if (sentAt) return { at: sentAt, state: 'sent' };
+  return null;
 }
 
 /**
@@ -282,8 +303,15 @@ async function sentFromAudit(userId: Id, docs: SavedDoc[]): Promise<Map<string, 
 export async function recordDarSent(savedId: Id, userId: Id, recipientCount: number, at: Date) {
   await SavedReportModel.updateOne(
     { _id: savedId, userId },
-    { $set: { sentAt: at, sentBy: userId, sentRecipientCount: recipientCount } },
+    {
+      $set: { sentAt: at, sentBy: userId, sentRecipientCount: recipientCount, sendUnknownAt: null },
+    },
   );
+}
+
+/** Records a Send whose result is unknown (Graph timeout); the sent fields stay as they were. */
+export async function recordDarSendUnknown(savedId: Id, userId: Id, at: Date) {
+  await SavedReportModel.updateOne({ _id: savedId, userId }, { $set: { sendUnknownAt: at } });
 }
 
 export async function toSavedDto(userId: Id, doc: SavedDoc): Promise<SavedReportDto> {

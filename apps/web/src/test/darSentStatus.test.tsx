@@ -45,6 +45,7 @@ const base: SavedReportSummaryDto = {
   sentAt: null,
   sentBy: null,
   sentRecipientCount: null,
+  sendUnknownAt: null,
 };
 // 01:52 UTC is 9:52 AM Philippine time (UTC+8).
 const sent = {

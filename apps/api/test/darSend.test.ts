@@ -3,7 +3,10 @@ import {
   DAR_NOTIFY_RECENT,
   DAR_PASSWORD_ONLY,
   DAR_SEND_RATE_LIMITED,
+  DAR_SEND_UNCONFIRMED,
   DAR_TOO_LARGE,
+  darResendConfirmMessage,
+  darSendError,
   type DarReportDto,
 } from '@xc8/shared';
 import request from 'supertest';
@@ -19,6 +22,8 @@ import type * as DarExport from '../src/services/darExport.js';
 import {
   GraphSendError,
   graphSendFailureReason,
+  GraphSendUnknownError,
+  sendMailAsUser,
   sendMailWithPdf,
 } from '../src/services/graphMail.js';
 import { darMailContent } from '../src/services/darSend.js';
@@ -73,7 +78,11 @@ async function saveReport(agent: ReturnType<typeof request.agent>, from: string,
 let stateSeq = 0;
 
 /** POST /send (with CSRF) and return the signed mail cookie and state it set. */
-async function startSend(agent: ReturnType<typeof request.agent>, savedId: string) {
+async function startSend(
+  agent: ReturnType<typeof request.agent>,
+  savedId: string,
+  body: Record<string, unknown> = {},
+) {
   stateSeq += 1;
   const state = `mail-state-${stateSeq}-${Date.now()}`;
   loginUrlMock.mockResolvedValueOnce({
@@ -82,7 +91,7 @@ async function startSend(agent: ReturnType<typeof request.agent>, savedId: strin
     state,
     nonce: `nonce-${stateSeq}`,
   });
-  const res = await agent.post(`/api/v1/dar/saved/${savedId}/send`).set(CSRF).send({});
+  const res = await agent.post(`/api/v1/dar/saved/${savedId}/send`).set(CSRF).send(body);
   const setCookie = res.headers['set-cookie'] as unknown as string[] | string | undefined;
   const raw = (Array.isArray(setCookie) ? setCookie : [setCookie ?? '']).join('; ');
   const cookie = /xc8_ms_mail=([^;]+)/.exec(raw)?.[1] ?? '';
@@ -602,8 +611,9 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
     expect(cb.headers.location).toContain(`sent=${s1}`);
     fetchSpy.mockRestore();
 
-    expect((await startSend(g1, s1)).res.status).toBe(200);
-    const limited = await startSend(g1, s1);
+    // Sent a moment ago: a re-send needs confirmResend (it still counts against the limiter).
+    expect((await startSend(g1, s1, { confirmResend: true })).res.status).toBe(200);
+    const limited = await startSend(g1, s1, { confirmResend: true });
     expect(limited.res.status).toBe(429);
     expect(limited.res.body.error).toMatchObject({
       code: 'DAR_SEND_RATE_LIMITED',
@@ -724,8 +734,9 @@ describe('DAR sent status on saved reports', () => {
     a: Parameters<typeof request>[0],
     agent: ReturnType<typeof request.agent>,
     id: string,
+    body: Record<string, unknown> = {},
   ) {
-    const { state, cookie } = await startSend(agent, id);
+    const { state, cookie } = await startSend(agent, id, body);
     mailExchangeMock.mockResolvedValueOnce(goodToken());
     const fetchSpy = graph202();
     const done = await callback(a, cookie, { code: 'c', state });
@@ -766,7 +777,7 @@ describe('DAR sent status on saved reports', () => {
 
     const t2 = soon(6);
     setTestTime(t2);
-    await sendOk(a, agent, id);
+    await sendOk(a, agent, id, { confirmResend: true });
     expect(await listItem(agent, id)).toMatchObject({ sentAt: t2 });
   });
 
@@ -790,7 +801,8 @@ describe('DAR sent status on saved reports', () => {
     const t1 = soon(1);
     setTestTime(t1);
     await sendOk(a, agent, id);
-    const again = await startSend(agent, id);
+    const again = await startSend(agent, id, { confirmResend: true });
+    expect(again.res.status).toBe(200);
     await callback(a, again.cookie, { error: 'access_denied', state: again.state });
     expect(await listItem(agent, id)).toMatchObject({ sentAt: t1 });
   });
@@ -857,5 +869,193 @@ describe('DAR sent status on saved reports', () => {
     expect(await ids('?sent=NOT_SENT')).toEqual([n]);
     expect((await ids('?sent=ALL')).sort()).toEqual([s, n].sort());
     expect((await agent.get('/api/v1/dar/saved?sent=maybe')).status).toBe(400);
+  });
+});
+
+describe('DAR Send: Graph timeout is "unknown", not failed (no duplicate sends)', () => {
+  const timeout = () =>
+    vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(
+        new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+      );
+  const list = async (agent: ReturnType<typeof request.agent>, id: string) =>
+    ((await agent.get('/api/v1/dar/saved')).body.items as { id: string }[]).find(
+      (i) => i.id === id,
+    ) as Record<string, unknown>;
+
+  beforeEach(async () => {
+    loginUrlMock.mockReset();
+    mailExchangeMock.mockReset();
+    await ActivityLogModel.deleteMany({
+      action: { $in: ['report_sent', 'report_send_failed', 'report_send_unknown'] },
+    });
+    await UserModel.deleteMany({});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    setTestTime(null);
+  });
+
+  it('graphMail: timeout or dropped connection → GraphSendUnknownError; connect refused → GraphSendError', async () => {
+    const input = { subject: 's', html: '<p>x</p>', to: ['sup@xceler8.example'] };
+    timeout();
+    await expect(sendMailAsUser('t', input)).rejects.toBeInstanceOf(GraphSendUnknownError);
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }),
+    );
+    await expect(sendMailAsUser('t', input)).rejects.toBeInstanceOf(GraphSendUnknownError);
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }),
+    );
+    const refused = await sendMailWithPdf('t', {
+      ...input,
+      to: 'sup@xceler8.example',
+      cc: [],
+      fileName: 'dar.pdf',
+      pdf: Buffer.from('%PDF'),
+    }).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(GraphSendError);
+    expect(graphSendFailureReason((refused as GraphSendError).status, '')).toBe(
+      'graph_unavailable',
+    );
+    expect(darSendError('result_unavailable')).toBe(DAR_SEND_UNCONFIRMED);
+    expect(DAR_SEND_UNCONFIRMED).toBe(
+      "We couldn't confirm the send. Check your Outlook Sent Items before sending again.",
+    );
+  });
+
+  it('timeout: result_unavailable redirect, state unknown (not failed, not sent), audited without the token', async () => {
+    const { a, agent, member } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const t0 = new Date('2026-10-22T03:00:00.000Z');
+    setTestTime(t0);
+    const { state, cookie } = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    const spy = timeout();
+    const done = await callback(a, cookie, { code: 'c', state });
+    expect(spy).toHaveBeenCalledTimes(1); // never retried by the server
+    expect(done.headers.location).toBe(
+      'http://localhost:5173/dar/saved?send_error=result_unavailable',
+    );
+    expect(await failedAudit(id)).toBeNull();
+    const unknown = await ActivityLogModel.findOne({
+      action: 'report_send_unknown',
+      entityId: id,
+    }).lean();
+    expect(unknown?.actorId?.toString()).toBe(member._id.toString());
+    expect(unknown?.meta).toMatchObject({ reason: 'result_unavailable', error: 'TimeoutError' });
+    expect(JSON.stringify(unknown)).not.toContain(MOCK_TOKEN);
+    expect(await ActivityLogModel.countDocuments({ action: 'report_sent', entityId: id })).toBe(0);
+    const doc = await SavedReportModel.findById(id).lean();
+    expect(doc?.sendUnknownAt?.toISOString()).toBe(t0.toISOString());
+    expect(doc?.sentAt ?? null).toBeNull();
+    expect(await list(agent, id)).toMatchObject({
+      sentAt: null,
+      sendUnknownAt: t0.toISOString(),
+    });
+  });
+
+  it('re-send within 15 minutes of an unknown result needs confirmResend; after 15 minutes it does not', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const t0 = new Date('2026-10-22T03:00:00.000Z');
+    setTestTime(t0);
+    const first = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    timeout();
+    await callback(a, first.cookie, { code: 'c', state: first.state });
+    vi.restoreAllMocks();
+
+    setTestTime(new Date(t0.getTime() + 14 * 60_000));
+    const blocked = await startSend(agent, id);
+    expect(blocked.res.status).toBe(409);
+    expect(blocked.res.body.error).toEqual({
+      code: 'ALREADY_SENT_OR_UNKNOWN',
+      message: darResendConfirmMessage('unknown'),
+      details: { state: 'unknown', lastAttemptAt: t0.toISOString() },
+    });
+    // Refused before Microsoft: no mail cookie, no login URL used.
+    expect(blocked.cookie).toBe('');
+    expect(blocked.res.body.url).toBeUndefined();
+
+    // Only `true` is a confirm; other values are refused by the strict body.
+    const bad = await agent
+      .post(`/api/v1/dar/saved/${id}/send`)
+      .set(CSRF)
+      .send({ confirmResend: 'yes' });
+    expect(bad.status).toBe(400);
+    const notConfirmed = await startSend(agent, id, { confirmResend: false });
+    expect(notConfirmed.res.status).toBe(409);
+
+    const confirmed = await startSend(agent, id, { confirmResend: true });
+    expect(confirmed.res.status).toBe(200);
+    expect(confirmed.res.body.url).toMatch(/^https:\/\/login\.microsoftonline\.com\//);
+
+    setTestTime(new Date(t0.getTime() + 15 * 60_000));
+    expect((await startSend(agent, id)).res.status).toBe(200);
+  });
+
+  it('a confirmed send after an unknown one clears it; a re-send soon after a sent one also needs the confirm', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const t0 = new Date('2026-10-22T03:00:00.000Z');
+    setTestTime(t0);
+    const first = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    timeout();
+    await callback(a, first.cookie, { code: 'c', state: first.state });
+    vi.restoreAllMocks();
+
+    const t1 = new Date(t0.getTime() + 2 * 60_000);
+    setTestTime(t1);
+    const second = await startSend(agent, id, { confirmResend: true });
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    graph202();
+    const ok = await callback(a, second.cookie, { code: 'c', state: second.state });
+    expect(ok.headers.location).toBe(`http://localhost:5173/dar/saved?sent=${id}`);
+    expect(await list(agent, id)).toMatchObject({
+      sentAt: t1.toISOString(),
+      sendUnknownAt: null,
+    });
+    expect((await SavedReportModel.findById(id).lean())?.sendUnknownAt ?? null).toBeNull();
+
+    setTestTime(new Date(t1.getTime() + 60_000));
+    const again = await startSend(agent, id);
+    expect(again.res.status).toBe(409);
+    expect(again.res.body.error.details).toEqual({
+      state: 'sent',
+      lastAttemptAt: t1.toISOString(),
+    });
+    expect(again.res.body.error.message).toBe(darResendConfirmMessage('sent'));
+  });
+
+  it('a definite failure (Graph 403, connection refused) records nothing and never blocks a re-send', async () => {
+    const { a, agent } = await setupLinkedMember();
+    const id = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const first = await startSend(agent, id);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'ErrorAccessDenied' } }), { status: 403 }),
+    );
+    expect(
+      (await callback(a, first.cookie, { code: 'c', state: first.state })).headers.location,
+    ).toContain('send_error=send_forbidden');
+    vi.restoreAllMocks();
+
+    const second = await startSend(agent, id);
+    expect(second.res.status).toBe(200);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }),
+    );
+    expect(
+      (await callback(a, second.cookie, { code: 'c', state: second.state })).headers.location,
+    ).toContain('send_error=graph_unavailable');
+    const doc = await SavedReportModel.findById(id).lean();
+    expect(doc?.sendUnknownAt ?? null).toBeNull();
+    expect(doc?.sentAt ?? null).toBeNull();
+    expect(await ActivityLogModel.countDocuments({ action: 'report_send_unknown' })).toBe(0);
+    expect((await startSend(agent, id)).res.status).toBe(200);
   });
 });

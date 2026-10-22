@@ -215,6 +215,7 @@ const summary = (over: Partial<SavedReportSummaryDto>): SavedReportSummaryDto =>
   sentAt: null,
   sentBy: null,
   sentRecipientCount: null,
+  sendUnknownAt: null,
   ...over,
 });
 
