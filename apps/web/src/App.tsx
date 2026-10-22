@@ -164,7 +164,10 @@ export function App() {
             <Route
               path="/dar"
               element={
-                <RequirePermission any={[['activities', 'view']]}>
+                <RequirePermission
+                  any={[['activities', 'view']]}
+                  message="Ask an Admin to assign your role to use DAR."
+                >
                   <DarPage />
                 </RequirePermission>
               }
@@ -180,7 +183,10 @@ export function App() {
             <Route
               path="/dar/saved"
               element={
-                <RequirePermission any={[['activities', 'view']]}>
+                <RequirePermission
+                  any={[['activities', 'view']]}
+                  message="Ask an Admin to assign your role to use DAR."
+                >
                   <SavedReportsPage />
                 </RequirePermission>
               }

@@ -38,7 +38,7 @@ class NoAccessScreen extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            "You don't have access to this. Ask an Admin if you need it.",
+            "You don't have access to that view.",
             textAlign: TextAlign.center,
           ),
         ),

@@ -51,7 +51,15 @@ class ApiAuthRepository implements AuthRepository {
     if (!browserManagesCookies) {
       try {
         final body = await api.post('/auth/mobile/login', creds);
-        api.bearer = body['token'] as String;
+        final token = body['token'] as String;
+        if (isPortalToken(token)) {
+          throw ApiException(
+            'This sign-in is for the client portal on the web.',
+            status: 403,
+            code: 'PORTAL_TOKEN',
+          );
+        }
+        api.bearer = token;
         await api.touch();
         return AppUser.fromJson(body['user'] as Map<String, dynamic>);
       } on ApiException catch (e) {
@@ -80,6 +88,16 @@ class ApiAuthRepository implements AuthRepository {
   @override
   Future<void> setupPassword(String token, String password) =>
       api.post('/auth/setup-password', {'token': token, 'password': password});
+
+  @override
+  Future<bool> microsoftAvailable() async {
+    try {
+      final body = await api.get('/auth/providers');
+      return body['microsoft'] == true;
+    } on ApiException {
+      return false;
+    }
+  }
 }
 
 class ApiProjectRepository implements ProjectRepository {
@@ -176,6 +194,7 @@ class ApiTimeRepository implements TimeRepository {
       entries: _items(b).map(TimeEntry.fromJson).toList(),
       total: (b['total'] as num? ?? 0).toDouble(),
       capacity: (b['capacity'] as num? ?? 40).toDouble(),
+      loggedTotal: (b['loggedTotal'] as num?)?.toDouble(),
     );
   }
 

@@ -124,7 +124,16 @@ class Project {
     this.code,
     this.can,
     this.archived = false,
+    this.templateName,
+    this.templateVersion,
   });
+
+  /// D20: "Started from {template} v{n}" / "Started blank".
+  final String? templateName;
+  final int? templateVersion;
+  String get startedFrom => templateName == null
+      ? 'Started blank'
+      : 'Started from $templateName${templateVersion == null ? '' : ' v$templateVersion'}';
   final bool archived;
 
   /// Server `can` flags (edit, planTasks, activity…); null in demo data.
@@ -147,6 +156,8 @@ class Project {
   final int taskCount;
 
   factory Project.fromJson(Map<String, dynamic> j) => Project(
+    templateName: j['templateName'] as String?,
+    templateVersion: (j['templateVersion'] as num?)?.toInt(),
     id: j['id'] as String,
     name: j['name'] as String? ?? '',
     clientName: j['clientName'] as String? ?? '',
@@ -220,12 +231,13 @@ class Task {
     String? blockerReason,
     bool clearBlocker = false,
     double? actualHours,
+    String? phase,
   }) => Task(
     id: id,
     projectId: projectId,
     name: name,
     projectName: projectName,
-    phase: phase,
+    phase: phase ?? this.phase,
     priority: priority,
     party: party,
     ownerName: ownerName,
@@ -342,10 +354,16 @@ class TimeWeek {
     required this.entries,
     required this.total,
     this.capacity = 40,
+    this.loggedTotal,
   });
   final DateTime weekStart;
   final List<TimeEntry> entries;
   final double total, capacity;
+
+  /// M8: all hours logged this week (task time + tracker), from `GET /time` `loggedTotal`.
+  /// Older APIs omit it; fall back to [total].
+  final double? loggedTotal;
+  double get logged => loggedTotal ?? total;
 }
 
 class LoggableProject {
@@ -384,6 +402,7 @@ class AppNotification {
     'REJECTED': 'returned your task',
     'BLOCKED': 'blocked a task',
     'MENTION': 'mentioned you',
+    'ADDED_TO_PROJECT': 'added you to a project',
   };
 
   factory AppNotification.fromJson(Map<String, dynamic> j) {
@@ -478,6 +497,6 @@ const _roleLabels = {
 /// "Project Manager · SAP consultant"; never shows raw codes or the same label twice.
 String _roleLine(String? system, String? job) {
   final a = _roleLabels[system] ?? system;
-  final b = job == null || job.isEmpty ? null : (_roleLabels[job] ?? job);
+  final b = job == null || job.isEmpty ? 'Not set' : (_roleLabels[job] ?? job);
   return [a, if (b != a) b].whereType<String>().join(' · ');
 }

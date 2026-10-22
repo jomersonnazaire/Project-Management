@@ -1,4 +1,4 @@
-import { JOB_ROLE_LABELS, type JobRole } from '@xc8/shared';
+import { jobRoleLabel } from '@xc8/shared';
 import { useMemo, useState } from 'react';
 import { useTeams } from '../../api/hooks';
 import { useCan } from '../../auth/useCan';
@@ -119,7 +119,7 @@ export function WorkloadPage() {
                       <td>
                         <div className="fw-medium">{r.person.name}</div>
                         <div className="small text-body-secondary">
-                          {JOB_ROLE_LABELS[r.jobRole as JobRole] ?? r.jobRole}
+                          {jobRoleLabel(r.jobRole as Parameters<typeof jobRoleLabel>[0])}
                         </div>
                       </td>
                       <td className="small">{r.teams.map((t) => t.name).join(', ') || '–'}</td>

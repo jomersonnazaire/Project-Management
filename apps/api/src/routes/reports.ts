@@ -158,7 +158,7 @@ export function reportsRouter(registry: RouteRegistry) {
       const assignedPct = utilizationPct(assigned, capacity);
       return {
         person: { id: pid, name: p.name, email: p.email, active: Boolean(p.active) },
-        jobRole: p.jobRole,
+        jobRole: p.jobRole ?? null,
         teams: (p.teamIds ?? []).map((t) => ({
           id: t.toString(),
           name: teamName.get(t.toString()) ?? '',

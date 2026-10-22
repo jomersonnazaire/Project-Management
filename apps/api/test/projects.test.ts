@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ProjectModel, TaskModel } from '../src/models/index.js';
+import { ProjectModel, TaskModel, UserModel } from '../src/models/index.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 import {
   clientWithContacts,
@@ -621,5 +621,24 @@ describe('People picker (AC-04.2)', () => {
     expect(res.body.items.some((u: { name: string }) => u.name === acme.active[0].name)).toBe(
       false,
     );
+  });
+
+  it('includes a Viewer with null jobRole for the project people picker', async () => {
+    const { member } = await world(app);
+    const viewer = await UserModel.create({
+      name: 'MS Viewer No Role',
+      email: `viewer-norole-${Date.now()}@xceler8.example`,
+      systemRole: 'VIEWER',
+      jobRole: null,
+      active: true,
+      passwordHash: null,
+      authProvider: 'microsoft',
+      msOid: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      msTid: '11111111-1111-1111-1111-111111111111',
+      mustChangePassword: false,
+    });
+    const res = await member.agent.get('/api/v1/people');
+    const row = res.body.items.find((u: { id: string }) => u.id === viewer._id.toString());
+    expect(row?.jobRole).toBeNull();
   });
 });

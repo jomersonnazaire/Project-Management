@@ -127,7 +127,7 @@ export interface MyProjectsDto {
 // ---------- Workload (FR-WL-01..03) ----------
 export interface WorkloadRowDto {
   person: UserRefDto;
-  jobRole: string;
+  jobRole: string | null;
   teams: Ref[];
   capacityHours: number;
   /** Remaining estimates of open tasks they own that are due in the week. */

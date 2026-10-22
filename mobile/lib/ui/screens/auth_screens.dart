@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/api_client.dart' show isPortalToken;
 import '../../data/models.dart' show ApiException;
 import '../../state/p3_providers.dart';
 
 import 'package:go_router/go_router.dart';
 
 import '../../data/models.dart';
+import '../../data/ms_sign_in.dart';
 import '../../state/providers.dart';
 import '../../theme/app_theme.dart';
 import '../widgets/brand.dart';
@@ -58,10 +60,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // A Microsoft deep link can fail before this screen is built (cold start).
+    _error = ref.read(msSignInErrorProvider);
+  }
+
+  @override
   void dispose() {
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _signInWithMicrosoft() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    ref.read(msSignInErrorProvider.notifier).set(null);
+    try {
+      await ref.read(msSignInProvider).start();
+    } on MicrosoftSignInFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -70,6 +94,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _busy = true;
       _error = null;
     });
+    ref.read(msSignInErrorProvider.notifier).set(null);
     try {
       await ref
           .read(authProvider.notifier)
@@ -77,7 +102,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.status == 429) {
-        showError(context, e.message); // rate limited → SnackBar
+        // Rate limited → SnackBar with a friendly message.
+        showError(
+          context,
+          'Too many sign-in attempts. Wait a few minutes, then try again.',
+        );
       } else {
         setState(() => _error = e.message);
       }
@@ -88,6 +117,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(msSignInErrorProvider, (prev, next) {
+      if (next != null && mounted) setState(() => _error = next);
+    });
+    ref.listen(authProvider, (prev, next) {
+      if (next.hasValue && next.value != null && mounted) {
+        setState(() => _busy = false);
+      }
+    });
+    final msAvailable = ref
+        .watch(msAvailableProvider)
+        .maybeWhen(data: (v) => v, orElse: () => false);
     final t = Theme.of(context).textTheme;
     final s = Theme.of(context).colorScheme;
     return Scaffold(
@@ -165,6 +205,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 onPressed: _busy ? null : _submit,
                 child: Text(_busy ? 'Signing in…' : 'Sign in'),
               ),
+              if (msAvailable) ...[
+                const SizedBox(height: Space.m),
+                OutlinedButton(
+                  key: const Key('loginMicrosoft'),
+                  onPressed: _busy ? null : _signInWithMicrosoft,
+                  child: const Text('Sign in with Microsoft'),
+                ),
+              ],
               const SizedBox(height: Space.l),
               Text(
                 'New here? Open the invite link from your admin.',
@@ -204,7 +252,9 @@ class _SetPasswordScreenState extends ConsumerState<SetPasswordScreen> {
   final _pw = TextEditingController();
   final _confirm = TextEditingController();
   bool _busy = false;
-  late final Future<Map<String, dynamic>> _info = widget.token.isEmpty
+  // D6: client-portal (`ptl_`) tokens are web-only; never accept them here.
+  late final Future<Map<String, dynamic>> _info =
+      widget.token.isEmpty || isPortalToken(widget.token)
       ? Future.error(Exception())
       : ref.read(p3RepositoryProvider).verifyInvite(widget.token);
 

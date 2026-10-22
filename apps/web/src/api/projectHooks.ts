@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  ActionEmailStartDto,
   CreateProjectInput,
   CreateTaskInput,
   MyTasksDto,
@@ -113,7 +114,10 @@ export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateProjectInput) =>
-      api<{ project: ProjectDto; warnings: string[] }>('/projects', { method: 'POST', body }),
+      api<{ project: ProjectDto; warnings: string[]; email?: ActionEmailStartDto }>('/projects', {
+        method: 'POST',
+        body,
+      }),
     onSuccess: () => invalidateProjects(qc),
   });
 }
@@ -121,10 +125,12 @@ export function useCreateProject() {
 export function useUpdateProject(id: string) {
   const qc = useQueryClient();
   return useMutation({
+    // `email` is there when the save asked to email the people it added (action emails).
     mutationFn: (body: UpdateProjectInput) =>
-      api<{ project: ProjectDto }>(`/projects/${id}`, { method: 'PATCH', body }).then(
-        (r) => r.project,
-      ),
+      api<{ project: ProjectDto; email?: ActionEmailStartDto }>(`/projects/${id}`, {
+        method: 'PATCH',
+        body,
+      }),
     onSuccess: () => invalidateProjects(qc),
   });
 }
@@ -240,7 +246,11 @@ export function useTaskMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: { path: string; method?: 'POST' | 'PATCH' | 'DELETE'; body?: unknown }) =>
-      api<{ task?: TaskDto }>(req.path, { method: req.method ?? 'POST', body: req.body }),
+      // `email` is there when a task save asked to email the people it newly assigned.
+      api<{ task?: TaskDto; email?: ActionEmailStartDto }>(req.path, {
+        method: req.method ?? 'POST',
+        body: req.body,
+      }),
     // Also on errors: a 409 VERSION_CONFLICT means someone else changed the task, so refetch.
     onSettled: () => invalidateProjects(qc),
   });

@@ -38,7 +38,10 @@ import {
   UserModel,
   type Project,
 } from '../models/index.js';
+import type { AppConfig } from '../config.js';
 import { audit } from '../services/audit.js';
+import { membersAdded } from '../services/actionEmail.js';
+import { useMobileEmailReturn } from '../services/msSendReturn.js';
 import { notifyOwnerNeeded } from '../services/issues.js';
 import {
   assertCodeFree,
@@ -212,7 +215,7 @@ async function issuesWithOldClientContacts(projectId: Types.ObjectId, clientId: 
   return issues.filter((i) => old.has(i.reportedByContactId!.toString())).map((i) => i.key);
 }
 
-export function projectsRouter(registry: RouteRegistry) {
+export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
   // People picker for project managers, members and task owners: active internal users, names and
   // roles only (no emails), for anyone who can view projects. Client contacts never appear (AC-04.2).
   const people = registry.router('/people');
@@ -297,6 +300,7 @@ export function projectsRouter(registry: RouteRegistry) {
   // one transaction, so a failure leaves no partial project or tasks (AC-09.6).
   r.post('/', perm('projects', 'create'), async (req, res) => {
     const input = parseBody(createProjectSchema, req);
+    if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const user = currentUser(req);
     const client = await ClientModel.findById(input.clientId).lean();
     if (!client) throw unprocessable('Choose a client.', 'INVALID_CLIENT');
@@ -418,9 +422,20 @@ export function projectsRouter(registry: RouteRegistry) {
       warnings.push('This client already has a project with this name.');
     }
     const project = await ProjectModel.findById(projectId).lean();
+    // Action emails: everyone on the new team except the creator is "added" (in-app always,
+    // email when ticked). Worked out here, never taken from the request.
+    const email = await membersAdded(
+      config,
+      res,
+      user,
+      project as ProjectDoc,
+      memberIds.filter((m) => !m.equals(user._id)),
+      input.emailAddedMembers,
+    );
     res.status(201).json({
       project: await toProjectDto(project as ProjectDoc, user, currentPermissions(req)),
       warnings,
+      ...(email ? { email } : {}),
     });
   });
 
@@ -567,9 +582,13 @@ export function projectsRouter(registry: RouteRegistry) {
 
   r.patch('/:id', perm('projects', 'edit'), async (req, res) => {
     const input = parseBody(updateProjectSchema, req);
+    if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const user = currentUser(req);
     const project = await loadProject(req, 'edit');
     assertNotArchived(project);
+    const membersBefore = new Set(
+      [...project.memberIds, project.managerId].filter(Boolean).map(String),
+    );
     const changes: { field: string; old: unknown; new: unknown }[] = [];
     const track = (field: string, old: unknown, next: unknown) => {
       if (JSON.stringify(old) !== JSON.stringify(next)) changes.push({ field, old, new: next });
@@ -796,7 +815,24 @@ export function projectsRouter(registry: RouteRegistry) {
       });
     }
     const fresh = await ProjectModel.findById(project._id).lean();
-    res.json({ project: await toProjectDto(fresh as ProjectDoc, user, currentPermissions(req)) });
+    // Action emails: the people this save added (before/after diff of the member list, so a
+    // new manager joining counts too). In-app always; email only when ticked.
+    const after = [...(fresh?.memberIds ?? []), fresh?.managerId].filter((m): m is Types.ObjectId =>
+      Boolean(m),
+    );
+    const added = after.filter((m) => !membersBefore.has(m.toString()));
+    const email = await membersAdded(
+      config,
+      res,
+      user,
+      fresh as ProjectDoc,
+      added,
+      input.emailAddedMembers,
+    );
+    res.json({
+      project: await toProjectDto(fresh as ProjectDoc, user, currentPermissions(req)),
+      ...(email ? { email } : {}),
+    });
   });
 
   // Archive counts as Edit on projects (Q-26); PMs archive only projects they manage (Q-12).

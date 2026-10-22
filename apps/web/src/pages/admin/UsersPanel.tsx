@@ -3,6 +3,7 @@ import {
   APP_NAME,
   JOB_ROLES,
   JOB_ROLE_LABELS,
+  jobRoleLabel,
   SYSTEM_ROLES,
   SYSTEM_ROLE_LABELS,
   emailSchema,
@@ -299,7 +300,7 @@ function EditUserModal({
       name: user.name,
       email: user.email,
       systemRole: user.systemRole,
-      jobRole: user.jobRole,
+      jobRole: user.jobRole ?? ('' as never),
       teamIds: user.teamIds,
       weeklyCapacityHours: user.weeklyCapacityHours,
     },
@@ -346,7 +347,7 @@ function EditUserModal({
     const body: EditOut = {
       name: v.name,
       ...(email !== user.email ? { email } : {}),
-      jobRole: v.jobRole,
+      ...(v.jobRole ? { jobRole: v.jobRole } : {}),
       teamIds: v.teamIds ?? [],
       weeklyCapacityHours: Number(v.weeklyCapacityHours),
       ...(isSelf ? {} : { systemRole: v.systemRole }),
@@ -582,7 +583,7 @@ export function UsersPanel() {
                         <small className="text-body-secondary text-break">{u.email}</small>
                       </td>
                       <td data-label="Access">{SYSTEM_ROLE_LABELS[u.systemRole]}</td>
-                      <td data-label="Job role">{JOB_ROLE_LABELS[u.jobRole]}</td>
+                      <td data-label="Job role">{jobRoleLabel(u.jobRole)}</td>
                       <td data-label="Teams">
                         <TeamNames
                           names={u.teamIds

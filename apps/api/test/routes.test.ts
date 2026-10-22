@@ -74,12 +74,19 @@ describe('Route policy table', () => {
     });
     expect(table).toEqual([
       'GET /health public',
+      'GET /auth/providers public',
+      'GET /auth/mobile/microsoft/login public',
+      'GET /auth/microsoft/login public',
+      'GET /auth/microsoft/callback public',
+      'POST /auth/mobile/mail/confirm authenticated',
+      'POST /auth/mobile/microsoft/exchange public',
       'POST /auth/login public',
       'POST /auth/mobile/login public',
       'POST /auth/mobile/refresh authenticated',
       'POST /auth/mobile/logout public',
       'POST /auth/logout public',
       'GET /auth/me authenticated',
+      'GET /auth/me/email-status authenticated',
       'GET /auth/me/permissions authenticated',
       'POST /auth/invite/verify public',
       'POST /auth/setup-password public',
@@ -200,6 +207,10 @@ describe('Route policy table', () => {
       'POST /dar/saved activities.view',
       'GET /dar/saved/:id activities.view',
       'GET /dar/saved/:id/export/:format activities.view',
+      'GET /dar/send-status activities.view',
+      'POST /dar/saved/:id/send/mobile activities.view',
+      'POST /dar/saved/:id/send activities.view',
+      'POST /dar/saved/:id/notify-supervisor activities.view',
       'GET /leave/types leave.view',
       'GET /leave/types/all settings.view',
       'POST /leave/types settings.edit',
@@ -266,6 +277,8 @@ describe('Route policy table', () => {
       'GET /reports/project-status/export reports.export',
       'GET /reports/issues reports.view',
       'GET /reports/issues/export reports.export',
+      'POST /action-emails/mobile authenticated',
+      'POST /action-emails authenticated',
     ]);
   });
 });
