@@ -18,12 +18,39 @@ export type MicrosoftSignInSuccess = { ok: true; user: UserDoc };
 
 export type MicrosoftSignInResult = MicrosoftSignInSuccess | MicrosoftSignInFailure;
 
+/**
+ * Error code for /login?error= (web) and opstrack://auth/microsoft?error= (mobile). Refusals
+ * the user can act on get their own code; everything else stays the generic ms_signin_failed.
+ */
+export function msSignInErrorCode(reason: string): string {
+  if (reason === 'no_email') return 'ms_no_email';
+  if (reason === 'ms_account_mismatch' || reason === 'ms_email_unverified') return reason;
+  return 'ms_signin_failed';
+}
+
 function refuse(reason: string): MicrosoftSignInFailure {
   return { ok: false, reason };
 }
 
 function ssoMeta(userId: UserDoc['_id'], claims: MicrosoftIdClaims, email: string) {
   return { userId: userId.toString(), msTid: claims.tid, email };
+}
+
+/** Audit for a refused link (no tokens or codes, only ids from the verified ID token). */
+async function auditLinkRefused(
+  userId: UserDoc['_id'],
+  claims: MicrosoftIdClaims,
+  email: string,
+  reason: 'ms_account_mismatch' | 'ms_email_unverified',
+): Promise<void> {
+  await audit({
+    actorId: null,
+    entityType: 'user',
+    entityId: userId,
+    action: 'sso_link_refused',
+    reason,
+    meta: { ...ssoMeta(userId, claims, email), msOid: claims.oid },
+  });
 }
 
 /**
@@ -53,8 +80,19 @@ export async function resolveMicrosoftSignIn(
   const existing = await UserModel.findOne({ email });
   if (existing) {
     if (!existing.active) return refuse('deactivated');
+    // Already linked to a different Microsoft account (another oid, or the same oid in another
+    // tenant): never silently relink by email. An admin has to clear the link first.
+    if (existing.msOid && (existing.msOid !== claims.oid || existing.msTid !== claims.tid)) {
+      await auditLinkRefused(existing._id, claims, email, 'ms_account_mismatch');
+      return refuse('ms_account_mismatch');
+    }
     if (!isAllowedEmailDomain(email, config)) {
       return refuse('link_denied');
+    }
+    // Linking by email trusts the email claim, so Microsoft must say it is verified.
+    if (claims.xms_edov !== true) {
+      await auditLinkRefused(existing._id, claims, email, 'ms_email_unverified');
+      return refuse('ms_email_unverified');
     }
     existing.msOid = claims.oid;
     existing.msTid = claims.tid;

@@ -97,7 +97,9 @@ describe('Microsoft 365 sign-in', () => {
   beforeEach(async () => {
     exchangeMock.mockReset();
     loginUrlMock.mockReset();
-    await ActivityLogModel.deleteMany({ action: { $in: ['sso_user_created', 'sso_linked'] } });
+    await ActivityLogModel.deleteMany({
+      action: { $in: ['sso_user_created', 'sso_linked', 'sso_link_refused'] },
+    });
   });
 
   it('providers: msEnabled false when allowlists empty', async () => {
@@ -233,15 +235,95 @@ describe('Microsoft 365 sign-in', () => {
     });
   });
 
-  it('5 existing user, domain allowed, xms_edov absent: linked', async () => {
+  it('5 existing user, domain allowed, xms_edov absent: refused ms_email_unverified, not linked', async () => {
     const a = appMs();
     const user = await createUser({ email: `nodov@${DOMAIN}` });
     const claims = baseClaims();
     claims.email = user.email;
     claims.oid = '44444444-4444-4444-4444-444444444444';
     delete claims.xms_edov;
-    expect((await runCallback(a, claims)).status).toBe(302);
-    expect((await UserModel.findById(user._id))?.msOid).toBe(claims.oid);
+    const res = await runCallback(a, claims);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('http://localhost:5173/login?error=ms_email_unverified');
+    expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/xc8_sid=[^;]/);
+    expect((await UserModel.findById(user._id))?.msOid).toBeFalsy();
+    const refused = await ActivityLogModel.findOne({
+      action: 'sso_link_refused',
+      entityId: user._id,
+    });
+    expect(refused?.reason).toBe('ms_email_unverified');
+    expect(await ActivityLogModel.countDocuments({ action: 'sso_linked' })).toBe(0);
+  });
+
+  it('5b existing user, xms_edov false: refused ms_email_unverified, not linked', async () => {
+    const a = appMs();
+    const user = await createUser({ email: `dovfalse@${DOMAIN}` });
+    const claims = baseClaims(user.email);
+    claims.xms_edov = false;
+    const res = await runCallback(a, claims);
+    expect(res.headers.location).toBe('http://localhost:5173/login?error=ms_email_unverified');
+    expect((await UserModel.findById(user._id))?.msOid).toBeFalsy();
+    expect(
+      await ActivityLogModel.countDocuments({ action: 'sso_link_refused', entityId: user._id }),
+    ).toBe(1);
+  });
+
+  it('5c already linked to another oid: refused ms_account_mismatch, link unchanged, audited', async () => {
+    const a = appMs();
+    const user = await createUser({ email: `relink-oid@${DOMAIN}`, systemRole: 'MEMBER' });
+    const linkedOid = nextOid();
+    await UserModel.updateOne({ _id: user._id }, { $set: { msOid: linkedOid, msTid: TENANT } });
+    const claims = baseClaims(user.email);
+    expect(claims.oid).not.toBe(linkedOid);
+    const res = await runCallback(a, claims);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('http://localhost:5173/login?error=ms_account_mismatch');
+    expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/xc8_sid=[^;]/);
+    expect(await SessionModel.countDocuments({ userId: user._id })).toBe(0);
+    const after = await UserModel.findById(user._id);
+    expect(after?.msOid).toBe(linkedOid);
+    expect(after?.msTid).toBe(TENANT);
+    const refused = await ActivityLogModel.findOne({
+      action: 'sso_link_refused',
+      entityId: user._id,
+    });
+    expect(refused?.reason).toBe('ms_account_mismatch');
+    expect(refused?.meta).toMatchObject({
+      userId: user._id.toString(),
+      msTid: TENANT,
+      msOid: claims.oid,
+      email: user.email,
+    });
+    // No tokens, codes, verifiers or nonces in the audit entry.
+    const raw = JSON.stringify(refused?.toObject());
+    expect(raw).not.toMatch(/auth-code|verifier|nonce|token/i);
+    expect(await ActivityLogModel.countDocuments({ action: 'sso_linked' })).toBe(0);
+  });
+
+  it('5d same oid but another tenant: refused ms_account_mismatch', async () => {
+    const otherTenant = '22222222-2222-2222-2222-222222222222';
+    const a = appMs({ MS_ALLOWED_TENANT_IDS: `${TENANT},${otherTenant}` });
+    const user = await createUser({ email: `relink-tid@${DOMAIN}` });
+    const claims = baseClaims(user.email);
+    await UserModel.updateOne({ _id: user._id }, { $set: { msOid: claims.oid, msTid: TENANT } });
+    claims.tid = otherTenant;
+    const res = await runCallback(a, claims);
+    expect(res.headers.location).toBe('http://localhost:5173/login?error=ms_account_mismatch');
+    const after = await UserModel.findById(user._id);
+    expect(after?.msTid).toBe(TENANT);
+    expect(
+      (await ActivityLogModel.findOne({ action: 'sso_link_refused', entityId: user._id }))?.reason,
+    ).toBe('ms_account_mismatch');
+  });
+
+  it('5e mismatch is refused even when xms_edov is true and the domain is allowed', async () => {
+    const a = appMs();
+    const user = await createUser({ email: `relink-edov@${DOMAIN}` });
+    await UserModel.updateOne({ _id: user._id }, { $set: { msOid: nextOid(), msTid: TENANT } });
+    const claims = baseClaims(user.email);
+    claims.xms_edov = true;
+    const res = await runCallback(a, claims);
+    expect(res.headers.location).toMatch(/error=ms_account_mismatch/);
   });
 
   it('6 existing user, domain not allowed, xms_edov false: no link', async () => {

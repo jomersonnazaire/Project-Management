@@ -136,7 +136,9 @@ describe('Microsoft 365 mobile sign-in', () => {
     await MobileAuthCodeModel.deleteMany({});
     await SessionModel.deleteMany({});
     await UserModel.deleteMany({});
-    await ActivityLogModel.deleteMany({ action: { $in: ['sso_user_created', 'sso_linked'] } });
+    await ActivityLogModel.deleteMany({
+      action: { $in: ['sso_user_created', 'sso_linked', 'sso_link_refused'] },
+    });
   });
 
   afterEach(() => resetTestTime());
@@ -316,6 +318,38 @@ describe('Microsoft 365 mobile sign-in', () => {
     expect((await mobileCallback(a, { state: 's-noacct' })).headers.location).toMatch(
       /error=ms_signin_failed/,
     );
+  });
+
+  it('8b relink refusals carry their own code to the app; no one-time code, audited', async () => {
+    const a = appMs();
+
+    const linked = await createUser({ email: `m-linked-${oidSeq}@${DOMAIN}` });
+    const linkedOid = nextOid();
+    await UserModel.updateOne({ _id: linked._id }, { $set: { msOid: linkedOid, msTid: TENANT } });
+    mockMicrosoftStart('s-mismatch');
+    await mobileLoginStart(a);
+    exchangeMock.mockResolvedValueOnce(baseClaims(linked.email));
+    expect((await mobileCallback(a, { state: 's-mismatch' })).headers.location).toBe(
+      'opstrack://auth/microsoft?error=ms_account_mismatch',
+    );
+    expect((await UserModel.findById(linked._id))?.msOid).toBe(linkedOid);
+
+    const unverified = await createUser({ email: `m-nodov-${oidSeq}@${DOMAIN}` });
+    const claims = baseClaims(unverified.email);
+    delete claims.xms_edov;
+    mockMicrosoftStart('s-unverified');
+    await mobileLoginStart(a);
+    exchangeMock.mockResolvedValueOnce(claims);
+    expect((await mobileCallback(a, { state: 's-unverified' })).headers.location).toBe(
+      'opstrack://auth/microsoft?error=ms_email_unverified',
+    );
+    expect((await UserModel.findById(unverified._id))?.msOid).toBeFalsy();
+
+    expect(await MobileAuthCodeModel.countDocuments({ phase: 'code' })).toBe(0);
+    const reasons = (
+      await ActivityLogModel.find({ action: 'sso_link_refused' }).sort({ _id: 1 }).lean()
+    ).map((e) => e.reason);
+    expect(reasons).toEqual(['ms_account_mismatch', 'ms_email_unverified']);
   });
 
   it('9 access_denied → cancelled and pending removed', async () => {
