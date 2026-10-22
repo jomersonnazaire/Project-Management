@@ -45,8 +45,9 @@ import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
 import {
   confirmMobileMailResult,
   mobileMailConfirmSchema,
+  ACTION_EMAIL_FLOW,
   returnToMobile,
-  takeMobileDarState,
+  takeMobileMailState,
 } from '../services/msSendReturn.js';
 import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
@@ -276,21 +277,40 @@ export function authRouter(
       return;
     }
 
-    // A DAR Send started from the mobile app: state kept server-side (single use); the result
-    // goes back to the fixed opstrack:// address. Same handler, so state/nonce checks still hold.
-    const mobileDar = await takeMobileDarState(state);
-    if (mobileDar) {
+    // A send started from the mobile app (DAR Send, action email): state kept server-side
+    // (single use); the result goes back to the fixed opstrack://auth/mail address with a
+    // one-time code. Same handlers, so the state/nonce checks still hold.
+    const mobileMail = await takeMobileMailState(state);
+    if (mobileMail?.flow === 'dar') {
+      const d = mobileMail.data;
       returnToMobile(res, {
         flow: 'dar',
-        userId: mobileDar.userId,
-        codeChallenge: mobileDar.codeChallenge,
-        base: { report: mobileDar.savedReportId, recipients: 0 },
+        userId: d.userId,
+        codeChallenge: mobileMail.codeChallenge,
+        base: { report: d.savedReportId, recipients: 0 },
       });
-      await handleMicrosoftDarMailCallback(
+      await handleMicrosoftDarMailCallback(config, req, res, d, code, msError, errorDescription);
+      return;
+    }
+    if (mobileMail?.flow === 'action') {
+      const d = mobileMail.data;
+      returnToMobile(res, {
+        flow: 'action',
+        userId: d.userId,
+        codeChallenge: mobileMail.codeChallenge,
+        base: {
+          flow: ACTION_EMAIL_FLOW[d.kind],
+          project: d.projectId,
+          ...(d.taskId ? { task: d.taskId } : {}),
+          ...(d.followUpId ? { followUp: d.followUpId } : {}),
+          recipients: 0,
+        },
+      });
+      await handleMicrosoftActionEmailCallback(
         config,
         req,
         res,
-        mobileDar,
+        d,
         code,
         msError,
         errorDescription,

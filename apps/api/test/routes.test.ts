@@ -277,6 +277,7 @@ describe('Route policy table', () => {
       'GET /reports/project-status/export reports.export',
       'GET /reports/issues reports.view',
       'GET /reports/issues/export reports.export',
+      'POST /action-emails/mobile authenticated',
       'POST /action-emails authenticated',
     ]);
   });

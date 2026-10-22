@@ -1,5 +1,10 @@
-import { ACTION_EMAIL_NOT_LINKED, actionEmailSchema } from '@xc8/shared';
-import type { RequestHandler } from 'express';
+import {
+  ACTION_EMAIL_NOT_LINKED,
+  actionEmailMobileSchema,
+  actionEmailSchema,
+  type ActionEmailInput,
+} from '@xc8/shared';
+import type { Request, RequestHandler, Response } from 'express';
 import { AUTHENTICATED, type RouteRegistry } from '../access/registry.js';
 import type { AppConfig } from '../config.js';
 import { conflict, forbidden, notFound } from '../lib/errors.js';
@@ -7,6 +12,7 @@ import { parseBody } from '../lib/validate.js';
 import { currentUser } from '../middleware/auth.js';
 import { UserModel } from '../models/index.js';
 import { actionRecipients, startActionEmail } from '../services/actionEmail.js';
+import { useMobileEmailReturn } from '../services/msSendReturn.js';
 import { loadTask } from './tasks.js';
 
 /**
@@ -23,8 +29,23 @@ export function actionEmailsRouter(
 ) {
   const r = registry.router('/action-emails');
 
+  // From the app (bearer only): same checks, state kept server-side with the app's PKCE
+  // challenge, result back through opstrack://auth/mail + /auth/mobile/mail/confirm.
+  r.post('/mobile', AUTHENTICATED, limiter, async (req, res) => {
+    const {
+      code_challenge,
+      code_challenge_method: _m,
+      ...input
+    } = parseBody(actionEmailMobileSchema, req);
+    useMobileEmailReturn(res, code_challenge);
+    await start(req, res, input);
+  });
+
   r.post('/', AUTHENTICATED, limiter, async (req, res) => {
-    const input = parseBody(actionEmailSchema, req);
+    await start(req, res, parseBody(actionEmailSchema, req));
+  });
+
+  async function start(req: Request, res: Response, input: ActionEmailInput) {
     if (!config.actionEmailEnabled) {
       throw conflict('Emails are switched off.', 'EMAIL_DISABLED');
     }
@@ -57,7 +78,7 @@ export function actionEmailsRouter(
       recipientIds: people.map((p) => p._id),
     });
     res.json({ url, recipients: people.length });
-  });
+  }
 
   return r.router;
 }

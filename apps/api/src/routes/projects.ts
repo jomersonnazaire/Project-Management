@@ -41,6 +41,7 @@ import {
 import type { AppConfig } from '../config.js';
 import { audit } from '../services/audit.js';
 import { membersAdded } from '../services/actionEmail.js';
+import { useMobileEmailReturn } from '../services/msSendReturn.js';
 import { notifyOwnerNeeded } from '../services/issues.js';
 import {
   assertCodeFree,
@@ -298,6 +299,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
   // one transaction, so a failure leaves no partial project or tasks (AC-09.6).
   r.post('/', perm('projects', 'create'), async (req, res) => {
     const input = parseBody(createProjectSchema, req);
+    if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const user = currentUser(req);
     const client = await ClientModel.findById(input.clientId).lean();
     if (!client) throw unprocessable('Choose a client.', 'INVALID_CLIENT');
@@ -579,6 +581,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
 
   r.patch('/:id', perm('projects', 'edit'), async (req, res) => {
     const input = parseBody(updateProjectSchema, req);
+    if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const user = currentUser(req);
     const project = await loadProject(req, 'edit');
     assertNotArchived(project);
