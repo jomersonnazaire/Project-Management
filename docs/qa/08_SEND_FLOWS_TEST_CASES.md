@@ -97,3 +97,9 @@ IDs continue the per-milestone letter scheme in `docs/qa` (A–N, P–T and CP a
 
 ## Open PR #41 (mobile UI for DAR Send and action emails)
 PR #41 is open, not merged, GitHub says mergeable (clean), CI "Lint, typecheck, test, build" passed on `996d0a5`. CI doesn't run Flutter; the 278 Flutter tests in the PR text weren't checked here because Flutter isn't installed on this box. On a phone with a PR #41 build, run TC-U20, U26, U28, U29 (mobile card: To/CC preview, password-only text, no-supervisor text), U44 (Sent / Not sent badge on its own line), U48 and U51 to U53 (boxes "Email the team", "Email {name}", "Email new assignees", "Email new members"), and U60 to U66.
+
+## Defects found in live regression (2026-10-22)
+
+| ID | Severity | Summary | Steps | Expected | Actual | Traces | Status |
+|---|---|---|---|---|---|---|---|
+| DEF-018 | High | Viewers can reach DAR send and notify-supervisor | Sign in as viewer@ (seeded), `POST /dar/saved/{id}/send` and `POST /dar/saved/{id}/notify-supervisor` | 403 on both routes (viewers have no time, tracker or DAR access) | Passes the permission check and returns 404 for an unknown ID; both routes only require `activities` view (`apps/api/src/routes/dar.ts:165,171,211`); `/send/mobile` is the same | Q-70 B (Oct 13) | Open, assigned to Deven (queued after security review) |
