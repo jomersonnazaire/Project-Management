@@ -83,13 +83,28 @@ function isBodyParserError(err: unknown): boolean {
   );
 }
 
-function isDatabaseUnavailable(err: unknown): boolean {
+const DB_UNAVAILABLE_NAMES = new Set([
+  'MongoNetworkError',
+  'MongoNetworkTimeoutError',
+  'MongoServerSelectionError',
+  'MongoTopologyClosedError',
+  'MongoNotConnectedError',
+  'PoolClearedError',
+  'PoolClearedOnNetworkError',
+  'MongoPoolClearedError',
+]);
+const DB_UNAVAILABLE_LABELS = ['ResetPool', 'NetworkError', 'PoolRequestedRetry'];
+
+/** True for errors that mean MongoDB is unreachable (as opposed to a bad query). */
+export function isDatabaseUnavailable(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   // MongooseError: Connection operation buffering timed out
   if (err.name === 'MongooseError' && err.message.includes('buffering timed out')) return true;
-  // MongoServerError: connection errors
-  if (err.name === 'MongoServerError' && err.message.includes('connection')) return true;
-  // MongoNetworkError
-  if (err.name === 'MongoNetworkError') return true;
-  return false;
+  if (DB_UNAVAILABLE_NAMES.has(err.name)) return true;
+  const labels = (err as { errorLabels?: unknown }).errorLabels;
+  const labelList = labels instanceof Set ? [...labels] : Array.isArray(labels) ? labels : [];
+  const hasLabel = (err as { hasErrorLabel?: (l: string) => boolean }).hasErrorLabel;
+  return DB_UNAVAILABLE_LABELS.some(
+    (l) => labelList.includes(l) || (typeof hasLabel === 'function' && hasLabel.call(err, l)),
+  );
 }

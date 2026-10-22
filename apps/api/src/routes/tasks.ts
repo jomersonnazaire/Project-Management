@@ -227,7 +227,8 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
     const u = ref(id);
     return u ? { id: u.id, name: u.name } : null;
   };
-  const today = clockNow();
+  // DEF-017: overdue is judged on the Philippine calendar date, not the UTC instant.
+  const today = todayPH(clockNow());
   // M3.5: planners may delete a task only while nothing is recorded under it.
   const mayDelete = canDeleteTasks(user, perms, project);
   const records = mayDelete ? await taskRecordCounts(tasks.map((t) => t._id)) : null;

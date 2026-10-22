@@ -71,6 +71,7 @@ import { assertCan, loadTask, respondTask, type TaskDoc } from './tasks.js';
 import { assertCanEditIssue, loadIssue } from './issues.js';
 import { IssueModel } from '../models/index.js';
 import { toIssueDto, type IssueDoc } from '../services/issues.js';
+import { now as clockNow } from '../lib/clock.js';
 
 /**
  * Documents (doc 10) and task evidence uploads (doc 12 §3.2). Files never pass through the API:
@@ -278,7 +279,7 @@ async function toDocDtos(
   const write = canWriteDocs(user, perms, project);
   const archive = canArchiveDocs(user, perms, project);
   const planner = isPlanner(user, project);
-  const today = todayPH();
+  const today = todayPH(clockNow());
   return docs.map((d) => {
     const latest = d.versions[d.versions.length - 1];
     const status = d.status as DocumentState;
@@ -845,7 +846,7 @@ export function documentsRouter(
       );
     }
     const due = parseDateOnly(input.dueDate);
-    if (due < todayPH()) {
+    if (due < todayPH(clockNow())) {
       throw badRequest(
         DUE_DATE_PAST_MESSAGE,
         [{ path: 'dueDate', message: DUE_DATE_PAST_MESSAGE }],
@@ -1017,7 +1018,7 @@ export function documentsRouter(
       }
       if (input.dueDate && input.dueDate !== (doc.dueDate ? toDateOnly(doc.dueDate) : null)) {
         const due = parseDateOnly(input.dueDate);
-        if (due < todayPH()) {
+        if (due < todayPH(clockNow())) {
           throw badRequest(
             DUE_DATE_PAST_MESSAGE,
             [{ path: 'dueDate', message: DUE_DATE_PAST_MESSAGE }],

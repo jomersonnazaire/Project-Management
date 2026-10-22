@@ -15,6 +15,7 @@ import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
 import { SMALL_TEMPLATE, grant, publishedTemplate, resetRules, world } from './m2helpers.js';
 import { FILES, uploadEvidence } from './m3helpers.js';
 import { lookups } from './trackerHelpers.js';
+import { now as clockNow } from '../src/lib/clock.js';
 
 /** m8-polish (doc 14 v1.2.4 §A, B, E, F; doc 11 v0.4.13 FR-ACL-19..22). */
 useDatabase();
@@ -361,7 +362,7 @@ describe('FR-ACT-32/33: Quick Activity system type and FUTURE_DATE', () => {
     await UserModel.updateOne({ _id: w.member.user._id }, { supervisorId: w.pm.user._id });
     const qa = (await LookupModel.findOne({ key: 'quick_activity' }).lean())!._id.toString();
     // Use yesterday's date (within the 2-day lock window) by calculating from today.
-    const yesterday = new Date();
+    const yesterday = clockNow();
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
