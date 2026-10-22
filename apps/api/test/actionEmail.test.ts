@@ -363,6 +363,71 @@ describe('Failures never undo the action (AC4, FE-05, FE-06, FE-07, FA-10)', () 
     expect(task!.followUps.at(-1)!.emailedAt).toBeNull();
   });
 
+  it('Graph timeout after the request went out: unconfirmed, not failed; the follow-up stays emailed', async () => {
+    const w = await world(appOn);
+    const oid = await link(w.pm.user._id);
+    const t = await firstTask(w);
+    await assign(w, t.id, w.member.user._id.toString());
+    const fu = await postFollowUp(w.pm.agent, t.id);
+    const { state, cookie } = await start(w.pm.agent, {
+      kind: 'FOLLOW_UP',
+      taskId: t.id,
+      followUpId: fu,
+    });
+    mailExchangeMock.mockResolvedValueOnce(token(oid));
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(
+        new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+      );
+    const done = await callback(cookie, { code: 'c', state });
+    expect(done.headers.location).toContain('email_error=result_unavailable');
+    // Never retried by the server.
+    expect(spy.mock.calls.length).toBeGreaterThan(0);
+    const before = spy.mock.calls.length;
+    expect(
+      await ActivityLogModel.countDocuments({ action: 'action_email_failed', entityId: t.id }),
+    ).toBe(0);
+    const unknown = await ActivityLogModel.findOne({
+      action: 'action_email_unknown',
+      entityId: t.id,
+    }).lean();
+    expect(unknown?.meta).toMatchObject({
+      kind: 'FOLLOW_UP',
+      reason: 'result_unavailable',
+      error: 'TimeoutError',
+    });
+    expect(JSON.stringify(unknown)).not.toContain(TOKEN);
+    // It may have gone: the follow-up stays marked as emailed (no accidental duplicate).
+    const task = await TaskModel.findById(t.id).lean();
+    expect(task!.followUps.at(-1)!.emailedAt).not.toBeNull();
+    expect(spy.mock.calls.length).toBe(before);
+  });
+
+  it('a connection refused before sending is a plain failure (nothing went)', async () => {
+    const w = await world(appOn);
+    const oid = await link(w.pm.user._id);
+    const t = await firstTask(w);
+    await assign(w, t.id, w.member.user._id.toString());
+    const fu = await postFollowUp(w.pm.agent, t.id);
+    const { state, cookie } = await start(w.pm.agent, {
+      kind: 'FOLLOW_UP',
+      taskId: t.id,
+      followUpId: fu,
+    });
+    mailExchangeMock.mockResolvedValueOnce(token(oid));
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }),
+    );
+    const done = await callback(cookie, { code: 'c', state });
+    expect(done.headers.location).toContain('email_error=graph_unavailable');
+    expect(
+      await ActivityLogModel.countDocuments({ action: 'action_email_unknown', entityId: t.id }),
+    ).toBe(0);
+    const task = await TaskModel.findById(t.id).lean();
+    expect(task!.followUps.at(-1)!.emailedAt).toBeNull();
+  });
+
   it('cancelled or missing consent is audited and nothing is sent', async () => {
     const w = await world(appOn);
     await link(w.pm.user._id);

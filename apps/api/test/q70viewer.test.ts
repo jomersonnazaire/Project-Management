@@ -1,9 +1,11 @@
 import { ACCESS_DEFAULT_CHANGES, defaultPermissions } from '@xc8/shared';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Types } from 'mongoose';
 import {
   AccessRuleModel,
   ActivityLogModel,
   MigrationModel,
+  SavedReportModel,
   TimeEntryModel,
 } from '../src/models/index.js';
 import { applyAccessDefaultChanges } from '../src/services/accessDefaults.js';
@@ -85,6 +87,81 @@ describe('Q-70: Viewer has no time or tracker access', () => {
     ];
     const results = await Promise.all(calls);
     results.forEach((res, i) => expect(res.status, labels[i]).toBe(403));
+  });
+
+  describe('DEF-018: DAR Send and Notify supervisor', () => {
+    const MISSING = new Types.ObjectId().toString();
+    const PKCE = {
+      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+      code_challenge_method: 'S256',
+    };
+    const sendCalls = (agent: Awaited<ReturnType<typeof signedInAs>>['agent'], id: string) => [
+      agent.post(`/api/v1/dar/saved/${id}/send`).set(CSRF).send({}),
+      agent.post(`/api/v1/dar/saved/${id}/send/mobile`).set(CSRF).send(PKCE),
+      agent.post(`/api/v1/dar/saved/${id}/notify-supervisor`).set(CSRF).send({}),
+    ];
+    const LABELS = ['send', 'send/mobile', 'notify-supervisor'];
+    const ownReport = (userId: Types.ObjectId) =>
+      SavedReportModel.create({
+        userId,
+        from: '2026-10-12',
+        to: '2026-10-12',
+        savedAt: new Date('2026-10-12T10:00:00Z'),
+        totalActivities: 1,
+        totalMinutes: 60,
+        report: {},
+      });
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('a Viewer gets 403 for a made-up id (not 404), before any saved report lookup', async () => {
+      const v = await signedInAs(app, 'VIEWER');
+      const findById = vi.spyOn(SavedReportModel, 'findById');
+      const findOne = vi.spyOn(SavedReportModel, 'findOne');
+      const results = await Promise.all(sendCalls(v.agent, MISSING));
+      results.forEach((res, i) => {
+        expect(res.status, LABELS[i]).toBe(403);
+        expect(res.body.error.code, LABELS[i]).toBe('FORBIDDEN');
+      });
+      // A malformed id too: the role decides, not the record.
+      const bad = await Promise.all(sendCalls(v.agent, 'not-an-id'));
+      bad.forEach((res, i) => expect(res.status, LABELS[i]).toBe(403));
+      expect(findById).not.toHaveBeenCalled();
+      expect(findOne).not.toHaveBeenCalled();
+    });
+
+    it('a Viewer gets 403 on their own saved report (from before Q-70), and nothing is sent or audited', async () => {
+      const v = await signedInAs(app, 'VIEWER');
+      const doc = await ownReport(v.user._id);
+      const results = await Promise.all(sendCalls(v.agent, doc._id.toString()));
+      results.forEach((res, i) => expect(res.status, LABELS[i]).toBe(403));
+      expect(await ActivityLogModel.countDocuments({ entityId: doc._id })).toBe(0);
+    });
+
+    it('a Viewer granted activities view only (customised grid) still gets 403', async () => {
+      await ensureDefaultAccessRules();
+      await AccessRuleModel.updateOne(
+        { role: 'VIEWER' },
+        {
+          $set: {
+            'permissions.activities': { view: true, create: false, edit: false, delete: false },
+          },
+        },
+      );
+      const v = await signedInAs(app, 'VIEWER');
+      expect((await v.agent.get('/api/v1/dar/saved')).status).toBe(200);
+      const doc = await ownReport(v.user._id);
+      for (const id of [MISSING, doc._id.toString()]) {
+        const results = await Promise.all(sendCalls(v.agent, id));
+        results.forEach((res, i) => expect(res.status, `${LABELS[i]} ${id}`).toBe(403));
+      }
+    });
+
+    it('a Member still gets the scope 404 for a made-up id (NFR-25 unchanged)', async () => {
+      const m = await signedInAs(app, 'MEMBER');
+      const results = await Promise.all(sendCalls(m.agent, MISSING));
+      results.forEach((res, i) => expect(res.status, LABELS[i]).toBe(404));
+    });
   });
 
   it('EC-111: a Viewer gets 403 on their own old time entry and it is kept', async () => {

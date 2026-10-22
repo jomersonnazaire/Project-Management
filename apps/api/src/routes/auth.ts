@@ -41,7 +41,7 @@ import {
   appRedirect,
   s256,
 } from '../services/microsoftMobile.js';
-import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
+import { msSignInErrorCode, resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
 import {
   confirmMobileMailResult,
   mobileMailConfirmSchema,
@@ -234,7 +234,7 @@ export function authRouter(
             { reason: result.reason, tid: claims.tid, oid: claims.oid },
             'Microsoft sign-in refused',
           );
-          msFailureRedirect(res, result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed');
+          msFailureRedirect(res, msSignInErrorCode(result.reason));
           return;
         }
         const now = clockNow();
@@ -347,8 +347,7 @@ export function authRouter(
               { reason: result.reason, tid: claims.tid, oid: claims.oid },
               'Microsoft mobile sign-in refused',
             );
-            const errCode = result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed';
-            res.redirect(appRedirect({ error: errCode }));
+            res.redirect(appRedirect({ error: msSignInErrorCode(result.reason) }));
             return;
           }
           const oneTime = newToken();

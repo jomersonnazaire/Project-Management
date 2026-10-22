@@ -76,3 +76,7 @@ export const BRAND_ASSETS = {
   icon: '/brand/icon.svg',
   iconWhite: '/brand/icon-white.svg',
 } as const;
+
+/** /login?error=ms_email_unverified: Microsoft didn't confirm the email, so no link by email. */
+export const MS_EMAIL_UNVERIFIED_MESSAGE =
+  "We couldn't link this Microsoft account to OpsTrack. Sign in with your Xceler8 work account, or use your email and password.";

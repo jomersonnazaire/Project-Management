@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Ref } from './projects.js';
+import { phDateOf, type Ref } from './projects.js';
 import { BRAND, EXPORT_FOOTER, PRE_BRAND_EXPORT_NAME, exportFooterFor } from './brand.js';
 
 /**
@@ -37,30 +37,102 @@ export const DAR_SEND_RATE_LIMITED =
 export const DAR_NOTIFY_RECENT =
   'You already notified your supervisor about this report in the last hour. You can notify them again later.';
 
-const DAR_SEND_GENERIC =
-  "We couldn't send your report: {reason}. Try again, or export it and send it yourself.";
+/**
+ * Graph timed out or the connection dropped after the request went out: the mail may or may not
+ * have been sent. Not a failure; the saved report records the send as unknown.
+ */
+export const DAR_SEND_UNCONFIRMED =
+  "We couldn't confirm the send. Check your Outlook Sent Items before sending again.";
+/**
+ * CR-16 / UIE 6: sending a saved report that already has a send on record (sent, or an
+ * unconfirmed send) always needs an explicit confirm, however long ago it was.
+ * `lastAttemptAt` is the ISO time of that send (from the 409); it is shown in Asia/Manila.
+ */
+export function darResendConfirmMessage(
+  state: 'sent' | 'unknown',
+  lastAttemptAt: string,
+  range: { from: string; to: string },
+): string {
+  const when = formatPhDateTime(lastAttemptAt);
+  const r = darEmailRange(range.from, range.to);
+  return state === 'unknown'
+    ? `We couldn't confirm your last send of the report for ${r} on ${when}. Microsoft may already have sent it, so check your Outlook Sent Items. Send it again anyway?`
+    : `Already sent on ${when}: report for ${r}. Send it again?`;
+}
 
+/** First sentence of every failed-send message (web banner, 409 SEND_UNAVAILABLE). */
+export const DAR_NOT_SENT = "Your report wasn't sent.";
+/** Any send error code without its own line: never show the raw code. */
+export const DAR_SEND_FAILURE_GENERIC =
+  'Something went wrong. Try again, or export the report and send it yourself.';
+const DAR_NOT_ENABLED_LINE =
+  "Sending reports isn't turned on. Export the report and send it yourself.";
+
+/** The line after "Your report wasn't sent." for each `send_error` / SEND_UNAVAILABLE reason. */
+const DAR_SEND_FAILURE_LINES: Readonly<Record<string, string>> = {
+  ms_auth_failed: 'Microsoft sign-in failed, so nothing was sent. Try again.',
+  send_forbidden:
+    "Your Microsoft account isn't allowed to send email from OpsTrack. Ask your Admin to allow it.",
+  bad_recipient: "Your supervisor's email address isn't valid. Ask your Admin to check it.",
+  graph_unavailable: "Microsoft isn't responding right now. Try again in a few minutes.",
+  not_found: "We couldn't find this saved report. Refresh the page and try again.",
+  not_enabled: DAR_NOT_ENABLED_LINE,
+  ms_disabled: DAR_NOT_ENABLED_LINE,
+  // Codes that already had their own wording (web and mobile): kept, so the user knows what to do.
+  no_mailbox: 'This Microsoft account has no mailbox. Use Export instead.',
+  no_supervisor: 'Ask an Admin to set your supervisor.',
+  consent_declined:
+    "You didn't allow OpsTrack to send email as you. Press Send again and choose Accept, or export the report.",
+  admin_consent_required:
+    'Your organization needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.',
+  wrong_account: 'Pick the same Microsoft account you use for OpsTrack.',
+  too_large: DAR_TOO_LARGE,
+  not_linked: DAR_PASSWORD_ONLY,
+  rate_limited: DAR_SEND_RATE_LIMITED,
+};
+
+/** The reason's own line, or the generic one; never the raw code. */
+export function darSendFailureLine(reason: string | null | undefined): string {
+  return (
+    (reason && Object.hasOwn(DAR_SEND_FAILURE_LINES, reason) && DAR_SEND_FAILURE_LINES[reason]) ||
+    DAR_SEND_FAILURE_GENERIC
+  );
+}
+
+/** "Your report wasn't sent. {line}" for a failed send. */
+export const darSendFailureMessage = (reason: string | null | undefined) =>
+  `${DAR_NOT_SENT} ${darSendFailureLine(reason)}`;
+
+/**
+ * Short text for a reason without the "wasn't sent" lead-in (hints such as no_supervisor);
+ * result_unavailable is not a failure and gets the "check Sent Items" text.
+ */
 export function darSendError(reason: string): string {
-  switch (reason) {
-    case 'no_mailbox':
-      return 'This Microsoft account has no mailbox. Use Export instead.';
-    case 'no_supervisor':
-      return 'Ask an Admin to set your supervisor.';
-    case 'consent_declined':
-      return "You didn't allow OpsTrack to send email as you, so nothing was sent. Press Send again and choose Accept, or export the report.";
-    case 'admin_consent_required':
-      return 'Your organisation needs an administrator to approve OpsTrack sending email for you. Ask your IT admin to approve it, then press Send again. You can export the report meanwhile.';
-    case 'wrong_account':
-      return 'Pick the same Microsoft account you use for OpsTrack.';
-    case 'too_large':
-      return DAR_TOO_LARGE;
-    case 'not_linked':
-      return DAR_PASSWORD_ONLY;
-    case 'rate_limited':
-      return DAR_SEND_RATE_LIMITED;
-    default:
-      return DAR_SEND_GENERIC.replace('{reason}', reason.replaceAll('_', ' '));
-  }
+  if (reason === 'result_unavailable') return DAR_SEND_UNCONFIRMED;
+  return darSendFailureLine(reason);
+}
+
+/** One person a send went to, as recorded when Graph accepted it. */
+export interface DarSendRecipient {
+  name: string;
+  email: string;
+}
+
+/** GET /dar/saved/:id/send-result: who the last confirmed send of this report went to. */
+export interface DarSendResultDto {
+  sentAt: string;
+  from: string;
+  to: string;
+  recipient: DarSendRecipient;
+  cc: DarSendRecipient[];
+}
+
+/** "Report for Oct 13, 2026 sent to Supervisor Sam (sup@…). CC: Cee One." */
+export function darSentBanner(
+  r: Pick<DarSendResultDto, 'from' | 'to' | 'recipient' | 'cc'>,
+): string {
+  const head = `Report for ${darEmailRange(r.from, r.to)} sent to ${r.recipient.name} (${r.recipient.email}).`;
+  return r.cc.length ? `${head} CC: ${r.cc.map((c) => c.name).join(', ')}.` : head;
 }
 
 export function darSentMessage(supervisorName: string, ccCount: number): string {
@@ -86,6 +158,8 @@ export const DAR_COLUMNS = [
 export const SAVED_LATEST = 'Latest';
 export const DAR_STATUS_SENT = 'Sent';
 export const DAR_STATUS_NOT_SENT = 'Not sent';
+/** The last send timed out after it went out: it may or may not have been sent. */
+export const DAR_STATUS_UNCONFIRMED = 'Not confirmed';
 /** Hover note on the Sent badge: Graph accepted it; delivery isn't confirmed. */
 export const DAR_SENT_NOTE = 'Accepted by Microsoft for delivery';
 /** "1 recipient" / "3 recipients" */
@@ -194,6 +268,11 @@ export interface SavedReportSummaryDto {
   sentBy: string | null;
   /** How many people that send went to (To + CC). */
   sentRecipientCount: number | null;
+  /**
+   * When the last send could not be confirmed (Graph timeout or dropped connection after the
+   * request went out), ISO; null when there is no unconfirmed send after the last confirmed one.
+   */
+  sendUnknownAt: string | null;
 }
 
 export interface SavedReportDto extends SavedReportSummaryDto {
@@ -221,6 +300,24 @@ export function darEmailRange(from: string, to: string): string {
   if (from.slice(0, 4) === to.slice(0, 4))
     return `${formatShortDate(from)} to ${formatLongDate(to)}`;
   return `${formatLongDate(from)} to ${formatLongDate(to)}`;
+}
+/**
+ * The mobile route's 409 ALREADY_SENT_OR_UNKNOWN text. The current app (PR #41) shows the API
+ * message as is and has no "send again" confirm yet, so it points to the web for a re-send.
+ */
+export function darMobileResendMessage(state: 'sent' | 'unknown', lastAttemptAt: string): string {
+  const when = formatPhDateTime(lastAttemptAt);
+  return state === 'unknown'
+    ? `We couldn't confirm your last send on ${when}. Microsoft may already have sent it, so check your Outlook Sent Items. To send it again, use OpsTrack on the web.`
+    : `Already sent on ${when}. To send it again, use OpsTrack on the web.`;
+}
+/** An instant in Asia/Manila (UTC+8, no daylight saving): "2026-10-13T09:20:00Z" → "Oct 13, 2026, 5:20 PM". */
+export function formatPhDateTime(iso: string): string {
+  const t = new Date(iso);
+  const h24 = new Date(t.getTime() + 8 * 3_600_000).getUTCHours();
+  const min = String(t.getUTCMinutes()).padStart(2, '0');
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${formatLongDate(phDateOf(t))}, ${h12}:${min} ${h24 < 12 ? 'AM' : 'PM'}`;
 }
 /** "2026-09-30" → "Sep 30" */
 export function formatShortDate(d: string): string {

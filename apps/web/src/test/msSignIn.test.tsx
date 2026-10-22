@@ -9,6 +9,9 @@ const providers = (microsoft: boolean) => (url: string) =>
 
 const NO_EMAIL = /Your Microsoft account has no email address/;
 const FAILED = /couldn.t sign you in with Microsoft/;
+const MISMATCH = /already linked to a different Microsoft account/;
+const UNVERIFIED =
+  "We couldn't link this Microsoft account to OpsTrack. Sign in with your Xceler8 work account, or use your email and password.";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -41,9 +44,23 @@ describe('Microsoft sign-in on the login page', () => {
     expect(screen.queryByText(FAILED)).toBeNull();
     noEmail.unmount();
 
+    const mismatch = renderAt('/login?error=ms_account_mismatch', <App />);
+    expect(await screen.findByText(MISMATCH)).toBeInTheDocument();
+    expect(screen.queryByText(FAILED)).toBeNull();
+    expect(screen.queryByText(UNVERIFIED)).toBeNull();
+    mismatch.unmount();
+
+    const unverified = renderAt('/login?error=ms_email_unverified', <App />);
+    expect(await screen.findByText(UNVERIFIED)).toBeInTheDocument();
+    expect(screen.queryByText(FAILED)).toBeNull();
+    expect(screen.queryByText(MISMATCH)).toBeNull();
+    unverified.unmount();
+
     renderAt('/login', <App />);
     await screen.findByLabelText('Email');
     expect(screen.queryByText(NO_EMAIL)).toBeNull();
     expect(screen.queryByText(FAILED)).toBeNull();
+    expect(screen.queryByText(MISMATCH)).toBeNull();
+    expect(screen.queryByText(UNVERIFIED)).toBeNull();
   });
 });

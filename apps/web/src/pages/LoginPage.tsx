@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   APP_NAME,
+  MS_EMAIL_UNVERIFIED_MESSAGE,
   loginSchema,
   type LoginInput,
   type PermissionGrid,
@@ -51,12 +52,25 @@ export function LoginPage() {
   const reason = params.get('reason');
   const msError = params.get('error') === 'ms_signin_failed';
   const msNoEmail = params.get('error') === 'ms_no_email';
+  const msMismatch = params.get('error') === 'ms_account_mismatch';
+  const msUnverified = params.get('error') === 'ms_email_unverified';
   return (
     <AuthCard title="Sign in">
       <h4 className="mb-1">Sign in to {APP_NAME}</h4>
       {msNoEmail && (
         <Alert variant="danger" className="mt-3">
           Your Microsoft account has no email address. Ask an admin to check your account.
+        </Alert>
+      )}
+      {msMismatch && (
+        <Alert variant="danger" className="mt-3">
+          Your {APP_NAME} account is already linked to a different Microsoft account. Sign in with
+          that account or your email and password, or ask an Admin to change the link.
+        </Alert>
+      )}
+      {msUnverified && (
+        <Alert variant="danger" className="mt-3">
+          {MS_EMAIL_UNVERIFIED_MESSAGE}
         </Alert>
       )}
       {msError && (
