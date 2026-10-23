@@ -82,6 +82,9 @@ export function TaskPanel({
       {
         onSuccess: (data) => {
           setNote('');
+          // Jomerson (Oct 22): the email box starts ticked for every new follow-up, even if
+          // it was unticked for the last one.
+          setEmailNote(true);
           // The follow-up and its in-app notification are saved; the email is extra.
           const posted = data.task?.followUps.at(-1);
           if (wantsEmail && notifies && posted) {
