@@ -6,6 +6,7 @@ import {
   phDateOf,
   toDateOnly,
   type DarDayDto,
+  type DarSendResultDto,
   type DarDayStatus,
   type DarReportDto,
   type DarRowDto,
@@ -17,6 +18,7 @@ import {
 import type { Types } from 'mongoose';
 import { now as clockNow } from '../lib/clock.js';
 import {
+  ActivityLogModel,
   SavedReportModel,
   TimeEntryModel,
   TimesheetDayModel,
@@ -199,6 +201,7 @@ export async function toSavedDtos(userId: Id, docs: SavedDoc[]): Promise<SavedRe
   })
     .select('date changedAt')
     .lean();
+  const pastSends = await sentFromAudit(userId, docs);
   return docs.map((d) => {
     const grp = g.get(`${d.from}|${d.to}`);
     const tag: SavedTag =
@@ -220,11 +223,146 @@ export async function toSavedDtos(userId: Id, docs: SavedDoc[]): Promise<SavedRe
       totalRendered: formatHHMM(d.totalMinutes),
       tag,
       changedDates,
+      ...sentFields(d, pastSends.get(d._id.toString())),
     };
   });
+}
+
+interface SentRecord {
+  sentAt: Date;
+  sentBy: Id | null;
+  sentRecipientCount: number | null;
+}
+
+function sentFields(d: SavedDoc, fromAudit: SentRecord | undefined) {
+  const rec: SentRecord | undefined = d.sentAt
+    ? {
+        sentAt: d.sentAt,
+        sentBy: d.sentBy ?? null,
+        sentRecipientCount: d.sentRecipientCount ?? null,
+      }
+    : fromAudit;
+  const unknownAt =
+    d.sendUnknownAt && (!rec || d.sendUnknownAt > rec.sentAt) ? d.sendUnknownAt : null;
+  return {
+    sentAt: rec ? rec.sentAt.toISOString() : null,
+    sentBy: rec?.sentBy ? rec.sentBy.toString() : null,
+    sentRecipientCount: rec ? rec.sentRecipientCount : null,
+    sendUnknownAt: unknownAt ? unknownAt.toISOString() : null,
+  };
+}
+
+/**
+ * The latest Send of this saved report that went out or may have gone out (sent, or unknown
+ * after a Graph timeout), or null. Failed sends don't count.
+ */
+export async function lastDarSendAttempt(
+  userId: Id,
+  doc: SavedDoc,
+): Promise<{ at: Date; state: 'sent' | 'unknown' } | null> {
+  const fromAudit = doc.sentAt
+    ? undefined
+    : (await sentFromAudit(userId, [doc])).get(doc._id.toString());
+  const sentAt = doc.sentAt ?? fromAudit?.sentAt ?? null;
+  const unknownAt = doc.sendUnknownAt ?? null;
+  if (unknownAt && (!sentAt || unknownAt > sentAt)) return { at: unknownAt, state: 'unknown' };
+  if (sentAt) return { at: sentAt, state: 'sent' };
+  return null;
+}
+
+/**
+ * Reports sent before the sent fields existed: their latest `report_sent` audit entry (written
+ * only after Graph accepted the mail) is the proof. One indexed query per list.
+ */
+async function sentFromAudit(userId: Id, docs: SavedDoc[]): Promise<Map<string, SentRecord>> {
+  const ids = docs.filter((d) => !d.sentAt).map((d) => d._id);
+  const out = new Map<string, SentRecord>();
+  if (!ids.length) return out;
+  const logs = await ActivityLogModel.find({
+    entityType: 'savedReport',
+    entityId: { $in: ids },
+    action: 'report_sent',
+    actorId: userId,
+  })
+    .sort({ at: -1 })
+    .select('entityId actorId at meta')
+    .lean();
+  for (const l of logs) {
+    const key = l.entityId.toString();
+    if (out.has(key)) continue;
+    const cc = (l.meta as { cc?: unknown } | null)?.cc;
+    out.set(key, {
+      sentAt: l.at,
+      sentBy: l.actorId ?? null,
+      sentRecipientCount: 1 + (Array.isArray(cc) ? cc.length : 0),
+    });
+  }
+  return out;
+}
+
+/** Records a successful Send on the saved report; a re-send overwrites it. */
+export async function recordDarSent(savedId: Id, userId: Id, recipientCount: number, at: Date) {
+  await SavedReportModel.updateOne(
+    { _id: savedId, userId },
+    {
+      $set: { sentAt: at, sentBy: userId, sentRecipientCount: recipientCount, sendUnknownAt: null },
+    },
+  );
+}
+
+/** Records a Send whose result is unknown (Graph timeout); the sent fields stay as they were. */
+export async function recordDarSendUnknown(savedId: Id, userId: Id, at: Date) {
+  await SavedReportModel.updateOne({ _id: savedId, userId }, { $set: { sendUnknownAt: at } });
 }
 
 export async function toSavedDto(userId: Id, doc: SavedDoc): Promise<SavedReportDto> {
   const [summary] = await toSavedDtos(userId, [doc]);
   return { ...summary!, report: doc.report as DarReportDto };
+}
+
+/**
+ * Who the last confirmed send of this saved report went to, from its `report_sent` audit entry
+ * (written only after Graph accepted the mail): the addresses actually used, not today's
+ * supervisor. Names recorded at send time; older entries fall back to the user's current name,
+ * then to the address.
+ */
+export async function darSendResult(userId: Id, doc: SavedDoc): Promise<DarSendResultDto | null> {
+  const log = await ActivityLogModel.findOne({
+    entityType: 'savedReport',
+    entityId: doc._id,
+    action: 'report_sent',
+    actorId: userId,
+  })
+    .sort({ at: -1, _id: -1 })
+    .select('at meta')
+    .lean();
+  if (!log) return null;
+  const meta = (log.meta ?? {}) as {
+    to?: unknown;
+    toName?: unknown;
+    cc?: unknown;
+    ccNames?: unknown;
+  };
+  const toEmail = typeof meta.to === 'string' ? meta.to : '';
+  const ccEmails = Array.isArray(meta.cc) ? meta.cc.filter((e) => typeof e === 'string') : [];
+  const ccNames = Array.isArray(meta.ccNames) ? meta.ccNames : [];
+  const missing = [
+    ...(typeof meta.toName === 'string' ? [] : [toEmail]),
+    ...ccEmails.filter((_, i) => typeof ccNames[i] !== 'string'),
+  ].filter(Boolean);
+  const users = missing.length
+    ? await UserModel.find({ email: { $in: missing } })
+        .select('name email')
+        .lean()
+    : [];
+  const current = new Map(users.map((u) => [u.email.toLowerCase(), u.name]));
+  const nameOf = (email: string, recorded: unknown) =>
+    typeof recorded === 'string' ? recorded : (current.get(email.toLowerCase()) ?? email);
+  return {
+    sentAt: log.at.toISOString(),
+    from: doc.from,
+    to: doc.to,
+    recipient: { name: nameOf(toEmail, meta.toName), email: toEmail },
+    cc: ccEmails.map((email, i) => ({ name: nameOf(email, ccNames[i]), email })),
+  };
 }

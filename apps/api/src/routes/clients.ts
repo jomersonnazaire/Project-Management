@@ -30,6 +30,7 @@ import { toClientDto, toContactDto } from '../services/dto.js';
 import { toProjectListItems, type ProjectDoc } from '../services/projectService.js';
 import { applyProjectFilter } from './projects.js';
 import { clientInScope, projectScopeFilter, visibleClientIds } from '../services/scope.js';
+import { now as clockNow } from '../lib/clock.js';
 
 /**
  * Clients, their contacts and their projects (FR-CLI-01..03, FR-CLI-09..12).
@@ -97,7 +98,7 @@ async function withProjects(req: Request, contacts: ContactDto[]): Promise<Conta
   })
     .select('requestedFrom dueDate')
     .lean();
-  const today = todayPH();
+  const today = todayPH(clockNow());
   return contacts.map((c) => {
     const mine = [
       ...tasks,

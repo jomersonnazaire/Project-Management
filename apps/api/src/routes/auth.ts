@@ -41,7 +41,14 @@ import {
   appRedirect,
   s256,
 } from '../services/microsoftMobile.js';
-import { resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
+import { msSignInErrorCode, resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
+import {
+  confirmMobileMailResult,
+  mobileMailConfirmSchema,
+  ACTION_EMAIL_FLOW,
+  returnToMobile,
+  takeMobileMailState,
+} from '../services/msSendReturn.js';
 import { permissionsFor } from '../services/accessRules.js';
 import { audit } from '../services/audit.js';
 import { toUserDto } from '../services/dto.js';
@@ -227,7 +234,7 @@ export function authRouter(
             { reason: result.reason, tid: claims.tid, oid: claims.oid },
             'Microsoft sign-in refused',
           );
-          msFailureRedirect(res, result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed');
+          msFailureRedirect(res, msSignInErrorCode(result.reason));
           return;
         }
         const now = clockNow();
@@ -270,6 +277,47 @@ export function authRouter(
       return;
     }
 
+    // A send started from the mobile app (DAR Send, action email): state kept server-side
+    // (single use); the result goes back to the fixed opstrack://auth/mail address with a
+    // one-time code. Same handlers, so the state/nonce checks still hold.
+    const mobileMail = await takeMobileMailState(state);
+    if (mobileMail?.flow === 'dar') {
+      const d = mobileMail.data;
+      returnToMobile(res, {
+        flow: 'dar',
+        userId: d.userId,
+        codeChallenge: mobileMail.codeChallenge,
+        base: { report: d.savedReportId, recipients: 0 },
+      });
+      await handleMicrosoftDarMailCallback(config, req, res, d, code, msError, errorDescription);
+      return;
+    }
+    if (mobileMail?.flow === 'action') {
+      const d = mobileMail.data;
+      returnToMobile(res, {
+        flow: 'action',
+        userId: d.userId,
+        codeChallenge: mobileMail.codeChallenge,
+        base: {
+          flow: ACTION_EMAIL_FLOW[d.kind],
+          project: d.projectId,
+          ...(d.taskId ? { task: d.taskId } : {}),
+          ...(d.followUpId ? { followUp: d.followUpId } : {}),
+          recipients: 0,
+        },
+      });
+      await handleMicrosoftActionEmailCallback(
+        config,
+        req,
+        res,
+        d,
+        code,
+        msError,
+        errorDescription,
+      );
+      return;
+    }
+
     if (state) {
       const now = clockNow();
       const pending = await MobileAuthCodeModel.findOneAndDelete({
@@ -299,8 +347,7 @@ export function authRouter(
               { reason: result.reason, tid: claims.tid, oid: claims.oid },
               'Microsoft mobile sign-in refused',
             );
-            const errCode = result.reason === 'no_email' ? 'ms_no_email' : 'ms_signin_failed';
-            res.redirect(appRedirect({ error: errCode }));
+            res.redirect(appRedirect({ error: msSignInErrorCode(result.reason) }));
             return;
           }
           const oneTime = newToken();
@@ -329,6 +376,21 @@ export function authRouter(
     if (act) clearMicrosoftActionEmailCookie(config, res);
     req.log?.warn('Microsoft callback rejected: bad or missing OAuth state');
     msFailureRedirect(res);
+  });
+
+  /**
+   * Mobile DAR Send: the app reads the outcome of its send with the one-time code from the
+   * opstrack://auth/mail deep link and its PKCE verifier. Bearer only, the same user who started
+   * it, single use, 60 seconds.
+   */
+  router.post('/mobile/mail/confirm', AUTHENTICATED, async (req, res) => {
+    if (!bearerToken(req)) throw MOBILE_ONLY;
+    const { code, code_verifier } = parseBody(mobileMailConfirmSchema, req);
+    const result = await confirmMobileMailResult(code, code_verifier, currentUser(req)._id);
+    if (!result) {
+      throw new HttpError(400, 'INVALID_CODE', 'This send result has expired or was already read.');
+    }
+    res.json(result);
   });
 
   const mobileExchangeSchema = z.strictObject({

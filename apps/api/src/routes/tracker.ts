@@ -239,7 +239,7 @@ async function buildDay(
     own,
     can: {
       edit: own && state.editable,
-      submit: own && state.editable && status !== 'SUBMITTED' && date <= todayPH(),
+      submit: own && state.editable && status !== 'SUBMITTED' && date <= todayPH(clockNow()),
       reopen: canReopenRole && lockedNow && (!state.weekLocked || isAdmin),
     },
     leave: await leaveLabelFor(userId, date),

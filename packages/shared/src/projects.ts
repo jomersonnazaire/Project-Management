@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mobilePkceFields } from './schemas.js';
 import type { ProjectTypeRefDto } from './projectTypes.js';
 import { JOB_ROLES, type JobRole, type SystemRole } from './roles.js';
 
@@ -623,6 +624,28 @@ export const projectCodeSchema = z
   .regex(/^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/, 'Use letters, numbers and single hyphens.')
   .transform((v) => v.toUpperCase());
 
+/**
+ * Action emails started by a save from the mobile app: `emailReturn: 'mobile'` with the app's
+ * PKCE challenge makes `email.url` use the mobile return (opstrack://auth/mail + confirm).
+ * Omitted or 'web' = the web flow, unchanged. Not stored on the project or task.
+ */
+const emailReturnFields = {
+  emailReturn: z.enum(['web', 'mobile']).optional(),
+  code_challenge: mobilePkceFields.code_challenge.optional(),
+  code_challenge_method: mobilePkceFields.code_challenge_method.optional(),
+};
+export const EMAIL_RETURN_PKCE_MESSAGE =
+  "emailReturn 'mobile' needs code_challenge with code_challenge_method 'S256' (and only then).";
+const emailReturnOk = (v: {
+  emailReturn?: 'web' | 'mobile';
+  code_challenge?: string;
+  code_challenge_method?: 'S256';
+}) =>
+  v.emailReturn === 'mobile'
+    ? Boolean(v.code_challenge && v.code_challenge_method)
+    : v.code_challenge === undefined && v.code_challenge_method === undefined;
+const emailReturnIssue = { path: ['code_challenge'], message: EMAIL_RETURN_PKCE_MESSAGE };
+
 export const createProjectSchema = z
   .strictObject({
     name: requiredText('Project name', 160),
@@ -645,11 +668,13 @@ export const createProjectSchema = z
      * The server works out who they are; the response carries the Microsoft URL to continue.
      */
     emailAddedMembers: z.boolean().optional(),
+    ...emailReturnFields,
   })
   .refine((v) => v.plannedEndDate > v.startDate, {
     path: ['plannedEndDate'],
     message: END_AFTER_START,
-  });
+  })
+  .refine(emailReturnOk, emailReturnIssue);
 export type CreateProjectInput = z.input<typeof createProjectSchema>;
 
 export const updateProjectSchema = z
@@ -677,8 +702,10 @@ export const updateProjectSchema = z
      * server diffs the member list before and after the save; the client never names them.
      */
     emailAddedMembers: z.boolean().optional(),
+    ...emailReturnFields,
   })
-  .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
+  .refine((v) => Object.keys(v).length > 0, 'Nothing to update.')
+  .refine(emailReturnOk, emailReturnIssue);
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
 export const projectContactSchema = z.strictObject({ contactId: objectId });
@@ -752,8 +779,10 @@ export const createTaskSchema = z
     isMilestone: taskFields.isMilestone.default(false),
     addMemberIds,
     emailNewAssignees,
+    ...emailReturnFields,
   })
-  .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
+  .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START })
+  .refine(emailReturnOk, emailReturnIssue);
 export type CreateTaskInput = z.input<typeof createTaskSchema>;
 
 export const updateTaskSchema = z
@@ -762,12 +791,14 @@ export const updateTaskSchema = z
     version: z.number().int().min(0),
     addMemberIds,
     emailNewAssignees,
+    ...emailReturnFields,
   } as { [K in keyof typeof taskFields]: z.ZodOptional<(typeof taskFields)[K]> } & {
     version: z.ZodNumber;
     addMemberIds: typeof addMemberIds;
     emailNewAssignees: typeof emailNewAssignees;
-  })
-  .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START });
+  } & typeof emailReturnFields)
+  .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START })
+  .refine(emailReturnOk, emailReturnIssue);
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
 
 /** Fields only the project's planners (Admin, the managing PM) may change (FR-TSK-14, AC-10.4). */

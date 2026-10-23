@@ -10,6 +10,8 @@ import { authenticate } from './auth.js';
 /**
  * The one permission check every API request goes through (doc 11 §8, FR-ACL-08):
  * route lookup → authentication → record scope (NFR-25) → access rules → route handler.
+ * Routes declared with `perm(…, { beforeScope: true })` check the access rules before the record
+ * scope, so a role without the action gets 403 whether or not the record exists (DEF-018).
  * A record outside the caller's scope answers 404 before the rules are consulted, so an outsider
  * never learns it exists (403 only for records the caller can see but lacks the action for).
  * Unknown routes are denied by default: they answer 404 without reaching any handler.
@@ -26,18 +28,24 @@ export function authorize(config: AppConfig, registry: RouteRegistry) {
     const permissions = await permissionsFor(role);
     req.access = { role, permissions };
 
+    const policy = route.policy;
+    const denied = policy.kind === 'permission' && !permissions[policy.record]?.[policy.action];
+    const deny = () => {
+      if (policy.kind === 'permission') {
+        const { record, action } = policy;
+        req.log?.info({ access: { role, record, action } }, 'access denied');
+      }
+      return next(forbidden());
+    };
+    // The role lacks the action outright: 403 before the record is looked up (DEF-018).
+    if (denied && policy.kind === 'permission' && policy.beforeScope) return deny();
+
     if ((await recordScope(route.path, req.path, req.auth!.user)) === 'hidden') {
       req.log?.info({ access: { role, path: route.path } }, 'record outside scope');
       return next(notFound());
     }
 
-    if (route.policy.kind === 'permission') {
-      const { record, action } = route.policy;
-      if (!permissions[record]?.[action]) {
-        req.log?.info({ access: { role, record, action } }, 'access denied');
-        return next(forbidden());
-      }
-    }
+    if (denied) return deny();
     next();
   };
 }

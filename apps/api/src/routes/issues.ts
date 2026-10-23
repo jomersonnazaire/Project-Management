@@ -55,6 +55,7 @@ import { notify } from '../services/notify.js';
 import { userRefs } from '../services/projectService.js';
 import { projectScopeFilter } from '../services/scope.js';
 import { assertNotArchived, loadProject } from './projects.js';
+import { now as clockNow } from '../lib/clock.js';
 
 /**
  * Project issue tracking (doc 13, Milestone 3.5). Routes:
@@ -168,7 +169,7 @@ async function counts(filter: FilterQuery<Issue>): Promise<IssueListDto['counts'
     IssueModel.countDocuments(open),
     IssueModel.countDocuments({ ...open, severity: 'CRITICAL' }),
     IssueModel.countDocuments({ ...open, severity: 'HIGH' }),
-    IssueModel.countDocuments({ ...open, dueDate: { $lt: todayPH() } }),
+    IssueModel.countDocuments({ ...open, dueDate: { $lt: todayPH(clockNow()) } }),
     IssueModel.countDocuments({ ...filter, status: 'WAITING_ON_CLIENT' }),
   ]);
   return { open: o, critical: c, high: h, overdue, waiting };
@@ -229,7 +230,7 @@ export function issuesRouter(registry: RouteRegistry) {
         .lean(),
       loadCalendar(),
     ]);
-    const now = new Date();
+    const now = clockNow();
     const body: IssueOptionsDto = {
       users: [...users.values()]
         .filter((u) => u.active)
@@ -262,7 +263,7 @@ export function issuesRouter(registry: RouteRegistry) {
     await assertOwner(project, input.ownerId);
     await assertContact(project, input.reportedByContactId);
     await assertLinks(project, input.taskIds, input.messageIds);
-    const now = new Date();
+    const now = clockNow();
     const dueDate = input.dueDate
       ? parseDateOnly(input.dueDate)
       : defaultIssueDue(input.severity, now, await loadCalendar());

@@ -63,6 +63,7 @@ import { taskRecordCounts } from '../services/taskRecords.js';
 import { notify } from '../services/notify.js';
 import type { AppConfig } from '../config.js';
 import { followUpRecipientIds, saveEmail } from '../services/actionEmail.js';
+import { useMobileEmailReturn } from '../services/msSendReturn.js';
 import { dateOrNull, recomputeProject, userRefs } from '../services/projectService.js';
 import {
   canAddProjectMembers,
@@ -226,7 +227,8 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
     const u = ref(id);
     return u ? { id: u.id, name: u.name } : null;
   };
-  const today = clockNow();
+  // DEF-017: overdue is judged on the Philippine calendar date, not the UTC instant.
+  const today = todayPH(clockNow());
   // M3.5: planners may delete a task only while nothing is recorded under it.
   const mayDelete = canDeleteTasks(user, perms, project);
   const records = mayDelete ? await taskRecordCounts(tasks.map((t) => t._id)) : null;
@@ -564,7 +566,10 @@ function toPlanUpdate(input: Record<string, unknown>) {
       k === 'version' ||
       k === 'reviewerId' ||
       k === 'addMemberIds' ||
-      k === 'emailNewAssignees'
+      k === 'emailNewAssignees' ||
+      k === 'emailReturn' ||
+      k === 'code_challenge' ||
+      k === 'code_challenge_method'
     )
       continue;
     if (k === 'plannedStart' || k === 'dueDate') out[k] = v ? parseDateOnly(v as string) : null;
@@ -788,6 +793,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
 
   p.post('/:id/tasks', perm('tasks', 'create'), async (req, res) => {
     const input = parseBody(createTaskSchema, req);
+    if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const project = await loadProject(req, 'view');
     assertNotArchived(project);
     assertPlanOpen(project);
@@ -1069,6 +1075,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
   // Plan fields are PM-only (FR-TSK-14, AC-10.4); the template is never touched (AC-10.2).
   r.patch('/:id', perm('tasks', 'edit'), async (req, res) => {
     const input = parseBody(updateTaskSchema, req);
+    if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const { task, project } = await loadTask(req);
     assertCan(req, project, task.toObject() as TaskDoc, 'plan');
     assertVersion(task, input.version);

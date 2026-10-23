@@ -80,6 +80,21 @@ const savedReportSchema = new Schema(
     totalMinutes: { type: Number, required: true, immutable: true },
     /** The DarReportDto as rendered at save time. */
     report: { type: Schema.Types.Mixed, required: true, immutable: true },
+    /**
+     * Last successful DAR Send (Graph sendMail accepted it). Not part of the snapshot: a
+     * re-send overwrites these; a failed send never touches them. Older documents lack them.
+     */
+    sentAt: { type: Date, default: null },
+    sentBy: { type: ObjectId, ref: 'User', default: null },
+    /** To + CC count of that send (addresses stay in the audit log only). */
+    sentRecipientCount: { type: Number, default: null },
+    /**
+     * Last Send whose result is unknown (Graph timed out or the connection dropped after the
+     * request went out): it may or may not have gone. Cleared by the next confirmed send; a
+     * failed send never touches it. Any re-send while this or sentAt is set needs an
+     * explicit confirm.
+     */
+    sendUnknownAt: { type: Date, default: null },
   },
   { strict: 'throw', collection: 'savedReports', versionKey: false },
 );

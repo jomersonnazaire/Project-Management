@@ -18,12 +18,61 @@ export type MicrosoftSignInSuccess = { ok: true; user: UserDoc };
 
 export type MicrosoftSignInResult = MicrosoftSignInSuccess | MicrosoftSignInFailure;
 
+/**
+ * Error code for /login?error= (web) and opstrack://auth/microsoft?error= (mobile). Refusals
+ * the user can act on get their own code; everything else stays the generic ms_signin_failed.
+ */
+export function msSignInErrorCode(reason: string): string {
+  if (reason === 'no_email') return 'ms_no_email';
+  if (reason === 'ms_account_mismatch' || reason === 'ms_email_unverified') return reason;
+  return 'ms_signin_failed';
+}
+
 function refuse(reason: string): MicrosoftSignInFailure {
   return { ok: false, reason };
 }
 
 function ssoMeta(userId: UserDoc['_id'], claims: MicrosoftIdClaims, email: string) {
   return { userId: userId.toString(), msTid: claims.tid, email };
+}
+
+/** Audit for a refused link (no tokens or codes, only ids from the verified ID token). */
+async function auditLinkRefused(
+  userId: UserDoc['_id'],
+  claims: MicrosoftIdClaims,
+  email: string,
+  reason: 'ms_account_mismatch' | 'ms_email_unverified',
+): Promise<void> {
+  await audit({
+    actorId: null,
+    entityType: 'user',
+    entityId: userId,
+    action: 'sso_link_refused',
+    reason,
+    meta: { ...ssoMeta(userId, claims, email), msOid: claims.oid },
+  });
+}
+
+/**
+ * Why linking an existing user by email is allowed, or null to refuse (Lean: deploying must not
+ * depend on the app registration emitting xms_edov):
+ * - xms_edov present and true: Microsoft verified the email domain.
+ * - xms_edov present and not true: refuse.
+ * - xms_edov missing: only when the verified token's tid is in MS_ALLOWED_TENANT_IDS and the
+ *   email domain is in MS_ALLOWED_DOMAINS (our own tenant controls those addresses).
+ * `claims` must come from a verified ID token (signature, issuer, audience); see msIdToken.ts.
+ */
+export function emailLinkBasis(
+  claims: MicrosoftIdClaims,
+  email: string,
+  config: AppConfig,
+): 'xms_edov' | 'allowed_tenant_domain' | null {
+  if (claims.xms_edov === true) return 'xms_edov';
+  if (claims.xms_edov !== undefined) return null;
+  if (isAllowedTenant(claims.tid, config) && isAllowedEmailDomain(email, config)) {
+    return 'allowed_tenant_domain';
+  }
+  return null;
 }
 
 /**
@@ -53,8 +102,20 @@ export async function resolveMicrosoftSignIn(
   const existing = await UserModel.findOne({ email });
   if (existing) {
     if (!existing.active) return refuse('deactivated');
+    // Already linked to a different Microsoft account (another oid, or the same oid in another
+    // tenant): never silently relink by email. An admin has to clear the link first.
+    if (existing.msOid && (existing.msOid !== claims.oid || existing.msTid !== claims.tid)) {
+      await auditLinkRefused(existing._id, claims, email, 'ms_account_mismatch');
+      return refuse('ms_account_mismatch');
+    }
     if (!isAllowedEmailDomain(email, config)) {
       return refuse('link_denied');
+    }
+    // Linking by email trusts the email claim, so Microsoft must say it is verified.
+    const emailVerifiedBy = emailLinkBasis(claims, email, config);
+    if (!emailVerifiedBy) {
+      await auditLinkRefused(existing._id, claims, email, 'ms_email_unverified');
+      return refuse('ms_email_unverified');
     }
     existing.msOid = claims.oid;
     existing.msTid = claims.tid;
@@ -64,7 +125,7 @@ export async function resolveMicrosoftSignIn(
       entityType: 'user',
       entityId: existing._id,
       action: 'sso_linked',
-      meta: ssoMeta(existing._id, claims, email),
+      meta: { ...ssoMeta(existing._id, claims, email), emailVerifiedBy },
     });
     return { ok: true, user: existing };
   }

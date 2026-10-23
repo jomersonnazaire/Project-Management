@@ -1,7 +1,9 @@
 import {
   DAR_NOTIFY_RECENT,
   darRangeSchema,
-  darSendError,
+  darMobileResendMessage,
+  darResendConfirmMessage,
+  darSendFailureMessage,
   generatedRangeLabel,
   phDateOf,
   savedReportQuerySchema,
@@ -23,14 +25,35 @@ import {
   type SavedReport,
 } from '../models/index.js';
 import { audit } from '../services/audit.js';
-import { buildDar, toSavedDto, toSavedDtos } from '../services/dar.js';
+import {
+  buildDar,
+  darSendResult,
+  lastDarSendAttempt,
+  toSavedDto,
+  toSavedDtos,
+} from '../services/dar.js';
 import { darSendStatusPayload, resolveDarSupervisor } from '../services/darSend.js';
 import { darFileName, darToPdf, darToXlsx } from '../services/darExport.js';
 import { buildMicrosoftLoginUrl } from '../services/microsoftAuth.js';
 import { setMicrosoftMailOAuthCookie } from '../services/microsoftOAuthCookie.js';
+import {
+  MOBILE_SEND_ONLY,
+  isMobileSend,
+  mobileSendSchema,
+  saveMobileDarState,
+} from '../services/msSendReturn.js';
 import { notifyPersonal } from '../services/notify.js';
 
 const formatParam = z.enum(['pdf', 'xlsx']);
+/**
+ * DAR Send and Notify supervisor email or notify someone else, so they need the tracker's write
+ * permission (activities.edit, as submitting a day), not just view. Viewers have no activities
+ * access (Q-70 B): 403, checked before the saved report is looked up (DEF-018), so a Viewer gets
+ * 403 even for an id that doesn't exist.
+ */
+const SEND_PERM = perm('activities', 'edit', { beforeScope: true });
+/** Send body: `confirmResend: true` after the 409 ALREADY_SENT_OR_UNKNOWN confirm. */
+const confirmResendField = { confirmResend: z.boolean().optional() };
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /** Default range: today (FR-DAR-02). */
@@ -95,6 +118,9 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
     let items = await toSavedDtos(user._id, docs as never);
     if (q.label === 'LATEST') items = items.filter((i) => i.tag === 'LATEST');
     if (q.label === 'EARLIER') items = items.filter((i) => i.tag === 'EARLIER');
+    // After the DTOs, so reports sent before the sent fields existed (audit fallback) count.
+    if (q.sent === 'SENT') items = items.filter((i) => i.sentAt !== null);
+    if (q.sent === 'NOT_SENT') items = items.filter((i) => i.sentAt === null);
     res.json({ items });
   });
 
@@ -143,6 +169,14 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
     await sendFile(res, doc.report as DarReportDto, fmt);
   });
 
+  // The ?sent= banner: who the last confirmed send went to (owner only, NFR-25 scope).
+  r.get('/saved/:id/send-result', perm('activities', 'view'), async (req, res) => {
+    const doc = await ownSaved(req);
+    const result = await darSendResult(currentUser(req)._id, doc as never);
+    if (!result) throw notFound('This report has no confirmed send.');
+    res.json({ result });
+  });
+
   r.get('/send-status', perm('activities', 'view'), async (req, res) => {
     const user = await UserModel.findById(currentUser(req)._id);
     if (!user) throw notFound();
@@ -151,8 +185,30 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
 
   // Send starts with a POST (CSRF header + Origin allow-list, D1) and returns the Microsoft
   // URL; the browser then navigates there. Its own per-user limiter (D5).
-  r.post('/saved/:id/send', perm('activities', 'view'), sendLimiter, async (req, res) => {
-    parseBody(z.strictObject({}), req);
+  // Mobile Send (bearer only): same checks, the OAuth state is kept server-side instead of a
+  // cookie and the callback returns to the app (services/msSendReturn.ts).
+  r.post('/saved/:id/send/mobile', SEND_PERM, sendLimiter, async (req, res) => {
+    if (!isMobileSend(res)) throw MOBILE_SEND_ONLY;
+    const body = parseBody(mobileSendSchema.extend(confirmResendField), req);
+    await startSend(req, res, body.code_challenge, body.confirmResend === true);
+  });
+
+  r.post('/saved/:id/send', SEND_PERM, sendLimiter, async (req, res) => {
+    const body = parseBody(z.strictObject(confirmResendField), req);
+    await startSend(req, res, null, body.confirmResend === true);
+  });
+
+  /**
+   * `mobileChallenge`: the app's PKCE S256 challenge for a mobile Send; null for web.
+   * `confirmResend`: the user confirmed sending again although the last send of this report was
+   * sent, or may have been (unknown result), at any time before (CR-16, UIE 6).
+   */
+  async function startSend(
+    req: Request,
+    res: Response,
+    mobileChallenge: string | null,
+    confirmResend: boolean,
+  ) {
     const doc = await ownSaved(req);
     const user = await UserModel.findById(currentUser(req)._id);
     if (!user) throw notFound();
@@ -168,23 +224,40 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
         action: 'report_send_failed',
         meta: { reason, stage: 'start' },
       });
-      throw new HttpError(409, 'SEND_UNAVAILABLE', darSendError(reason), { reason });
+      throw new HttpError(409, 'SEND_UNAVAILABLE', darSendFailureMessage(reason), { reason });
+    }
+    // A report with a send on record (sent, or a timed-out send that may have gone out) is only
+    // sent again with an explicit confirm, however long ago that was (CR-16, UIE 6).
+    const last = await lastDarSendAttempt(user._id, doc as never);
+    if (last && !confirmResend) {
+      const lastAttemptAt = last.at.toISOString();
+      throw new HttpError(
+        409,
+        'ALREADY_SENT_OR_UNKNOWN',
+        // The mobile app shows this message as is (it has no re-send confirm yet).
+        mobileChallenge !== null
+          ? darMobileResendMessage(last.state, lastAttemptAt)
+          : darResendConfirmMessage(last.state, lastAttemptAt, { from: doc.from, to: doc.to }),
+        { state: last.state, lastAttemptAt },
+      );
     }
     const login = await buildMicrosoftLoginUrl(config, {
       scopes: ['Mail.Send'],
       loginHint: user.email,
     });
-    setMicrosoftMailOAuthCookie(config, res, {
+    const mailState = {
       codeVerifier: login.codeVerifier,
       state: login.state,
       nonce: login.nonce,
       userId: user._id.toString(),
       savedReportId: doc._id.toString(),
-    });
+    };
+    if (mobileChallenge) await saveMobileDarState(mailState, mobileChallenge);
+    else setMicrosoftMailOAuthCookie(config, res, mailState);
     res.json({ url: login.url });
-  });
+  }
 
-  r.post('/saved/:id/notify-supervisor', perm('activities', 'view'), async (req, res) => {
+  r.post('/saved/:id/notify-supervisor', SEND_PERM, async (req, res) => {
     parseBody(z.strictObject({}), req);
     const doc = await ownSaved(req);
     const user = await UserModel.findById(currentUser(req)._id);
@@ -206,7 +279,7 @@ export function darRouter(config: AppConfig, registry: RouteRegistry, sendLimite
         entityType: 'savedReport',
         entityId: doc._id,
         action: 'dar_supervisor_notified',
-        at: { $gt: new Date(Date.now() - NOTIFY_WINDOW_MS) },
+        at: { $gt: new Date(clockNow().getTime() - NOTIFY_WINDOW_MS) },
       });
       if (recent) throw conflict(DAR_NOTIFY_RECENT, 'NOTIFY_RECENT');
       res.json({ notified: await notifySupervisorOnce(user, supervisor, doc) });

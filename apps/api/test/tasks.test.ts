@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished } from 'vitest';
 import { ActivityLogModel, TaskModel } from '../src/models/index.js';
 import { FILES, uploadEvidence } from './m3helpers.js';
-import { CSRF, makeApp, useDatabase } from './helpers.js';
+import { CSRF, login, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world, ptypeId } from './m2helpers.js';
 import { resetTestTime, setTestTime } from '../src/lib/clock.js';
 
@@ -486,5 +486,39 @@ describe('Board and My tasks (FR-TSK-10/13, AC-12.4, AC-17.1)', () => {
     // The outsider sees nothing; the Viewer has no tasks of their own.
     expect((await w.outsider.agent.get('/api/v1/tasks/mine')).body.items).toEqual([]);
     expect((await w.viewer.agent.get('/api/v1/tasks/mine')).body.items).toEqual([]);
+  });
+});
+
+describe('DEF-017: overdue uses the Philippine calendar date', () => {
+  it('a task due today is not overdue after 00:00 UTC (08:00+ PHT) on the project board', async () => {
+    // 00:30 UTC = 08:30 PHT on 2026-11-02; sessions are created at this pinned time too.
+    setTestTime(new Date('2026-11-02T00:30:00Z'));
+    onTestFinished(() => resetTestTime());
+    const w = await world(app);
+    const [first] = await tasksOf(w.pm.agent, w.project.id);
+    await TaskModel.updateOne(
+      { _id: first!.id },
+      { $set: { dueDate: new Date('2026-11-02T00:00:00Z'), status: 'NOT_STARTED' } },
+    );
+    const board = (await w.pm.agent.get(`/api/v1/projects/${w.project.id}/tasks`)).body.items as {
+      id: string;
+      overdue: boolean;
+      daysLate: number;
+    }[];
+    expect(board.find((t) => t.id === first!.id)).toMatchObject({ overdue: false, daysLate: 0 });
+
+    // The next PH day it is overdue by one day.
+    setTestTime(new Date('2026-11-03T00:30:00Z'));
+    const pm = await login(app, w.pm.user.email); // the earlier session idled out a day ago
+    await TaskModel.updateOne(
+      { _id: first!.id },
+      { $set: { dueDate: new Date('2026-11-02T00:00:00Z') } },
+    );
+    const later = (await pm.get(`/api/v1/projects/${w.project.id}/tasks`)).body.items as {
+      id: string;
+      overdue: boolean;
+      daysLate: number;
+    }[];
+    expect(later.find((t) => t.id === first!.id)).toMatchObject({ overdue: true, daysLate: 1 });
   });
 });

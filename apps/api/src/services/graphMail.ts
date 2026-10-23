@@ -13,6 +13,72 @@ export class GraphSendError extends Error {
   }
 }
 
+/**
+ * The request may have reached Graph but no answer came back (our 20 s timeout fired, or the
+ * connection dropped mid-request). The mail may or may not have been sent, so callers must not
+ * report this as a failure, and must not retry on their own.
+ */
+export class GraphSendUnknownError extends Error {
+  constructor(cause: unknown) {
+    super('Graph send result unknown', { cause });
+    this.name = 'GraphSendUnknownError';
+  }
+}
+
+/** Connection errors raised before any byte of the request left (nothing can have been sent). */
+const NOT_SENT_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'CERT_HAS_EXPIRED',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+]);
+
+function errCode(err: unknown): string {
+  const cause = (err as { cause?: { code?: unknown } } | null)?.cause;
+  const code = cause?.code ?? (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : '';
+}
+
+/**
+ * POST /me/sendMail. A rejected fetch is either a connect failure (definitely not sent:
+ * GraphSendError 503 → graph_unavailable) or anything after that, including our timeout
+ * (GraphSendUnknownError: it may have been sent).
+ */
+async function postSendMail(accessToken: string, body: unknown): Promise<void> {
+  let res: globalThis.Response;
+  try {
+    res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    if (NOT_SENT_CODES.has(errCode(err))) {
+      throw new GraphSendError(503, 'network_unreachable');
+    }
+    throw new GraphSendUnknownError(err);
+  }
+  if (res.status === 202) return;
+  let code = 'send_failed';
+  try {
+    const json = (await res.json()) as { error?: { code?: string } };
+    if (typeof json.error?.code === 'string') code = json.error.code;
+  } catch {
+    /* ignore */
+  }
+  throw new GraphSendError(res.status, code);
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -83,58 +149,24 @@ export async function sendMailWithPdf(
     },
     saveToSentItems: true,
   };
-  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    signal: AbortSignal.timeout(20_000),
-    body: JSON.stringify(body),
-  });
-  if (res.status === 202) return;
-  let code = 'send_failed';
-  try {
-    const json = (await res.json()) as { error?: { code?: string } };
-    if (typeof json.error?.code === 'string') code = json.error.code;
-  } catch {
-    /* ignore */
-  }
-  throw new GraphSendError(res.status, code);
+  await postSendMail(accessToken, body);
 }
 
 /**
  * A plain HTML email (no attachment) from the signed-in user's own mailbox via delegated
  * /me/sendMail: it lands in their Sent Items. Used by follow-up emails; DAR Send keeps
- * sendMailWithPdf. Throws GraphSendError like sendMailWithPdf.
+ * sendMailWithPdf. Throws GraphSendError or GraphSendUnknownError like sendMailWithPdf.
  */
 export async function sendMailAsUser(
   accessToken: string,
   input: { subject: string; html: string; to: string[] },
 ): Promise<void> {
-  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
+  await postSendMail(accessToken, {
+    message: {
+      subject: input.subject,
+      body: { contentType: 'HTML', content: input.html },
+      toRecipients: input.to.map((address) => ({ emailAddress: { address } })),
     },
-    signal: AbortSignal.timeout(20_000),
-    body: JSON.stringify({
-      message: {
-        subject: input.subject,
-        body: { contentType: 'HTML', content: input.html },
-        toRecipients: input.to.map((address) => ({ emailAddress: { address } })),
-      },
-      saveToSentItems: true,
-    }),
+    saveToSentItems: true,
   });
-  if (res.status === 202) return;
-  let code = 'send_failed';
-  try {
-    const json = (await res.json()) as { error?: { code?: string } };
-    if (typeof json.error?.code === 'string') code = json.error.code;
-  } catch {
-    /* ignore */
-  }
-  throw new GraphSendError(res.status, code);
 }

@@ -22,7 +22,7 @@ An account in the **Xceler8 Microsoft 365 tenant** with one of: Global Administr
 ## 3. Token claims
 **Token configuration > Add optional claim > ID**: add `email`, `xms_edov`, `acct`. Accept the prompt to enable the Microsoft Graph `email` permission.
 - `acct` is required: the API refuses sign-in unless `acct` is `0` (tenant member). Without it **every** Microsoft sign-in is refused.
-- `xms_edov` tells the API the email domain is verified (used for linking existing accounts).
+- `xms_edov` tells the API the email domain is verified (used for linking existing accounts). If the claim is missing (not configured), the API still links an existing account by email, but only when the verified ID token's `tid` is in `MS_ALLOWED_TENANT_IDS` and the email domain is in `MS_ALLOWED_DOMAINS`. If the claim is present and not `true`, linking is refused (`ms_email_unverified`).
 
 ## 4. API permissions
 Keep Microsoft Graph delegated `openid`, `profile`, `email`, and **`Mail.Send`** (for DAR Send from the user's mailbox). **Remove `User.Read`** (added by default). Then click **Grant admin consent for Xceler8**, including for `Mail.Send`, and check every row shows "Granted". With admin consent in place, users aren't asked to approve `Mail.Send` when they first press **Send** on a saved DAR. Sign-in itself still asks only for `openid profile email`; `Mail.Send` is requested only when someone presses Send.
@@ -46,6 +46,15 @@ Keep Microsoft Graph delegated `openid`, `profile`, `email`, and **`Mail.Send`**
 | `EDGE_PROXY_SECRET` | 32+ character secret (same value as on Vercel for the API proxy); signs the short-lived Microsoft sign-in state cookie |
 
 The API fails closed: if any of these is missing (including `EDGE_PROXY_SECRET`) or either allowlist is empty, the Microsoft button is hidden and no one can sign in with Microsoft. Email login is unaffected. A non-empty `EDGE_PROXY_SECRET` shorter than 32 characters is a configuration error: the API refuses to start.
+
+### ID token verification and signing keys
+The API checks every sign-in ID token itself before using any claim: RS256 signature, issuer `https://login.microsoftonline.com/{tid}/v2.0` (the token's own `tid`), audience = `MS_CLIENT_ID`, and expiry.
+
+- Signing keys come from the tenant's own endpoint, `https://login.microsoftonline.com/{tid}/discovery/v2.0/keys?appid={MS_CLIENT_ID}` (not `common`). `appid` makes this cover app-specific keys if a claims-mapping policy is ever added to the app registration.
+- Keys are fetched only for a `tid` listed in `MS_ALLOWED_TENANT_IDS`. A token from any other tenant is refused before any network call.
+- The App Service needs outbound HTTPS to `login.microsoftonline.com` (already required for sign-in).
+- Keys are cached in memory per tenant (per API instance). They are refreshed after about 24 hours, or once when a token names a key id (`kid`) that isn't cached (at most one such refresh every 5 minutes per tenant).
+- If a refresh fails or times out (10 seconds), the cached keys keep working and a warning is logged (`Microsoft signing keys refresh failed; using cached keys`, with the tenant id and error name only, never token data). Sign-in fails only when there are no cached keys at all, e.g. right after a restart while Microsoft is unreachable (`Microsoft signing keys fetch failed; no cached keys`).
 
 ## 7. Local development
 Add the same keys to `apps/api/.env` (never commit it), with `MS_REDIRECT_URI=http://localhost:5173/api/auth/microsoft/callback`, a dev client secret, and `EDGE_PROXY_SECRET` set to any random string of at least 32 characters. Start API + web as usual and open http://localhost:5173/login.

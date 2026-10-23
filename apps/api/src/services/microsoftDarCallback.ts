@@ -1,8 +1,11 @@
 import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import type { AppConfig } from '../config.js';
+import { now as clockNow } from '../lib/clock.js';
 import { SavedReportModel, UserModel } from '../models/index.js';
 import { audit } from './audit.js';
+import { recordDarSent, recordDarSendUnknown } from './dar.js';
+import { GraphSendUnknownError } from './graphMail.js';
 import {
   buildDarCc,
   GraphSendError,
@@ -19,11 +22,33 @@ import {
   msalMailFailureReason,
 } from './microsoftAuth.js';
 import { consumeMicrosoftMailState, type MicrosoftMailOAuthState } from './microsoftOAuthCookie.js';
+import { sendResultRedirect } from './msSendReturn.js';
 
-function darSendRedirect(config: AppConfig, res: Response, params: Record<string, string>) {
+function darSendRedirect(
+  config: AppConfig,
+  res: Response,
+  params: Record<string, string>,
+  mobileExtra: Record<string, number> = {},
+) {
   const q = new URLSearchParams(params);
-  res.redirect(`${config.WEB_APP_URL}/dar/saved?${q.toString()}`);
+  sendResultRedirect(res, `${config.WEB_APP_URL}/dar/saved?${q.toString()}`, params, mobileExtra);
 }
+
+/** Display names for these addresses (a user's name, or the address itself). */
+async function namesFor(emails: string[]): Promise<string[]> {
+  if (!emails.length) return [];
+  try {
+    const users = await UserModel.find({ email: { $in: emails } })
+      .select('name email')
+      .lean();
+    const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.name]));
+    return emails.map((e) => byEmail.get(e.toLowerCase()) ?? e);
+  } catch {
+    return emails;
+  }
+}
+
+const errorName = (e: unknown) => (e instanceof Error ? e.name : 'Error');
 
 async function failSend(
   config: AppConfig,
@@ -42,7 +67,11 @@ async function failSend(
       meta: { reason, ...meta },
     });
   }
-  darSendRedirect(config, res, { send_error: reason });
+  // The report id lets the page show which report failed and offer Retry.
+  darSendRedirect(config, res, {
+    send_error: reason,
+    ...(savedId ? { report: savedId.toString() } : {}),
+  });
 }
 
 export async function handleMicrosoftDarMailCallback(
@@ -118,24 +147,38 @@ export async function handleMicrosoftDarMailCallback(
   }
   const cc = buildDarCc(user, supervisor.email, user.email);
 
+  let bytes: number;
   try {
-    const { bytes } = await sendDarReportEmail(
-      token.accessToken,
-      user,
-      saved as never,
-      supervisor,
-      cc,
-    );
-    const range = `${saved.from} to ${saved.to}`;
-    await audit({
-      actorId: user._id,
-      entityType: 'savedReport',
-      entityId: saved._id,
-      action: 'report_sent',
-      meta: { to: supervisor.email, cc, range, bytes },
-    });
-    darSendRedirect(config, res, { sent: saved._id.toString() });
+    ({ bytes } = await sendDarReportEmail(token.accessToken, user, saved as never, supervisor, cc));
   } catch (err) {
+    if (err instanceof GraphSendUnknownError) {
+      // The request may have reached Graph (timeout or dropped connection): the mail may be out.
+      // Not a failure: record it as unknown so a quick re-send needs a confirm.
+      req.log?.warn({ err: err.cause }, 'DAR Graph send result unknown');
+      try {
+        await recordDarSendUnknown(saved._id, user._id, clockNow());
+      } catch (recErr) {
+        req.log?.warn({ err: recErr }, 'DAR unknown send state not recorded');
+      }
+      await audit({
+        actorId: user._id,
+        entityType: 'savedReport',
+        entityId: saved._id,
+        action: 'report_send_unknown',
+        meta: {
+          reason: 'result_unavailable',
+          to: supervisor.email,
+          cc,
+          range: `${saved.from} to ${saved.to}`,
+          error: errorName(err.cause),
+        },
+      });
+      darSendRedirect(config, res, {
+        send_error: 'result_unavailable',
+        report: saved._id.toString(),
+      });
+      return;
+    }
     if (err instanceof GraphSendError) {
       const reason = graphSendFailureReason(err.status, err.code);
       await failSend(config, res, reason, userId, savedId, {
@@ -146,5 +189,25 @@ export async function handleMicrosoftDarMailCallback(
     }
     req.log?.warn({ err }, 'DAR Graph send failed');
     await failSend(config, res, 'graph_unavailable', userId, savedId);
+    return;
   }
+  // The mail is out: from here on nothing may turn this into a "failed" send. If recording the
+  // sent fields fails, the report_sent audit entry below still proves it (read as a fallback).
+  try {
+    await recordDarSent(saved._id, user._id, 1 + cc.length, clockNow());
+  } catch (err) {
+    req.log?.warn({ err }, 'DAR sent status not recorded');
+  }
+  const range = `${saved.from} to ${saved.to}`;
+  // Names of the people it went to, as they were at send time (the result banner shows them).
+  const ccNames = await namesFor(cc);
+  await audit({
+    actorId: user._id,
+    entityType: 'savedReport',
+    entityId: saved._id,
+    action: 'report_sent',
+    meta: { to: supervisor.email, toName: supervisor.name, cc, ccNames, range, bytes },
+  });
+  // Mobile confirm only: addresses Graph accepted (one message: To + CC).
+  darSendRedirect(config, res, { sent: saved._id.toString() }, { recipients: 1 + cc.length });
 }

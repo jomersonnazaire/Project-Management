@@ -2,9 +2,16 @@ import { ACTION_EMAIL_NOT_LINKED, toDateOnly, type ActionEmailStartDto } from '@
 import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import type { AppConfig } from '../config.js';
+import { now as clockNow } from '../lib/clock.js';
 import { ProjectModel, TaskModel, UserModel } from '../models/index.js';
 import { audit } from './audit.js';
-import { escapeHtml, GraphSendError, graphSendFailureReason, sendMailAsUser } from './graphMail.js';
+import {
+  escapeHtml,
+  GraphSendError,
+  graphSendFailureReason,
+  GraphSendUnknownError,
+  sendMailAsUser,
+} from './graphMail.js';
 import {
   consentReason,
   exchangeMicrosoftMailCode,
@@ -20,6 +27,7 @@ import {
   type MicrosoftActionEmailOAuthState,
 } from './microsoftOAuthCookie.js';
 import { buildMicrosoftLoginUrl } from './microsoftAuth.js';
+import { mobileEmailChallenge, saveMobileActionState, sendResultRedirect } from './msSendReturn.js';
 import { notify, projectRecipients } from './notify.js';
 
 type Id = Types.ObjectId;
@@ -29,8 +37,10 @@ type Id = Types.ObjectId;
  * assigning a task or adding project members, the actor can email the people concerned from
  * their OWN Outlook with delegated Graph Mail.Send, the same consent flow as DAR Send (#29).
  * POST /action-emails returns a Microsoft URL; the browser goes there and the shared
- * /auth/microsoft/callback sends one email per recipient. Nothing is stored: the access token
- * only lives for that request (no offline_access, no refresh tokens). In-app notifications are
+ * /auth/microsoft/callback sends one email per recipient. Nothing is stored: the code exchange
+ * runs on a per-request MSAL client with no cache plugin (createMsalClient), so the access token
+ * and the refresh token MSAL also gets (its default scopes include offline_access) live only in
+ * that client's memory for that request and are never saved or reused. In-app notifications are
  * created by the action itself, unchanged; the email is extra and never replaces them.
  * Off unless EMAIL_NOTIFICATIONS_ENABLED (and Microsoft sign-in) are configured.
  */
@@ -108,7 +118,7 @@ export async function startActionEmail(
     scopes: ['Mail.Send'],
     loginHint: me.email,
   });
-  setMicrosoftActionEmailCookie(config, res, {
+  const mailState = {
     codeVerifier: login.codeVerifier,
     state: login.state,
     nonce: login.nonce,
@@ -118,7 +128,12 @@ export async function startActionEmail(
     taskId: item.taskId ? item.taskId.toString() : '',
     followUpId: item.followUpId ?? '',
     recipientIds: item.recipientIds.map(String),
-  });
+  };
+  // Started from the app (POST /action-emails/mobile or emailReturn 'mobile'): state kept
+  // server-side with the app's PKCE challenge; otherwise the web cookie, unchanged.
+  const challenge = mobileEmailChallenge(res);
+  if (challenge) await saveMobileActionState(mailState, challenge);
+  else setMicrosoftActionEmailCookie(config, res, mailState);
   return login.url;
 }
 
@@ -244,9 +259,14 @@ export async function handleMicrosoftActionEmailCallback(
   const taskId = st.taskId ? new Types.ObjectId(st.taskId) : null;
   const followUpId = st.followUpId ? new Types.ObjectId(st.followUpId) : null;
   const base = config.WEB_APP_URL.replace(/\/+$/, '');
-  const back = (params: Record<string, string>) => {
+  const back = (params: Record<string, string>, mobileExtra: Record<string, number> = {}) => {
     const q = new URLSearchParams({ ...(st.taskId ? { task: st.taskId } : {}), ...params });
-    res.redirect(`${base}/projects/${st.projectId}?${q.toString()}`);
+    sendResultRedirect(
+      res,
+      `${base}/projects/${st.projectId}?${q.toString()}`,
+      params,
+      mobileExtra,
+    );
   };
   const entity = taskId
     ? { entityType: 'task', entityId: taskId }
@@ -311,12 +331,13 @@ export async function handleMicrosoftActionEmailCallback(
   if (st.kind === 'FOLLOW_UP') {
     const claimed = await TaskModel.updateOne(
       { _id: taskId, followUps: { $elemMatch: { _id: followUpId, emailedAt: null } } },
-      { $set: { 'followUps.$.emailedAt': new Date() } },
+      { $set: { 'followUps.$.emailedAt': clockNow() } },
     );
     if (!claimed.modifiedCount) return fail('already_emailed');
   }
 
   let sent = 0;
+  let unknown = 0;
   let lastReason = '';
   for (const r of to) {
     const address = r.email?.trim();
@@ -337,6 +358,24 @@ export async function handleMicrosoftActionEmailCallback(
       await sendMailAsUser(token.accessToken, { subject, html, to: [address] });
       sent += 1;
     } catch (err) {
+      if (err instanceof GraphSendUnknownError) {
+        // Timeout or dropped connection after the request went out: it may have been sent.
+        // Not a failure, and never retried here.
+        unknown += 1;
+        await audit({
+          actorId: userId,
+          ...entity,
+          projectId,
+          action: 'action_email_unknown',
+          meta: {
+            ...meta,
+            reason: 'result_unavailable',
+            recipientId: r._id.toString(),
+            error: err.cause instanceof Error ? err.cause.name : 'Error',
+          },
+        });
+        continue;
+      }
       const extra =
         err instanceof GraphSendError
           ? { graphStatus: err.status, graphCode: err.code }
@@ -348,7 +387,7 @@ export async function handleMicrosoftActionEmailCallback(
       await failed(lastReason, { recipientId: r._id.toString(), ...extra });
     }
   }
-  if (!sent) {
+  if (!sent && !unknown) {
     if (st.kind === 'FOLLOW_UP') {
       await TaskModel.updateOne(
         { _id: taskId, 'followUps._id': followUpId },
@@ -358,12 +397,20 @@ export async function handleMicrosoftActionEmailCallback(
     back({ email_error: lastReason || 'send_failed' });
     return;
   }
-  await audit({
-    actorId: user._id,
-    ...entity,
-    projectId,
-    action: 'action_email_sent',
-    meta: { ...meta, recipients: sent },
-  });
-  back(sent === to.length ? { email: 'sent' } : { email: 'partial' });
+  if (sent) {
+    await audit({
+      actorId: user._id,
+      ...entity,
+      projectId,
+      action: 'action_email_sent',
+      meta: { ...meta, recipients: sent, ...(unknown ? { unknown } : {}) },
+    });
+  }
+  // Any unconfirmed email: say so (check Sent Items) rather than "sent" or "failed". A follow-up
+  // stays marked as emailed, so it can't be emailed twice by accident.
+  if (unknown) {
+    back({ email_error: 'result_unavailable' }, { recipients: sent, unknown });
+    return;
+  }
+  back(sent === to.length ? { email: 'sent' } : { email: 'partial' }, { recipients: sent });
 }
