@@ -1,3 +1,4 @@
+import 'action_email.dart';
 import 'mock_repositories.dart';
 import 'p2.dart';
 import 'models.dart';
@@ -951,6 +952,9 @@ class MockDarRepository implements DarRepository {
       totalRendered: r.totalRendered,
       tag: r.tag,
       changedDates: r.changedDates,
+      sentKnown: r.sentKnown,
+      sentAt: r.sentAt,
+      sentRecipientCount: r.sentRecipientCount,
       report: DarReport(
         userName: rep.userName,
         supervisor: rep.supervisor,
@@ -994,7 +998,14 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
   ];
 
   @override
-  Future<String> create(ProjectInput p) async {
+  Future<String> create(ProjectInput p, {EmailOnSave? email}) async {
+    if (email != null) {
+      email.start = mockSaveEmail(
+        'emailAddedMembers',
+        (p.memberIds ?? const []).length,
+        email,
+      );
+    }
     final types = MockTrackerStore.projectTypes;
     final t = types.where((x) => x.id == p.projectTypeId).firstOrNull;
     if (t != null && !t.active) {
@@ -1039,7 +1050,14 @@ class MockProjectAdminRepository implements ProjectAdminRepository {
   }
 
   @override
-  Future<void> update(String id, ProjectInput p) async {
+  Future<void> update(String id, ProjectInput p, {EmailOnSave? email}) async {
+    if (email != null) {
+      email.start = mockSaveEmail(
+        'emailAddedMembers',
+        (p.memberIds ?? const []).length,
+        email,
+      );
+    }
     if (p.memberIds != null) {
       await MockProjectExtrasRepository(store)
           .setMembers(id, {...p.memberIds!, ?p.managerId}.toList());

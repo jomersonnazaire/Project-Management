@@ -1,3 +1,4 @@
+import 'action_email.dart';
 import 'api_client.dart';
 import 'models.dart';
 import 'ph_time.dart';
@@ -92,8 +93,10 @@ abstract interface class ProjectAdminRepository {
   Future<List<NamedRef>> templates();
   Future<List<NamedRef>> clients();
   Future<List<NamedRef>> people();
-  Future<String> create(ProjectInput p);
-  Future<void> update(String id, ProjectInput p);
+
+  /// [email]: "Email new members" (PR #37); filled from the save response.
+  Future<String> create(ProjectInput p, {EmailOnSave? email});
+  Future<void> update(String id, ProjectInput p, {EmailOnSave? email});
 }
 
 List<Map<String, dynamic>> _items(Map<String, dynamic> b) => [
@@ -320,22 +323,28 @@ class ApiProjectAdminRepository implements ProjectAdminRepository {
   };
 
   @override
-  Future<String> create(ProjectInput p) async {
+  Future<String> create(ProjectInput p, {EmailOnSave? email}) async {
     final b = await api.post('/projects', {
       ..._body(p),
       'templateId': ?p.templateId,
       'templateVersion': ?p.templateVersion,
+      ...?email?.fields('emailAddedMembers'),
     });
+    email?.start = EmailStart.fromJson(b['email']);
     return '${(b['project'] as Map)['id']}';
   }
 
   @override
-  Future<void> update(String id, ProjectInput p) => api.patch('/projects/$id', {
-    ..._body(p),
-    'status': ?p.status,
-    if (p.rebaselineReason != null && p.rebaselineReason!.isNotEmpty)
-      'reason': p.rebaselineReason,
-  });
+  Future<void> update(String id, ProjectInput p, {EmailOnSave? email}) async {
+    final b = await api.patch('/projects/$id', {
+      ..._body(p),
+      'status': ?p.status,
+      if (p.rebaselineReason != null && p.rebaselineReason!.isNotEmpty)
+        'reason': p.rebaselineReason,
+      ...?email?.fields('emailAddedMembers'),
+    });
+    email?.start = EmailStart.fromJson(b['email']);
+  }
 }
 
 /// Maps a thrown error to a readable message for banners/snackbars.

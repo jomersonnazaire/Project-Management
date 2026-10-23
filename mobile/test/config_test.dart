@@ -25,4 +25,9 @@ void main() {
     expect(AppConfig.demoMode, isFalse);
     expect(AppConfig.apiBaseUrl, 'http://api.test/api/v1');
   });
+
+  test('QA D2: WEB_APP_URL defaults to the live OpsTrack web app', () {
+    expect(AppConfig.webAppUrl, 'https://xc8-projectmgmt-web.vercel.app');
+    expect(AppConfig.webAppUrl, isNot(contains('example.com')));
+  });
 }

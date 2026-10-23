@@ -17,6 +17,8 @@ import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/status_flow.dart';
 import 'home_screens.dart';
+import '../v2/action_email_ui.dart';
+import '../../data/action_email.dart' show EmailOnSave;
 
 class ProjectsScreen extends ConsumerStatefulWidget {
   const ProjectsScreen({super.key});
@@ -756,6 +758,12 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
   String? _owner, _reviewer;
   final _assignees = <String>{};
   List<String> _deps = [];
+  bool _emailAssigned = true;
+
+  Set<String> _newlyAssigned() {
+    final me = ref.read(authProvider).value?.id;
+    return {?_owner, ..._assignees}.difference({?me});
+  }
 
   @override
   void dispose() {
@@ -801,6 +809,18 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
             ),
         ],
       ),
+      if (_newlyAssigned().isNotEmpty)
+        EmailCheckbox(
+          key: const ValueKey('taskAssignedEmail'),
+          label: emailAssigneesLabel(
+            [
+              for (final id in _newlyAssigned())
+                people.where((p) => p.id == id).firstOrNull?.name ?? '',
+            ]..removeWhere((n) => n.isEmpty),
+          ),
+          value: _emailAssigned,
+          onChanged: (v) => setState(() => _emailAssigned = v),
+        ),
       const SizedBox(height: Space.m),
     ];
   }
@@ -844,10 +864,15 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
       return showError(context, 'Due date can\'t be before the start date.');
     }
     setState(() => _busy = true);
+    final pkce = wantsEmail(ref, _emailAssigned) && _newlyAssigned().isNotEmpty
+        ? ref.read(darMailSendProvider).newPair()
+        : null;
+    final email = pkce == null ? null : EmailOnSave(pkce.challenge);
     try {
-      await ref
+      final created = await ref
           .read(projectRepositoryProvider)
           .createTask(
+            email: email,
             widget.projectId,
             NewTask(
               name: _name.text.trim(),
@@ -870,6 +895,16 @@ class _CreateTaskScreenState extends ConsumerState<CreateTaskScreen> {
             ),
           );
       ref.invalidate(projectTasksProvider(widget.projectId));
+      if (pkce != null) {
+        await continueSaveEmail(
+          ref,
+          email,
+          pkce,
+          flow: 'task_assigned',
+          projectId: widget.projectId,
+          taskId: created.id,
+        );
+      }
       if (mounted) {
         popOrGo(context, '/projects/${widget.projectId}?tab=checklist');
       }

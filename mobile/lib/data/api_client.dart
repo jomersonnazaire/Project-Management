@@ -157,7 +157,18 @@ class ApiClient {
     } else if (res.statusCode < 400) {
       await touch();
     }
-    final decoded = res.body.isEmpty ? null : jsonDecode(res.body);
+    // QA D1: a non-JSON body (captive portal, proxy or "site stopped" page) must not surface
+    // as a raw FormatException.
+    Object? decoded;
+    try {
+      decoded = res.body.isEmpty ? null : jsonDecode(res.body);
+    } on FormatException {
+      throw ApiException(
+        unexpectedResponseMessage,
+        status: res.statusCode,
+        code: 'BAD_RESPONSE',
+      );
+    }
     final map = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
     if (res.statusCode >= 400) {
       final err = map['error'];
@@ -240,6 +251,10 @@ DateTime? _parseHttpDate(String s) {
     int.parse(m[6]!),
   );
 }
+
+/// QA D1: shown when the server answers with something that isn't JSON.
+const unexpectedResponseMessage =
+    "The server sent an unexpected response. Check your connection and try again.";
 
 /// Copy for M8 error codes (doc 16 / design delta). Server text otherwise.
 const apiCodeMessages = <String, String>{

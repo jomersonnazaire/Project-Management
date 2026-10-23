@@ -1,3 +1,4 @@
+import 'action_email.dart';
 import 'models.dart';
 import 'repositories.dart';
 
@@ -467,7 +468,18 @@ class MockProjectRepository implements ProjectRepository {
       store.tasks.where((t) => t.projectId == projectId).toList();
 
   @override
-  Future<Task> createTask(String projectId, NewTask n) async {
+  Future<Task> createTask(
+    String projectId,
+    NewTask n, {
+    EmailOnSave? email,
+  }) async {
+    if (email != null) {
+      email.start = mockSaveEmail(
+        'emailNewAssignees',
+        {?n.ownerId, ...n.assigneeIds}.length,
+        email,
+      );
+    }
     final t = Task(
       id: 't${store.tasks.length + 1}',
       projectId: projectId,
