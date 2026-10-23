@@ -98,3 +98,11 @@ Document management questions Q-20 to Q-25 are in [10 §9](10_DOCUMENT_MANAGEMEN
 | Auto-created Viewers' job role (doc 17 Q-91, CR-02; Jomerson, 2026-10-22, 8:38 PM SGT) | **Decided:** they start with **no job role**, and an Admin sets it from Users. | doc 03 FR-USR-01 exception; doc 14 FR-SSO-04 |
 | Mobile Microsoft sign-in (doc 17 CR-03, Q-92 sign-in part; Jomerson, 2026-10-22, 8:38 PM SGT) | **Decided:** it already works (Jomerson confirmed 9 sign-ins), and PR #41 uses it as it is. | doc 14 §G |
 | Still open | Doc 17 CR-14 (the bot's edits to docs on `main`, including "approved by Jonathan"), Q-88, Q-89, Q-91, *(Q-91 decided at 8:38 PM SGT, see above)* the rest of Q-92 (M8 catch-up), Q-93 to Q-100 and Q-102 to Q-105. | doc 17 §2 |
+
+## Client archive (doc 17 CR-18; added 2026-10-23, 12:30 PM SGT)
+Lean approved the scope on 2026-10-23: archive only, no hard delete; an Admin archives or restores a client; archived clients are hidden from lists and pickers, with "Show archived" for Admins; all history stays and reports still include them. Not built. These questions are open for Jomerson, and the proposed defaults apply until he answers.
+
+| ID | Question | Why it matters | Proposed default |
+|----|----------|----------------|------------------|
+| Q-107 | Can an Admin archive a client that still has open projects (Planning, Active or On Hold)? (A) Block it until they're completed, cancelled or archived; (B) allow it and leave the projects as they are; (C) allow it and archive or close the projects in the same step. | Live projects under a hidden client would drop out of pickers while people still work on them | **A, block** with "{client} can't be archived because it has {n} open project(s). Complete, cancel or archive them first." and a linked list (doc 17 FR-CLI-18). |
+| Q-108 | Clients already have an `active` flag (doc 03 FR-CLI-01, doc 07), but the docs don't say what it does in the build. Is "archived" the same as `active: false`, or a separate field? | Two hidden states would confuse lists, pickers and reports | **Same flag:** Archive sets `active: false` and records `archivedAt` and `archivedBy`. Deven to confirm what `active` does today. |
