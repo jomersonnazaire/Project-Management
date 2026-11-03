@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   CLIENT_IMPORT_TOKEN_HEADER,
@@ -547,6 +547,23 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     release();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(commitCalls()).toBe(1);
+  });
+
+  it('DEF-056 two clicks in the same tick send one commit (guard does not wait for isPending)', async () => {
+    const fetch = setup('ADMIN');
+    renderAt('/clients', <App />);
+    const { dialog } = await upload();
+    const btn = await within(dialog).findByRole('button', { name: 'Import valid rows (3)' });
+    act(() => {
+      btn.click();
+      btn.click();
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const commitCalls = fetch.mock.calls.filter(([u]) =>
+      String(u).includes('/clients/import/commit'),
+    ).length;
+    expect(commitCalls).toBe(1);
+    expect(screen.queryByText(/Nothing was saved/)).not.toBeInTheDocument();
   });
 
   it('UIE a "Possible duplicate" warning is amber (text-warning) with ⚠ and the row stays New', async () => {

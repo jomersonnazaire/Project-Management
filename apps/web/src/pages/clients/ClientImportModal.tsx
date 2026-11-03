@@ -180,6 +180,10 @@ export function ClientImportModal({
 }) {
   const preview = useClientImportPreview();
   const commit = useClientImportCommit();
+  // DEF-056: `commit.isPending` only disables Import after a re-render, so a fast double-click
+  // could send two commits (the second gets IMPORT_BUSY and wrongly says nothing was saved).
+  // This ref blocks a second click synchronously until the first commit settles.
+  const committing = useRef(false);
   const [file, setFile] = useState<File | null>(null);
   const [problem, setProblem] = useState<ImportProblem | null>(null);
   const [tab, setTab] = useState<'clients' | 'contacts'>('clients');
@@ -361,9 +365,19 @@ export function ClientImportModal({
           ) : (
             <Button
               disabled={valid === 0 || commit.isPending}
-              onClick={() =>
-                file && commit.mutate({ file, token: data.token }, { onSuccess: onImported })
-              }
+              onClick={() => {
+                if (!file || committing.current) return;
+                committing.current = true;
+                commit.mutate(
+                  { file, token: data.token },
+                  {
+                    onSuccess: onImported,
+                    onSettled: () => {
+                      committing.current = false;
+                    },
+                  },
+                );
+              }}
             >
               {commit.isPending ? 'Importing…' : `Import valid rows (${valid})`}
             </Button>
