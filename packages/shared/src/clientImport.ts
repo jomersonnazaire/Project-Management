@@ -27,6 +27,11 @@ export const CLIENT_IMPORT_MAX_ROWS = 2000;
 /** NFR-37: zip-bomb guard on the declared uncompressed size of the workbook. */
 export const CLIENT_IMPORT_MAX_UNZIPPED_BYTES = 50 * 1024 * 1024;
 
+/** NFR-41 (Locked): per user, per 15 minutes; then 429. One commit per user at a time. */
+export const CLIENT_IMPORT_RATE_WINDOW_MS = 15 * 60_000;
+export const CLIENT_IMPORT_PREVIEW_LIMIT = 20;
+export const CLIENT_IMPORT_COMMIT_LIMIT = 5;
+
 export const CLIENT_IMPORT_TEMPLATE_NAME = 'OpsTrack-clients-template.xlsx';
 export const CLIENT_IMPORT_SKIPPED_NAME = 'OpsTrack-skipped-rows.xlsx';
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -149,6 +154,15 @@ export const CLIENT_IMPORT_MESSAGES = {
   PREVIEW_STALE: 'These clients changed after your preview. Preview again.',
   /** AC-62.23 / EC-158: the preview-token signing key isn't set on the API (503). */
   IMPORT_NOT_CONFIGURED: 'Excel import isn’t set up yet. Ask an Admin.',
+  /** NFR-41 / AC-62.24: a second commit by the same user while one is running (429 IMPORT_BUSY). */
+  IMPORT_BUSY: 'Another import is still running. Wait a moment, then try again. Nothing was saved.',
+  /** NFR-41: over 20 previews or 5 commits in 15 minutes (429 RATE_LIMITED). */
+  RATE_LIMITED: 'Too many imports. Wait a few minutes, then try again. Nothing was saved.',
+  /** UIE modal copy (CLIENTS_EXCEL_IMPORT_UI.md), shown by the web app for these responses. */
+  UI_PREVIEW_STALE: 'This preview is out of date. Preview again.',
+  UI_NOT_CONFIGURED: "Excel import isn't available right now. Nothing was saved.",
+  UI_NOT_CONFIGURED_TEMPLATE: "Excel import isn't available right now.",
+  UI_BUSY: 'Another import is still running. Wait a moment, then try again. Nothing was saved.',
   /** UIE: any other template download failure (404, 5xx, network). */
   TEMPLATE_FAILED: "Couldn't download the template. Try again.",
 } as const;

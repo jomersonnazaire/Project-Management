@@ -1,7 +1,10 @@
 import {
+  CLIENT_IMPORT_COMMIT_LIMIT,
   CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MESSAGES as MSG,
   CLIENT_IMPORT_PERMISSIONS,
+  CLIENT_IMPORT_PREVIEW_LIMIT,
+  CLIENT_IMPORT_RATE_WINDOW_MS,
   CLIENT_IMPORT_TEMPLATE_NAME,
   CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
@@ -10,6 +13,7 @@ import {
 } from '@xc8/shared';
 import { createHash } from 'node:crypto';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import mongoose, { Types } from 'mongoose';
 import { z } from 'zod';
 import { permAll, type RouteRegistry } from '../access/registry.js';
@@ -47,6 +51,8 @@ import { visibleClientIds } from '../services/scope.js';
  * All three need create AND edit on BOTH clients and contacts (FR-CLI-24, Q-111), checked by the
  * central gate from the Access Rules. The upload is parsed in memory and never stored (NFR-37).
  * Without the signing key (NFR-42) all three return 503 IMPORT_NOT_CONFIGURED (AC-62.23).
+ * NFR-41 / AC-62.24: per-user limits (20 previews, 5 commits per 15 minutes, 429 RATE_LIMITED)
+ * and one commit per user at a time (429 IMPORT_BUSY).
  */
 
 const IMPORT_GATE = permAll(CLIENT_IMPORT_PERMISSIONS);
@@ -99,6 +105,23 @@ function previewDto(plan: ImportPlan, fileName: string, size: number, notes: str
   } satisfies Omit<ClientImportPreviewDto, 'token'>;
 }
 
+/**
+ * NFR-41: a per-user limiter on the API's existing express-rate-limit setup (as for sign-in and
+ * DAR Send in app.ts). It runs after the gate, so a user is always present. In-memory store, so
+ * the same single-instance caveat applies (TD-01).
+ */
+function importLimiter(step: 'preview' | 'commit', limit: number) {
+  return rateLimit({
+    windowMs: CLIENT_IMPORT_RATE_WINDOW_MS,
+    limit,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    validate: false,
+    keyGenerator: (req) => `client-import-${step}:${currentUser(req)._id.toString()}`,
+    handler: (_req, _res, next) => next(new HttpError(429, 'RATE_LIMITED', MSG.RATE_LIMITED)),
+  });
+}
+
 const isDuplicateKey = (err: unknown) =>
   typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
 
@@ -110,6 +133,10 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
   const requireKey = (_req: Request, _res: Response, next: NextFunction) =>
     key ? next() : next(new HttpError(503, 'IMPORT_NOT_CONFIGURED', MSG.IMPORT_NOT_CONFIGURED));
   const signingKey = () => key as string;
+  const previewLimiter = importLimiter('preview', CLIENT_IMPORT_PREVIEW_LIMIT);
+  const commitLimiter = importLimiter('commit', CLIENT_IMPORT_COMMIT_LIMIT);
+  /** AC-62.24: users with a commit running in this process (one at a time per user). */
+  const committing = new Set<string>();
 
   r.get('/template', IMPORT_GATE, requireKey, async (_req, res) => {
     const buf = await buildTemplate();
@@ -118,7 +145,7 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
     res.send(buf);
   });
 
-  r.post('/preview', IMPORT_GATE, requireKey, rawXlsx, async (req, res) => {
+  r.post('/preview', IMPORT_GATE, requireKey, previewLimiter, rawXlsx, async (req, res) => {
     const { buf, fileName } = uploadOf(req);
     const file = await readWorkbook(buf);
     const plan = await planImport(file, await contextFor(req));
@@ -136,7 +163,19 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
     res.json(body);
   });
 
-  r.post('/commit', IMPORT_GATE, requireKey, rawXlsx, async (req, res) => {
+  r.post('/commit', IMPORT_GATE, requireKey, commitLimiter, rawXlsx, async (req, res) => {
+    // AC-62.24: a second commit by the same user while one runs is refused before any work.
+    const userKey = currentUser(req)._id.toString();
+    if (committing.has(userKey)) throw new HttpError(429, 'IMPORT_BUSY', MSG.IMPORT_BUSY);
+    committing.add(userKey);
+    try {
+      await runCommit(req, res);
+    } finally {
+      committing.delete(userKey);
+    }
+  });
+
+  async function runCommit(req: Request, res: Response) {
     const { buf, fileName } = uploadOf(req);
     const file = await readWorkbook(buf);
     const actorId = currentUser(req)._id;
@@ -319,7 +358,7 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
       applied: { created: total.new, updated: total.update, skipped: total.error },
     };
     res.json(body);
-  });
+  }
 
   return r.router;
 }

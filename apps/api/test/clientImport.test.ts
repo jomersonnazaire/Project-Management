@@ -9,6 +9,7 @@ import {
 } from '@xc8/shared';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
+import mongoose from 'mongoose';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type request from 'supertest';
 import {
@@ -1031,18 +1032,159 @@ describe('CR-19 signed preview token (FR-CLI-35b, Q-116)', () => {
     const { token: foreign } = await preview(otherAgent, file);
     const otherFile = await xlsx({ clients: [[a, 'Different']] });
     const bad = [`${altered}.${mac}`, `${data}.${flipped}`, `${data}`, 'x.y.z', '', foreign];
+    // Nine commits by one user: each on a fresh app so NFR-41's 5-commit limit isn't the answer.
+    const fresh = () => login(makeApp(), admin.user.email);
     for (const t of bad) {
-      const res = await commitWith(admin.agent, file, t);
+      const res = await commitWith(await fresh(), file, t);
       expect(res.status, t).toBe(409);
       expect(res.body.error).toMatchObject(STALE);
     }
-    const noHeader = await send(admin.agent, 'commit', file);
+    const noHeader = await send(await fresh(), 'commit', file);
     expect(noHeader.status).toBe(409);
     // A valid token for a different file is stale too (file SHA-256 is in the hash).
-    expect((await commitWith(admin.agent, otherFile, token)).status).toBe(409);
+    expect((await commitWith(await fresh(), otherFile, token)).status).toBe(409);
     expect(await ClientModel.countDocuments({ name: a })).toBe(0);
     // The untouched token still works.
     expect((await commitWith(admin.agent, file, token)).status).toBe(200);
+  });
+});
+
+describe('CR-19 any matched-record change makes the preview stale (FR-CLI-35b v0.7)', () => {
+  it('AC-62.19 an edit to a field the file does not touch (Notes, file cell blank) is still 409', async () => {
+    const admin = await signedInAs(app, 'ADMIN');
+    const a = co('Notes Only');
+    await commit(admin.agent, await xlsx({ clients: [[a, 'Retail']] }));
+    const file = await xlsx({ clients: [[a, 'Banking']] });
+    const p = await preview(admin.agent, file);
+    const client = await ClientModel.findOne({ name: a }).lean();
+    const edit = await admin.agent
+      .patch(`/api/v1/clients/${client!._id.toString()}`)
+      .set(CSRF)
+      .send({ notes: 'Edited elsewhere' });
+    expect(edit.status, JSON.stringify(edit.body)).toBe(200);
+    const res = await commitWith(admin.agent, file, p.token);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('PREVIEW_STALE');
+    expect(await ClientModel.findOne({ name: a }).lean()).toMatchObject({ industry: 'Retail' });
+  });
+
+  it("AC-62.19 user 1's commit updating Client A makes user 2's open preview of Client A stale", async () => {
+    const u1 = await signedInAs(app, 'ADMIN');
+    const u2 = await signedInAs(app, 'ADMIN');
+    const a = co('Shared');
+    await commit(u1.agent, await xlsx({ clients: [[a, 'Retail']] }));
+    const f1 = await xlsx({ clients: [[a, 'Banking']] });
+    const f2 = await xlsx({ clients: [[a, 'Retail', 'Somewhere']] });
+    const p2 = await preview(u2.agent, f2);
+    await commit(u1.agent, f1);
+    const res = await commitWith(u2.agent, f2, p2.token);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('PREVIEW_STALE');
+  });
+});
+
+describe('CR-19 abuse limits (NFR-41, AC-62.24, EC-149)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('AC-62.24 the 21st preview in 15 minutes gets 429 RATE_LIMITED; another user is not affected', async () => {
+    const app2 = makeApp();
+    const u1 = await signedInAs(app2, 'ADMIN');
+    const u2 = await signedInAs(app2, 'ADMIN');
+    const file = await xlsx({ clients: [[co('Limit')]] });
+    for (let i = 0; i < 20; i++) {
+      expect((await send(u1.agent, 'preview', file)).status, `preview ${i + 1}`).toBe(200);
+    }
+    const res = await send(u1.agent, 'preview', file);
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatchObject({
+      code: 'RATE_LIMITED',
+      message: 'Too many imports. Wait a few minutes, then try again. Nothing was saved.',
+    });
+    expect((await send(u2.agent, 'preview', file)).status).toBe(200);
+    // Other routes for the same user still work.
+    expect((await u1.agent.get('/api/v1/clients')).status).toBe(200);
+  });
+
+  it('AC-62.24 the 6th commit in 15 minutes gets 429 and saves nothing', async () => {
+    const app2 = makeApp();
+    const admin = await signedInAs(app2, 'ADMIN');
+    for (let i = 0; i < 5; i++) {
+      const file = await xlsx({ clients: [[co('Five')]] });
+      const { token } = await preview(admin.agent, file);
+      expect((await commitWith(admin.agent, file, token)).status, `commit ${i + 1}`).toBe(200);
+    }
+    const sixth = co('Sixth');
+    const file = await xlsx({ clients: [[sixth]] });
+    const { token } = await preview(admin.agent, file);
+    const res = await commitWith(admin.agent, file, token);
+    expect(res.status).toBe(429);
+    expect(res.body.error.code).toBe('RATE_LIMITED');
+    expect(await ClientModel.countDocuments({ name: sixth })).toBe(0);
+  });
+
+  /** Holds the next commit inside the handler (at startSession) until release() is called. */
+  function holdNextCommit() {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let entered!: () => void;
+    const inside = new Promise<void>((r) => (entered = r));
+    const real = mongoose.startSession.bind(mongoose);
+    const spy = vi.spyOn(mongoose, 'startSession').mockImplementationOnce(async (...args) => {
+      entered();
+      await gate;
+      return real(...(args as Parameters<typeof real>));
+    });
+    return { release, inside, spy };
+  }
+
+  it('AC-62.24 / EC-149 a second commit by the same user while one runs gets 429 IMPORT_BUSY; the first saves; another user still works', async () => {
+    const app2 = makeApp();
+    const u1 = await signedInAs(app2, 'ADMIN');
+    const u2 = await signedInAs(app2, 'ADMIN');
+    const a = co('Busy');
+    const b = co('Busy Other');
+    const file = await xlsx({ clients: [[a]] });
+    const other = await xlsx({ clients: [[b]] });
+    const p1 = await preview(u1.agent, file);
+    const p1b = await preview(u1.agent, file);
+    const p2 = await preview(u2.agent, other);
+
+    const hold = holdNextCommit();
+    const first = commitWith(u1.agent, file, p1.token).then((r) => r);
+    await hold.inside;
+    const second = await commitWith(u1.agent, file, p1b.token);
+    expect(second.status).toBe(429);
+    expect(second.body.error).toMatchObject({
+      code: 'IMPORT_BUSY',
+      message: 'Another import is still running. Wait a moment, then try again. Nothing was saved.',
+    });
+    // A different user is not blocked by u1's lock (their own rules apply: here, success).
+    const theirs = await commitWith(u2.agent, other, p2.token);
+    expect(theirs.status, JSON.stringify(theirs.body)).toBe(200);
+    hold.release();
+    const done = await first;
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    expect(await ClientModel.countDocuments({ name: a })).toBe(1);
+  });
+
+  it('AC-62.24 the lock is released after a 409, a 500 and a file error', async () => {
+    const app2 = makeApp();
+    const admin = await signedInAs(app2, 'ADMIN');
+    const a = co('Released');
+    const file = await xlsx({ clients: [[a]] });
+    // 409: a bad token.
+    expect((await commitWith(admin.agent, file, 'bad.token')).status).toBe(409);
+    // 415/422: a file error.
+    const bad = await send(admin.agent, 'commit', Buffer.from('not a zip'), 'x.xlsx', 'x');
+    expect([415, 422]).toContain(bad.status);
+    // 500: the database session fails.
+    const p = await preview(admin.agent, file);
+    vi.spyOn(mongoose, 'startSession').mockRejectedValueOnce(new Error('boom'));
+    expect((await commitWith(admin.agent, file, p.token)).status).toBe(500);
+    // The next commit is not refused as busy.
+    const ok = await commitWith(admin.agent, file, p.token);
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(await ClientModel.countDocuments({ name: a })).toBe(1);
   });
 });
 
