@@ -43,7 +43,9 @@ describe('Vercel /api middleware (DEF-002)', () => {
     expect(previewApiOrigin(o + '/', 'preview')).toBe(o);
     expect(previewApiOrigin(o, 'production')).toBeUndefined();
     expect(previewApiOrigin(undefined, 'preview')).toBeUndefined();
-    expect(previewApiOrigin('http://ops-track-staging.azurewebsites.net', 'preview')).toBeUndefined();
+    expect(
+      previewApiOrigin('http://ops-track-staging.azurewebsites.net', 'preview'),
+    ).toBeUndefined();
     expect(previewApiOrigin(o + '/x', 'preview')).toBeUndefined();
     expect(previewApiOrigin('not a url', 'preview')).toBeUndefined();
   });
