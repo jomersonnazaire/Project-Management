@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://xc8-projectmgmt-api-tc3w.azurewebsites.net/api/:path*"
+      "destination": "https://ops-track-bwdfeda7duhde2b5.southeastasia-01.azurewebsites.net/api/:path*"
     },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ],
