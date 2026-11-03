@@ -1,4 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  CLIENT_EXPORT_ROWS_HEADERS,
+  CLIENT_IMPORT_TEMPLATE_NAME,
+  CLIENT_IMPORT_TOKEN_HEADER,
+  XLSX_MIME,
+  clientExportFileName,
+  phDateOf,
+  type ClientExportCounts,
+  type ClientImportCommitDto,
+  type ClientImportPreviewDto,
+  type ClientImportSheet,
+} from '@xc8/shared';
 import type {
   AccessRulesDto,
   ClientDto,
@@ -14,7 +26,7 @@ import type {
   UpdateUserInput,
   UserDto,
 } from '@xc8/shared';
-import { api, qs } from './client';
+import { api, downloadFile, qs } from './client';
 
 export const keys = {
   users: (p: object) => ['users', p] as const,
@@ -246,4 +258,58 @@ export function useResetAccessRules() {
       void qc.invalidateQueries({ queryKey: ['auth', 'me'] });
     },
   });
+}
+
+// ----- CR-19: Clients Excel import -----
+
+const importPath = (step: 'preview' | 'commit', file: File) =>
+  `/clients/import/${step}${qs({ fileName: file.name })}`;
+
+/** Validates and matches the file; saves nothing (FR-CLI-34). */
+export function useClientImportPreview() {
+  return useMutation({
+    mutationFn: (file: File) =>
+      api<ClientImportPreviewDto>(importPath('preview', file), {
+        method: 'POST',
+        file: { body: file, type: XLSX_MIME },
+      }),
+  });
+}
+
+/**
+ * Sends the same file again with the preview's signed token (FR-CLI-35b). The API recomputes the
+ * result and writes the valid rows in one transaction only if it equals the preview; otherwise
+ * 409 PREVIEW_STALE ("Preview again") and nothing is saved.
+ */
+export function useClientImportCommit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, token }: { file: File; token: string }) =>
+      api<ClientImportCommitDto>(importPath('commit', file), {
+        method: 'POST',
+        file: { body: file, type: XLSX_MIME },
+        headers: { [CLIENT_IMPORT_TOKEN_HEADER]: token },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['clients'] });
+      void qc.invalidateQueries({ queryKey: ['contacts'] });
+    },
+  });
+}
+
+export const downloadClientTemplate = () =>
+  downloadFile('/clients/import/template', CLIENT_IMPORT_TEMPLATE_NAME);
+
+/**
+ * The clients the user may see, in the template layout (file name from Content-Disposition).
+ * Resolves with each sheet's row count (Q-119; a missing header reads as 0).
+ */
+export async function downloadClientExport(): Promise<ClientExportCounts> {
+  const headers = await downloadFile(
+    '/clients/import/export',
+    clientExportFileName(phDateOf(new Date())),
+  );
+  const count = (sheet: ClientImportSheet) =>
+    Number(headers.get(CLIENT_EXPORT_ROWS_HEADERS[sheet])) || 0;
+  return { Clients: count('Clients'), Contacts: count('Contacts') };
 }

@@ -1,19 +1,62 @@
-import { plural, type ClientDto } from '@xc8/shared';
-import { useState } from 'react';
-import { Button, Form } from 'react-bootstrap';
+import {
+  clientExportLimitToast,
+  clientImportToast,
+  plural,
+  type ClientDto,
+  type ClientImportCommitDto,
+} from '@xc8/shared';
+import { useEffect, useRef, useState } from 'react';
+import { Button, Dropdown, Form, Spinner, ToastContainer } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { useClientActive, useClients } from '../../api/hooks';
+import { downloadClientExport, useClientActive, useClients } from '../../api/hooks';
 import { useCan } from '../../auth/useCan';
 import { ActiveBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
+import { ClientImportModal } from './ClientImportModal';
+import { exportErrorOf, type ImportProblem } from './importErrors';
 import { ClientModal } from './ClientModal';
+import { downloadSkippedRows } from './skippedRows';
 
 /** Clients list (FR-CLI-01). Each client opens its Details / Contacts / Projects tabs. */
 export function ClientsPage() {
   const canCreate = useCan('clients', 'create');
   const canEdit = useCan('clients', 'edit');
   const canDelete = useCan('clients', 'delete');
+  // CR-19 (FR-CLI-23/24, Q-111): Excel needs create AND edit on BOTH clients and contacts.
+  const canCreateContact = useCan('contacts', 'create');
+  const canEditContact = useCan('contacts', 'edit');
+  const canImport = canCreate && canEdit && canCreateContact && canEditContact;
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ClientImportCommitDto | null>(null);
+  const [excelError, setExcelError] = useState<ImportProblem | null>(null);
+  // UIE (Q-118): the Excel toggle is disabled with a spinner and "Preparing file…" while the
+  // file builds; the ref blocks a fast second click before the re-render lands.
+  const [exporting, setExporting] = useState(false);
+  const exportingRef = useRef(false);
+  // DEF-060: disabling the toggle drops focus to the body; give it back when the file is done.
+  const excelToggleRef = useRef<HTMLButtonElement>(null);
+  const wasExporting = useRef(false);
+  useEffect(() => {
+    if (wasExporting.current && !exporting) excelToggleRef.current?.focus();
+    wasExporting.current = exporting;
+  }, [exporting]);
+  // Q-119: amber notice after a download whose sheet(s) are over the import row limit.
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const downloadClients = () => {
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+    setExporting(true);
+    setExcelError(null);
+    setExportNotice(null);
+    downloadClientExport()
+      .then((counts) => setExportNotice(clientExportLimitToast(counts)))
+      .catch((e: unknown) => setExcelError(exportErrorOf(e)))
+      .finally(() => {
+        exportingRef.current = false;
+        setExporting(false);
+      });
+  };
   const [q, setQ] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
   const clients = useClients({ q: q || undefined, includeInactive });
@@ -24,11 +67,54 @@ export function ClientsPage() {
   return (
     <>
       <PageHeader title="Clients">
-        {canCreate && (
-          <Button onClick={() => setEditing(null)}>
-            <i className="bx bx-plus me-1" aria-hidden="true" />
-            New client
-          </Button>
+        {(canImport || canCreate) && (
+          // UIE: one group that wraps together, Excel first (stays together at 390px).
+          <div className="d-flex flex-wrap align-items-center gap-2" data-testid="clients-actions">
+            {canImport && (
+              <Dropdown>
+                <Dropdown.Toggle
+                  variant="outline-secondary"
+                  id="clients-excel"
+                  disabled={exporting}
+                  aria-busy={exporting || undefined}
+                  // DEF-060: the disabled toggle keeps a name while busy.
+                  aria-label={exporting ? 'Preparing file…' : undefined}
+                  ref={excelToggleRef}
+                >
+                  {/* DEF-059: the spinner takes the icon's place and the visible label stays
+                      "Excel", so the toggle keeps its width and nothing reflows at 390px. */}
+                  {exporting ? (
+                    <Spinner animation="border" size="sm" className="me-1" aria-hidden="true" />
+                  ) : (
+                    <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
+                  )}
+                  Excel
+                </Dropdown.Toggle>
+                <Dropdown.Menu>
+                  <Dropdown.Item as="button" onClick={downloadClients}>
+                    <i className="bx bx-download me-2" aria-hidden="true" />
+                    Download clients (.xlsx)
+                  </Dropdown.Item>
+                  <Dropdown.Item as="button" onClick={() => setImporting(true)}>
+                    <i className="bx bx-upload me-2" aria-hidden="true" />
+                    Import from Excel
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown>
+            )}
+            {/* DEF-060: always mounted so screen readers announce the text when it changes. */}
+            {canImport && (
+              <span className="visually-hidden" role="status" data-testid="clients-excel-status">
+                {exporting ? 'Preparing file…' : ''}
+              </span>
+            )}
+            {canCreate && (
+              <Button onClick={() => setEditing(null)}>
+                <i className="bx bx-plus me-1" aria-hidden="true" />
+                New client
+              </Button>
+            )}
+          </div>
         )}
       </PageHeader>
       <div className="card">
@@ -50,6 +136,20 @@ export function ClientsPage() {
               onChange={(e) => setIncludeInactive(e.target.checked)}
             />
           </div>
+          {excelError && (
+            <div
+              className={`alert alert-${excelError.tone ?? 'danger'} alert-dismissible py-2`}
+              role="alert"
+            >
+              {excelError.message}
+              <button
+                type="button"
+                className="btn-close"
+                aria-label="Dismiss"
+                onClick={() => setExcelError(null)}
+              />
+            </div>
+          )}
           <ErrorAlert error={clients.error} />
           <ErrorAlert error={setActive.error} action />
           {clients.isPending ? (
@@ -139,6 +239,64 @@ export function ClientsPage() {
           )}
         </div>
       </div>
+      {/* FR-CLI-38: the done message is a toast (UIE), with the skipped-rows link. */}
+      <ToastContainer position="bottom-center" containerPosition="fixed" className="p-3">
+        {/* Plain toast markup: react-bootstrap's <Toast> forces role="alert"; this is a polite status. */}
+        {imported && (
+          <div
+            className="toast show bg-success client-import-toast"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div className="toast-body d-flex flex-wrap align-items-center gap-2 text-white">
+              <span>{clientImportToast(imported.applied)}</span>
+              {imported.applied.skipped > 0 && (
+                <Button
+                  variant="link"
+                  className="p-0 align-baseline text-white"
+                  onClick={() => void downloadSkippedRows(imported)}
+                >
+                  Download skipped rows (.xlsx)
+                </Button>
+              )}
+              <button
+                type="button"
+                className="btn-close btn-close-white ms-auto"
+                aria-label="Dismiss"
+                onClick={() => setImported(null)}
+              />
+            </div>
+          </div>
+        )}
+        {exportNotice && (
+          <div
+            className="toast show bg-warning client-import-toast"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div className="toast-body d-flex flex-wrap align-items-center gap-2 text-dark">
+              <span>{exportNotice}</span>
+              <button
+                type="button"
+                className="btn-close ms-auto"
+                aria-label="Dismiss"
+                onClick={() => setExportNotice(null)}
+              />
+            </div>
+          </div>
+        )}
+      </ToastContainer>
+      {importing && (
+        <ClientImportModal
+          onClose={() => setImporting(false)}
+          onImported={(result) => {
+            setImporting(false);
+            setImported(result);
+          }}
+        />
+      )}
       {editing !== undefined && (
         <ClientModal client={editing} onClose={() => setEditing(undefined)} />
       )}

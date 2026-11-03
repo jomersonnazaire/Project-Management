@@ -1,0 +1,305 @@
+# 17 — Change requests: Microsoft 365, DAR Send, action emails, mobile (PRs #21 to #41)
+
+**Status:** v0.5.2 draft (2026-11-03, 12:35 PM SGT) · v0.5.1 draft (2026-11-03, 12:15 PM SGT) · v0.5 draft (2026-11-03, 12:10 PM SGT) · v0.4.2 draft (2026-10-23, 12:45 PM SGT) · v0.4.1 draft (2026-10-23, 12:40 PM SGT) · v0.4 draft (2026-10-23, 12:30 PM SGT) · v0.3.1 draft (2026-10-22, 8:38 PM SGT) · v0.3 draft (2026-10-22, 8:29 PM SGT; v0.2 3:50 PM SGT) · **Author:** Business Analyst · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Scope:** what other accounts built on `main` from `cb3b48b` to `1f6492e`, plus PR #27 and PR #29 (merged just before `cb3b48b`) and open PR #41 (`feature/mobile-email-dar`, not merged). All the work came from Jonathan's bot (`JonathanBot/...` branches). The commits show as "Jonathan Esmalla" or "Jomerson Nazaire", and every one was made through the `jomersonnazaire` GitHub account.
+**Checked against:** docs 01 to 16 in this pack (doc 14 here is v1.2.25), `docs/FEATURES_AND_ROADMAP.md` (roadmap) and the copies of doc 14 (v1.2.28) and doc 09 on `main`, which these PRs changed.
+**Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
+
+**Doc change log:**
+- v0.5.2 (2026-11-03, 12:35 PM SGT): **CR-19 Q-116 reversed by Lean (2026-11-03, about 12:32 PM SGT), now Locked:** at commit the server re-checks the file; a result that differs from the preview, or another import writing at the same time, gets 409 "Preview again" and nothing is saved. CR-19 summary and §2 line updated (spec v0.4). No IDs renumbered.
+- v0.5.1 (2026-11-03, 12:15 PM SGT): **Q-107 closed by Lean (2026-11-03, about 12:10 PM SGT), without needing Jomerson: no block.** Deactivating a client with open projects stays allowed, as built today. **FR-CLI-18 (CR-18) is deferred**, not adopted; if Jomerson wants a block later, it becomes its own change covering both Edit client / Deactivate client and import. CR-18 rows, status and §2/§3 lines updated; EC-137 still holds as the time-entry guard. CR-19 summary updated (spec v0.3): import follows Deactivate client and has no open-project rule; CR-19 now has no open questions. Doc 09 Q-107 marked closed. No IDs renumbered.
+- v0.5 (2026-11-03, 12:10 PM SGT): added **CR-19 (Clients: Excel template download and import)**, a new request from Jomerson (2026-11-03) with rules locked by Lean and Deven. It is **not built**. The full spec is in [`17_CR-19_CLIENTS_EXCEL_IMPORT.md`](17_CR-19_CLIENTS_EXCEL_IMPORT.md) (v0.2). It proposes FR-CLI-23 to FR-CLI-41 (with FR-CLI-34a), US-61/62, AC-61.1 to 61.6 and AC-62.1 to 62.18, EC-139 to EC-157, NFR-36 to NFR-41, and Q-109 to Q-117, all decided (Locked or Lean-accepted defaults, 2026-11-03). Q-107 (CR-18) stays open and affects CR-19 Status changes. No other CR or ID changed.
+- v0.4.2 (2026-10-23, 12:45 PM SGT): CR-18 gains two items of new work. **FR-CLI-21** (Lean, 2026-10-23, 12:33 PM SGT): no new time on an inactive client's projects, whatever the project status. It sits on top of the existing `PROJECT_CLOSED` check, and time already logged stays. On live (3bf528e) QA found a PM account could still log time on such a project (201). **FR-CLI-22** (Deven, verified on 3bf528e): a project can't be reopened or moved to Planning or Active while its client is inactive. Today the client check only runs when the client changes. New edge cases **EC-137** and **EC-138**. **FR-CLI-17 verified on live by QA (2026-10-23).** FR-CLI-18 (Q-107) still waits for Jomerson. No IDs renumbered or reused. **UIE wording folded (2026-10-23):** final FR-CLI-21 and FR-CLI-22 messages (FR-CLI-22 in two versions, depending on whether the user can reactivate clients), shown inline with `role="alert"`, input kept, no toast; leaving inactive clients' projects out of the time-entry picker is now a firm part of FR-CLI-21.
+- v0.4.1 (2026-10-23, 12:40 PM SGT): **CR-18 revised** after Deven checked `main` at `3bf528e`. "Deactivate client" / "Reactivate client" (the `active` flag, audited, never deletes, "Show inactive" filter, Delete permission on `clients`) already exists. CR-18 is now **partly built**, and the new work is narrowed to the open-project check (FR-CLI-18, Q-107 still open), no portal sign-in for an inactive client's contacts (FR-CLI-19, once the portal exists) and an optional audit reason (FR-CLI-20, nice-to-have). FR-CLI-13 to 17 and EC-131 are marked built. EC-132, EC-133 and EC-135 are withdrawn. **Q-108 decided (Lean, 2026-10-23):** reuse the `active` flag. The UI keeps the built words (no rename to "Archive"), and the permission stays as built. The QA test client left over from DEF-017 can be deactivated today with Jomerson's OK. No IDs renumbered or reused.
+- v0.4 (2026-10-23, 12:30 PM SGT): added **CR-18 (client archive, no hard delete)**, a new request whose scope Lean approved on 2026-10-23. It is **not built**. It proposes FR-CLI-13 to FR-CLI-20 and EC-131 to EC-136, and adds **Q-107** (open projects when archiving) and **Q-108** (archive vs the existing client `active` flag), also in doc 09. Once approved and built, CR-18 is how the leftover QA test client from the DEF-017 testing is cleaned up. No other CR or ID changed.
+- v0.3.1 (2026-10-22, 8:38 PM SGT): two more decisions by Jomerson. **Q-91 decided:** auto-created Viewers start with no job role, and an Admin sets it from Users (CR-02; exception added to doc 03 FR-USR-01; doc 09 and doc 14 FR-SSO-04 notes). **CR-03 decided:** mobile Microsoft sign-in already works (9 sign-ins confirmed), and PR #41 uses it as it is. This decides the mobile sign-in part of Q-92 (doc 14 §G note). IDs unchanged.
+- v0.3 (2026-10-22, 8:29 PM SGT): recorded Jomerson's decisions of 2026-10-22, 8:29 PM SGT (new §0a). **Decided:** Q-90 (keep auto-creating uninvited Microsoft accounts from the allowed tenant as Viewer, CR-02), Q-101 (action-email box ticked by default, CR-09), DAR Send kept and **Q-49 revised** to view, export and send (CR-04), Q-92 for mobile DAR Send and email notifications, with #41 coming off hold now that #42 is merged and then rebased (CR-11, CR-13), Q-106 (any valid email address allowed as DAR CC, CR-17). PRs #26 then #42 approved for merge (§4, record only). **Moot/closed:** Q-87 (sign-in hold; sign-in is live, PR #27/#32/#28). **Still open:** CR-14 (bot doc edits), plus Q-88, Q-89, Q-91, Q-93 to Q-100 and Q-102 to Q-105. Matching updates in docs 01, 09, 12, 14 and 16, the README and the local roadmap §4 (see §0a). IDs unchanged.
+- v0.2 (2026-10-22, 3:50 PM SGT): added CR-15 (silent Microsoft relink), CR-16 (duplicate sends after a Graph timeout) and CR-17 (external DAR CC addresses), with Q-104 to Q-106. CR-01 now notes the sign-in audit gap (FR-SSO-09). Real account emails in the samples are replaced with generic placeholders (Jomerson's rule).
+- v0.1 (2026-10-22, 3:40 PM SGT): CR-01 to CR-14, Q-87 to Q-103.
+
+> **Every CR below is built. Before v0.3 none was approved.** No record in this pack showed that Jomerson approved any of it. Since v0.3, §0a records the parts Jomerson decided on 2026-10-22, 8:29 PM SGT. Every other CR or question not marked Decided still needs his approval. The `main` copies of doc 14, doc 09 and the roadmap say **"approved by Jonathan"**, but Jonathan is not an approver anywhere in docs 01 to 16. Each CR needs Jomerson to approve it or send it back. *Exception (v0.4.1): CR-18 (client archive) is a new request (scope approved by Lean, 2026-10-23) and is **partly built** (most of it exists on `main` 3bf528e as "Deactivate client").*
+
+## 0. Baseline decisions these changes touch
+| Decision | Where | What it says |
+|---|---|---|
+| Microsoft sign-in on hold | doc 14 §13 (line 201); roadmap §4 | "Microsoft sign-in (§1) is on hold and moved to External integrations." (Jomerson, 2026-10-09, 8:41 PM). *Q-87 moot/closed: Microsoft sign-in is live (PR #27, nonce fix #32, mobile #28), so the hold no longer applies.* |
+| M5 sign-in rules | doc 14 FR-SSO-01 to 09 (lines 21–29), §12 Q-36/Q-37 (line 153) | Microsoft sign-in works alongside passwords, accepts the Xceler8 tenant only and **never auto-creates users** ("Refuse; Admins invite first"). *Q-37 superseded by Q-90 (2026-10-22, §0a): auto-create as Viewer* |
+| DAR email (M7 as first numbered, now M6) | doc 14 Q-41 (line 112), §12 (line 154), FR-DAR-07 (line 162) | An **HTML email** laid out like the sample, with a To/CC preview, sent "through Microsoft Graph from the user's mailbox". The doc never says app or delegated permission. "from the user's own mailbox; recipients see it from the person" fits **delegated** `Mail.Send` |
+| DAR sender | doc 14 §13 (lines 203–207), §14 (lines 210–211), §15 FR-DAR-18 (line 223) | Q-49: view and export only for now. "Once Entra ID is set up, reports send from each person's own account (roadmap)". *Revised 2026-10-22 (§0a): view, export and send* |
+| Email notifications deferred | doc 12 FR-NTF-02 (line 79), Q-28 (line 130); doc 09 Q-02 (line 11); roadmap §4 | In-app only. Email moves to the External integrations stage and "needs an email sending service and Jomerson's sign-off on the sender address". Q-02: email is used only for internal password reset |
+| Mobile | doc 01 out of scope (line 39); doc 14 m8 notes (lines 306, 405, 438); doc 16 header; roadmap §4 "Native mobile apps: On hold" | Mobile native apps are outside Phase 1 and on hold. Doc 16 is only a catch-up handoff "when it resumes". *2026-10-22 (§0a): mobile DAR Send and email notifications (#41) are in scope* |
+| Access roles | doc 11 line 5, line 102; FR-SSO-05 | Four fixed Access roles. Viewer means internal read-only staff with no time, tracker, leave or DAR access |
+
+## 0a. Jomerson's decisions (2026-10-22, 8:29 PM SGT)
+Jomerson (lead developer) gave these decisions in the room. Each row maps a decision to the CR and question it settles. The original questions stay under their IDs below and are marked **Decided**.
+
+| # | Pending decision | CR / Q | Decision | Docs updated |
+|---|---|---|---|---|
+| 1 | Auto-create or refuse uninvited Microsoft accounts | CR-02, **Q-90** | **Keep auto-create.** A Microsoft account from the allowed tenant and domain that matches no user is still **created as a Viewer** and is not refused. Viewer means internal read-only staff with no time, tracker, DAR or leave access (Q-70 B, Q-72 No, doc 14 FR-ACT-35). The Viewer's read-only access to projects (doc 11 §6, FR-PMV-04) is accepted with it. Access stays limited by Entra app assignment. | doc 14 FR-SSO-04, Q-37 (§8, §12), §11 message, EC-73; doc 09 log |
+| 2 | Action-email box default | CR-09, **Q-101** | **Ticked by default** ("Email {name}", "Email the team", "Email new members"), as built. The user can untick it before saving. | doc 12 FR-NTF-02 note; doc 09 log |
+| 3 | DAR Send vs Q-49 | CR-04, Q-49 (doc 14 §13) | **Keep DAR Send.** **Q-49 revised:** DAR reports can be **viewed, exported and sent**, because the features were updated (PR #29). Send goes from the user's own Microsoft 365 mailbox. Password-only users keep Export. | doc 14 §0, §3 note, §13 Q-49, §14, FR-DAR-18; doc 09 log |
+| 4 | Mobile scope and #41 | CR-11, CR-13, **Q-92** (part) | **Mobile scope is DAR Send and email notifications on mobile** (the PR #41 work, with its #36/#37 return path). **Sequencing decided:** #41 comes off hold now that PR #42 is merged (merged 2026-10-22), then it is rebased onto the merged branch. (This was the lead's earlier advice, "hold #41 until #42 is live", now confirmed.) The mobile Send flow must handle the server's **409 "Already sent"** response. Today the app shows the server message as it is, and that message points to the web. A full mobile confirm-and-resend step is part of #41. | doc 01 §scope; doc 16 header; doc 14 §G mobile note; doc 09 log |
+| 5 | DAR CC to addresses outside our domain | CR-17, **Q-106** | **Don't block them.** Any email address is allowed as a DAR CC. **Assumptions (security and non-functional):** the address format is still checked (UI and API); up to 5 addresses, duplicates removed; the CC list comes only from the profile, is set only by Admins and every change is audited (FR-DAR-17); the server never takes recipients from the browser; Send stays a user action, rate-limited and logged. | doc 14 FR-DAR-01 note; doc 09 Q-02 note; doc 01 out of scope |
+| 6 | Merge approvals | §4 | **PRs #26, then #42, approved for merge** by Jomerson. Recorded here only. Nobody has merged anything from this doc. | §4 |
+
+**Not decided in this round:** CR-14 (requirement docs edited inside feature PRs: "approved by Jonathan", US-57/AC-57.x clash, roadmap) stays **open**. Q-87 (lift the Microsoft sign-in hold) is **moot/closed**: sign-in is live (PR #27, nonce fix #32, mobile #28). Decisions 1, 3 and 4 only work if Microsoft sign-in is in use, and it is live, so they stand (see §3).
+
+## 1. Change requests
+
+### CR-01 — Microsoft 365 sign-in on web (PR #27, nonce hotfix PR #32)
+- **What changed:** a "Sign in with Microsoft" button under the password form (`LoginPage.tsx` around line 112 at PR head), using OIDC code flow with PKCE. It is off unless all the MS_* settings are set. It refuses guests (`acct` must be 0) and checks the tenant and the email domain. PR #32 passes the nonce to MSAL and changes no requirement.
+- **Requirement it amends:** it lifts the doc 14 §13 hold on §1 and Q-17 (doc 09 line 26). On `main`, doc 09 Q-17 now says "Superseded … approved by Jonathan".
+- **Conformance:**
+  - FR-SSO-01 (except the button placement), FR-SSO-03 (works alongside passwords), FR-SSO-05, FR-SSO-06 and FR-SSO-08 (Key Vault) are met.
+  - FR-SSO-01 placement differs: the button sits *below* the form, and FR-SSO-01 says *above*.
+  - FR-SSO-02 is met in practice, but `MS_ALLOWED_TENANT_IDS` takes a comma-separated list (`config.ts:90`). That would allow more than one tenant, which contradicts "single tenant only".
+  - FR-SSO-07 is partly met. The redirect is the fixed production web address, proxied to the API, and not the API address. After sign-in the API always returns to `WEB_APP_URL`, so "back to the site they started from" is not built.
+  - **Sign-in audit gap (FR-SSO-09, Should):** Microsoft sign-ins, refused Microsoft sign-ins and successful password sign-ins are not written to the audit log, so the sign-in method isn't recorded anywhere. The only sign-in audit entries are `sso_linked` and `sso_user_created`. FR-SSO-09 should cover successes and refusals, with the method and the refusal reason.
+  - The §11 messages ("isn't set up", "Wrong tenant", "Deactivated") are replaced by one generic message (`LoginPage.tsx:64`).
+- **Open questions:** Q-87 Does Jomerson lift the hold on Microsoft sign-in? (**moot/closed**: sign-in is live, PR #27/#32/#28, so decisions 1, 3 and 4 in §0a stand) Q-88 Must the tenant setting be limited to one ID? Q-89 Do the §11 messages stand, or does UIE accept the generic one?
+- **Status:** built, pending approval.
+
+### CR-02 — Auto-create unknown Microsoft accounts as Viewer; job role optional (PR #27)
+- **What changed:** a tenant member with an allowed domain who matches no user is **created** as `VIEWER` with `jobRole: null`, active and with no password (`microsoftSignIn.ts:80–94`). `User.jobRole` is no longer required (`User.ts:21`). The Users "Active" filter now also counts Microsoft-linked users.
+- **Requirement it amends:**
+  - **Conflicts** with FR-SSO-04 and Q-37, which Jomerson decided on 2026-10-09 (§12, line 153: "only for users already in the app"). It also conflicts with EC-73 and FR-USR-01 (doc 03 line 20, where a user record has a job role).
+  - The `main` copy of doc 14 rewrites FR-SSO-04 and Q-37 as "approved by Jonathan" and adds AC-57.8.
+- **Access impact:** a Viewer can read every project (doc 11 §6 matrix; FR-PMV-04). Any tenant member assigned to the Entra app therefore gets read access to all projects without an Admin invite. Q-37 exists to keep access deliberate, and this removes that. The only control left is Entra "Assignment required", which sits in the setup guide (`docs/setup/MS365_LOGIN_SETUP.md` §5) and not in the requirements.
+- **Data note:** each first sign-in adds a user record. The 2026-10-19 UAT cleanup kept the 7 seed users plus one password-only staff account, and any Microsoft sign-in since then may have added more. Deven should check the Users list for `authProvider: 'microsoft'` records.
+- **Open questions:** ~~Q-90 Refuse unknown accounts (as Jomerson decided), or auto-create? If auto-create, as Viewer with read access to all projects, or with no project access until an Admin acts?~~ **Q-90 Decided (Jomerson, 2026-10-22, 8:29 PM SGT):** keep auto-creating them as **Viewer** (internal read-only staff, no time, tracker, DAR or leave access per Q-70 B and Q-72 No). They are not refused. Q-37 is superseded. Q-91 Is a user with no job role allowed (FR-USR-01)? (**still open**; auto-created Viewers get `jobRole: null`, so FR-USR-01 doesn't match the build until Q-91 is answered.) **Q-91 Decided (Jomerson, 2026-10-22, 8:38 PM SGT):** auto-created Viewers start with **no job role** (`jobRole: null`, shown "Not set"), and an Admin sets it from Users. FR-USR-01 (doc 03) has a matching exception.
+- **Status:** built. **Decided (Jomerson, 2026-10-22, 8:29 PM SGT)** for auto-create as Viewer. Q-91 open. **Q-91 decided (Jomerson, 2026-10-22, 8:38 PM SGT):** no job role until an Admin sets it.
+
+### CR-03 — Microsoft 365 sign-in on mobile (PR #28)
+- **What changed:** `GET /auth/mobile/microsoft/login` opens the system browser. The callback returns to `opstrack://auth/microsoft?code=…`, a 60-second single-use code bound to PKCE, which the app exchanges at `POST /auth/mobile/microsoft/exchange` for a bearer token. The PR adds Flutter sign-in, deep-link registration in the Android manifest and iOS plist, and mobile error messages.
+- **Requirement it amends:** none covers this. Mobile is out of scope or on hold (section 0), and FR-SSO-01 and FR-SSO-07 are web only. It needs a new **FR-SSO-10 (mobile sign-in)**. The mobile messages are new and have no counterpart in §11.
+- **Open questions:** Q-92 Is mobile back in scope, and for which features? **Partly decided (2026-10-22, 8:29 PM SGT):** mobile scope is DAR Send and email notifications (CR-11, CR-13). Mobile Microsoft sign-in is not named in the decision. #41's mobile send needs a Microsoft-linked session, so confirm whether CR-03 is in scope along with it (**open**). **CR-03 Decided (Jomerson, 2026-10-22, 8:38 PM SGT):** mobile Microsoft sign-in (PR #28) already works; Jomerson confirmed 9 successful sign-ins. PR #41 uses it as it is, with no change. The mobile sign-in part of Q-92 is decided: it is in scope.
+- **Status:** built, pending approval. **Unspecified, needs a decision.** **Decided (Jomerson, 2026-10-22, 8:38 PM SGT):** in scope and used as it is by PR #41.
+
+### CR-04 — DAR Send from the user's own mailbox with delegated Mail.Send (PR #29)
+- **What changed:** Send on **saved** reports only. It starts with a POST protected against cross-site requests (CSRF). `Mail.Send` consent is asked for on the first Send, the token is not stored, and each send is one Graph `/me/sendMail` call. Send is limited to 30 per user per 15 minutes. The audit records `report_sent` and `report_send_failed`. A confirm dialog shows To and CC (`DarPage.tsx`). The `main` copy of doc 14 adds §N (FR-DAR-20 to 27, US-57, AC-57.1 to 57.8) and rewrites FR-DAR-04, FR-DAR-04b, FR-DAR-18, §13, §14 and Q-49.
+- **Requirement it amends:** FR-DAR-04, FR-DAR-04b and FR-DAR-18. It reinstates them, which reverses §13's "dropped". It also changes Q-49 and the §14 deferral.
+- **M7 conflict, as asked:**
+  - **The sending method fits Q-41.** "From the user's mailbox; recipients see it from the person" means delegated permission. Q-41 never says app-level (application) Mail.Send.
+  - ~~**It conflicts with §13/Q-49.** Jomerson's latest word was view and export only until the Microsoft sign-in item is taken off hold, and that hold was never lifted on record.~~ **Resolved (2026-10-22, 8:29 PM SGT):** Jomerson keeps DAR Send and **revised Q-49**: reports can be viewed, exported **and sent**, because the features were updated (doc 14 §13). The sign-in hold itself (Q-87) is moot/closed: sign-in is live (PR #27/#32/#28).
+  - **Delegated sending ties Send to a Microsoft-linked account.** Password-only users (for example a staff user who signs in as `user@example.com`) can never send. Q-38 says to keep passwords for those users.
+- **Doc defect:** §N uses **US-57 and AC-57.1 to 57.8**, but doc 11 already uses those IDs for the client portal (doc 11 lines 258–269, cited in doc 15). The §N items need renumbering to the next free IDs (**US-60, AC-60.x**).
+- **Open questions:** Q-93 Does Jomerson confirm the delegated own-mailbox sender over a company or noreply sender? (**open**; decision 3 keeps Send as built, which sends from the user's own mailbox and matches revised Q-49, but the sender type wasn't confirmed on its own.) Q-94 Is the roadmap claim "admin consent granted Oct 21" confirmed by the tenant admin (A-19)? (**open**)
+- **Status:** built. **Decided (Jomerson, 2026-10-22, 8:29 PM SGT): keep DAR Send; Q-49 revised.** Q-93 and Q-94 open.
+
+### CR-05 — DAR email body: summary plus PDF attachment; HTML report body deferred (PR #29)
+- **What changed:** the body is a short summary (range, total activities, total rendered hours, footer) with the PDF attached and a 2.5 MB limit (`darSend.ts:65`, `graphMail.ts:72–75`). The `main` copy of doc 14 adds FR-DAR-22 and FR-DAR-27 ("HTML body deferred, not dropped").
+- **Requirement it amends:** **conflicts** with Jomerson's Q-41 decision (§12 line 154) and FR-DAR-07 (Must): the email should be an HTML report laid out like the sample. It matches the original FR-DAR-04 wording (PDF attachment plus a short summary).
+- **Open questions:** Q-95 Does a summary plus PDF meet Q-41 for this release, or is the HTML body required before go-live?
+- **Status:** built, pending approval. **Conflict (partial).**
+
+### CR-06 — Recipients resolved at send time, not from the saved copy (PR #29)
+- **What changed:** To is the current supervisor and CC is the current `reportCc`, with duplicates removed, the sender left out and a maximum of 5. The supervisor and CC stored with the saved copy are ignored.
+- **Requirement it amends:** FR-DAR-12 (line 218), which says the saved copy keeps the "supervisor and CC on file at that moment". It matches FR-DAR-17's server-built recipients.
+- **Open questions:** Q-96 Should the saved copy show that its stored recipients are not the ones that will be used?
+- **Status:** built, pending approval.
+
+### CR-07 — "Notify supervisor" button for password-only users (PR #29)
+- **What changed:** password-only users get Export plus a manual **Notify supervisor** button that sends a `DAR_READY` in-app notice with no link, limited to one per report per hour. The §11 messages are reworded.
+- **Requirement it amends:** FR-DAR-04b and the §11/§12.3 message ("Your supervisor **has been notified**"), which describe an automatic notice. The build makes it a manual button, so the message wording now differs. It is related to FR-DAR-05 (Should).
+- **Open questions:** Q-97 Manual or automatic supervisor notice?
+- **Status:** built, pending approval.
+
+### CR-08 — Sent / Not sent status on saved reports (PR #35)
+- **What changed:**
+  - Saved reports gain `sentAt`, `sentBy` and `sentRecipientCount` (`Tracker.ts:87`). The three fields are overwritten on each successful send.
+  - The page gets a Status column and filter, with the time shown in PH time and labelled "(PH)", and a hover note "Accepted by Microsoft for delivery".
+  - Older reports are filled in from the `report_sent` audit.
+  - The `main` copy of doc 14 FR-DAR-15 adds "Send status (Lean, 2026-10-21)".
+- **Requirement it amends:**
+  - FR-DAR-15 and FR-DAR-12 (saved records are read-only). These three fields now change after saving.
+  - It partly brings back the §12.6 Sent reports record that doc 14 §14 deferred. It shows only the last send, not each send as FR-DAR-06 asks.
+- **Open questions:** Q-98 Is last-send-only enough, or is a per-send history (FR-DAR-06, §12.6) needed?
+- **Status:** built, pending approval. Lean decided this; Jomerson still needs to approve it.
+
+### CR-09 — Action emails from the user's own Outlook (PR #34; roadmap §4 edit; closed PR #33 is superseded)
+- **What changed:**
+  - After a follow-up, a task assignment by a PM, or adding people to a project, an **"Email {name}" box, ticked by default** (`EmailCheckbox.tsx:31`), emails the people concerned from the actor's Outlook using delegated Mail.Send.
+  - The server picks the recipients (`actionEmail.ts:69`). It is behind `EMAIL_NOTIFICATIONS_ENABLED`, off by default (`config.ts:101`), plus Microsoft sign-in.
+  - A new endpoint `GET /auth/me/email-status` is added.
+  - Follow-ups record `emailedAt`.
+  - The roadmap row changes to "In progress", with a planned noreply@ sender.
+- **Requirement it amends:** **conflicts** with:
+  - FR-NTF-02 (doc 12 line 79): in-app only, email deferred.
+  - Q-28 (doc 12 line 130), Jomerson.
+  - Q-02 (doc 09 line 11): email only for internal password reset.
+  - Roadmap §4, where email notifications come after the internal process and need Jomerson's sign-off on the sender.
+  - The recipients follow FR-NTF-01 and FR-NTF-05, and the in-app notices are unchanged. That part conforms.
+- **Open questions:**
+  - Q-99 Does Jomerson bring email notifications forward from External integrations?
+  - Q-100 Which sender: the actor's own Outlook (as built) or a system noreply@?
+  - ~~Q-101 Should the box be ticked or unticked by default?~~ **Q-101 Decided (Jomerson, 2026-10-22, 8:29 PM SGT):** the box is **ticked by default**, as built (`EmailCheckbox.tsx:31`).
+  - Q-102 What is the production value of the flag, and who may turn it on?
+- **Status:** built (flag off). Q-101 decided. Q-99, Q-100 and Q-102 are **open**. Decision 4 puts email notifications in mobile scope, but bringing email forward on web (Q-99), the sender (Q-100) and the production flag (Q-102) still need answers. Until then the FR-NTF-02 conflict stays (doc 12). **Conflict (partly decided).**
+
+### CR-10 — New in-app notification "added you to {project}" (PR #34)
+- **What changed:** a new `ADDED_TO_PROJECT` notice type (`m3.ts:701`) goes to everyone a save adds to a project: New project, Edit project, and people added through the task form. It is **always on**, whatever the flag.
+- **Requirement it amends:** none. FR-NTF-01 and FR-NTF-05 don't list this event. It would be a new **FR-NTF-07**, and it changes behaviour even with email off.
+- **Open questions:** Q-103 Do we keep this in-app notice? What exact wording, and should UIE check it?
+- **Status:** built, pending approval. **Unspecified, needs a decision.**
+
+### CR-11 — Mobile return path for DAR Send and action emails (PRs #36 and #37)
+- **What changed:**
+  - Bearer-only `POST /dar/saved/:id/send/mobile` and `POST /action-emails/mobile`. Web sessions get `403 MOBILE_ONLY`.
+  - A pending state is kept for 10 minutes, single use, under a hashed key, in the new `mobileMailStates` collection. A new `MobileAuthCode` model is added.
+  - The app returns at `opstrack://auth/mail?code=`, a 60-second single-use code bound to PKCE, confirmed at `POST /auth/mobile/mail/confirm`.
+  - Task and project saves accept `emailReturn: 'web' | 'mobile'`.
+- **Requirement it amends:** none. This is mobile and email work beyond anything specified. It inherits CR-03, CR-04 and CR-09.
+- **Open questions:** Q-92 **Decided (Jomerson, 2026-10-22, 8:29 PM SGT)** for this work: mobile DAR Send and email notifications are in scope, so this return path is in scope too. Q-93 and Q-99 are still open.
+- **Status:** built. **In scope (decision 4).** Mobile requirements still need writing (§3).
+
+### CR-12 — Mobile catch-up with the M8 delta (PR #21)
+- **What changed:** the Flutter app now follows doc 16:
+  - My tasks tabs and the denied-tab notice (FR-TSK-29, FR-TSK-30).
+  - Viewer gating (Q-70 B, Q-72).
+  - Day location required, with per-entry location removed.
+  - Locked-day buttons (Q-09, FR-ACT-36).
+  - `FUTURE_DATE` handling (FR-ACT-33).
+  - Optional template, phases, and apply template.
+- **Requirement it amends:**
+  - The content matches doc 16 §4 and the doc 14 mobile notes.
+  - The timing conflicts with "mobile on hold" (doc 14 lines 306 and 405, doc 16 header, roadmap §4).
+  - Doc 14 FR-ACT-17 (line 179) still says a single entry's location can be changed. Doc 16 (lines 39 and 107) and the web build dropped that. FR-ACT-17 needs rewording.
+- **Open questions:** Q-92 (mobile in scope?).
+- **Status:** built, pending approval.
+
+### CR-13 — Mobile DAR Send and action emails UI (open PR #41, `feature/mobile-email-dar`, not merged)
+- **What changed (proposed):**
+  - An "Email this report" card with To/CC preview, Send, Notify supervisor and a Sent / Not sent badge.
+  - "Email the team", "Email {name}" and "Email new members" boxes on follow-ups, tasks and projects.
+  - Result banners.
+- **Requirement it amends:** none for mobile. It follows CR-04, CR-07, CR-08, CR-09 and CR-11. The text "export this report on the web" fits mobile having no export, but nothing in the requirements says so.
+- **Open questions:** ~~Q-92, and whether #41 should wait until CR-03 and CR-09 are decided.~~ **Decided (Jomerson, 2026-10-22, 8:29 PM SGT):**
+  - **Scope:** mobile covers DAR Send and email notifications. That is this PR (#41).
+  - **Sequencing (decided):** #41 comes off hold now that PR #42 is merged (merged 2026-10-22), then it is rebased onto the merged branch. This confirms the lead's earlier advice to hold #41 until #42 is live.
+  - **409 "Already sent":** the mobile Send flow must handle the server's 409 "Already sent" response. Today the app shows the server message as it is, and that message points the user to the web. A full mobile confirm-and-resend step ("Already sent on {date, time} (PH). Send again?") is part of #41 (see CR-16 (c)).
+- **Status:** built on a branch, not merged. **Scope and sequencing Decided (Jomerson, 2026-10-22, 8:29 PM SGT).** Waits for #42 to merge, then rebase.
+
+### CR-14 — Requirement docs edited inside feature PRs (PRs #29, #34, #35; closed #33)
+- **What changed:**
+  - The `main` copies of doc 14 (now v1.2.28), doc 09 Q-17 and the roadmap §4 were edited by the bot PRs.
+  - Those edits record decisions as "approved by Jonathan" and mark items "Done, live".
+  - They supersede Jomerson's Q-17, Q-37, Q-49 and the §13 hold.
+- **Problems:**
+  - (a) The approver named isn't one recognised in this pack.
+  - (b) US-57 and AC-57.x clash with doc 11 (see CR-04).
+  - (c) The roadmap contradicts itself. It says "Microsoft sign-in … live on … mobile (PR #28)" while "Native mobile apps: On hold" is unchanged.
+  - (d) The README change log has no entry for doc 14 v1.2.26 to v1.2.28.
+  - (e) This local pack is behind `main` and needs syncing once Jomerson decides.
+- **v0.3 note:** decisions 1 and 3 (§0a) settle the content of Q-37 and Q-49 on their own merits. They don't approve the bot's doc edits or the "approved by Jonathan" wording. Whether those `main` edits are accepted, corrected or replaced is still **open**.
+- **Status:** pending approval (**open**). Docs need correcting.
+
+### CR-15 — Silent relinking of a Microsoft account (PR #27)
+- **What changed:** when a Microsoft account signs in and no user matches its Entra IDs (`oid` and `tid`), the user with the same email is linked to it (`microsoftSignIn.ts:53–61` at PR #27 head). That user's stored `msOid` and `msTid` are overwritten without checking whether a *different* Microsoft account was already linked. A different Microsoft account with the same email (for example after a mailbox is deleted and recreated, or a reused address) silently takes over the existing user and their access. The only trace is a routine `sso_linked` audit entry.
+- **Requirement it amends:** FR-SSO-04 says later sign-ins match on `oid` "so an email change in Entra doesn't break the link". It doesn't say what happens when a user who is already linked meets a different `oid` with the same email. EC-73 covers only the first link of a password user. **Proposed (new FR-SSO-11):** if the user already has a different `oid`/`tid` linked, refuse the Microsoft sign-in, leave the link unchanged, and write an audit entry (for example `sso_relink_refused` with the old and new IDs). An Admin clears or resets the link by hand, and that is audited too.
+- **Open questions:** Q-104 Should a different Microsoft account with the same email be refused and audited, so only an Admin can move the link? Or may it relink automatically?
+- **Status:** built, pending approval. **Unspecified, needs a decision.**
+
+### CR-16 — Duplicate DAR and action-email sends after a Graph timeout (PRs #29, #34; mobile #41)
+- **What changed:**
+  - The Graph `sendMail` call gives up after **20 seconds** (`graphMail.ts:92` at PR #29 head, `AbortSignal.timeout(20_000)`).
+  - If Microsoft had already accepted the mail, the send is still recorded as failed (`report_send_failed`, and the report stays "Not sent" under #35). Retrying sends the email **twice**.
+  - The confirm step has no "Already sent on {date}. Send again?" warning for a report that already went out.
+  - On mobile (#41), two quick taps can both start a send.
+  - Action emails (#34) use the same Graph path and have the same timeout risk.
+- **Requirement it amends:** FR-DAR-06 (re-send allowed, each send logged), FR-DAR-15 and the `main` §N FR-DAR-20 and FR-DAR-23 (send record). None of them covers an unknown outcome, duplicate protection or a re-send warning. **Proposed (new FR-DAR-28, and the same rule for action emails under FR-NTF-08):**
+  - (a) Each Send is idempotent: one user action sends at most one email, and repeated taps or a retried request with the same send ID don't send again.
+  - (b) A timeout or other unknown result is recorded and shown as **"Outcome unknown – check your Sent Items before sending again"**, not "Failed".
+  - (c) Sending a report that already shows Sent asks "Already sent on {date, time} (PH). Send again?" first.
+  - (d) The Send control is disabled while a send is in progress, on web and mobile.
+- **v0.3 note:** the server now answers a repeat Send with **409 "Already sent"**. Decision 4 needs the mobile Send flow (#41) to handle it, with a full confirm-and-resend step on mobile. Rules (a), (b) and (d) are still undecided.
+- **Open questions:** Q-105 (**open**) Do we adopt idempotent Send, an "outcome unknown" status and an already-sent warning for DAR and action emails? Should an unknown outcome block a re-send until the user confirms?
+- **Status:** built, pending approval. **Gap, needs a decision.**
+
+### CR-17 — DAR CC addresses outside the company email domain (PR #29)
+- **What changed:** an Admin can set a user's Report CC list (`reportCc`, up to 5) to any valid email address, including addresses outside the company domain. Since #29, DAR Send emails those addresses from the user's own mailbox. The send copies at most 5 of them, drops duplicates, and leaves out the supervisor and the sender.
+- **Requirement it amends:** FR-DAR-01 ("up to 5 valid addresses") and FR-DAR-17 (CC only from the profile, changed only by Admins and audited). Neither limits the domain. Doc 09 Q-02 says no email to client contacts, and doc 01 lists "any email to client contacts" as out of scope. A CC to a client address would break that, and nothing stops it.
+- **Open questions:** ~~Q-106 Should DAR CC addresses be limited to the company email domain(s), or are external addresses allowed? If allowed, which ones, and should client-contact addresses be refused?~~ **Q-106 Decided (Jomerson, 2026-10-22, 8:29 PM SGT):** don't block them. **Any email address is allowed** as a DAR CC, including outside our domain and client contacts.
+- **Security and non-functional assumptions:** the address format is still checked (UI and API, 400 `VALIDATION_ERROR` on a bad address); up to 5 addresses, duplicates removed, supervisor and sender left out at send time; CC comes only from the profile, is set only by Admins and every change is audited (FR-DAR-17); the server never takes recipient addresses from the browser; Send stays a user action, with the per-user rate limit and the audit (`report_sent` / `report_send_failed`). A DAR CC is an explicit exception to "no email to client contacts" (doc 01, doc 09 Q-02).
+- **Status:** built. **Decided (Jomerson, 2026-10-22, 8:29 PM SGT)** (no domain limit).
+
+### CR-18 — Client archive: use the existing "Deactivate client", add an open-project check and portal sign-off (scope approved by Lean, 2026-10-23)
+- **Mostly built on `main` at `3bf528e`** (checked by Deven, 2026-10-23). Unlike CR-01 to CR-17, this started as a new request, not a PR review. Lean approved the scope on 2026-10-23. Most of it already exists as **"Deactivate client"**, so the new work is small. Jomerson approves the CR. (v0.5.1) Q-107 is closed by Lean (2026-11-03): no block, FR-CLI-18 deferred.
+- **Why:** finished or test clients should be put away safely. Hard delete isn't wanted (archive only, **no hard delete**). EC-56 already blocks deleting a client with contacts on projects.
+- **Baseline: already built (`main` 3bf528e, per Deven):**
+  - **"Deactivate client"** sets the client's `active` flag to inactive. It never deletes and it writes an audit log entry. **"Reactivate client"** restores it. The buttons are on the Clients list and the client page.
+  - **Permission:** needs the **Delete permission on `clients`** (doc 11 access grid). **Kept as built** rather than "Admin only" as v0.4 said. Whoever the grid gives Delete on `clients` can deactivate and reactivate.
+  - Inactive clients are hidden from the Clients list unless **"Show inactive"** is ticked, and from the New project client picker. The Edit project picker keeps an inactive client only when it is that project's current client. The API refuses a new project for an inactive client.
+  - Projects, time and billing history all stay.
+  - **Gap:** nothing checks for open projects, so a client with Active projects can be deactivated today.
+- **Decided by default (v0.4.1):** the UI keeps the built words **"Deactivate client"**, **"Reactivate client"** and **"Show inactive"**. A rename to "Archive" isn't needed. "Archive a client" in this CR means deactivating it.
+- **Q-108 Decided (Lean, 2026-10-23):** reuse the existing `active` flag. "Archived" = inactive. No separate field.
+- **New work (open):** (1) ~~the open-project check (FR-CLI-18, Q-107)~~ **deferred (v0.5.1, Q-107 closed by Lean 2026-11-03: no block)**; (2) portal contacts of an inactive client can't sign in (FR-CLI-19, once the portal exists); (3) an optional reason in the audit entry if it isn't there already (FR-CLI-20, nice-to-have). (v0.4.2) Also new: (4) no new time on an inactive client's projects (FR-CLI-21, Lean's ruling); (5) no reopening a project under an inactive client (FR-CLI-22).
+- **Clean-up use:** the leftover QA test client from the DEF-017 testing **can be deactivated today** with Jomerson's OK. That needs no new build. (v0.5.1) FR-CLI-18 is deferred, so no open-project check applies.
+- **Requirements (IDs from v0.4 kept and not renumbered; doc 11 continues the doc 03 `FR-CLI-xx` series):**
+
+| ID | Requirement | Status |
+|----|-------------|--------|
+| FR-CLI-13 | **Deactivate and reactivate.** "Deactivate client" and "Reactivate client" on the Clients list and the client page change only the `active` flag. Nothing is deleted, and no hard-delete action is added. Needs Delete on `clients` (others: no buttons, API 403). | **Built (3bf528e).** Permission as built (v0.4 said Admin only; withdrawn). |
+| FR-CLI-14 | **Hidden from lists and pickers.** Inactive clients are hidden from the Clients list and the New project picker. The Edit project picker keeps one only as that project's current client. The API refuses new projects for an inactive client. | **Built (3bf528e).** The v0.4 list of other pickers (contact pickers, task and conversation tags, time entry) isn't confirmed. Deven or Queen can check it, but it's not new work in this CR. |
+| FR-CLI-15 | **"Show inactive" filter** on the Clients list, off by default. Inactive clients are labelled as such when it's on. | **Built (3bf528e)**, as "Show inactive" (v0.4 said "Show archived", Admins only; withdrawn). |
+| FR-CLI-16 | **History stays.** Projects, time and billing history are kept unchanged. | **Built (3bf528e).** v0.4's read-only client page and banner are **withdrawn** (not needed). |
+| FR-CLI-17 | **Reports** for any period still count an inactive client's projects and time. | **Built (3bf528e); verified on live by QA (2026-10-23).** |
+| FR-CLI-18 | **Open-project check (Q-107, proposed default A).** "Deactivate client" is refused while the client has any project that is Planning, Active or On Hold and not archived. API 409 `CLIENT_HAS_OPEN_PROJECTS` with `details.projects` (id, name, status). Message: **"{client} can't be deactivated because it has {n} open project(s). Complete, cancel or archive them first."**, with the projects listed and linked. Completed, Cancelled and archived projects don't block it. A refused attempt changes nothing. | **Deferred (v0.5.1).** Q-107 closed by Lean (2026-11-03, about 12:10 PM SGT): **no block**, matching what Edit client / Deactivate client allow today. Not adopted now; it becomes a future change, covering both the form and import, only if Jomerson asks. |
+| FR-CLI-19 | **No portal sign-in for an inactive client's contacts** (doc 11 FR-ACL-33 to 36). Deactivating sets their portal accounts to `disabled`, revokes sessions (next `/portal/*` request returns 401, as AC-58.3) and voids open invite links. Portal access and Invite are refused for an inactive client's contacts (API 422 `CLIENT_INACTIVE`). Reactivating doesn't turn portal access back on: staff turn it on per contact, which sends a new invite (AC-58.9). | **New.** The client portal is **on hold** on the roadmap, so this applies once the portal exists. |
+| FR-CLI-20 | **Audit.** Each deactivate and reactivate writes one audit entry (FR-ACL-10). **Nice-to-have:** an optional **"Reason (optional)"** field in the confirm step, saved in the entry, if the build doesn't already have it. | Audit entry **built (3bf528e)**. Optional reason **new, nice-to-have (Could)**. Deven confirms whether a reason exists. |
+| FR-CLI-21 | **No new time on an inactive client's projects** (Lean, 2026-10-23, 12:33 PM SGT). Whatever the project's status, the API refuses a new time entry, a manual time in and out pair or a timer start on a project whose client is inactive: 422 `CLIENT_INACTIVE`, message (UIE final wording) **"{Client} is inactive, so time can't be logged on its projects. Ask an Admin to reactivate the client."** **Picker (firm):** the time-entry project picker leaves out inactive clients' projects, so most users never see this message, and the API refusal stays as the backstop. **Display:** inline under the time-entry project picker with `role="alert"`; the user's input is kept, no toast. **Why:** this must not depend on project statuses being right. The existing `PROJECT_CLOSED` check (On Hold, Completed, Cancelled or archived projects are refused and hidden from the time-entry picker; FR-TIME-08; Deven, verified on 3bf528e) **stays**. FR-CLI-21 adds the client-inactive check on top of it, so neither depends on the other. Time already logged stays as it is. **Assumptions (Rich, to confirm):** editing and deleting existing unlocked entries stay as built (FR-TIME-06, with the day lock in FR-TIME-04), because no doc says otherwise; an edit that moves an entry onto an inactive client's project counts as new time and is refused. | **New** (Lean's ruling; doesn't wait for Q-107). Today a PM account can still log time on such a project (QA on live 3bf528e: 201). |
+| FR-CLI-22 | **No reopening a project under an inactive client** (Deven, verified on 3bf528e). A project can't be reopened or moved to Planning or Active (for example Completed, Cancelled or On Hold back to Active) while its client is inactive. The API refuses with 422 `CLIENT_INACTIVE` and a message in one of two versions (UIE final wording), and nothing changes. For users who can reactivate clients (Delete on `clients`): **"{Client} is inactive. Reactivate the client before reopening this project."** For everyone else: **"{Client} is inactive. Ask an Admin to reactivate the client before reopening this project."** **Display:** inline under the status field on project edit with `role="alert"`; the user's input is kept, no toast. Today, editing a project checks that the client is active only when the client changes, not when the status changes. | **New.** It replaces the reopen case of withdrawn EC-132 under a new ID. |
+
+- **Edge cases (IDs from v0.4 kept):**
+  - **EC-131** Deactivate a client whose projects are all Completed or Cancelled: allowed, and the projects keep their status. **Built (3bf528e)**, because no check exists today. It stays allowed (FR-CLI-18 deferred, v0.5.1).
+  - **EC-132** ~~Reopen or edit a project of an archived client~~ **Withdrawn (v0.4.1):** outside the narrowed scope. Moving a project to an inactive client is already prevented by the picker (FR-CLI-14).
+  - **EC-133** ~~Create a client with an archived client's name, with a Restore message~~ **Withdrawn (v0.4.1):** names stay unique as built (FR-CLI-01), and no new message is needed.
+  - **EC-134** A portal user of the client is signed in when the client is deactivated: the next `/portal/*` request returns 401, and an old invite link shows the existing invalid-link message. **New** with FR-CLI-19, once the portal exists.
+  - **EC-135** ~~Two Admins archive at once~~ **Withdrawn (v0.4.1):** as-built behaviour, not new work.
+  - **EC-136** Reactivate a client: it's listed and pickable again (**built, 3bf528e**). Its portal accounts stay `disabled` until staff turn portal access on again (**new** with FR-CLI-19).
+  - **EC-137** A user (a PM, for example) logs time, adds a time pair or starts a timer on a project that is still Active while its client is inactive (deactivating with open projects is allowed, since Q-107 was closed with no block, or the status is wrong): refused with 422 `CLIENT_INACTIVE` and "{Client} is inactive, so time can't be logged on its projects. Ask an Admin to reactivate the client.", shown inline under the project picker (`role="alert"`, input kept, no toast). Normally the picker doesn't offer the project at all, so this is the API backstop (for example a stale form or a direct API call). Entries already on the project stay, and reports keep them (FR-CLI-17). **New** with FR-CLI-21. Today it returns 201 (QA, live 3bf528e).
+  - **EC-138** A PM or Admin changes a Completed project of an inactive client back to Active (or to Planning): refused with 422 `CLIENT_INACTIVE`, and the status stays Completed. The message is shown inline under the status field (`role="alert"`, input kept, no toast): "{Client} is inactive. Reactivate the client before reopening this project." for a user with Delete on `clients`, or "{Client} is inactive. Ask an Admin to reactivate the client before reopening this project." for anyone else. After the client is reactivated, the same change is allowed under the usual rules. **New** with FR-CLI-22.
+- **Wording:** as built for buttons and the filter ("Deactivate client", "Reactivate client", "Show inactive"). New text only for the FR-CLI-18 refusal above (deferred in v0.5.1, so not needed now) and, if added, the "Reason (optional)" field. UIE checks both. (v0.4.2) The FR-CLI-21 and FR-CLI-22 refusal messages use UIE's final wording (in the rows above).
+- **Open questions:**
+  - **Q-107 Closed (Lean, 2026-11-03, about 12:10 PM SGT): no block (option B, as built).** Deactivating a client with open projects stays allowed, and FR-CLI-18 is deferred; a block, if Jomerson asks, is its own future change covering the form and import. Original question: Block deactivating while the client has open projects (Planning, Active or On Hold)? (A) Block, with the message and list in FR-CLI-18 (**recommended**: no live work under a hidden client, and it closes the gap Deven found). (B) Allow it, and leave the projects as they are (today's behaviour). (C) Allow it, and close or archive the open projects in the same step.
+  - ~~**Q-108** Is "archived" the existing `active` flag or a separate field?~~ **Decided (Lean, 2026-10-23):** reuse the existing `active` flag.
+- **Status:** **partly built** (mostly built on `main` 3bf528e). New: ~~FR-CLI-18 (pending Q-107)~~ FR-CLI-18 deferred (v0.5.1, Q-107 closed: no block), FR-CLI-19 (once the portal exists), FR-CLI-20 reason (nice-to-have). Pending Jomerson's approval. **v0.4.2:** also new FR-CLI-21 and FR-CLI-22 (Lean's ruling and Deven's finding; neither waits for Q-107). **v0.5.1:** FR-CLI-18 deferred; Q-107 closed by Lean (2026-11-03).
+
+
+### CR-19 — Clients: Excel template download and import (requested by Jomerson, 2026-11-03; rules locked by Lean and Deven)
+- **Full spec:** [`17_CR-19_CLIENTS_EXCEL_IMPORT.md`](17_CR-19_CLIENTS_EXCEL_IMPORT.md) (v0.4). UI reference: UIE's mockup v0.9.17 (`docs/design/mockup/index-v0.9.17.html#clients`).
+- **What:** an **Excel ▾** button on the existing Clients list (`/clients`), next to **"New client"**, with **Download template** and **Import from Excel**. One `.xlsx` with sheets **Clients** (Company name, Industry, Address, Notes, Status) and **Contacts** (Company name, Full name, Position, Email, Phone, Department, Notes). Preview (New / Update / No change / Error, nothing saved), then **Import valid rows** in one transaction. At commit the server re-checks the file; if the result differs from the preview, or another import writes at the same time, it returns 409 "Preview again" and saves nothing (Q-116, Locked, v0.5.2). Error rows are skipped and downloadable.
+- **Gate (Locked):** create **and** edit on **both** `clients` and `contacts` in Access Rules, for the button and all three API calls (403 otherwise). By default that's Admin and PM (`accessRules.ts:176-177`, `:198-199`); Member and Viewer are View only.
+- **Status (Locked):** Active / Inactive = the client `active` flag. Changing it on an existing client needs `clients.delete`; without it the whole row is an Error and nothing in it is saved. Import has no open-project rule of its own: it follows Deactivate client as it is today (Q-107 closed by Lean, 2026-11-03: no block; FR-CLI-18 deferred).
+- **Matching (Locked):** client on Company name (trimmed, case-insensitive). Contact on Email within the client, else Full name among that client's no-email contacts. Blank cells keep values. Duplicates in the file: every copy is an Error. A contact whose company is in neither the file nor the app is an Error.
+- **Limits (Locked):** 5 MB, `.xlsx` only, 2,000 rows per sheet, read in memory (no Storage). Formula-like cells saved as text and escaped on export.
+- **Status:** **new, not built.** Pending Jomerson's approval. No open questions.
+
+## 2. New questions for Jomerson (Q-87 to Q-106)
+**Update v0.3.1 (Jomerson, 2026-10-22, 8:38 PM SGT):** Q-91 and CR-03 (the mobile sign-in part of Q-92) are **decided**. So Q-91 is no longer open, and Q-92 now has only the M8 catch-up (CR-12) left.
+**Status after v0.3:** **Decided** (2026-10-22, 8:29 PM SGT): Q-90 (auto-create as Viewer), Q-101 (ticked), Q-106 (any address), Q-92 for mobile DAR Send and email notifications (mobile sign-in CR-03 and the M8 catch-up CR-12 not covered). Also decided: Q-49 revised (doc 14). **Moot/closed:** Q-87 (sign-in is live, PR #27/#32/#28). **Open:** Q-88, Q-89, Q-91, Q-92 (rest), Q-93, Q-94, Q-95, Q-96, Q-97, Q-98, Q-99, Q-100, Q-102, Q-103, Q-104, Q-105, and CR-14.
+
+Q-87 Lift the Microsoft sign-in hold? (moot/closed: sign-in is live) · Q-88 One tenant ID only? · Q-89 §11 sign-in messages · Q-90 Auto-create or refuse unknown accounts? · Q-91 Users without a job role (decided v0.3.1: none until an Admin sets it) · Q-92 Is mobile in scope (sign-in, DAR, emails, M8 catch-up)? · Q-93 Delegated own-mailbox sender confirmed? · Q-94 Mail.Send admin consent confirmed? · Q-95 HTML DAR body before go-live? · Q-96 Saved copy showing stale recipients · Q-97 Manual or automatic supervisor notice · Q-98 Last send only, or send history? · Q-99 Bring email notifications forward? · Q-100 Action email sender · Q-101 Email box ticked by default? · Q-102 Who controls the email flag in production · Q-103 Keep the "added you to" notice? · Q-104 Refuse and audit a different Microsoft account with the same email? · Q-105 Idempotent Send, "outcome unknown" status and an already-sent warning? · Q-106 Company-domain-only DAR CC, or external addresses allowed?
+
+**Added v0.5 (CR-19):** Q-109 to Q-117, all decided on 2026-11-03 (Locked: Q-109, Q-110, Q-111, Q-115, Q-116 (reversed to the stricter rule, v0.5.2); Lean-accepted defaults: Q-112, Q-113, Q-114, Q-117). See the CR-19 spec §15.
+
+**Added v0.4 (CR-18):** Q-107 Block deactivating a client that has open projects, or allow it? (**closed v0.5.1, Lean, 2026-11-03: no block; FR-CLI-18 deferred**) · Q-108 Is "archived" the existing client `active` flag, or a separate field? (**decided v0.4.1, Lean, 2026-10-23: reuse the `active` flag**)
+
+## 3. Requirements to write once decided
+- **FR-SSO-04 (rewrite)** with the auto-create decision (*v0.3: decided and reworded in doc 14; FR-USR-01 waits for Q-91*), (*v0.3.1: Q-91 decided; FR-USR-01 exception added in doc 03*) plus **FR-SSO-10** for mobile Microsoft sign-in (deep link, one-time code, its messages). (*v0.3.1: CR-03 decided; mobile sign-in works as built, and FR-SSO-10 should describe the as-built PR #28 flow*)
+- **FR-DAR-20 to 27** (from `main` §N) once approved, with the user story and acceptance criteria renumbered to **US-60 / AC-60.1 to 60.8**. Rewrite **FR-DAR-12** (recipients at send time) and **FR-DAR-15** (send-status fields). Settle **FR-DAR-07** (HTML body) and FR-DAR-04b/§11 (manual Notify supervisor).
+- **FR-NTF-07** "added to project" in-app notice. **FR-NTF-08** action emails (events, recipients, sender, opt-in default, flag). **FR-NTF-02** amended, or kept and the build parked.
+- **Mobile scope** in doc 01 and the roadmap (*v0.3: noted in doc 01, doc 16 and the local `docs/FEATURES_AND_ROADMAP.md` §4. Mobile requirements for #41 still need writing*), plus mobile requirements (doc 16 or a new doc) for DAR Send and action emails.
+- **FR-SSO-11** refuse and audit a relink to a different Microsoft account (CR-15). **FR-SSO-09** widened to all sign-ins and refusals (CR-01). **FR-DAR-28** idempotent Send, unknown outcome and already-sent warning, also applied to action emails (CR-16). **FR-DAR-01 / FR-DAR-17** CC domain rule (CR-17) (*v0.3: decided, no domain limit; note added to doc 14 FR-DAR-01*).
+- **FR-ACT-17** reworded: location is set per day only.
+- **FR-USR-01** amended if a job role can be empty.
+- **CR-18 (v0.4.1):** FR-CLI-13 to FR-CLI-17 describe built behaviour (`main` 3bf528e) and only need writing up in doc 11. New: ~~**FR-CLI-18** (open-project check, after Q-107)~~ (deferred v0.5.1: Q-107 closed, no block), **FR-CLI-19** and EC-134 (portal, once the portal exists), and the **FR-CLI-20** optional reason (nice-to-have), with a user story and acceptance criteria (next free US and AC numbers when written). FR-CLI-01 and doc 07 `clients`: `active` = deactivated (Q-108). (v0.4.2) Also **FR-CLI-21** with EC-137 (time on an inactive client's projects) and **FR-CLI-22** with EC-138 (reopening). These amend FR-TIME-08 and the project status rules.
+- **CR-19 (v0.5):** once approved, FR-CLI-23 to 41 go into doc 11, US-61/62 into doc 04, AC-61.x/62.x into doc 05, EC-139 to 157 into doc 08, NFR-36 to 41 into doc 07, and Q-109 to Q-117 into doc 09 as decided.
+- Edge cases to add: EC-128 (user removed in Entra keeps an open session up to 12 h), EC-129 (Microsoft user with no mailbox), EC-130 (a follow-up already emailed is not emailed again).
+- **Conflict resolved:** decisions 1, 3 and 4 depend on Microsoft sign-in, which is live (PR #27/#32/#28), so Q-87 is moot/closed.
+
+## 4. PR merge approvals (record only)
+| PR | Approval | Order | Note |
+|---|---|---|---|
+| #26 | Approved for merge by Jomerson (2026-10-22, 8:29 PM SGT) | 1st | Recorded only. This doc doesn't merge anything. |
+| #42 | Approved for merge by Jomerson (2026-10-22, 8:29 PM SGT) | 2nd, after #26 | Once #42 is merged, #41 comes off hold and is rebased onto the merged branch (CR-13). |

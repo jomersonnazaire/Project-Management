@@ -18,6 +18,7 @@
     "@vercel/functions": "^3.9.11",
     "@xc8/shared": "*",
     "bootstrap": "5.3.3",
+    "exceljs": "^4.4.0",
     "react": "^18.3.1",
     "react-bootstrap": "^2.10.10",
     "react-dom": "^18.3.1",
