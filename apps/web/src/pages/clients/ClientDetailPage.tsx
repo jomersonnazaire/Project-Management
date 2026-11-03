@@ -19,6 +19,7 @@ import { useCan } from '../../auth/useCan';
 import { ActiveBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows, LockNotice } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
+import { RowActions } from '../../components/RowActions';
 import { ProgressBar, ProjectBadge } from '../../components/ProjectBadges';
 import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
@@ -286,33 +287,21 @@ function ContactsTab({
                       </td>
                       {hasMenu && (
                         <td className="text-end cell-actions">
-                          <Dropdown align="end">
-                            <Dropdown.Toggle
-                              variant="link"
-                              size="sm"
-                              className="hide-arrow p-0 text-body"
-                              aria-label={`Actions for ${ct.name}`}
-                            >
-                              <i className="bx bx-dots-vertical-rounded fs-5" aria-hidden="true" />
-                            </Dropdown.Toggle>
-                            <Dropdown.Menu>
-                              {canEdit && (
-                                <Dropdown.Item as="button" onClick={() => onEdit(ct)}>
-                                  Edit
-                                </Dropdown.Item>
-                              )}
-                              {canDelete && (
-                                <Dropdown.Item
-                                  as="button"
-                                  onClick={() =>
-                                    setActive.mutate({ id: ct.id, active: !ct.active })
-                                  }
-                                >
-                                  {ct.active ? 'Deactivate' : 'Reactivate'}
-                                </Dropdown.Item>
-                              )}
-                            </Dropdown.Menu>
-                          </Dropdown>
+                          <RowActions label={`Actions for ${ct.name}`}>
+                            {canEdit && (
+                              <Dropdown.Item as="button" onClick={() => onEdit(ct)}>
+                                Edit
+                              </Dropdown.Item>
+                            )}
+                            {canDelete && (
+                              <Dropdown.Item
+                                as="button"
+                                onClick={() => setActive.mutate({ id: ct.id, active: !ct.active })}
+                              >
+                                {ct.active ? 'Deactivate' : 'Reactivate'}
+                              </Dropdown.Item>
+                            )}
+                          </RowActions>
                         </td>
                       )}
                     </tr>

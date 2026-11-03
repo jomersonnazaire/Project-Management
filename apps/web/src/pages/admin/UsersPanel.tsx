@@ -35,6 +35,7 @@ import { CopyLinkField } from '../../components/CopyLinkField';
 import { hoursUntil } from '../../components/linkExpiry';
 import { InviteLinkModal } from '../../components/InviteLinkModal';
 import { TopbarActions } from '../../components/PageHeader';
+import { RowActions } from '../../components/RowActions';
 
 type InviteIn = z.input<typeof inviteUserSchema>;
 type InviteOut = z.output<typeof inviteUserSchema>;
@@ -610,38 +611,32 @@ export function UsersPanel() {
                             onClick={() => void issueLink(u.id)}
                           />
                         )}
-                        <Dropdown align="end" className="d-inline-block">
-                          <Dropdown.Toggle
-                            variant="link"
-                            size="sm"
-                            className="hide-arrow p-0"
-                            aria-label={`Actions for ${u.name}`}
-                          >
-                            <i className="bx bx-dots-vertical-rounded fs-5" aria-hidden="true" />
-                          </Dropdown.Toggle>
-                          <Dropdown.Menu>
-                            <Dropdown.Item as="button" onClick={() => setEditing(u)}>
-                              Edit
-                            </Dropdown.Item>
-                            {u.id !== me?.id &&
-                              (u.active ? (
-                                <Dropdown.Item
-                                  as="button"
-                                  className="text-danger"
-                                  onClick={() => setConfirm(u)}
-                                >
-                                  Deactivate
-                                </Dropdown.Item>
-                              ) : (
-                                <Dropdown.Item
-                                  as="button"
-                                  onClick={() => action.mutate({ id: u.id, action: 'reactivate' })}
-                                >
-                                  Reactivate
-                                </Dropdown.Item>
-                              ))}
-                          </Dropdown.Menu>
-                        </Dropdown>
+                        <RowActions
+                          label={`Actions for ${u.name}`}
+                          className="d-inline-block"
+                          toggleClassName="hide-arrow p-0"
+                        >
+                          <Dropdown.Item as="button" onClick={() => setEditing(u)}>
+                            Edit
+                          </Dropdown.Item>
+                          {u.id !== me?.id &&
+                            (u.active ? (
+                              <Dropdown.Item
+                                as="button"
+                                className="text-danger"
+                                onClick={() => setConfirm(u)}
+                              >
+                                Deactivate
+                              </Dropdown.Item>
+                            ) : (
+                              <Dropdown.Item
+                                as="button"
+                                onClick={() => action.mutate({ id: u.id, action: 'reactivate' })}
+                              >
+                                Reactivate
+                              </Dropdown.Item>
+                            ))}
+                        </RowActions>
                       </td>
                     </tr>
                   ))}

@@ -4,6 +4,7 @@ import type { ContactDto, SystemRole } from '@xc8/shared';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
+import { ROW_MENU_POPPER_CONFIG } from '../components/rowMenuPopper';
 import { ACME, contact, meBody } from './fixtures';
 import { mockApi, renderAt } from './utils';
 
@@ -158,6 +159,21 @@ describe('Clients › Details / Contacts / Projects tabs (FR-CLI-09..12)', () =>
     ).toBeInTheDocument();
     const empty = screen.getByText('No contacts yet').closest('.empty-state') as HTMLElement;
     expect(within(empty).getByRole('button', { name: '+ Add contact' })).toBeInTheDocument();
+  });
+
+  it('DEF-053 the ⋮ row menu floats over the page: portalled to <body>, fixed, flips up', async () => {
+    clientApi('ADMIN', { contacts: [contact()] });
+    renderAt(`/clients/${ACME.id}/contacts`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions for R. Santos' }));
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    const menu = edit.closest('.dropdown-menu') as HTMLElement;
+    expect(menu).toBeInTheDocument();
+    expect(menu.parentElement).toBe(document.body);
+    expect(menu.closest('.table-responsive')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Deactivate' })).toBeInTheDocument();
+    expect(ROW_MENU_POPPER_CONFIG.strategy).toBe('fixed');
+    const flip = ROW_MENU_POPPER_CONFIG.modifiers?.find((m) => m.name === 'flip');
+    expect(flip?.options).toMatchObject({ fallbackPlacements: ['top-end', 'top-start'] });
   });
 
   it('Viewers and Members see contacts read-only: no + Add contact, no ⋮ menu, no Edit client', async () => {
