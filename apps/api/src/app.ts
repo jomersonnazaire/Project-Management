@@ -1,4 +1,4 @@
-import { DAR_SEND_RATE_LIMITED } from '@xc8/shared';
+import { CLIENT_IMPORT_TOKEN_HEADER, DAR_SEND_RATE_LIMITED } from '@xc8/shared';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
@@ -60,6 +60,12 @@ export function createApp(
   app.set('trust proxy', false);
 
   const isAllowedOrigin = originMatcher(config.CORS_ORIGINS);
+  if (!config.clientImportTokenSecret) {
+    // NFR-42 / EC-158: optional at startup; only the Clients Excel import endpoints return 503.
+    logger.warn(
+      'CLIENT_IMPORT_TOKEN_SECRET is not set (or shorter than 32 characters): Clients Excel import is disabled',
+    );
+  }
 
   app.use(httpLogger(logger));
   app.set('etag', false);
@@ -75,7 +81,7 @@ export function createApp(
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
       // No Authorization: browsers can't send mobile bearer tokens cross-origin.
-      allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id'],
+      allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id', CLIENT_IMPORT_TOKEN_HEADER],
       exposedHeaders: ['X-Request-Id', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
       maxAge: 600,
     }),
@@ -154,7 +160,7 @@ export function createApp(
     usersRouter(config, registry),
     teamsRouter(registry),
     // CR-19: before /clients/:id… so /clients/import/* is never read as a client id.
-    clientImportRouter(registry),
+    clientImportRouter(config, registry),
     clientsRouter(registry),
     contactsRouter(registry),
     templatesRouter(registry),

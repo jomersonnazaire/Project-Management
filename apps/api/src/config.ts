@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 const bool = (def: boolean) =>
@@ -71,6 +72,12 @@ const EnvSchema = z.object({
     .min(32, 'EDGE_PROXY_SECRET must be at least 32 characters')
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  /**
+   * CR-19 NFR-42: HMAC key that signs Clients Excel import preview tokens (FR-CLI-35b). 32+ chars,
+   * dedicated (never shared with another secret), App Service settings only. Optional at startup:
+   * when missing or too short, only the import endpoints return 503 IMPORT_NOT_CONFIGURED (AC-62.23).
+   */
+  CLIENT_IMPORT_TOKEN_SECRET: z.string().optional(),
   /** IPv4 addresses in the same /N share one auth rate-limit bucket (IPv6 uses /56). */
   AUTH_RATE_LIMIT_IPV4_PREFIX: z.coerce.number().int().min(8).max(32).default(24),
   /**
@@ -109,7 +116,16 @@ export type AppConfig = EnvConfig & {
   msAllowedDomains: string[];
   /** EMAIL_NOTIFICATIONS_ENABLED and Microsoft sign-in configured. */
   actionEmailEnabled: boolean;
+  /**
+   * CR-19 preview-token signing key, or null when import isn't set up (AC-62.23, EC-158). In
+   * development an unset key is replaced by a random per-process key, so tokens just expire on
+   * restart; in production (and tests that don't set it) it stays null.
+   */
+  clientImportTokenSecret: string | null;
 };
+
+/** NFR-42: same 32-character floor as EDGE_PROXY_SECRET. */
+export const CLIENT_IMPORT_TOKEN_SECRET_MIN = 32;
 
 function parseCsvList(raw: string): string[] {
   return raw
@@ -140,7 +156,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     msCore && msAllowedTenantIds.length > 0 && msAllowedDomains.length > 0 && msEdgeSecretOk,
   );
   const actionEmailEnabled = cfg.EMAIL_NOTIFICATIONS_ENABLED && msEnabled;
-  return { ...cfg, msEnabled, msAllowedTenantIds, msAllowedDomains, actionEmailEnabled };
+  const importKey = cfg.CLIENT_IMPORT_TOKEN_SECRET?.trim() ?? '';
+  const clientImportTokenSecret =
+    importKey.length >= CLIENT_IMPORT_TOKEN_SECRET_MIN
+      ? importKey
+      : cfg.NODE_ENV === 'development' && !importKey
+        ? randomBytes(32).toString('base64url')
+        : null;
+  return {
+    ...cfg,
+    msEnabled,
+    msAllowedTenantIds,
+    msAllowedDomains,
+    actionEmailEnabled,
+    clientImportTokenSecret,
+  };
 }
 
 /** HMAC key for short-lived OAuth state cookies (same shared secret as the Vercel edge proxy). */

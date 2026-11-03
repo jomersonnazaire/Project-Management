@@ -1,6 +1,7 @@
 import {
   CLIENT_IMPORT_COLUMNS,
   CLIENT_IMPORT_MAX_ROWS,
+  CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
   type ClientImportCommitDto,
   type ClientImportPreviewDto,
@@ -16,7 +17,20 @@ import {
   ClientModel,
   ProjectModel,
 } from '../src/models/index.js';
-import { CSRF, createUser, login, makeApp, signedInAs, useDatabase } from './helpers.js';
+import {
+  PREVIEW_TOKEN_TTL_MS,
+  previewTokenClock,
+} from '../src/services/clientImport/previewToken.js';
+import { loadConfig } from '../src/config.js';
+import {
+  appWithCapturedLogs,
+  CSRF,
+  createUser,
+  login,
+  makeApp,
+  signedInAs,
+  useDatabase,
+} from './helpers.js';
 import { grant, resetRules } from './m2helpers.js';
 
 /**
@@ -47,20 +61,33 @@ async function xlsx(
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-const send = (agent: Agent, step: 'preview' | 'commit', buf: Buffer, name = 'clients.xlsx') =>
-  agent
+const send = (
+  agent: Agent,
+  step: 'preview' | 'commit',
+  buf: Buffer,
+  name = 'clients.xlsx',
+  token?: string,
+) => {
+  const req = agent
     .post(`/api/v1/clients/import/${step}?fileName=${encodeURIComponent(name)}`)
     .set(CSRF)
-    .set('Content-Type', XLSX_MIME)
-    .send(buf);
+    .set('Content-Type', XLSX_MIME);
+  if (token !== undefined) req.set(CLIENT_IMPORT_TOKEN_HEADER, token);
+  return req.send(buf);
+};
 
 async function preview(agent: Agent, buf: Buffer) {
   const res = await send(agent, 'preview', buf);
   expect(res.status, JSON.stringify(res.body)).toBe(200);
   return res.body as ClientImportPreviewDto;
 }
+/** Commit with a given preview token (FR-CLI-35b), returning the raw response. */
+const commitWith = (agent: Agent, buf: Buffer, token: string) =>
+  send(agent, 'commit', buf, 'clients.xlsx', token);
+/** Preview, then commit with that preview's token (the normal two-step flow). */
 async function commit(agent: Agent, buf: Buffer) {
-  const res = await send(agent, 'commit', buf);
+  const { token } = await preview(agent, buf);
+  const res = await commitWith(agent, buf, token);
   expect(res.status, JSON.stringify(res.body)).toBe(200);
   return res.body as ClientImportCommitDto;
 }
@@ -656,16 +683,14 @@ describe('CR-19 commit (FR-CLI-35..39)', () => {
     const a = co('Rollback');
     const existing = co('Rollback Existing');
     await commit(admin.agent, await xlsx({ clients: [[existing, 'Before']] }));
+    const file = await xlsx({ clients: [[a], [existing, 'After']], contacts: [[a, 'Kid']] });
+    const { token } = await preview(admin.agent, file);
     const spy = vi
       .spyOn(ClientContactModel, 'insertMany')
       .mockRejectedValueOnce(new Error('simulated write failure'));
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
-      const res = await send(
-        admin.agent,
-        'commit',
-        await xlsx({ clients: [[a], [existing, 'After']], contacts: [[a, 'Kid']] }),
-      );
+      const res = await commitWith(admin.agent, file, token);
       expect(res.status).toBe(500);
       expect(res.body.error).toMatchObject({
         code: 'IMPORT_FAILED',
@@ -824,5 +849,265 @@ describe('CR-19 file checks (§9, NFR-36/37, AC-62.10)', () => {
     const rows = Array.from({ length: CLIENT_IMPORT_MAX_ROWS }, (_, i) => [`Bulk ${n}-${i}`]);
     const p = await preview(agent, await xlsx({ clients: rows }));
     expect(p.counts.clients.new).toBe(CLIENT_IMPORT_MAX_ROWS);
+  });
+});
+
+describe('CR-19 signed preview token (FR-CLI-35b, Q-116)', () => {
+  const STALE = {
+    code: 'PREVIEW_STALE',
+    message: 'These clients changed after your preview. Preview again.',
+  };
+  const importAudits = () =>
+    ActivityLogModel.countDocuments({
+      action: { $in: ['client_created', 'client_updated', 'contact_created', 'clients_imported'] },
+    });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('preview returns a signed token; nothing changed within 15 minutes: commit succeeds first try', async () => {
+    const admin = await signedInAs(app, 'ADMIN');
+    const a = co('Fresh');
+    const file = await xlsx({ clients: [[a, 'Retail']] });
+    const p = await preview(admin.agent, file);
+    expect(p.token).toMatch(/^[\w-]+\.[\w-]+$/);
+    // The payload names no records or values, only the user, the time and a hash.
+    const payload = JSON.parse(Buffer.from(p.token.split('.')[0]!, 'base64url').toString());
+    expect(Object.keys(payload).sort()).toEqual(['h', 'iat', 'uid', 'v']);
+    const res = await commitWith(admin.agent, file, p.token);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.applied).toEqual({ created: 1, updated: 0, skipped: 0 });
+  });
+
+  it('AC-62.19 a matched client edited after the preview: 409 PREVIEW_STALE, nothing saved; preview again then commit works', async () => {
+    const admin = await signedInAs(app, 'ADMIN');
+    const other = await signedInAs(app, 'ADMIN');
+    const a = co('Stale');
+    const fresh = co('Stale New');
+    await commit(admin.agent, await xlsx({ clients: [[a, 'Retail']] }));
+    const client = await ClientModel.findOne({ name: a }).lean();
+    const file = await xlsx({ clients: [[a, 'Banking'], [fresh]], contacts: [[a, 'Kid']] });
+    const p = await preview(admin.agent, file);
+    expect(p.clients.map((r) => r.result)).toEqual(['UPDATE', 'NEW']);
+
+    const edit = await other.agent
+      .patch(`/api/v1/clients/${client!._id.toString()}`)
+      .set(CSRF)
+      .send({ industry: 'Mining' });
+    expect(edit.status, JSON.stringify(edit.body)).toBe(200);
+
+    const before = await importAudits();
+    const failedBefore = await ActivityLogModel.countDocuments({ action: 'clients_import_failed' });
+    const res = await commitWith(admin.agent, file, p.token);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatchObject(STALE);
+    expect(await ClientModel.countDocuments({ name: fresh })).toBe(0);
+    expect(await ClientModel.findOne({ name: a }).lean()).toMatchObject({ industry: 'Mining' });
+    expect(await ClientContactModel.countDocuments({ clientId: client!._id })).toBe(0);
+    expect(await importAudits()).toBe(before);
+    expect(await ActivityLogModel.countDocuments({ action: 'clients_import_failed' })).toBe(
+      failedBefore,
+    );
+
+    const again = await preview(admin.agent, file);
+    const ok = await commitWith(admin.agent, file, again.token);
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.counts).toEqual(again.counts);
+    expect(ok.body.applied).toEqual({ created: 2, updated: 1, skipped: 0 });
+    expect(await ClientModel.findOne({ name: a }).lean()).toMatchObject({ industry: 'Banking' });
+  });
+
+  it('EC-148 a change to a client the file does not touch does not cause a 409', async () => {
+    const admin = await signedInAs(app, 'ADMIN');
+    const untouched = co('Untouched');
+    await commit(admin.agent, await xlsx({ clients: [[untouched]] }));
+    const file = await xlsx({ clients: [[co('Other')]] });
+    const p = await preview(admin.agent, file);
+    await ClientModel.updateOne({ name: untouched }, { $set: { industry: 'Changed' } });
+    expect((await commitWith(admin.agent, file, p.token)).status).toBe(200);
+  });
+
+  it('AC-62.20 two overlapping imports committed at the same time: exactly one saves, the other gets 409', async () => {
+    const u1 = await signedInAs(app, 'ADMIN');
+    const u2 = await signedInAs(app, 'ADMIN');
+    const existing = co('Race Existing');
+    const fresh = co('Race New');
+    await commit(u1.agent, await xlsx({ clients: [[existing]] }));
+    const f1 = await xlsx({
+      clients: [[fresh, 'One']],
+      contacts: [[existing, 'Same Person', '', 'same@example.com']],
+    });
+    const f2 = await xlsx({
+      clients: [[fresh, 'Two']],
+      contacts: [[existing, 'Same Person', '', 'same@example.com']],
+    });
+    const [p1, p2] = await Promise.all([preview(u1.agent, f1), preview(u2.agent, f2)]);
+    const results = await Promise.all([
+      commitWith(u1.agent, f1, p1.token),
+      commitWith(u2.agent, f2, p2.token),
+    ]);
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses, JSON.stringify(results.map((r) => r.body))).toEqual([200, 409]);
+    expect(results.find((r) => r.status === 409)!.body.error).toMatchObject(STALE);
+    expect(await ClientModel.countDocuments({ name: fresh })).toBe(1);
+    const client = await ClientModel.findOne({ name: existing }).lean();
+    expect(
+      await ClientContactModel.countDocuments({ clientId: client!._id, email: 'same@example.com' }),
+    ).toBe(1);
+    expect(await ActivityLogModel.countDocuments({ action: 'clients_imported' })).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('AC-62.20 / EC-149 two imports adding the same contact under an existing client: one saves, one 409', async () => {
+    const u1 = await signedInAs(app, 'ADMIN');
+    const u2 = await signedInAs(app, 'ADMIN');
+    const existing = co('Race Contacts');
+    await commit(u1.agent, await xlsx({ clients: [[existing]] }));
+    const file = await xlsx({ contacts: [[existing, 'Twin', '', 'twin@example.com']] });
+    const [p1, p2] = await Promise.all([preview(u1.agent, file), preview(u2.agent, file)]);
+    const results = await Promise.all([
+      commitWith(u1.agent, file, p1.token),
+      commitWith(u2.agent, file, p2.token),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const client = await ClientModel.findOne({ name: existing }).lean();
+    expect(await ClientContactModel.countDocuments({ clientId: client!._id })).toBe(1);
+  });
+
+  it('AC-62.21 another user committing with my token gets 409, nothing saved, no hint of whose it was', async () => {
+    const u1 = await signedInAs(app, 'ADMIN');
+    const u2 = await signedInAs(app, 'ADMIN');
+    const a = co('Borrowed');
+    const file = await xlsx({ clients: [[a]] });
+    const p1 = await preview(u1.agent, file);
+    const before = await importAudits();
+    const res = await commitWith(u2.agent, file, p1.token);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatchObject(STALE);
+    const text = JSON.stringify(res.body);
+    expect(text).not.toContain(u1.user._id.toString());
+    expect(text).not.toContain(u1.user.email);
+    expect(await ClientModel.countDocuments({ name: a })).toBe(0);
+    expect(await importAudits()).toBe(before);
+    // Their own preview and token work as usual.
+    const p2 = await preview(u2.agent, file);
+    expect((await commitWith(u2.agent, file, p2.token)).status).toBe(200);
+  });
+
+  it('AC-62.22 a token older than 15 minutes is 409 even with no data change; under 15 minutes it works', async () => {
+    const admin = await signedInAs(app, 'ADMIN');
+    const a = co('Expired');
+    const file = await xlsx({ clients: [[a]] });
+    const t0 = Date.now();
+    const clock = vi.spyOn(previewTokenClock, 'now').mockReturnValue(t0);
+    const old = await preview(admin.agent, file);
+    clock.mockReturnValue(t0 + PREVIEW_TOKEN_TTL_MS + 1);
+    const res = await commitWith(admin.agent, file, old.token);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatchObject(STALE);
+    expect(await ClientModel.countDocuments({ name: a })).toBe(0);
+
+    clock.mockReturnValue(t0 + 20 * 60_000);
+    const p = await preview(admin.agent, file);
+    clock.mockReturnValue(t0 + 20 * 60_000 + PREVIEW_TOKEN_TTL_MS - 1000);
+    expect((await commitWith(admin.agent, file, p.token)).status).toBe(200);
+  });
+
+  it('a tampered, forged, missing or other-file token is 409 PREVIEW_STALE and saves nothing', async () => {
+    const admin = await signedInAs(app, 'ADMIN');
+    const a = co('Tamper');
+    const file = await xlsx({ clients: [[a]] });
+    const { token } = await preview(admin.agent, file);
+    const [data, mac] = token.split('.') as [string, string];
+    const payload = JSON.parse(Buffer.from(data, 'base64url').toString());
+    const altered = Buffer.from(JSON.stringify({ ...payload, iat: Date.now() + 1 })).toString(
+      'base64url',
+    );
+    const flipped = `${mac.slice(0, -1)}${mac.endsWith('A') ? 'B' : 'A'}`;
+    const otherApp = makeApp({
+      CLIENT_IMPORT_TOKEN_SECRET: 'another-test-only-key-abcdefghijklmnop',
+    });
+    const otherAgent = await login(otherApp, admin.user.email);
+    const { token: foreign } = await preview(otherAgent, file);
+    const otherFile = await xlsx({ clients: [[a, 'Different']] });
+    const bad = [`${altered}.${mac}`, `${data}.${flipped}`, `${data}`, 'x.y.z', '', foreign];
+    for (const t of bad) {
+      const res = await commitWith(admin.agent, file, t);
+      expect(res.status, t).toBe(409);
+      expect(res.body.error).toMatchObject(STALE);
+    }
+    const noHeader = await send(admin.agent, 'commit', file);
+    expect(noHeader.status).toBe(409);
+    // A valid token for a different file is stale too (file SHA-256 is in the hash).
+    expect((await commitWith(admin.agent, otherFile, token)).status).toBe(409);
+    expect(await ClientModel.countDocuments({ name: a })).toBe(0);
+    // The untouched token still works.
+    expect((await commitWith(admin.agent, file, token)).status).toBe(200);
+  });
+});
+
+describe('CR-19 signing key not set (AC-62.23, EC-158, NFR-42)', () => {
+  it('template, preview and commit return 503 IMPORT_NOT_CONFIGURED; the rest of the API works', async () => {
+    for (const value of ['', 'too-short-key']) {
+      const noKey = makeApp({ CLIENT_IMPORT_TOKEN_SECRET: value });
+      const user = await createUser({ systemRole: 'ADMIN' });
+      const agent = await login(noKey, user.email);
+      const expected = {
+        code: 'IMPORT_NOT_CONFIGURED',
+        message: 'Excel import isn’t set up yet. Ask an Admin.',
+      };
+      const t = await agent.get('/api/v1/clients/import/template');
+      expect(t.status).toBe(503);
+      expect(t.body.error).toMatchObject(expected);
+      const a = co('NoKey');
+      const buf = await xlsx({ clients: [[a]] });
+      for (const step of ['preview', 'commit'] as const) {
+        const res = await send(agent, step, buf, 'clients.xlsx', 'anything');
+        expect(res.status, step).toBe(503);
+        expect(res.body.error).toMatchObject(expected);
+      }
+      expect(await ClientModel.countDocuments({ name: a })).toBe(0);
+      // Clients list and New client still work.
+      expect((await agent.get('/api/v1/clients')).status).toBe(200);
+      const created = await agent
+        .post('/api/v1/clients')
+        .set(CSRF)
+        .send({ name: co('Manual') });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+    }
+  });
+
+  it('the gate still answers first: a Member gets 403, not 503', async () => {
+    const noKey = makeApp({ CLIENT_IMPORT_TOKEN_SECRET: '' });
+    const user = await createUser({ systemRole: 'MEMBER' });
+    const agent = await login(noKey, user.email);
+    expect((await agent.get('/api/v1/clients/import/template')).status).toBe(403);
+  });
+
+  it('config loads in production without the key (no fail-fast) and logs one warning without a value', () => {
+    const base = {
+      NODE_ENV: 'production',
+      MONGODB_URI: 'mongodb://localhost/x',
+      COOKIE_SECURE: 'true',
+    };
+    expect(loadConfig(base).clientImportTokenSecret).toBeNull();
+    expect(
+      loadConfig({ ...base, CLIENT_IMPORT_TOKEN_SECRET: 'short' }).clientImportTokenSecret,
+    ).toBeNull();
+    const key = 'p'.repeat(40);
+    expect(loadConfig({ ...base, CLIENT_IMPORT_TOKEN_SECRET: key }).clientImportTokenSecret).toBe(
+      key,
+    );
+    // Development without a key gets a random per-process key so import works locally.
+    expect(
+      loadConfig({ ...base, NODE_ENV: 'development' }).clientImportTokenSecret?.length,
+    ).toBeGreaterThanOrEqual(32);
+
+    const off = appWithCapturedLogs({ CLIENT_IMPORT_TOKEN_SECRET: 'short-secret-value' });
+    const warnings = off.lines.filter((l) => l.includes('CLIENT_IMPORT_TOKEN_SECRET'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).not.toContain('short-secret-value');
+    const on = appWithCapturedLogs();
+    expect(on.lines.join('')).not.toContain('CLIENT_IMPORT_TOKEN_SECRET');
   });
 });

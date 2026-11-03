@@ -67,11 +67,13 @@ interface RequestOptions {
   quiet401?: boolean;
   /** Send a file as the raw request body instead of JSON (CR-19 import). */
   file?: { body: Blob; type: string };
+  /** Extra request headers (CR-19: the import preview token). */
+  headers?: Record<string, string>;
 }
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET';
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { ...opts.headers, Accept: 'application/json' };
   if (method !== 'GET') {
     // Custom header required by the API's CSRF check (NFR-03).
     headers['X-Requested-With'] = 'xc8-web';

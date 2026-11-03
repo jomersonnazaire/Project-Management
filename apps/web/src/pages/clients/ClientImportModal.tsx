@@ -209,6 +209,14 @@ export function ClientImportModal({
   const data: ClientImportPreviewDto | undefined = preview.data;
   const valid = data ? data.counts.total.new + data.counts.total.update : 0;
   const commitProblem = commit.error ? problemOf(commit.error) : null;
+  // FR-CLI-35b / Q-116: the data changed (or the token expired) since this preview. Nothing was
+  // saved; the user must preview the same file again before importing.
+  const stale = commitProblem?.code === 'PREVIEW_STALE';
+  const previewAgain = () => {
+    if (!file) return;
+    commit.reset();
+    preview.mutate(file, { onError: (e) => setProblem(problemOf(e)) });
+  };
 
   const templateLink = (lead?: string) => (
     <p className="small text-body-secondary mb-0">
@@ -340,12 +348,18 @@ export function ClientImportModal({
           <Button variant="outline-secondary" onClick={onClose} disabled={commit.isPending}>
             Cancel
           </Button>
-          <Button
-            disabled={valid === 0 || commit.isPending}
-            onClick={() => file && commit.mutate(file, { onSuccess: onImported })}
-          >
-            {commit.isPending ? 'Importing…' : `Import valid rows (${valid})`}
-          </Button>
+          {stale ? (
+            <Button onClick={previewAgain}>Preview again</Button>
+          ) : (
+            <Button
+              disabled={valid === 0 || commit.isPending}
+              onClick={() =>
+                file && commit.mutate({ file, token: data.token }, { onSuccess: onImported })
+              }
+            >
+              {commit.isPending ? 'Importing…' : `Import valid rows (${valid})`}
+            </Button>
+          )}
         </Modal.Footer>
       )}
     </Modal>

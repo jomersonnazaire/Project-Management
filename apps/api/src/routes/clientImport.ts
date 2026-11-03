@@ -3,6 +3,7 @@ import {
   CLIENT_IMPORT_MESSAGES as MSG,
   CLIENT_IMPORT_PERMISSIONS,
   CLIENT_IMPORT_TEMPLATE_NAME,
+  CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
   type ClientImportCommitDto,
   type ClientImportPreviewDto,
@@ -12,6 +13,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import mongoose, { Types } from 'mongoose';
 import { z } from 'zod';
 import { permAll, type RouteRegistry } from '../access/registry.js';
+import type { AppConfig } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { parseQuery } from '../lib/validate.js';
 import { currentPermissions, currentUser } from '../middleware/auth.js';
@@ -25,6 +27,12 @@ import {
   sumCounts,
   type ImportPlan,
 } from '../services/clientImport/plan.js';
+import {
+  issuePreviewToken,
+  resultHash,
+  sameHash,
+  verifyPreviewToken,
+} from '../services/clientImport/previewToken.js';
 import { buildTemplate, readWorkbook } from '../services/clientImport/workbook.js';
 import { visibleClientIds } from '../services/scope.js';
 
@@ -32,10 +40,13 @@ import { visibleClientIds } from '../services/scope.js';
  * CR-19: Clients Excel template download and import (FR-CLI-23..41).
  *   GET  /clients/import/template  the blank two-sheet template (FR-CLI-25..28)
  *   POST /clients/import/preview   raw .xlsx body; validates and matches, saves nothing (FR-CLI-34)
- *   POST /clients/import/commit    the same file again; re-validates and writes the valid rows in
- *                                  ONE transaction, all or nothing (FR-CLI-35)
+ *   POST /clients/import/commit    the same file again plus the preview's signed token; re-runs
+ *                                  the result and writes the valid rows in ONE transaction, all or
+ *                                  nothing (FR-CLI-35), only if the result equals the preview
+ *                                  (FR-CLI-35b, Q-116), else 409 PREVIEW_STALE
  * All three need create AND edit on BOTH clients and contacts (FR-CLI-24, Q-111), checked by the
  * central gate from the Access Rules. The upload is parsed in memory and never stored (NFR-37).
+ * Without the signing key (NFR-42) all three return 503 IMPORT_NOT_CONFIGURED (AC-62.23).
  */
 
 const IMPORT_GATE = permAll(CLIENT_IMPORT_PERMISSIONS);
@@ -71,6 +82,10 @@ async function contextFor(req: Request) {
   };
 }
 
+const stale = () => new HttpError(409, 'PREVIEW_STALE', MSG.PREVIEW_STALE);
+
+const sha256Of = (buf: Buffer) => createHash('sha256').update(buf).digest('hex');
+
 function previewDto(plan: ImportPlan, fileName: string, size: number, notes: string[]) {
   const clients = countsOf(plan.clients);
   const contacts = countsOf(plan.contacts);
@@ -81,50 +96,98 @@ function previewDto(plan: ImportPlan, fileName: string, size: number, notes: str
     clients: plan.clients.map(rowDto),
     contacts: plan.contacts.map(rowDto),
     notes,
-  } satisfies ClientImportPreviewDto;
+  } satisfies Omit<ClientImportPreviewDto, 'token'>;
 }
 
 const isDuplicateKey = (err: unknown) =>
   typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
 
-export function clientImportRouter(registry: RouteRegistry) {
+export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
   const r = registry.router('/clients/import');
+  const key = config.clientImportTokenSecret;
 
-  r.get('/template', IMPORT_GATE, async (_req, res) => {
+  /** AC-62.23 / EC-158: no signing key, no import (same shape as STORAGE_NOT_CONFIGURED). */
+  const requireKey = (_req: Request, _res: Response, next: NextFunction) =>
+    key ? next() : next(new HttpError(503, 'IMPORT_NOT_CONFIGURED', MSG.IMPORT_NOT_CONFIGURED));
+  const signingKey = () => key as string;
+
+  r.get('/template', IMPORT_GATE, requireKey, async (_req, res) => {
     const buf = await buildTemplate();
     res.setHeader('Content-Type', XLSX_MIME);
     res.setHeader('Content-Disposition', `attachment; filename="${CLIENT_IMPORT_TEMPLATE_NAME}"`);
     res.send(buf);
   });
 
-  r.post('/preview', IMPORT_GATE, rawXlsx, async (req, res) => {
+  r.post('/preview', IMPORT_GATE, requireKey, rawXlsx, async (req, res) => {
     const { buf, fileName } = uploadOf(req);
     const file = await readWorkbook(buf);
     const plan = await planImport(file, await contextFor(req));
+    // FR-CLI-35b: sign what this preview showed, for this user, now. Nothing is stored.
+    const token = issuePreviewToken(
+      signingKey(),
+      currentUser(req)._id.toString(),
+      resultHash(sha256Of(buf), plan),
+    );
     // Previews change nothing, so they aren't audited (FR-CLI-39).
-    res.json(previewDto(plan, fileName, buf.length, file.notes));
+    const body: ClientImportPreviewDto = {
+      ...previewDto(plan, fileName, buf.length, file.notes),
+      token,
+    };
+    res.json(body);
   });
 
-  r.post('/commit', IMPORT_GATE, rawXlsx, async (req, res) => {
+  r.post('/commit', IMPORT_GATE, requireKey, rawXlsx, async (req, res) => {
     const { buf, fileName } = uploadOf(req);
     const file = await readWorkbook(buf);
-    const ctx = await contextFor(req);
     const actorId = currentUser(req)._id;
+    // FR-CLI-35b: signature, user and 15-minute age first. A failure never says why or whose
+    // token it was (AC-62.21); the reason goes to the server log only.
+    const check = verifyPreviewToken(
+      signingKey(),
+      req.get(CLIENT_IMPORT_TOKEN_HEADER) ?? undefined,
+      actorId.toString(),
+    );
+    if (!check.ok) {
+      req.log?.info({ reason: check.why }, 'client import preview token rejected');
+      throw stale();
+    }
+    const ctx = await contextFor(req);
     const importId = new Types.ObjectId();
-    const sha256 = createHash('sha256').update(buf).digest('hex');
+    const sha256 = sha256Of(buf);
     const meta = { importId: importId.toString() };
     let plan: ImportPlan | null = null;
 
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
-        // FR-CLI-35 / Q-116: re-validate against the data as it is now, inside the transaction.
+        // FR-CLI-35b / Q-116: recompute against the data as it is now, inside the transaction,
+        // and save only if it equals what the preview showed. A transient write conflict makes
+        // the driver re-run this callback, and the recomputed result then differs (EC-149).
         plan = await planImport(file, { ...ctx, session });
+        if (!sameHash(resultHash(sha256, plan), check.hash)) throw stale();
         const entries: Parameters<typeof auditMany>[0] = [];
         const newClients = plan.clients.filter((c) => c.result === 'NEW');
         const updClients = plan.clients.filter((c) => c.result === 'UPDATE');
         const newContacts = plan.contacts.filter((c) => c.result === 'NEW');
         const updContacts = plan.contacts.filter((c) => c.result === 'UPDATE');
+
+        // EC-149: bump the version of every existing client this import writes to or under, so
+        // two overlapping imports always hit a write conflict (the loser re-runs, differs, 409)
+        // instead of both inserting the same new contact. updatedAt is left alone.
+        const newIds = new Set(newClients.map((c) => c.newId!.toString()));
+        const touched = new Map<string, Types.ObjectId>();
+        for (const c of updClients) touched.set(c.existing!._id.toString(), c.existing!._id);
+        for (const c of [...newContacts, ...updContacts]) {
+          const id = c.clientId!;
+          if (!newIds.has(id.toString())) touched.set(id.toString(), id);
+        }
+        if (touched.size) {
+          await ClientModel.updateMany(
+            { _id: { $in: [...touched.values()] } },
+            { $inc: { __v: 1 } },
+            { session, timestamps: false },
+          );
+        }
 
         // Clients first, so new contacts can link to new clients from the same file.
         if (newClients.length)
@@ -228,6 +291,8 @@ export function clientImportRouter(registry: RouteRegistry) {
         await auditMany(entries, { session });
       });
     } catch (err) {
+      // A stale preview wrote nothing and is not audited (AC-62.19).
+      if (err instanceof HttpError && err.code === 'PREVIEW_STALE') throw err;
       // Everything rolled back (AC-62.8); record the failure outside the transaction.
       await audit({
         actorId,
@@ -237,7 +302,8 @@ export function clientImportRouter(registry: RouteRegistry) {
         meta: { ...meta, fileName, size: buf.length, sha256 },
       }).catch(() => undefined);
       if (err instanceof HttpError || isDatabaseUnavailable(err)) throw err;
-      if (isDuplicateKey(err)) throw new HttpError(409, 'IMPORT_CONFLICT', MSG.IMPORT_CONFLICT);
+      // Another import wrote the same record first (AC-62.20, EC-149).
+      if (isDuplicateKey(err)) throw stale();
       req.log?.error({ err }, 'client import failed');
       throw new HttpError(500, 'IMPORT_FAILED', MSG.IMPORT_FAILED);
     } finally {

@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
+  CLIENT_IMPORT_TOKEN_HEADER,
   DEFAULT_ACCESS_RULES,
   XLSX_MIME,
   type ClientImportCommitDto,
@@ -57,10 +58,12 @@ const PREVIEW: ClientImportPreviewDto = {
     }),
   ],
   notes: [],
+  token: 'tok-1',
 };
 
+const { token: _token, ...PREVIEW_ROWS } = PREVIEW;
 const COMMITTED: ClientImportCommitDto = {
-  ...PREVIEW,
+  ...PREVIEW_ROWS,
   importId: 'i1',
   applied: { created: 2, updated: 1, skipped: 2 },
 };
@@ -71,6 +74,7 @@ function setup(
     permissions?: PermissionGrid;
     preview?: () => Reply;
     commit?: () => Reply;
+    template?: () => Reply;
   } = {},
 ) {
   return mockApi((url) => {
@@ -79,7 +83,8 @@ function setup(
       return opts.preview?.() ?? { status: 200, body: PREVIEW };
     if (url.includes('/clients/import/commit'))
       return opts.commit?.() ?? { status: 200, body: COMMITTED };
-    if (url.includes('/clients/import/template')) return { status: 200, body: {} };
+    if (url.includes('/clients/import/template'))
+      return opts.template?.() ?? { status: 200, body: {} };
     if (url.includes('/clients'))
       return { status: 200, body: { items: [ACME], page: 1, pageSize: 100, total: 1 } };
     return { status: 200, body: { items: [] } };
@@ -388,6 +393,80 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
       await screen.findByText('Imported 1 new, updated 0. 0 rows skipped.'),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Download skipped rows/ })).not.toBeInTheDocument();
+  });
+
+  it('FR-CLI-35b the commit sends the preview token back', async () => {
+    const fetch = setup('ADMIN');
+    renderAt('/clients', <App />);
+    const { user, dialog } = await upload();
+    await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const call = fetch.mock.calls.find(([u]) => String(u).includes('/clients/import/commit'))!;
+    const headers = (call[1] as RequestInit).headers as Record<string, string>;
+    expect(headers[CLIENT_IMPORT_TOKEN_HEADER]).toBe('tok-1');
+  });
+
+  it('AC-62.19 409 PREVIEW_STALE shows "Preview again"; it re-runs the preview and the next commit uses the new token', async () => {
+    let previews = 0;
+    let commits = 0;
+    const fetch = setup('ADMIN', {
+      preview: () => ({ status: 200, body: { ...PREVIEW, token: `tok-${++previews}` } }),
+      commit: () =>
+        ++commits === 1
+          ? errorReply(
+              409,
+              'PREVIEW_STALE',
+              'These clients changed after your preview. Preview again.',
+            )
+          : { status: 200, body: COMMITTED },
+    });
+    renderAt('/clients', <App />);
+    const { user, dialog } = await upload();
+    await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'These clients changed after your preview. Preview again.',
+    );
+    expect(within(dialog).queryByRole('button', { name: /Import valid rows/ })).toBeNull();
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Preview again' }),
+    );
+    const importBtn = await screen.findByRole('button', { name: 'Import valid rows (3)' });
+    expect(previews).toBe(2);
+    expect(screen.queryByText(/changed after your preview/)).toBeNull();
+    await user.click(importBtn);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const commitCalls = fetch.mock.calls.filter(([u]) => String(u).includes('/import/commit'));
+    const tokens = commitCalls.map(
+      ([, init]) =>
+        ((init as RequestInit).headers as Record<string, string>)[CLIENT_IMPORT_TOKEN_HEADER],
+    );
+    expect(tokens).toEqual(['tok-1', 'tok-2']);
+  });
+
+  it('AC-62.23 Download template on the Excel menu shows the "not set up" message on 503', async () => {
+    setup('ADMIN', {
+      template: () =>
+        errorReply(503, 'IMPORT_NOT_CONFIGURED', 'Excel import isn’t set up yet. Ask an Admin.'),
+    });
+    renderAt('/clients', <App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Excel/ }));
+    await user.click(screen.getByRole('button', { name: 'Download template' }));
+    expect(
+      await screen.findByText('Excel import isn’t set up yet. Ask an Admin.'),
+    ).toBeInTheDocument();
+  });
+
+  it('AC-62.23 503 IMPORT_NOT_CONFIGURED shows the "not set up" message', async () => {
+    setup('ADMIN', {
+      preview: () =>
+        errorReply(503, 'IMPORT_NOT_CONFIGURED', 'Excel import isn’t set up yet. Ask an Admin.'),
+    });
+    renderAt('/clients', <App />);
+    const { dialog } = await upload();
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Excel import isn’t set up yet. Ask an Admin.',
+    );
   });
 
   it('AC-62.8 a failed commit keeps the modal open with "Import failed. Nothing was saved."', async () => {

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CLIENT_IMPORT_TEMPLATE_NAME,
+  CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
   type ClientImportCommitDto,
   type ClientImportPreviewDto,
@@ -270,14 +271,19 @@ export function useClientImportPreview() {
   });
 }
 
-/** Sends the same file again; the API re-validates and writes valid rows in one transaction. */
+/**
+ * Sends the same file again with the preview's signed token (FR-CLI-35b). The API recomputes the
+ * result and writes the valid rows in one transaction only if it equals the preview; otherwise
+ * 409 PREVIEW_STALE ("Preview again") and nothing is saved.
+ */
 export function useClientImportCommit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) =>
+    mutationFn: ({ file, token }: { file: File; token: string }) =>
       api<ClientImportCommitDto>(importPath('commit', file), {
         method: 'POST',
         file: { body: file, type: XLSX_MIME },
+        headers: { [CLIENT_IMPORT_TOKEN_HEADER]: token },
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['clients'] });

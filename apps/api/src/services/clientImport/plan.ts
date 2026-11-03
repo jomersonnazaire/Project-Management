@@ -13,7 +13,7 @@ import type { ParsedWorkbook, RowValues, SheetRow } from './workbook.js';
 
 /**
  * CR-19 validation and matching (§5, §6). The same function runs for the preview and, again,
- * inside the commit's transaction (FR-CLI-35: the server never trusts an earlier preview).
+ * inside the commit's transaction, where the result must equal the signed preview (FR-CLI-35b).
  * Matching uses one lookup per sheet (NFR-40), never one query per row.
  */
 
@@ -35,6 +35,8 @@ interface ExistingClient {
   address?: string | null;
   notes?: string | null;
   active: boolean;
+  updatedAt?: Date;
+  __v?: number;
 }
 interface ExistingContact {
   _id: Types.ObjectId;
@@ -46,6 +48,8 @@ interface ExistingContact {
   department?: string | null;
   notes?: string | null;
   active: boolean;
+  updatedAt?: Date;
+  __v?: number;
 }
 
 interface Planned {

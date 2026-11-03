@@ -13,7 +13,9 @@ import { saveBlob } from '../../api/client';
  * loads only when this runs. Every value is written as a text cell (format "@"), never a formula,
  * so a cell such as "=1+2" stays plain text (FR-CLI-37, EC-153).
  */
-export async function buildSkippedRows(result: ClientImportPreviewDto): Promise<Blob> {
+export async function buildSkippedRows(
+  result: Pick<ClientImportPreviewDto, 'clients' | 'contacts'>,
+): Promise<Blob> {
   const { default: ExcelJS } = await import('exceljs');
   const wb = new ExcelJS.Workbook();
   const sheets: [ClientImportSheet, ClientImportPreviewDto['clients']][] = [
@@ -45,6 +47,8 @@ export async function buildSkippedRows(result: ClientImportPreviewDto): Promise<
   return new Blob([buf], { type: XLSX_MIME });
 }
 
-export async function downloadSkippedRows(result: ClientImportPreviewDto): Promise<void> {
+export async function downloadSkippedRows(
+  result: Pick<ClientImportPreviewDto, 'clients' | 'contacts'>,
+): Promise<void> {
   saveBlob(await buildSkippedRows(result), CLIENT_IMPORT_SKIPPED_NAME);
 }

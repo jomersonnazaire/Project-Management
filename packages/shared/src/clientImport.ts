@@ -145,8 +145,14 @@ export const CLIENT_IMPORT_MESSAGES = {
   EMPTY_FILE: 'No rows found in the file.',
   UNREADABLE_FILE: "This file can't be read. Save it again as .xlsx and retry.",
   IMPORT_FAILED: 'Import failed. Nothing was saved. Try again.',
-  IMPORT_CONFLICT: 'Someone changed these clients while you were importing. Preview again.',
+  /** FR-CLI-35b / Q-116: any 409 PREVIEW_STALE (changed data, concurrent import, token checks). */
+  PREVIEW_STALE: 'These clients changed after your preview. Preview again.',
+  /** AC-62.23 / EC-158: the preview-token signing key isn't set on the API (503). */
+  IMPORT_NOT_CONFIGURED: 'Excel import isn’t set up yet. Ask an Admin.',
 } as const;
+
+/** FR-CLI-35b: the commit sends the preview's signed token in this header. */
+export const CLIENT_IMPORT_TOKEN_HEADER = 'X-Import-Preview-Token';
 
 export const tooManyRowsMessage = (sheet: ClientImportSheet, n: number) =>
   `Too many rows: the ${sheet} sheet has ${n.toLocaleString('en-US')}. The limit is ${CLIENT_IMPORT_MAX_ROWS.toLocaleString('en-US')} per sheet.`;
@@ -224,9 +230,14 @@ export interface ClientImportPreviewDto {
   contacts: ClientImportRowDto[];
   /** File-level notes, e.g. "Extra columns were ignored: …". */
   notes: string[];
+  /**
+   * FR-CLI-35b: server-signed preview token; send it back with the commit (header
+   * CLIENT_IMPORT_TOKEN_HEADER). Valid for 15 minutes, for the previewing user only.
+   */
+  token: string;
 }
 
-export interface ClientImportCommitDto extends ClientImportPreviewDto {
+export interface ClientImportCommitDto extends Omit<ClientImportPreviewDto, 'token'> {
   importId: string;
   /** What was actually written (FR-CLI-38 toast: X new, Y updated, Z skipped). */
   applied: { created: number; updated: number; skipped: number };
