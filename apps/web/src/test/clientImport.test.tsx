@@ -431,16 +431,19 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     renderAt('/clients', <App />);
     const { user, dialog } = await upload();
     await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'These clients changed after your preview. Preview again.',
-    );
+    // UIE: the modal stays on the preview with a warning (not danger) alert.
+    const staleAlert = await within(dialog).findByRole('alert');
+    expect(staleAlert).toHaveTextContent('This preview is out of date. Preview again.');
+    expect(staleAlert).toHaveClass('alert-warning');
+    expect(staleAlert).not.toHaveClass('alert-danger');
+    expect(within(dialog).getByText('Bluewave Marine Supply')).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: /Import valid rows/ })).toBeNull();
     await user.click(
       within(screen.getByRole('dialog')).getByRole('button', { name: 'Preview again' }),
     );
     const importBtn = await screen.findByRole('button', { name: 'Import valid rows (3)' });
     expect(previews).toBe(2);
-    expect(screen.queryByText(/changed after your preview/)).toBeNull();
+    expect(screen.queryByText(/out of date/)).toBeNull();
     await user.click(importBtn);
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const commitCalls = fetch.mock.calls.filter(([u]) => String(u).includes('/import/commit'));
@@ -460,9 +463,8 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Excel/ }));
     await user.click(screen.getByRole('button', { name: 'Download template' }));
-    expect(
-      await screen.findByText('Excel import isn’t set up yet. Ask an Admin.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Excel import isn't available right now.")).toBeInTheDocument();
+    expect(screen.queryByText(/set up yet/)).toBeNull();
   });
 
   it('AC-62.23 503 IMPORT_NOT_CONFIGURED shows the "not set up" message', async () => {
@@ -472,9 +474,119 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     });
     renderAt('/clients', <App />);
     const { dialog } = await upload();
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent("Excel import isn't available right now. Nothing was saved.");
+    expect(alert).not.toHaveTextContent('set up yet');
+  });
+
+  it('AC-62.23 503 on commit shows the UIE "not available" copy', async () => {
+    setup('ADMIN', {
+      commit: () =>
+        errorReply(503, 'IMPORT_NOT_CONFIGURED', 'Excel import isn’t set up yet. Ask an Admin.'),
+    });
+    renderAt('/clients', <App />);
+    const { user, dialog } = await upload();
+    await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'Excel import isn’t set up yet. Ask an Admin.',
+      "Excel import isn't available right now. Nothing was saved.",
     );
+  });
+
+  it.each([
+    [
+      'IMPORT_BUSY',
+      'Another import is still running. Wait a moment, then try again. Nothing was saved.',
+    ],
+    ['RATE_LIMITED', 'Too many imports. Wait a few minutes, then try again. Nothing was saved.'],
+  ])(
+    'NFR-41 / AC-62.24 429 %s on commit: stays on the preview with the UIE warning; Import can be retried',
+    async (code, serverText) => {
+      let commits = 0;
+      setup('ADMIN', {
+        commit: () =>
+          ++commits === 1 ? errorReply(429, code, serverText) : { status: 200, body: COMMITTED },
+      });
+      renderAt('/clients', <App />);
+      const { user, dialog } = await upload();
+      await user.click(
+        await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }),
+      );
+      const alert = await within(dialog).findByRole('alert');
+      expect(alert).toHaveTextContent(
+        'Another import is still running. Wait a moment, then try again. Nothing was saved.',
+      );
+      expect(alert).toHaveClass('alert-warning');
+      expect(within(dialog).getByText('Bluewave Marine Supply')).toBeInTheDocument();
+      const again = within(dialog).getByRole('button', { name: 'Import valid rows (3)' });
+      expect(again).toBeEnabled();
+      await user.click(again);
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(commits).toBe(2);
+    },
+  );
+
+  it('NFR-41 the Import button is disabled while a commit is in flight (no double submit)', async () => {
+    const fetch = setup('ADMIN');
+    const real = fetch.getMockImplementation()!;
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    fetch.mockImplementation(async (input, init) => {
+      if (String(input).includes('/clients/import/commit')) await held;
+      return real(input, init);
+    });
+    renderAt('/clients', <App />);
+    const { user, dialog } = await upload();
+    const btn = await within(dialog).findByRole('button', { name: 'Import valid rows (3)' });
+    await user.dblClick(btn);
+    const busy = await within(dialog).findByRole('button', { name: 'Importing…' });
+    expect(busy).toBeDisabled();
+    await user.click(busy);
+    const commitCalls = () =>
+      fetch.mock.calls.filter(([u]) => String(u).includes('/clients/import/commit')).length;
+    expect(commitCalls()).toBe(1);
+    release();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(commitCalls()).toBe(1);
+  });
+
+  it('UIE a "Possible duplicate" warning is amber (text-warning) with ⚠ and the row stays New', async () => {
+    const dup = 'Possible duplicate of Contact One (no email) on the Contacts tab.';
+    setup('ADMIN', {
+      preview: () => ({
+        status: 200,
+        body: {
+          ...PREVIEW,
+          clients: [
+            row({
+              row: 3,
+              result: 'NEW',
+              warnings: [dup],
+              values: { 'Company name': 'Dup Co' },
+            }),
+          ],
+        },
+      }),
+    });
+    renderAt('/clients', <App />);
+    const { dialog } = await upload();
+    const warn = await within(dialog).findByText(dup);
+    const line = warn.closest('.client-import-warning') as HTMLElement;
+    expect(line).toHaveClass('text-warning');
+    expect(line).toHaveTextContent(`⚠ ${dup}`);
+    const tr = line.closest('tr') as HTMLElement;
+    expect(within(tr).getByText('New')).toHaveClass('bg-label-success');
+  });
+
+  it('DEF-055 the modal footer uses the stacking class (primary on top on phones)', async () => {
+    setup('ADMIN');
+    renderAt('/clients', <App />);
+    const { dialog } = await upload();
+    const btn = await within(dialog).findByRole('button', { name: 'Import valid rows (3)' });
+    const footer = btn.closest('.modal-footer') as HTMLElement;
+    expect(footer).toHaveClass('client-import-footer');
+    // column-reverse puts the last child (Import) on top, so Import must come after Cancel.
+    const buttons = within(footer).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Cancel', 'Import valid rows (3)']);
   });
 
   it('UIE the modal is size lg, not xl', async () => {

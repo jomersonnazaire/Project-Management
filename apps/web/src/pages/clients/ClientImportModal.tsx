@@ -102,9 +102,21 @@ function RowsTable({ rows, cols }: { rows: ClientImportRowDto[]; cols: string[] 
                 <ResultBadge row={r} />
               </td>
               <td className={r.result === 'ERROR' ? 'text-danger' : 'text-body-secondary'}>
-                {r.reasons.length || r.warnings.length
-                  ? [...r.reasons, ...r.warnings].join(' ')
-                  : '–'}
+                {r.reasons.length || r.warnings.length ? (
+                  <>
+                    {r.reasons.join(' ')}
+                    {/* UIE: warnings (e.g. "Possible duplicate", Q-113) in the AA amber with ⚠;
+                        the row keeps its own tag. */}
+                    {r.warnings.map((w) => (
+                      <span key={w} className="d-block text-warning client-import-warning">
+                        <span aria-hidden="true">⚠ </span>
+                        {w}
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  '–'
+                )}
               </td>
             </tr>
           ))}
@@ -256,7 +268,7 @@ export function ClientImportModal({
     body = (
       <>
         {problem && (
-          <div className="alert alert-danger" role="alert">
+          <div className={`alert alert-${problem.tone ?? 'danger'}`} role="alert">
             {problem.message}
           </div>
         )}
@@ -291,7 +303,7 @@ export function ClientImportModal({
           </div>
         ))}
         {commitProblem && (
-          <div className="alert alert-danger" role="alert">
+          <div className={`alert alert-${commitProblem.tone ?? 'danger'}`} role="alert">
             {commitProblem.message}
           </div>
         )}
@@ -339,7 +351,8 @@ export function ClientImportModal({
         {body}
       </Modal.Body>
       {data && !problem && (
-        <Modal.Footer>
+        // DEF-055: below 576px the buttons stack full width with the primary on top.
+        <Modal.Footer className="client-import-footer">
           <Button variant="outline-secondary" onClick={onClose} disabled={commit.isPending}>
             Cancel
           </Button>

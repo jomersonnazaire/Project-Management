@@ -3,20 +3,22 @@ import { ApiError, NO_LONGER_PERMITTED } from '../../api/client';
 
 /**
  * CR-19 UIE review: which API errors the import UI may show in its own words. Only the known
- * file checks (§9), 413/415, PREVIEW_STALE and IMPORT_NOT_CONFIGURED get specific copy; anything
- * else (404, 5xx, network) gets the generic spec line, never raw server text.
+ * file checks (§9), 413/415, PREVIEW_STALE, 429 (NFR-41) and IMPORT_NOT_CONFIGURED get specific
+ * copy (UIE CLIENTS_EXCEL_IMPORT_UI.md); anything else (404, 5xx, network) gets the generic spec
+ * line, never raw server text.
  */
 export interface ImportProblem {
   code: string;
   message: string;
+  /** UIE: stale preview and busy / rate limited are warnings, not errors. */
+  tone?: 'warning';
 }
 
 const FILE_CODES: readonly string[] = CLIENT_IMPORT_FILE_ERROR_CODES;
 
 function common(e: ApiError): ImportProblem | null {
   if (e.status === 403) return { code: e.code, message: NO_LONGER_PERMITTED };
-  if (e.code === 'IMPORT_NOT_CONFIGURED')
-    return { code: e.code, message: MSG.IMPORT_NOT_CONFIGURED };
+  if (e.code === 'IMPORT_NOT_CONFIGURED') return { code: e.code, message: MSG.UI_NOT_CONFIGURED };
   return null;
 }
 
@@ -27,7 +29,10 @@ export function importProblemOf(e: unknown): ImportProblem {
     if (known) return known;
     if (e.status === 413) return { code: 'FILE_TOO_LARGE', message: MSG.FILE_TOO_LARGE };
     if (e.status === 415) return { code: 'UNSUPPORTED_FILE', message: MSG.UNSUPPORTED_FILE };
-    if (e.code === 'PREVIEW_STALE') return { code: e.code, message: MSG.PREVIEW_STALE };
+    if (e.code === 'PREVIEW_STALE')
+      return { code: e.code, message: MSG.UI_PREVIEW_STALE, tone: 'warning' };
+    // NFR-41 / AC-62.24: IMPORT_BUSY or RATE_LIMITED; UIE uses one line for both.
+    if (e.status === 429) return { code: e.code, message: MSG.UI_BUSY, tone: 'warning' };
     if (FILE_CODES.includes(e.code)) return { code: e.code, message: e.message };
   }
   return { code: 'IMPORT_FAILED', message: MSG.IMPORT_FAILED };
@@ -36,8 +41,9 @@ export function importProblemOf(e: unknown): ImportProblem {
 /** Download template errors (Excel menu and the modal link). */
 export function templateErrorOf(e: unknown): string {
   if (e instanceof ApiError) {
-    const known = common(e);
-    if (known) return known.message;
+    if (e.status === 403) return NO_LONGER_PERMITTED;
+    // Nothing is saved by a download, so UIE's "Nothing was saved." is left off here.
+    if (e.code === 'IMPORT_NOT_CONFIGURED') return MSG.UI_NOT_CONFIGURED_TEMPLATE;
   }
   return MSG.TEMPLATE_FAILED;
 }
