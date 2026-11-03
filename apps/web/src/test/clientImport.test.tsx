@@ -500,7 +500,8 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     ['RATE_LIMITED', 'Too many imports. Wait a few minutes, then try again. Nothing was saved.'],
   ])(
     'NFR-41 / AC-62.24 429 %s on commit: stays on the preview with the UIE warning; Import can be retried',
-    async (code, serverText) => {
+    async (code, expected) => {
+      const serverText = '(raw server text, never shown)';
       let commits = 0;
       setup('ADMIN', {
         commit: () =>
@@ -512,9 +513,8 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
         await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }),
       );
       const alert = await within(dialog).findByRole('alert');
-      expect(alert).toHaveTextContent(
-        'Another import is still running. Wait a moment, then try again. Nothing was saved.',
-      );
+      expect(alert).toHaveTextContent(expected);
+      expect(alert).not.toHaveTextContent('raw server text');
       expect(alert).toHaveClass('alert-warning');
       expect(within(dialog).getByText('Bluewave Marine Supply')).toBeInTheDocument();
       const again = within(dialog).getByRole('button', { name: 'Import valid rows (3)' });

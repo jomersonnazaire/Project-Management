@@ -31,7 +31,9 @@ export function importProblemOf(e: unknown): ImportProblem {
     if (e.status === 415) return { code: 'UNSUPPORTED_FILE', message: MSG.UNSUPPORTED_FILE };
     if (e.code === 'PREVIEW_STALE')
       return { code: e.code, message: MSG.UI_PREVIEW_STALE, tone: 'warning' };
-    // NFR-41 / AC-62.24: IMPORT_BUSY or RATE_LIMITED; UIE uses one line for both.
+    // NFR-41: RATE_LIMITED has its own line (Lean, Nov 3); IMPORT_BUSY / other 429s (AC-62.24) say busy.
+    if (e.status === 429 && e.code === 'RATE_LIMITED')
+      return { code: e.code, message: MSG.RATE_LIMITED, tone: 'warning' };
     if (e.status === 429) return { code: e.code, message: MSG.UI_BUSY, tone: 'warning' };
     if (FILE_CODES.includes(e.code)) return { code: e.code, message: e.message };
   }
