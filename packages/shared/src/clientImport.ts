@@ -31,6 +31,8 @@ export const CLIENT_IMPORT_MAX_UNZIPPED_BYTES = 50 * 1024 * 1024;
 export const CLIENT_IMPORT_RATE_WINDOW_MS = 15 * 60_000;
 export const CLIENT_IMPORT_PREVIEW_LIMIT = 20;
 export const CLIENT_IMPORT_COMMIT_LIMIT = 5;
+/** NFR-41 (Lean, Nov 3): clients exports per user per window; each file is the whole list. */
+export const CLIENT_EXPORT_LIMIT = 20;
 
 export const CLIENT_IMPORT_TEMPLATE_NAME = 'OpsTrack-clients-template.xlsx';
 export const CLIENT_IMPORT_SKIPPED_NAME = 'OpsTrack-skipped-rows.xlsx';
@@ -165,6 +167,8 @@ export const CLIENT_IMPORT_MESSAGES = {
   IMPORT_BUSY: 'Another import is still running. Wait a moment, then try again. Nothing was saved.',
   /** NFR-41: over 20 previews or 5 commits in 15 minutes (429 RATE_LIMITED). */
   RATE_LIMITED: 'Too many imports. Wait a few minutes, then try again. Nothing was saved.',
+  /** NFR-41: over 20 clients downloads in 15 minutes (429 RATE_LIMITED). A download saves nothing. */
+  EXPORT_RATE_LIMITED: 'Too many downloads. Wait a few minutes, then try again.',
   /** UIE modal copy (CLIENTS_EXCEL_IMPORT_UI.md), shown by the web app for these responses. */
   UI_PREVIEW_STALE: 'This preview is out of date. Preview again.',
   UI_NOT_CONFIGURED: "Excel import isn't available right now. Nothing was saved.",

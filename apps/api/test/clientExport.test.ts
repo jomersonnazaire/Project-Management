@@ -407,3 +407,24 @@ describe('Clients export: over the 2,000-row import limit (Q-119, AC-63.7)', () 
     }
   });
 });
+
+describe('Clients export: rate limit (NFR-41, Lean Nov 3)', () => {
+  it('the 21st download in 15 minutes gets 429 RATE_LIMITED; another user is not affected', async () => {
+    const app2 = makeApp();
+    const u1 = await signedInAs(app2, 'ADMIN');
+    const u2 = await signedInAs(app2, 'PROJECT_MANAGER');
+    for (let i = 0; i < 20; i++) {
+      expect((await fileOf(u1.agent, EXPORT)).status, `export ${i + 1}`).toBe(200);
+    }
+    const res = await u1.agent.get(EXPORT);
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatchObject({
+      code: 'RATE_LIMITED',
+      message: 'Too many downloads. Wait a few minutes, then try again.',
+    });
+    expect(res.headers['ratelimit']).toBeDefined();
+    expect((await fileOf(u2.agent, EXPORT)).status).toBe(200);
+    // The blank template is not limited by the export limiter.
+    expect((await fileOf(u1.agent, '/api/v1/clients/import/template')).status).toBe(200);
+  });
+});

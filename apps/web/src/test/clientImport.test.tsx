@@ -805,6 +805,21 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     expect(screen.queryByText('raw forbidden text')).toBeNull();
   });
 
+  it('NFR-41 a 429 RATE_LIMITED on Download clients shows the amber "Too many downloads" line', async () => {
+    setup('ADMIN', {
+      exportFile: () => errorReply(429, 'RATE_LIMITED', '(raw server text, never shown)'),
+    });
+    renderAt('/clients', <App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Excel/ }));
+    await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
+    const alert = await screen.findByText(
+      'Too many downloads. Wait a few minutes, then try again.',
+    );
+    expect(alert.closest('.alert')).toHaveClass('alert-warning');
+    expect(screen.queryByText('(raw server text, never shown)')).toBeNull();
+  });
+
   it('UIE a template error in the modal is cleared when a file is chosen (alerts do not stack)', async () => {
     setup('ADMIN', { template: () => errorReply(404, 'NOT_FOUND', 'nope') });
     renderAt('/clients', <App />);

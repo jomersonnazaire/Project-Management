@@ -1,5 +1,6 @@
 import {
   CLIENT_EXPORT_ROWS_HEADERS,
+  CLIENT_EXPORT_LIMIT,
   CLIENT_IMPORT_COMMIT_LIMIT,
   CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MAX_ROWS,
@@ -117,7 +118,11 @@ function previewDto(plan: ImportPlan, fileName: string, size: number, notes: str
  * DAR Send in app.ts). It runs after the gate, so a user is always present. In-memory store, so
  * the same single-instance caveat applies (TD-01).
  */
-function importLimiter(step: 'preview' | 'commit', limit: number) {
+function importLimiter(
+  step: 'preview' | 'commit' | 'export',
+  limit: number,
+  message: string = MSG.RATE_LIMITED,
+) {
   return rateLimit({
     windowMs: CLIENT_IMPORT_RATE_WINDOW_MS,
     limit,
@@ -125,7 +130,7 @@ function importLimiter(step: 'preview' | 'commit', limit: number) {
     legacyHeaders: false,
     validate: false,
     keyGenerator: (req) => `client-import-${step}:${currentUser(req)._id.toString()}`,
-    handler: (_req, _res, next) => next(new HttpError(429, 'RATE_LIMITED', MSG.RATE_LIMITED)),
+    handler: (_req, _res, next) => next(new HttpError(429, 'RATE_LIMITED', message)),
   });
 }
 
@@ -142,6 +147,7 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
   const signingKey = () => key as string;
   const previewLimiter = importLimiter('preview', CLIENT_IMPORT_PREVIEW_LIMIT);
   const commitLimiter = importLimiter('commit', CLIENT_IMPORT_COMMIT_LIMIT);
+  const exportLimiter = importLimiter('export', CLIENT_EXPORT_LIMIT, MSG.EXPORT_RATE_LIMITED);
   /** AC-62.24: users with a commit running in this process (one at a time per user). */
   const committing = new Set<string>();
 
@@ -152,7 +158,7 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
     res.send(buf);
   });
 
-  r.get('/export', IMPORT_GATE, requireKey, async (req, res) => {
+  r.get('/export', IMPORT_GATE, requireKey, exportLimiter, async (req, res) => {
     const { scope } = await contextFor(req);
     const rows = await exportRows({ scope });
     const buf = await buildWorkbook(rows);

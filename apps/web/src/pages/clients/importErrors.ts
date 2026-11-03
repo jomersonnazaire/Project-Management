@@ -46,6 +46,9 @@ export function importProblemOf(e: unknown): ImportProblem {
 function downloadErrorOf(e: unknown, fallback: ImportProblem): ImportProblem {
   if (e instanceof ApiError) {
     if (e.status === 403) return { code: e.code, message: NO_LONGER_PERMITTED };
+    // NFR-41: the clients export is rate limited (20 per 15 minutes); amber, like the import 429s.
+    if (e.status === 429 && e.code === 'RATE_LIMITED')
+      return { code: e.code, message: MSG.EXPORT_RATE_LIMITED, tone: 'warning' };
     // Nothing is saved by a download, so UIE's "Nothing was saved." is left off here.
     // DEF-057: amber, like the other "wait or re-run" states.
     if (e.code === 'IMPORT_NOT_CONFIGURED')
