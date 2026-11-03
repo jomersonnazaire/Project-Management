@@ -1,13 +1,14 @@
 # CR-19 — Clients: Excel template download and import (add or update clients and contacts)
 
-**Status:** v0.2 draft (2026-11-03, 12:10 PM SGT) · v0.1 draft (2026-11-03, 12:00 PM SGT) · **Author:** Business Analyst · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Status:** v0.3 draft (2026-11-03, 12:15 PM SGT) · v0.2 draft (2026-11-03, 12:10 PM SGT) · v0.1 draft (2026-11-03, 12:00 PM SGT) · **Author:** Business Analyst · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Requested by:** Jomerson (lead dev / product owner), 2026-11-03. **Rules locked by:** Lean (tech lead) and Deven, 2026-11-03. Rules marked **Locked** are decided. Rules marked **Lean-accepted default (2026-11-03)** were proposed in v0.1 and accepted by Lean.
-**Part of:** doc 17 (change requests). CR-19 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-18 and uses the next free IDs: **FR-CLI-23 to FR-CLI-41**, **US-61, US-62**, **AC-61.x, AC-62.x**, **EC-139 to EC-157**, **NFR-36 to NFR-41**, **Q-109 to Q-117** (all decided, see §15), **A-30 to A-35**.
+**Part of:** doc 17 (change requests). CR-19 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-18 and uses the next free IDs: **FR-CLI-23 to FR-CLI-41**, **US-61, US-62**, **AC-61.x, AC-62.x**, **EC-139 to EC-157**, **NFR-36 to NFR-41**, **Q-109 to Q-117** (all decided, see §15; no open questions), **A-30 to A-35**.
 **UI reference:** UIE's mockup **v0.9.17** (`docs/design/mockup/index-v0.9.17.html#clients`), which mirrors the built Clients page plus the Excel button, and `docs/design/CLIENTS_EXCEL_IMPORT_UI.md` (written for v0.9.16; its role notes are replaced by §3 here). *The v0.9.17 file is in the team's local docs pack and isn't on this branch yet.*
 **Checked against:** docs 01 to 17 (doc 17 with CR-18), and the build at `main` `16854be` (no client code changed since `3bf528e`).
 **Not built.** This is a new request, not a PR review.
 
 **Doc change log:**
+- v0.3 (2026-11-03, 12:15 PM SGT): **Q-107 closed by Lean (2026-11-03, about 12:10 PM SGT), without needing Jomerson: no block.** Import follows exactly what Edit client / Deactivate client allow today, so a client with open projects can be set to Inactive through import (with `clients.delete`). Import has no open-project rule of its own. **FR-CLI-18 is deferred**, not adopted; if Jomerson wants a block later, it becomes its own change covering both the form and import. FR-CLI-41, AC-62.16, Q-110, §15 and §16 updated. No open questions remain; only Jomerson's approval of the CR is needed. No IDs renumbered.
 - v0.2 (2026-11-03, 12:10 PM SGT): Lean's calls applied. **Q-109** (contact whose company is in neither the file nor the app: Error, never creates a client), **Q-110** (Status change on an existing client needs `clients.delete`; otherwise the **whole row** is an Error and nothing in it is saved; a new client may be Active or Inactive; FR-CLI-18 check kept, Q-107 still pending), **Q-111** (one gate: create **and** edit on **both** `clients` and `contacts` for the button and all three API calls; new AC-61.6; the "contact rows become Errors" path removed), **Q-115** ("No change" tag, not written, not counted as an update) are **Locked**. Q-112, Q-113, Q-114, Q-116 and Q-117 are **Lean-accepted defaults (2026-11-03)**. The existing button is called **"New client"** everywhere. "Company name" header kept and its mapping to the client `name` field noted. UI reference moved to mockup v0.9.17. New FR-CLI-41 and EC-157. No IDs renumbered.
 - v0.1 (2026-11-03, 12:00 PM SGT): first draft, Q-109 to Q-117 open.
 
@@ -118,7 +119,7 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
   - **Without `clients.delete`, the whole row is an Error and none of its fields are saved**, including fields the user may edit (Industry, Address, Notes). Reason: **"You don't have permission to change Status. Set it back to {current status} or leave it blank, then import this row again."** The user fixes the row and imports it again. Contacts rows that point to this client still import, because the client already exists in the app.
   - A Status equal to the current value, or a blank Status, isn't a change and needs no `clients.delete`.
   - A **new** client can be created as Active or Inactive with the button gate alone (no `clients.delete`).
-  - **Open-project check:** when FR-CLI-18 is built, a change to Inactive also goes through it. If the client has open projects, the whole row is an Error with the FR-CLI-18 message, and nothing in it is saved. **Q-107 (whether to block) is still pending with Jomerson.** Until FR-CLI-18 is built, no such check runs (as today).
+  - **Open projects (Q-107 closed by Lean, 2026-11-03: no block):** import follows exactly what Edit client / Deactivate client allow today. A client with open projects (Planning, Active or On Hold) **can** be set to Inactive through import, the same as with "Deactivate client". Import has **no open-project rule of its own**. FR-CLI-18 is **deferred**: if Jomerson wants a block later, it becomes its own change covering both the form and import. The existing guards for inactive clients still apply afterwards (FR-CLI-21 no new time, FR-CLI-22 no reopening).
   - Each allowed Status change writes the existing `client_deactivated` / `client_reactivated` audit entry with `meta.importId`.
 
 ## 7. Import flow (Locked: two API calls)
@@ -152,7 +153,7 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 | FR-CLI-38 | Toast "Imported {X} new, updated {Y}. {Z} rows skipped." | Must |
 | FR-CLI-39 | Audit: one entry per created or updated record, plus one import summary entry | Must |
 | FR-CLI-40 | Email change on a contact with a portal account is an Error (once the portal exists) | Must |
-| FR-CLI-41 | Status change on an existing client needs `clients.delete`; without it the whole row is an Error and nothing in it is saved; FR-CLI-18 check applies once built | Must |
+| FR-CLI-41 | Status change on an existing client needs `clients.delete`; without it the whole row is an Error and nothing in it is saved; no open-project rule of its own (same as Deactivate client today; FR-CLI-18 deferred) | Must |
 
 **FR-CLI-37 detail (formula safety, Locked):** a value that starts with `=`, `+`, `-` or `@` (also after a leading tab or carriage return) is stored exactly as typed, as plain text. It's never evaluated on import. On every export (the skipped-rows file, and any later CSV or Excel export of clients or contacts) it's written as a text cell, never a formula; CSV output prefixes it with `'`. The UI shows the value as typed. A phone number such as `+63 900 000 0000` is stored unchanged.
 
@@ -198,7 +199,7 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 - **AC-62.13 (API)** Given an upload, then no file is written to Storage or Blob, and nothing about the file stays on the server after the response, except the audit entries.
 - **AC-62.14 (API)** Given a Contacts row with Company name "Client Z", and "Client Z" is on neither the Clients sheet nor in the app, then the row is an **Error** ("Company Client Z isn't on the Clients sheet or in OpsTrack. Add it on the Clients sheet."), it's skipped, and no client is created.
 - **AC-62.15 (API)** Given a user **without** `clients.delete` (for example a role with the four gate permissions but Delete off on `clients`) and an Active Client A, when a Clients row for Client A sets Status "Inactive" **and** changes Notes, then the **whole row** is an **Error** ("You don't have permission to change Status. Set it back to Active or leave it blank, then import this row again."). After the commit, Client A is still Active **and its Notes are unchanged**. When the user sets Status back to Active (or blank) and imports again, then the Notes change is saved.
-- **AC-62.16 (API)** Given a user **with** `clients.delete` and an Active Client A, when a row sets Status "Inactive", then Client A becomes inactive with a `client_deactivated` audit entry. Once FR-CLI-18 is built (Q-107 pending), a client with open projects instead gets an Error row with the FR-CLI-18 message, and nothing in the row is saved.
+- **AC-62.16 (API)** Given a user **with** `clients.delete` and an Active Client A, when a row sets Status "Inactive", then Client A becomes inactive with a `client_deactivated` audit entry. Given Client A has an Active project, the result is the same: the row imports and Client A becomes inactive, exactly as "Deactivate client" allows today (Q-107 closed, no block; FR-CLI-18 deferred).
 - **AC-62.17 (API)** Given a row that matches an inactive contact, when committed, then the contact is updated, stays inactive, and the preview tag reads "Update (inactive)".
 - **AC-62.18 (API)** Given Client A has a no-email contact "Contact One", when a Client A row has Full name "Contact One" and Email `contact@example.com`, then the row is **New**, with the warning "Possible duplicate of Contact One (no email) on the Contacts tab."
 
@@ -243,7 +244,7 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 | ID | Question | Decision |
 |---|---|---|
 | Q-109 | Contact whose Company name is in neither the file nor the app | **Locked (Lean, 2026-11-03):** Error row, skipped. Import never creates a client from the Contacts sheet (FR-CLI-34a). |
-| Q-110 | Status change on an existing client | **Locked (Lean, 2026-11-03):** needs `clients.delete`. Without it the **whole row** is an Error and nothing in it is saved. A new client may be Active or Inactive. The FR-CLI-18 open-project check applies once built (FR-CLI-41). |
+| Q-110 | Status change on an existing client | **Locked (Lean, 2026-11-03):** needs `clients.delete`. Without it the **whole row** is an Error and nothing in it is saved. A new client may be Active or Inactive. No open-project rule: import matches Deactivate client today (Q-107 closed by Lean, 2026-11-03; FR-CLI-18 deferred) (FR-CLI-41). |
 | Q-111 | Rights on clients but not contacts | **Locked (Lean, 2026-11-03):** one gate. Button and all three calls need create and edit on both `clients` and `contacts` (FR-CLI-23/24, AC-61.6). |
 | Q-112 | Email change on a contact with portal access | **Lean-accepted default (2026-11-03):** Error row; change the email on the Contacts tab (FR-CLI-40). |
 | Q-113 | Row with an Email vs a no-email contact with the same name | **Lean-accepted default (2026-11-03):** New, with a "Possible duplicate" warning (§5, AC-62.18). |
@@ -252,9 +253,9 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 | Q-116 | Commit result differs from the preview | **Lean-accepted default (2026-11-03):** apply the result at commit time and report the counts actually applied (§7, EC-148). |
 | Q-117 | Prefilled "Export clients (.xlsx)" | **Lean-accepted default (2026-11-03):** not in this CR. A prefilled export would be a new request for Jomerson. |
 
-**Still open:**
-- **Q-107** (from CR-18, Jomerson): block deactivating a client with open projects? It decides whether the FR-CLI-18 check exists, and so whether import Status changes to Inactive are refused for clients with open projects (FR-CLI-41).
-- **CR-19 approval** by Jomerson.
+| Q-107 (from CR-18) | Block deactivating a client with open projects? | **Closed (Lean, 2026-11-03, about 12:10 PM SGT): no block.** Import follows Edit client / Deactivate client as they are today and has no rule of its own. FR-CLI-18 is deferred; a block, if Jomerson asks for one, is its own future change covering the form and import. |
+
+**No open questions remain.** Only Jomerson's approval of CR-19 is needed.
 
 ## 16. Status
-**New, not built.** Rules are decided (Locked or Lean-accepted defaults, 2026-11-03). Jomerson approves the CR. Q-107 stays pending under CR-18. UIE's mockup v0.9.17 is the UI reference, and the role notes in `CLIENTS_EXCEL_IMPORT_UI.md` (v0.9.16, "Admin and Member") are replaced by §3. When approved, FR-CLI-23 to 41 go into doc 11 (Clients section), US-61/62 into doc 04, AC-61.x/62.x into doc 05, EC-139 to 157 into doc 08, NFR-36 to 41 into doc 07, and Q-109 to Q-117 into doc 09 as decided.
+**New, not built.** Rules are decided (Locked or Lean-accepted defaults, 2026-11-03). Jomerson approves the CR; nothing else is pending (Q-107 closed by Lean, 2026-11-03; FR-CLI-18 deferred). UIE's mockup v0.9.17 is the UI reference, and the role notes in `CLIENTS_EXCEL_IMPORT_UI.md` (v0.9.16, "Admin and Member") are replaced by §3. When approved, FR-CLI-23 to 41 go into doc 11 (Clients section), US-61/62 into doc 04, AC-61.x/62.x into doc 05, EC-139 to 157 into doc 08, NFR-36 to 41 into doc 07, and Q-109 to Q-117 into doc 09 as decided.
