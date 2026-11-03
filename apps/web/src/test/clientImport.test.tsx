@@ -228,11 +228,13 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
     // A fast double click lands before React re-renders: the ref guard keeps it to one fetch.
     fireEvent.click(item);
     fireEvent.click(item);
-    // Q-118: the TOGGLE is disabled and reads "Preparing file…" with a small spinner.
+    // Q-118 + DEF-059: the TOGGLE is disabled with a small spinner and announces
+    // "Preparing file…"; the visible label stays "Excel" so the width never changes at 390px.
     await waitFor(() => expect(toggle).toBeDisabled());
-    expect(toggle).toHaveTextContent('Preparing file…');
-    expect(toggle).not.toHaveTextContent('Excel');
+    expect(within(toggle).getByRole('status')).toHaveTextContent('Preparing file…');
+    expect(within(toggle).getByRole('status')).toHaveClass('visually-hidden');
     expect(toggle.querySelector('.spinner-border')).not.toBeNull();
+    expect(toggle.querySelector('.bx-spreadsheet')).toBeNull();
     await user.click(toggle); // disabled: no menu, no second download
     const exportCalls = () =>
       fetch.mock.calls.filter(([u]) => String(u).endsWith('/clients/import/export')).length;

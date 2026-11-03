@@ -71,16 +71,22 @@ export function ClientsPage() {
                   disabled={exporting}
                   aria-busy={exporting || undefined}
                 >
+                  {/* DEF-059: the spinner takes the icon's place and the visible label stays
+                      "Excel", so the toggle keeps its width and nothing reflows at 390px. */}
+                  {exporting ? (
+                    <Spinner animation="border" size="sm" className="me-1" aria-hidden="true" />
+                  ) : (
+                    <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
+                  )}
                   {exporting ? (
                     <>
-                      <Spinner animation="border" size="sm" className="me-1" aria-hidden="true" />
-                      Preparing file…
+                      <span aria-hidden="true">Excel</span>
+                      <span className="visually-hidden" role="status">
+                        Preparing file…
+                      </span>
                     </>
                   ) : (
-                    <>
-                      <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
-                      Excel
-                    </>
+                    'Excel'
                   )}
                 </Dropdown.Toggle>
                 <Dropdown.Menu>
