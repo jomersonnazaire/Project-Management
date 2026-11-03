@@ -29,7 +29,10 @@ export function authorize(config: AppConfig, registry: RouteRegistry) {
     req.access = { role, permissions };
 
     const policy = route.policy;
-    const denied = policy.kind === 'permission' && !permissions[policy.record]?.[policy.action];
+    const denied =
+      policy.kind === 'permission' &&
+      (!permissions[policy.record]?.[policy.action] ||
+        (policy.also ?? []).some(([record, action]) => !permissions[record]?.[action]));
     const deny = () => {
       if (policy.kind === 'permission') {
         const { record, action } = policy;

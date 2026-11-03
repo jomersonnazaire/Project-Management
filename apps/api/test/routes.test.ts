@@ -70,7 +70,8 @@ describe('Route policy table', () => {
     const entries = app.locals.routes as RouteEntry[];
     const table = entries.map((e) => {
       const p = e.policy;
-      return `${e.method} ${e.path} ${p.kind === 'permission' ? `${p.record}.${p.action}${p.beforeScope ? ' (before scope)' : ''}` : p.kind}`;
+      const also = p.kind === 'permission' ? (p.also ?? []).map(([r, a]) => ` + ${r}.${a}`) : [];
+      return `${e.method} ${e.path} ${p.kind === 'permission' ? `${p.record}.${p.action}${also.join('')}${p.beforeScope ? ' (before scope)' : ''}` : p.kind}`;
     });
     expect(table).toEqual([
       'GET /health public',
@@ -103,6 +104,9 @@ describe('Route policy table', () => {
       'PATCH /teams/:id teams.edit',
       'POST /teams/:id/archive teams.delete',
       'POST /teams/:id/unarchive teams.delete',
+      'GET /clients/import/template clients.create + clients.edit + contacts.create + contacts.edit',
+      'POST /clients/import/preview clients.create + clients.edit + contacts.create + contacts.edit',
+      'POST /clients/import/commit clients.create + clients.edit + contacts.create + contacts.edit',
       'GET /clients clients.view',
       'GET /clients/:id clients.view',
       'POST /clients clients.create',

@@ -24,6 +24,7 @@ import './models/index.js';
 import { accessRulesRouter } from './routes/accessRules.js';
 import { auditRouter } from './routes/audit.js';
 import { authRouter } from './routes/auth.js';
+import { clientImportRouter } from './routes/clientImport.js';
 import { clientsRouter, contactsRouter } from './routes/clients.js';
 import { projectsRouter } from './routes/projects.js';
 import { projectTypesRouter } from './routes/projectTypes.js';
@@ -152,6 +153,8 @@ export function createApp(
     authRouter(config, registry, authLimiter),
     usersRouter(config, registry),
     teamsRouter(registry),
+    // CR-19: before /clients/:id… so /clients/import/* is never read as a client id.
+    clientImportRouter(registry),
     clientsRouter(registry),
     contactsRouter(registry),
     templatesRouter(registry),

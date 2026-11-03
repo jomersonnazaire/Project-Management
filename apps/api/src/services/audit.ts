@@ -1,4 +1,4 @@
-import type { Types } from 'mongoose';
+import type { ClientSession, Types } from 'mongoose';
 import { requestContext } from '../lib/requestContext.js';
 import { ActivityLogModel } from '../models/index.js';
 
@@ -36,9 +36,18 @@ export async function audit(input: AuditInput): Promise<void> {
   await ActivityLogModel.create(toDoc(input, origin()));
 }
 
-/** Appends several entries in one write (e.g. one per changed access rule cell, AC-33.4). */
-export async function auditMany(inputs: AuditInput[]): Promise<void> {
+/**
+ * Appends several entries in one write (e.g. one per changed access rule cell, AC-33.4). Pass a
+ * `session` to write them inside a transaction, so a rollback leaves none (CR-19 FR-CLI-39).
+ */
+export async function auditMany(
+  inputs: AuditInput[],
+  opts: { session?: ClientSession } = {},
+): Promise<void> {
   if (!inputs.length) return;
   const from = origin();
-  await ActivityLogModel.insertMany(inputs.map((input) => toDoc(input, from)));
+  await ActivityLogModel.insertMany(
+    inputs.map((input) => toDoc(input, from)),
+    opts.session ? { session: opts.session } : {},
+  );
 }

@@ -31,6 +31,11 @@ export type RoutePolicy =
        * they can't see.
        */
       beforeScope?: boolean;
+      /**
+       * Further `record.action` pairs the role must ALSO hold (all of them), e.g. the CR-19 import
+       * gate: create and edit on both clients and contacts (FR-CLI-24). Missing any one is 403.
+       */
+      also?: readonly (readonly [RecordType, AccessAction])[];
     };
 
 export const PUBLIC: RoutePolicy = { kind: 'public' };
@@ -48,6 +53,21 @@ export function perm(
     throw new Error(`${action} doesn't apply to ${record}`);
   }
   return { kind: 'permission', record, action, ...(opts.beforeScope ? { beforeScope: true } : {}) };
+}
+
+/**
+ * A route that needs EVERY listed permission (FR-CLI-24: one gate, no partial path). Checked by
+ * the central gate like `perm()`; any one missing answers 403 before the handler runs.
+ */
+export function permAll(
+  pairs: readonly (readonly [RecordType, AccessAction])[],
+  opts: { beforeScope?: boolean } = {},
+): RoutePolicy {
+  const [first, ...rest] = pairs;
+  if (!first) throw new Error('permAll needs at least one permission');
+  const base = perm(first[0], first[1], opts);
+  for (const [record, action] of rest) perm(record, action); // same validation
+  return { ...base, also: rest } as RoutePolicy;
 }
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
