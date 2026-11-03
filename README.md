@@ -132,7 +132,7 @@ Only `VITE_*` variables reach the browser. Never put secrets in them.
 ### Web on Vercel
 
 - Import the repo and set **Root Directory** to `apps/web`. `apps/web/vercel.json` sets the install command (`npm ci` at the repo root), the build and the output.
-- `vercel.json` rewrites `/api/*` to `https://xc8-projectmgmt-api-tc3w.azurewebsites.net/api/*`. The browser only ever talks to the Vercel origin, so the session cookie is first-party. This works in Safari and other browsers that block third-party cookies. The API's `WEB_APP_URL` and `CORS_ORIGINS` should be the Vercel URL(s).
+- `vercel.json` rewrites `/api/*` to `https://ops-track-bwdfeda7duhde2b5.southeastasia-01.azurewebsites.net/api/*`. The browser only ever talks to the Vercel origin, so the session cookie is first-party. This works in Safari and other browsers that block third-party cookies. The API's `WEB_APP_URL` and `CORS_ORIGINS` should be the Vercel URL(s).
 - Cross-site mode is the alternative. Set `VITE_API_BASE_URL` to the Azure URL, and on the API set `COOKIE_SAMESITE=none`, `COOKIE_SECURE=true` and `CORS_ORIGINS` to the Vercel origin(s).
 
 ### API on Azure App Service (`xc8-projectmgmt-api-tc3w`)
