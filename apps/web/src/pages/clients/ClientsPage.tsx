@@ -1,6 +1,6 @@
 import { clientImportToast, plural, type ClientDto, type ClientImportCommitDto } from '@xc8/shared';
 import { useState } from 'react';
-import { Button, Dropdown, Form } from 'react-bootstrap';
+import { Button, Dropdown, Form, ToastContainer } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { downloadClientTemplate, useClientActive, useClients } from '../../api/hooks';
 import { useCan } from '../../auth/useCan';
@@ -8,6 +8,7 @@ import { ActiveBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { ClientImportModal } from './ClientImportModal';
+import { templateErrorOf } from './importErrors';
 import { ClientModal } from './ClientModal';
 import { downloadSkippedRows } from './skippedRows';
 
@@ -33,37 +34,42 @@ export function ClientsPage() {
   return (
     <>
       <PageHeader title="Clients">
-        {canImport && (
-          <Dropdown className="me-2">
-            <Dropdown.Toggle variant="outline-primary" id="clients-excel">
-              <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
-              Excel
-            </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Item
-                as="button"
-                onClick={() => {
-                  setExcelError(null);
-                  downloadClientTemplate().catch((e: unknown) =>
-                    setExcelError(e instanceof Error ? e.message : 'Could not download.'),
-                  );
-                }}
-              >
-                <i className="bx bx-download me-2" aria-hidden="true" />
-                Download template
-              </Dropdown.Item>
-              <Dropdown.Item as="button" onClick={() => setImporting(true)}>
-                <i className="bx bx-upload me-2" aria-hidden="true" />
-                Import from Excel
-              </Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown>
-        )}
-        {canCreate && (
-          <Button onClick={() => setEditing(null)}>
-            <i className="bx bx-plus me-1" aria-hidden="true" />
-            New client
-          </Button>
+        {(canImport || canCreate) && (
+          // UIE: one group that wraps together, Excel first (stays together at 390px).
+          <div className="d-flex flex-wrap align-items-center gap-2" data-testid="clients-actions">
+            {canImport && (
+              <Dropdown>
+                <Dropdown.Toggle variant="outline-secondary" id="clients-excel">
+                  <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
+                  Excel
+                </Dropdown.Toggle>
+                <Dropdown.Menu>
+                  <Dropdown.Item
+                    as="button"
+                    onClick={() => {
+                      setExcelError(null);
+                      downloadClientTemplate().catch((e: unknown) =>
+                        setExcelError(templateErrorOf(e)),
+                      );
+                    }}
+                  >
+                    <i className="bx bx-download me-2" aria-hidden="true" />
+                    Download template
+                  </Dropdown.Item>
+                  <Dropdown.Item as="button" onClick={() => setImporting(true)}>
+                    <i className="bx bx-upload me-2" aria-hidden="true" />
+                    Import from Excel
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown>
+            )}
+            {canCreate && (
+              <Button onClick={() => setEditing(null)}>
+                <i className="bx bx-plus me-1" aria-hidden="true" />
+                New client
+              </Button>
+            )}
+          </div>
         )}
       </PageHeader>
       <div className="card">
@@ -85,32 +91,15 @@ export function ClientsPage() {
               onChange={(e) => setIncludeInactive(e.target.checked)}
             />
           </div>
-          {imported && (
-            <div
-              className="alert alert-success py-2 d-flex flex-wrap align-items-center gap-2"
-              role="status"
-            >
-              <span>{clientImportToast(imported.applied)}</span>
-              {imported.applied.skipped > 0 && (
-                <Button
-                  variant="link"
-                  className="p-0 align-baseline"
-                  onClick={() => void downloadSkippedRows(imported)}
-                >
-                  Download skipped rows (.xlsx)
-                </Button>
-              )}
+          {excelError && (
+            <div className="alert alert-danger alert-dismissible py-2" role="alert">
+              {excelError}
               <button
                 type="button"
-                className="btn-close ms-auto"
+                className="btn-close"
                 aria-label="Dismiss"
-                onClick={() => setImported(null)}
+                onClick={() => setExcelError(null)}
               />
-            </div>
-          )}
-          {excelError && (
-            <div className="alert alert-danger py-2" role="alert">
-              {excelError}
             </div>
           )}
           <ErrorAlert error={clients.error} />
@@ -202,6 +191,37 @@ export function ClientsPage() {
           )}
         </div>
       </div>
+      {/* FR-CLI-38: the done message is a toast (UIE), with the skipped-rows link. */}
+      <ToastContainer position="bottom-center" containerPosition="fixed" className="p-3">
+        {/* Plain toast markup: react-bootstrap's <Toast> forces role="alert"; this is a polite status. */}
+        {imported && (
+          <div
+            className="toast show bg-success client-import-toast"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div className="toast-body d-flex flex-wrap align-items-center gap-2 text-white">
+              <span>{clientImportToast(imported.applied)}</span>
+              {imported.applied.skipped > 0 && (
+                <Button
+                  variant="link"
+                  className="p-0 align-baseline text-white"
+                  onClick={() => void downloadSkippedRows(imported)}
+                >
+                  Download skipped rows (.xlsx)
+                </Button>
+              )}
+              <button
+                type="button"
+                className="btn-close btn-close-white ms-auto"
+                aria-label="Dismiss"
+                onClick={() => setImported(null)}
+              />
+            </div>
+          </div>
+        )}
+      </ToastContainer>
       {importing && (
         <ClientImportModal
           onClose={() => setImporting(false)}

@@ -149,7 +149,17 @@ export const CLIENT_IMPORT_MESSAGES = {
   PREVIEW_STALE: 'These clients changed after your preview. Preview again.',
   /** AC-62.23 / EC-158: the preview-token signing key isn't set on the API (503). */
   IMPORT_NOT_CONFIGURED: 'Excel import isn’t set up yet. Ask an Admin.',
+  /** UIE: any other template download failure (404, 5xx, network). */
+  TEMPLATE_FAILED: "Couldn't download the template. Try again.",
 } as const;
+
+/** UIE: error codes whose server text the import modal shows as is (§9 file checks). */
+export const CLIENT_IMPORT_FILE_ERROR_CODES = [
+  'NOT_TEMPLATE',
+  'EMPTY_FILE',
+  'TOO_MANY_ROWS',
+  'UNREADABLE_FILE',
+] as const;
 
 /** FR-CLI-35b: the commit sends the preview's signed token in this header. */
 export const CLIENT_IMPORT_TOKEN_HEADER = 'X-Import-Preview-Token';

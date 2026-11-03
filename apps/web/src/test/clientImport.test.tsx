@@ -139,8 +139,14 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
       setup(role);
       renderAt('/clients', <App />);
       const excel = await screen.findByRole('button', { name: /Excel/ });
-      expect(excel).toHaveClass('btn-outline-primary');
-      expect(screen.getByRole('button', { name: /New client/ })).toBeInTheDocument();
+      // UIE: outline-secondary, and Excel then New client in one wrapping group.
+      expect(excel).toHaveClass('btn-outline-secondary');
+      const group = screen.getByTestId('clients-actions');
+      expect(group).toHaveClass('d-flex', 'flex-wrap');
+      const newClient = within(group).getByRole('button', { name: /New client/ });
+      expect(
+        excel.compareDocumentPosition(newClient) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       await userEvent.click(excel);
       expect(screen.getByRole('button', { name: 'Download template' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Import from Excel' })).toBeInTheDocument();
@@ -349,8 +355,10 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     const { user, dialog } = await upload();
     await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    const toast = screen.getByRole('status');
-    expect(toast).toHaveClass('alert-success');
+    // UIE: a toast (react-bootstrap Toast), not an inline alert.
+    const toast = await screen.findByRole('status');
+    expect(toast).toHaveClass('toast');
+    expect(toast).not.toHaveClass('alert');
     expect(toast).toHaveTextContent('Imported 2 new, updated 1. 2 rows skipped.');
     expect(fetch.mock.calls.some(([u]) => String(u).includes('/clients/import/commit'))).toBe(true);
 
@@ -467,6 +475,77 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'Excel import isn’t set up yet. Ask an Admin.',
     );
+  });
+
+  it('UIE the modal is size lg, not xl', async () => {
+    setup('ADMIN');
+    renderAt('/clients', <App />);
+    const { dialog } = await openImport();
+    expect(dialog.querySelector('.modal-dialog') ?? dialog.closest('.modal-dialog')).toHaveClass(
+      'modal-lg',
+    );
+  });
+
+  it.each([
+    [404, 'NOT_FOUND', 'Cannot POST /api/v1/clients/import/preview'],
+    [500, 'INTERNAL', 'TypeError: x is undefined'],
+    [502, 'HTTP_ERROR', 'Bad gateway'],
+  ])(
+    'UIE an unknown %s on preview shows the generic import message, not the server text',
+    async (status, code, message) => {
+      setup('ADMIN', { preview: () => errorReply(status, code, message) });
+      renderAt('/clients', <App />);
+      const { dialog } = await upload();
+      const alert = await within(dialog).findByRole('alert');
+      expect(alert).toHaveTextContent('Import failed. Nothing was saved. Try again.');
+      expect(alert).not.toHaveTextContent(message);
+    },
+  );
+
+  it('UIE 413 and 415 from the API use the spec copy', async () => {
+    setup('ADMIN', { preview: () => errorReply(413, 'X', 'raw 413') });
+    renderAt('/clients', <App />);
+    const { dialog } = await upload();
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'The file is larger than 5 MB.',
+    );
+  });
+
+  it('UIE an unknown commit error shows the generic import message', async () => {
+    setup('ADMIN', { commit: () => errorReply(500, 'BOOM', 'stack trace here') });
+    renderAt('/clients', <App />);
+    const { user, dialog } = await upload();
+    await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent('Import failed. Nothing was saved. Try again.');
+    expect(alert).not.toHaveTextContent('stack trace here');
+  });
+
+  it('UIE a failed template download on the Excel menu shows the generic copy and can be dismissed', async () => {
+    setup('ADMIN', { template: () => errorReply(500, 'INTERNAL', 'raw server text') });
+    renderAt('/clients', <App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Excel/ }));
+    await user.click(screen.getByRole('button', { name: 'Download template' }));
+    const alert = await screen.findByText("Couldn't download the template. Try again.");
+    expect(screen.queryByText('raw server text')).toBeNull();
+    await user.click(
+      within(alert.closest('.alert') as HTMLElement).getByRole('button', { name: 'Dismiss' }),
+    );
+    expect(screen.queryByText("Couldn't download the template. Try again.")).toBeNull();
+  });
+
+  it('UIE a template error in the modal is cleared when a file is chosen (alerts do not stack)', async () => {
+    setup('ADMIN', { template: () => errorReply(404, 'NOT_FOUND', 'nope') });
+    renderAt('/clients', <App />);
+    const { user, dialog } = await openImport();
+    await user.click(within(dialog).getByRole('button', { name: 'Download template' }));
+    expect(
+      await within(dialog).findByText("Couldn't download the template. Try again."),
+    ).toBeInTheDocument();
+    await user.upload(within(dialog).getByTestId('client-import-file'), xlsxFile());
+    expect(await within(dialog).findByText('2 new')).toBeInTheDocument();
+    expect(within(dialog).queryByText("Couldn't download the template. Try again.")).toBeNull();
   });
 
   it('AC-62.8 a failed commit keeps the modal open with "Import failed. Nothing was saved."', async () => {

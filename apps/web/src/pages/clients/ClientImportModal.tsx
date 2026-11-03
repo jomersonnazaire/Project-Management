@@ -9,12 +9,12 @@ import {
 } from '@xc8/shared';
 import { useRef, useState, type DragEvent } from 'react';
 import { Button, Modal, Nav, Spinner } from 'react-bootstrap';
-import { ApiError, NO_LONGER_PERMITTED } from '../../api/client';
 import {
   downloadClientTemplate,
   useClientImportCommit,
   useClientImportPreview,
 } from '../../api/hooks';
+import { importProblemOf, templateErrorOf, type ImportProblem } from './importErrors';
 
 /**
  * CR-19 "Import clients from Excel" (FR-CLI-34..38, UIE CLIENTS_EXCEL_IMPORT_UI.md, mockup
@@ -32,20 +32,8 @@ const RESULT_VARIANT: Record<ClientImportRowDto['result'], string> = {
 const MATCH_NOTE =
   "Clients match on Company name (spaces trimmed, case doesn't matter). Contacts match on Email under that client, or on Full name within that client when there's no email. The same email under a different client is a separate contact. Matches update the record; others are added. Rows with nothing to change show No change and aren't saved. Rows with errors are skipped, and if a row appears twice in the file, every copy is skipped.";
 
-interface FileProblem {
-  code: string;
-  message: string;
-}
-
-function problemOf(e: unknown): FileProblem {
-  if (e instanceof ApiError) {
-    return { code: e.code, message: e.status === 403 ? NO_LONGER_PERMITTED : e.message };
-  }
-  return { code: 'UNKNOWN', message: 'Something went wrong. Please try again.' };
-}
-
 /** Quick checks before upload; the API checks the content again (§9). */
-function localProblem(file: File): FileProblem | null {
+function localProblem(file: File): ImportProblem | null {
   if (!/\.xlsx$/i.test(file.name))
     return { code: 'UNSUPPORTED_FILE', message: MSG.UNSUPPORTED_FILE };
   if (file.size > CLIENT_IMPORT_MAX_BYTES) {
@@ -137,7 +125,7 @@ function DropZone({ onFile }: { onFile: (f: File) => void }) {
   };
   return (
     <div
-      className={`border border-2 border-dashed rounded p-4 text-center mb-3 ${over ? 'border-primary bg-label-primary' : ''}`}
+      className={`client-import-drop mb-3 ${over ? 'is-over' : ''}`}
       onDragOver={(e) => {
         e.preventDefault();
         setOver(true);
@@ -146,7 +134,7 @@ function DropZone({ onFile }: { onFile: (f: File) => void }) {
       onDrop={onDrop}
       data-testid="client-import-drop"
     >
-      <i className="bx bx-upload fs-2 d-block mb-2" aria-hidden="true" />
+      <i className="bx bx-upload client-import-drop-icon" aria-hidden="true" />
       <strong className="d-block mb-3">Drop your filled template here or choose a file</strong>
       <Button variant="outline-secondary" onClick={() => input.current?.click()}>
         Choose file
@@ -181,7 +169,7 @@ export function ClientImportModal({
   const preview = useClientImportPreview();
   const commit = useClientImportCommit();
   const [file, setFile] = useState<File | null>(null);
-  const [problem, setProblem] = useState<FileProblem | null>(null);
+  const [problem, setProblem] = useState<ImportProblem | null>(null);
   const [tab, setTab] = useState<'clients' | 'contacts'>('clients');
   const [tplError, setTplError] = useState<string | null>(null);
 
@@ -190,32 +178,33 @@ export function ClientImportModal({
     commit.reset();
     setFile(null);
     setProblem(null);
+    setTplError(null);
     setTab('clients');
   };
 
   const choose = (f: File) => {
-    reset();
+    reset(); // also clears a template-download error, so alerts don't stack (UIE)
     setFile(f);
     const local = localProblem(f);
     if (local) return setProblem(local);
-    preview.mutate(f, { onError: (e) => setProblem(problemOf(e)) });
+    preview.mutate(f, { onError: (e) => setProblem(importProblemOf(e)) });
   };
 
   const template = () => {
     setTplError(null);
-    downloadClientTemplate().catch((e: unknown) => setTplError(problemOf(e).message));
+    downloadClientTemplate().catch((e: unknown) => setTplError(templateErrorOf(e)));
   };
 
   const data: ClientImportPreviewDto | undefined = preview.data;
   const valid = data ? data.counts.total.new + data.counts.total.update : 0;
-  const commitProblem = commit.error ? problemOf(commit.error) : null;
+  const commitProblem = commit.error ? importProblemOf(commit.error) : null;
   // FR-CLI-35b / Q-116: the data changed (or the token expired) since this preview. Nothing was
   // saved; the user must preview the same file again before importing.
   const stale = commitProblem?.code === 'PREVIEW_STALE';
   const previewAgain = () => {
     if (!file) return;
     commit.reset();
-    preview.mutate(file, { onError: (e) => setProblem(problemOf(e)) });
+    preview.mutate(file, { onError: (e) => setProblem(importProblemOf(e)) });
   };
 
   const templateLink = (lead?: string) => (
@@ -326,7 +315,7 @@ export function ClientImportModal({
   }
 
   return (
-    <Modal show onHide={onClose} centered size="xl" aria-labelledby="client-import-title">
+    <Modal show onHide={onClose} centered size="lg" aria-labelledby="client-import-title">
       <Modal.Header closeButton>
         <div>
           <Modal.Title id="client-import-title">Import clients from Excel</Modal.Title>
@@ -337,8 +326,14 @@ export function ClientImportModal({
       </Modal.Header>
       <Modal.Body>
         {tplError && (
-          <div className="alert alert-danger py-2" role="alert">
+          <div className="alert alert-danger alert-dismissible py-2" role="alert">
             {tplError}
+            <button
+              type="button"
+              className="btn-close"
+              aria-label="Dismiss"
+              onClick={() => setTplError(null)}
+            />
           </div>
         )}
         {body}

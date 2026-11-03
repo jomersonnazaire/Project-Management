@@ -762,3 +762,29 @@ $board-gap: 0.75rem;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+// --- CR-19 Clients Excel import drop zone (mockup v0.9.17 .x16drop) ---
+.client-import-drop {
+  border: 2px dashed #b8bcf5;
+  background: #f8f8ff;
+  border-radius: 8px;
+  padding: 34px 18px;
+  text-align: center;
+
+  &.is-over {
+    border-color: $primary;
+  }
+}
+
+.client-import-drop-icon {
+  display: block;
+  margin: 0 auto 6px;
+  font-size: 30px;
+  line-height: 1;
+  color: $primary;
+}
+
+// CR-19 import done toast: bottom centre, above the page (mockup .m93toast).
+.client-import-toast {
+  max-width: 92vw;
+}
