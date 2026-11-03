@@ -5,7 +5,7 @@ import {
   type ClientDto,
   type ClientImportCommitDto,
 } from '@xc8/shared';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Dropdown, Form, Spinner, ToastContainer } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { downloadClientExport, useClientActive, useClients } from '../../api/hooks';
@@ -34,6 +34,13 @@ export function ClientsPage() {
   // file builds; the ref blocks a fast second click before the re-render lands.
   const [exporting, setExporting] = useState(false);
   const exportingRef = useRef(false);
+  // DEF-060: disabling the toggle drops focus to the body; give it back when the file is done.
+  const excelToggleRef = useRef<HTMLButtonElement>(null);
+  const wasExporting = useRef(false);
+  useEffect(() => {
+    if (wasExporting.current && !exporting) excelToggleRef.current?.focus();
+    wasExporting.current = exporting;
+  }, [exporting]);
   // Q-119: amber notice after a download whose sheet(s) are over the import row limit.
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const downloadClients = () => {
@@ -70,6 +77,9 @@ export function ClientsPage() {
                   id="clients-excel"
                   disabled={exporting}
                   aria-busy={exporting || undefined}
+                  // DEF-060: the disabled toggle keeps a name while busy.
+                  aria-label={exporting ? 'Preparing file…' : undefined}
+                  ref={excelToggleRef}
                 >
                   {/* DEF-059: the spinner takes the icon's place and the visible label stays
                       "Excel", so the toggle keeps its width and nothing reflows at 390px. */}
@@ -78,16 +88,7 @@ export function ClientsPage() {
                   ) : (
                     <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
                   )}
-                  {exporting ? (
-                    <>
-                      <span aria-hidden="true">Excel</span>
-                      <span className="visually-hidden" role="status">
-                        Preparing file…
-                      </span>
-                    </>
-                  ) : (
-                    'Excel'
-                  )}
+                  Excel
                 </Dropdown.Toggle>
                 <Dropdown.Menu>
                   <Dropdown.Item as="button" onClick={downloadClients}>
@@ -100,6 +101,12 @@ export function ClientsPage() {
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown>
+            )}
+            {/* DEF-060: always mounted so screen readers announce the text when it changes. */}
+            {canImport && (
+              <span className="visually-hidden" role="status" data-testid="clients-excel-status">
+                {exporting ? 'Preparing file…' : ''}
+              </span>
             )}
             {canCreate && (
               <Button onClick={() => setEditing(null)}>

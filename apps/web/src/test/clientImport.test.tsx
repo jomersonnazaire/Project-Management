@@ -223,6 +223,9 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
     renderAt('/clients', <App />);
     const user = userEvent.setup();
     const toggle = await screen.findByRole('button', { name: /Excel/ });
+    const status = screen.getByTestId('clients-excel-status');
+    expect(status).toHaveAttribute('role', 'status');
+    expect(status).toBeEmptyDOMElement();
     await user.click(toggle);
     const item = screen.getByRole('button', { name: 'Download clients (.xlsx)' });
     // A fast double click lands before React re-renders: the ref guard keeps it to one fetch.
@@ -231,8 +234,12 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
     // Q-118 + DEF-059: the TOGGLE is disabled with a small spinner and announces
     // "Preparing file…"; the visible label stays "Excel" so the width never changes at 390px.
     await waitFor(() => expect(toggle).toBeDisabled());
-    expect(within(toggle).getByRole('status')).toHaveTextContent('Preparing file…');
-    expect(within(toggle).getByRole('status')).toHaveClass('visually-hidden');
+    // DEF-060: the busy toggle is named "Preparing file…", and the always-mounted status
+    // region (outside the toggle) changes its text so screen readers announce it.
+    expect(toggle).toHaveAccessibleName('Preparing file…');
+    expect(status).toHaveTextContent('Preparing file…');
+    expect(status).toHaveClass('visually-hidden');
+    expect(toggle).toHaveTextContent('Excel');
     expect(toggle.querySelector('.spinner-border')).not.toBeNull();
     expect(toggle.querySelector('.bx-spreadsheet')).toBeNull();
     await user.click(toggle); // disabled: no menu, no second download
@@ -244,6 +251,10 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
     await waitFor(() => expect(toggle).not.toBeDisabled());
     expect(toggle).toHaveTextContent('Excel');
     expect(toggle).not.toHaveTextContent('Preparing file…');
+    expect(toggle).toHaveAccessibleName('Excel');
+    expect(status).toBeEmptyDOMElement();
+    // DEF-060: focus goes back to the toggle instead of dropping to the page body.
+    expect(toggle).toHaveFocus();
     expect(toggle.querySelector('.spinner-border')).toBeNull();
     expect(exportCalls()).toBe(1);
   });
@@ -482,7 +493,10 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     // UIE: a toast (react-bootstrap Toast), not an inline alert.
-    const toast = await screen.findByRole('status');
+    // (The Excel toggle's always-mounted status region is the other role=status; DEF-060.)
+    const toast = await screen
+      .findByText('Imported 2 new, updated 1. 2 rows skipped.')
+      .then((el) => el.closest('[role="status"]') as HTMLElement);
     expect(toast).toHaveClass('toast');
     expect(toast).not.toHaveClass('alert');
     expect(toast).toHaveTextContent('Imported 2 new, updated 1. 2 rows skipped.');
