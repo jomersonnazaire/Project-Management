@@ -1,0 +1,104 @@
+name: Deploy API to staging (ops-track-staging)
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - 'apps/api/**'
+      - 'packages/**'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-api-staging.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-api-staging
+  cancel-in-progress: false
+
+env:
+  AZURE_WEBAPP_NAME: ops-track-staging
+  AZURE_RESOURCE_GROUP: XTI-DEVS
+  HEALTH_URL: https://ops-track-staging.azurewebsites.net/api/v1/health
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No `environment:` here: it would change the OIDC subject away from
+    # repo:jomersonnazaire/Project-Management:ref:refs/heads/staging.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test API
+        run: npm run test --workspace @xc8/api
+
+      - name: Build API
+        run: npm run build --workspace @xc8/api
+
+      # Same package as the manual deploys: prepare-deploy.mjs writes dist/ + a pinned
+      # package.json, then production deps are installed on Linux (native argon2 matches)
+      # with plain node_modules, matching the manual deploys (App Service has
+      # SCM_DO_BUILD_DURING_DEPLOYMENT=false and startup command `npm start`).
+      - name: Assemble deploy package
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/api-deploy"
+          node apps/api/scripts/prepare-deploy.mjs "$STAGE"
+          cd "$STAGE"
+          npm install --omit=dev --no-audit --no-fund
+
+          # Same layout as the manual zips that have been deployed successfully:
+          # plain node_modules, no Oryx manifest. Stamp every file with the commit
+          # time in UTC so the container never sees future timestamps.
+          MTIME="$(TZ=UTC git -C "$GITHUB_WORKSPACE" log -1 --format=%cd --date=format-local:'%Y-%m-%d %H:%M:%S')"
+
+          TZ=UTC find . -exec touch -d "$MTIME UTC" {} +
+          zip -X -q -r "$RUNNER_TEMP/api.zip" .
+          ls -la "$STAGE"
+          unzip -l "$RUNNER_TEMP/api.zip" | tail -n 20
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          # Staging app registration in the XTI-DEVS tenant (IDs are not secrets).
+          client-id: 18e158c5-e587-4c60-91f7-85e66700353b
+          tenant-id: 4955ee88-7648-44f1-be1b-da3f3385803f
+          subscription-id: 76aac60d-0c62-40f7-a5be-b6946000d0c8
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          resource-group-name: ${{ env.AZURE_RESOURCE_GROUP }}
+          package: ${{ runner.temp }}/api.zip
+
+      - name: Health check (status ok, db up)
+        run: |
+          set -uo pipefail
+          deadline=$(( $(date +%s) + 300 ))
+          attempt=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            attempt=$((attempt + 1))
+            body="$(curl -sS --max-time 20 "$HEALTH_URL" || true)"
+            status="$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)"
+            db="$(printf '%s' "$body" | jq -r '.db // empty' 2>/dev/null || true)"
+            echo "Attempt $attempt: status=${status:-?} db=${db:-?}"
+            if [ "$status" = "ok" ] && [ "$db" = "up" ]; then
+              echo "Healthy: $body"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Health check failed after ~5 minutes. Last response: ${body:-<none>}"
+          exit 1
