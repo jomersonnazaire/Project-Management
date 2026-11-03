@@ -65,7 +65,8 @@
 - **Results:** a match updates the record, and anything else is added. On an update, **blank cells keep the current value** (FR-CLI-31).
 - **Duplicates in one file:** every copy is an Error and no copy wins. Copy: "Duplicate in file (rows 4 and 7)" (FR-CLI-33, EC-139).
 - **Company not found (decided, Q-109):** a contact whose company is in neither the file nor OpsTrack is an Error and is skipped. Copy: "Company not found in file or OpsTrack". Import never creates a client from the Contacts sheet (EC-140).
-- **No change (decided, Q-115):** a row that matches and changes nothing gets a grey **No change** result. It isn't written or audited, and it isn't counted as an update (FR-CLI-40, EC-156).
+- **No change (decided, Q-115):** a row that matches and changes nothing gets a grey **No change** result. It isn't written or audited, and it isn't counted as an update (FR-CLI-31, EC-156).
+- **Possible duplicate (decided, Lean Nov 3):** a contact row that has an email and matches an existing no-email contact by Full name is added as **New**, with an amber "Possible duplicate" warning shown in the Reason column. It's never merged automatically and doesn't block the import.
 - **Limits:** 5 MB per file and 2,000 rows per sheet (EC-147).
 - **Formula safety:** cells that start with `=` `+` `-` `@` are saved as plain text and escaped on every export (FR-CLI-37, EC-153). This rule is in the spec only and doesn't appear in the UI.
 
