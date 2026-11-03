@@ -117,12 +117,15 @@ All names are fictional.
 - **Q-109:** a contact whose company isn't found is an Error. Import never creates a client from the Contacts sheet.
 - **Q-110:** a Status change on an update needs `clients` delete. Otherwise the row is an Error.
 - **Q-115:** rows with nothing to change show **No change**, aren't written and aren't counted as updates.
+- **Q-113:** a row with an Email that matches a no-email contact by Full name is added as **New** with an amber "Possible duplicate" warning, never merged.
+- **Q-116 (CR-19 v0.6, FR-CLI-35b; any change to a matched record counts as stale):** the preview returns a signed token (tied to the user, valid 15 minutes). At commit the server recomputes. If anything differs, or the token is someone else's or expired, it returns 409 `PREVIEW_STALE` and saves nothing. The modal stays open on the preview with a warning alert, "This preview is out of date. Preview again.", and a **Preview again** button that re-runs the preview with the same file. Editing any matched client or contact, or another user's commit, also makes an open preview stale.
+- **Busy / rate limited (NFR-41, 429):** if a commit is already running for this user, or the rate limit is hit, the modal stays on the preview with a warning alert: "Another import is still running. Wait a moment, then try again. Nothing was saved." The Import button is disabled while a commit is in flight, so a double click can't send a second one.
+- **Not configured (AC-62.23):** if the API returns 503 `IMPORT_NOT_CONFIGURED`, the modal shows "Excel import isn't available right now. Nothing was saved." The rest of the page works.
+- **Unknown errors:** server text is shown only for the known codes (`NOT_TEMPLATE`, `EMPTY_FILE`, `TOO_MANY_ROWS`, `UNREADABLE_FILE`, 413, 415). Any other import failure shows "Import failed. Nothing was saved. Try again." and a template failure shows "Couldn't download the template. Try again." Page alerts can be dismissed, and choosing a new file clears old errors.
 - Blank cells keep the current value on update, every copy of a duplicate is an Error, and Status is Active or Inactive from `active`.
 
-## Open items (CR-19, for Jomerson; not designed here)
+## Settled by CR-19 defaults (Lean-accepted; see CR-19 v0.6 for the chosen answer)
 - **Q-112:** once the portal exists, may import change the email of a contact that has portal access?
-- **Q-113:** a row has an Email, and the client has a no-email contact with the same Full name: add a new contact, or update that contact?
 - **Q-114:** rows that match an inactive client or contact: update them (tagged "Update (inactive)", EC-150) or make them Errors? The mockup has no example yet.
-- **Q-116:** if the result at commit differs from the preview: apply the current result, or refuse and ask for a new preview?
 - **Q-117:** a later "Export clients (.xlsx)" prefilled with existing data?
 - **Not drawn yet:** file-level messages from the CR. These are "Upload an .xlsx file." (415), "The file is larger than 5 MB." (413), "This file can't be read. Save it again as .xlsx and retry." (422 `UNREADABLE_FILE`), "Extra columns were ignored: {names}." and "Import failed. Nothing was saved. Try again." (AC-62.8).
