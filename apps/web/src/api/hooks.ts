@@ -1,4 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  CLIENT_IMPORT_TEMPLATE_NAME,
+  XLSX_MIME,
+  type ClientImportCommitDto,
+  type ClientImportPreviewDto,
+} from '@xc8/shared';
 import type {
   AccessRulesDto,
   ClientDto,
@@ -14,7 +20,7 @@ import type {
   UpdateUserInput,
   UserDto,
 } from '@xc8/shared';
-import { api, qs } from './client';
+import { api, downloadFile, qs } from './client';
 
 export const keys = {
   users: (p: object) => ['users', p] as const,
@@ -247,3 +253,38 @@ export function useResetAccessRules() {
     },
   });
 }
+
+// ----- CR-19: Clients Excel import -----
+
+const importPath = (step: 'preview' | 'commit', file: File) =>
+  `/clients/import/${step}${qs({ fileName: file.name })}`;
+
+/** Validates and matches the file; saves nothing (FR-CLI-34). */
+export function useClientImportPreview() {
+  return useMutation({
+    mutationFn: (file: File) =>
+      api<ClientImportPreviewDto>(importPath('preview', file), {
+        method: 'POST',
+        file: { body: file, type: XLSX_MIME },
+      }),
+  });
+}
+
+/** Sends the same file again; the API re-validates and writes valid rows in one transaction. */
+export function useClientImportCommit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) =>
+      api<ClientImportCommitDto>(importPath('commit', file), {
+        method: 'POST',
+        file: { body: file, type: XLSX_MIME },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['clients'] });
+      void qc.invalidateQueries({ queryKey: ['contacts'] });
+    },
+  });
+}
+
+export const downloadClientTemplate = () =>
+  downloadFile('/clients/import/template', CLIENT_IMPORT_TEMPLATE_NAME);

@@ -1,19 +1,28 @@
-import { plural, type ClientDto } from '@xc8/shared';
+import { clientImportToast, plural, type ClientDto, type ClientImportCommitDto } from '@xc8/shared';
 import { useState } from 'react';
-import { Button, Form } from 'react-bootstrap';
+import { Button, Dropdown, Form } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { useClientActive, useClients } from '../../api/hooks';
+import { downloadClientTemplate, useClientActive, useClients } from '../../api/hooks';
 import { useCan } from '../../auth/useCan';
 import { ActiveBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
+import { ClientImportModal } from './ClientImportModal';
 import { ClientModal } from './ClientModal';
+import { downloadSkippedRows } from './skippedRows';
 
 /** Clients list (FR-CLI-01). Each client opens its Details / Contacts / Projects tabs. */
 export function ClientsPage() {
   const canCreate = useCan('clients', 'create');
   const canEdit = useCan('clients', 'edit');
   const canDelete = useCan('clients', 'delete');
+  // CR-19 (FR-CLI-23/24, Q-111): Excel needs create AND edit on BOTH clients and contacts.
+  const canCreateContact = useCan('contacts', 'create');
+  const canEditContact = useCan('contacts', 'edit');
+  const canImport = canCreate && canEdit && canCreateContact && canEditContact;
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ClientImportCommitDto | null>(null);
+  const [excelError, setExcelError] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
   const clients = useClients({ q: q || undefined, includeInactive });
@@ -24,6 +33,32 @@ export function ClientsPage() {
   return (
     <>
       <PageHeader title="Clients">
+        {canImport && (
+          <Dropdown className="me-2">
+            <Dropdown.Toggle variant="outline-primary" id="clients-excel">
+              <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
+              Excel
+            </Dropdown.Toggle>
+            <Dropdown.Menu>
+              <Dropdown.Item
+                as="button"
+                onClick={() => {
+                  setExcelError(null);
+                  downloadClientTemplate().catch((e: unknown) =>
+                    setExcelError(e instanceof Error ? e.message : 'Could not download.'),
+                  );
+                }}
+              >
+                <i className="bx bx-download me-2" aria-hidden="true" />
+                Download template
+              </Dropdown.Item>
+              <Dropdown.Item as="button" onClick={() => setImporting(true)}>
+                <i className="bx bx-upload me-2" aria-hidden="true" />
+                Import from Excel
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown>
+        )}
         {canCreate && (
           <Button onClick={() => setEditing(null)}>
             <i className="bx bx-plus me-1" aria-hidden="true" />
@@ -50,6 +85,34 @@ export function ClientsPage() {
               onChange={(e) => setIncludeInactive(e.target.checked)}
             />
           </div>
+          {imported && (
+            <div
+              className="alert alert-success py-2 d-flex flex-wrap align-items-center gap-2"
+              role="status"
+            >
+              <span>{clientImportToast(imported.applied)}</span>
+              {imported.applied.skipped > 0 && (
+                <Button
+                  variant="link"
+                  className="p-0 align-baseline"
+                  onClick={() => void downloadSkippedRows(imported)}
+                >
+                  Download skipped rows (.xlsx)
+                </Button>
+              )}
+              <button
+                type="button"
+                className="btn-close ms-auto"
+                aria-label="Dismiss"
+                onClick={() => setImported(null)}
+              />
+            </div>
+          )}
+          {excelError && (
+            <div className="alert alert-danger py-2" role="alert">
+              {excelError}
+            </div>
+          )}
           <ErrorAlert error={clients.error} />
           <ErrorAlert error={setActive.error} action />
           {clients.isPending ? (
@@ -139,6 +202,15 @@ export function ClientsPage() {
           )}
         </div>
       </div>
+      {importing && (
+        <ClientImportModal
+          onClose={() => setImporting(false)}
+          onImported={(result) => {
+            setImporting(false);
+            setImported(result);
+          }}
+        />
+      )}
       {editing !== undefined && (
         <ClientModal client={editing} onClose={() => setEditing(undefined)} />
       )}
