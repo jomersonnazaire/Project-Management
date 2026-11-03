@@ -4,9 +4,14 @@ import {
   ISSUE_STAGE_LABELS,
   ISSUE_STATUS_LABELS,
   type IssueRowDto,
+  csvSafe,
 } from '@xc8/shared';
 
-const csvCell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+/** FR-CLI-37: formula-like text is escaped before quoting. */
+const csvCell = (raw: string) => {
+  const v = csvSafe(raw);
+  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
 
 /** FR-ISS-17: the filtered list as CSV (opens in Excel). */
 export function issuesCsv(items: IssueRowDto[]): string {

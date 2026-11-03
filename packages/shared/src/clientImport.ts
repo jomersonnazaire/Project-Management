@@ -129,9 +129,12 @@ export function isFormulaLike(value: string): boolean {
   return /^[\t\r\n]*[=+\-@]/.test(value);
 }
 
+/** Signed numbers, times and percents (e.g. `-5`, `+04:00`, `+50%`) can't run as a formula. */
+const SIGNED_NUMBER = /^[+-]?[\d.,:%]+$/;
+
 /** FR-CLI-37: CSV cells that look like a formula are prefixed with `'`. */
 export function csvSafe(value: string): string {
-  return isFormulaLike(value) ? `'${value}` : value;
+  return isFormulaLike(value) && !SIGNED_NUMBER.test(value) ? `'${value}` : value;
 }
 
 // ----- Copy (CR-19 §6, §9, UIE CLIENTS_EXCEL_IMPORT_UI.md) -----
