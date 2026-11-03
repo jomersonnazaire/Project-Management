@@ -1,6 +1,6 @@
 import { clientImportToast, plural, type ClientDto, type ClientImportCommitDto } from '@xc8/shared';
-import { useState } from 'react';
-import { Button, Dropdown, Form, ToastContainer } from 'react-bootstrap';
+import { useRef, useState } from 'react';
+import { Button, Dropdown, Form, Spinner, ToastContainer } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { downloadClientExport, useClientActive, useClients } from '../../api/hooks';
 import { useCan } from '../../auth/useCan';
@@ -24,6 +24,9 @@ export function ClientsPage() {
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<ClientImportCommitDto | null>(null);
   const [excelError, setExcelError] = useState<ImportProblem | null>(null);
+  // UIE: disabled with a small spinner while the file builds; the ref blocks a fast second click.
+  const [exporting, setExporting] = useState(false);
+  const exportingRef = useRef(false);
   const [q, setQ] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
   const clients = useClients({ q: q || undefined, includeInactive });
@@ -46,12 +49,32 @@ export function ClientsPage() {
                 <Dropdown.Menu>
                   <Dropdown.Item
                     as="button"
+                    disabled={exporting}
+                    aria-busy={exporting || undefined}
                     onClick={() => {
+                      if (exportingRef.current) return;
+                      exportingRef.current = true;
+                      setExporting(true);
                       setExcelError(null);
-                      downloadClientExport().catch((e: unknown) => setExcelError(exportErrorOf(e)));
+                      downloadClientExport()
+                        .catch((e: unknown) => setExcelError(exportErrorOf(e)))
+                        .finally(() => {
+                          exportingRef.current = false;
+                          setExporting(false);
+                        });
                     }}
                   >
-                    <i className="bx bx-download me-2" aria-hidden="true" />
+                    {exporting ? (
+                      <Spinner
+                        animation="border"
+                        size="sm"
+                        className="me-2"
+                        role="status"
+                        aria-label="Preparing file"
+                      />
+                    ) : (
+                      <i className="bx bx-download me-2" aria-hidden="true" />
+                    )}
                     Download clients (.xlsx)
                   </Dropdown.Item>
                   <Dropdown.Item as="button" onClick={() => setImporting(true)}>

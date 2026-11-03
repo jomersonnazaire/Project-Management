@@ -212,6 +212,38 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('UIE Download clients is disabled with a spinner while the file builds; one fetch per click burst', async () => {
+    const fetch = setup('ADMIN');
+    const orig = fetch.getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    fetch.mockImplementation((u: RequestInfo | URL, init?: RequestInit) =>
+      String(u).endsWith('/clients/import/export') ? gate.then(() => orig(u, init)) : orig(u, init),
+    );
+    renderAt('/clients', <App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Excel/ }));
+    await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
+    if (!screen.queryByRole('button', { name: /Download clients/ }))
+      await user.click(screen.getByRole('button', { name: 'Excel' }));
+    const busy = await screen.findByRole('button', { name: /Download clients \(\.xlsx\)/ });
+    await waitFor(() => expect(busy).toHaveAttribute('aria-disabled', 'true'));
+    expect(within(busy).getByRole('status', { name: 'Preparing file' })).toBeInTheDocument();
+    await user.click(busy);
+    const exportCalls = () =>
+      fetch.mock.calls.filter(([u]) => String(u).endsWith('/clients/import/export')).length;
+    expect(exportCalls()).toBe(1);
+    release();
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Download clients (.xlsx)' })).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    );
+    expect(exportCalls()).toBe(1);
+  });
+
   it('AC-61.5 Download template in the import modal still fetches the blank template', async () => {
     const fetch = setup('ADMIN');
     renderAt('/clients', <App />);
