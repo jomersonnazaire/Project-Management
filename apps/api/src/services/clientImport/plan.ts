@@ -89,6 +89,14 @@ export interface ImportPlan {
   contacts: PlannedContact[];
 }
 
+/** FR-ACL-07: true when the fixed scope lets the caller see this client (null scope = all). */
+export const inScopeOf = (scope: ImportContext['scope']) => (id: Types.ObjectId) =>
+  !scope || scope.has(id.toString());
+
+/** The same scope as a clients query filter (used by the clients export). */
+export const clientScopeFilter = (scope: ImportContext['scope']) =>
+  scope ? { _id: { $in: [...scope].map((id) => new Types.ObjectId(id)) } } : {};
+
 const keyOf = (s: string) => s.toLowerCase(); // values are already trimmed (FR-CLI-29)
 const label = (active: boolean) => (active ? 'Active' : 'Inactive');
 
@@ -136,7 +144,7 @@ function finish(p: Planned, changed: boolean) {
 }
 
 export async function planImport(file: ParsedWorkbook, ctx: ImportContext): Promise<ImportPlan> {
-  const inScope = (id: Types.ObjectId) => !ctx.scope || ctx.scope.has(id.toString());
+  const inScope = inScopeOf(ctx.scope);
 
   // ----- one lookup for every company name in the file -----
   const keys = [

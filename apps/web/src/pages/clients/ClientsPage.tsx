@@ -2,13 +2,13 @@ import { clientImportToast, plural, type ClientDto, type ClientImportCommitDto }
 import { useState } from 'react';
 import { Button, Dropdown, Form, ToastContainer } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { downloadClientTemplate, useClientActive, useClients } from '../../api/hooks';
+import { downloadClientExport, useClientActive, useClients } from '../../api/hooks';
 import { useCan } from '../../auth/useCan';
 import { ActiveBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { ClientImportModal } from './ClientImportModal';
-import { templateErrorOf, type ImportProblem } from './importErrors';
+import { exportErrorOf, type ImportProblem } from './importErrors';
 import { ClientModal } from './ClientModal';
 import { downloadSkippedRows } from './skippedRows';
 
@@ -48,13 +48,11 @@ export function ClientsPage() {
                     as="button"
                     onClick={() => {
                       setExcelError(null);
-                      downloadClientTemplate().catch((e: unknown) =>
-                        setExcelError(templateErrorOf(e)),
-                      );
+                      downloadClientExport().catch((e: unknown) => setExcelError(exportErrorOf(e)));
                     }}
                   >
                     <i className="bx bx-download me-2" aria-hidden="true" />
-                    Download template
+                    Download clients (.xlsx)
                   </Dropdown.Item>
                   <Dropdown.Item as="button" onClick={() => setImporting(true)}>
                     <i className="bx bx-upload me-2" aria-hidden="true" />

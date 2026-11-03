@@ -1,6 +1,7 @@
 import {
   CLIENT_IMPORT_COMMIT_LIMIT,
   CLIENT_IMPORT_MAX_BYTES,
+  CLIENT_IMPORT_MAX_ROWS,
   CLIENT_IMPORT_MESSAGES as MSG,
   CLIENT_IMPORT_PERMISSIONS,
   CLIENT_IMPORT_PREVIEW_LIMIT,
@@ -8,6 +9,8 @@ import {
   CLIENT_IMPORT_TEMPLATE_NAME,
   CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
+  clientExportFileName,
+  phDateOf,
   type ClientImportCommitDto,
   type ClientImportPreviewDto,
 } from '@xc8/shared';
@@ -37,20 +40,23 @@ import {
   sameHash,
   verifyPreviewToken,
 } from '../services/clientImport/previewToken.js';
-import { buildTemplate, readWorkbook } from '../services/clientImport/workbook.js';
+import { exportRows } from '../services/clientImport/export.js';
+import { buildTemplate, buildWorkbook, readWorkbook } from '../services/clientImport/workbook.js';
 import { visibleClientIds } from '../services/scope.js';
 
 /**
  * CR-19: Clients Excel template download and import (FR-CLI-23..41).
  *   GET  /clients/import/template  the blank two-sheet template (FR-CLI-25..28)
+ *   GET  /clients/import/export    the same workbook filled with the clients (and their contacts)
+ *                                  the user may see, so it can be edited and imported back
  *   POST /clients/import/preview   raw .xlsx body; validates and matches, saves nothing (FR-CLI-34)
  *   POST /clients/import/commit    the same file again plus the preview's signed token; re-runs
  *                                  the result and writes the valid rows in ONE transaction, all or
  *                                  nothing (FR-CLI-35), only if the result equals the preview
  *                                  (FR-CLI-35b, Q-116), else 409 PREVIEW_STALE
- * All three need create AND edit on BOTH clients and contacts (FR-CLI-24, Q-111), checked by the
+ * All of them need create AND edit on BOTH clients and contacts (FR-CLI-24, Q-111), checked by the
  * central gate from the Access Rules. The upload is parsed in memory and never stored (NFR-37).
- * Without the signing key (NFR-42) all three return 503 IMPORT_NOT_CONFIGURED (AC-62.23).
+ * Without the signing key (NFR-42) all of them return 503 IMPORT_NOT_CONFIGURED (AC-62.23).
  * NFR-41 / AC-62.24: per-user limits (20 previews, 5 commits per 15 minutes, 429 RATE_LIMITED)
  * and one commit per user at a time (429 IMPORT_BUSY).
  */
@@ -142,6 +148,30 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
     const buf = await buildTemplate();
     res.setHeader('Content-Type', XLSX_MIME);
     res.setHeader('Content-Disposition', `attachment; filename="${CLIENT_IMPORT_TEMPLATE_NAME}"`);
+    res.send(buf);
+  });
+
+  r.get('/export', IMPORT_GATE, requireKey, async (req, res) => {
+    const { scope } = await contextFor(req);
+    const rows = await exportRows({ scope });
+    const buf = await buildWorkbook(rows);
+    const fileName = clientExportFileName(phDateOf(new Date()));
+    const counts = { clients: rows.Clients.length, contacts: rows.Contacts.length };
+    // Over the import's 2,000-row limit the file is still complete, but can't be imported back
+    // in one go (NFR-36); recorded on the audit entry.
+    const overLimit =
+      counts.clients > CLIENT_IMPORT_MAX_ROWS || counts.contacts > CLIENT_IMPORT_MAX_ROWS;
+    // FR-AUD-01: customer data leaving the app is recorded (who, when, how many), no values.
+    await audit({
+      actorId: currentUser(req)._id,
+      entityType: 'clientExport',
+      entityId: new Types.ObjectId(),
+      action: 'clients_exported',
+      meta: { fileName, size: buf.length, counts, ...(overLimit ? { overLimit: true } : {}) },
+    });
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Cache-Control', 'no-store');
     res.send(buf);
   });
 

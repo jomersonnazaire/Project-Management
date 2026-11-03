@@ -34,6 +34,8 @@ export const CLIENT_IMPORT_COMMIT_LIMIT = 5;
 
 export const CLIENT_IMPORT_TEMPLATE_NAME = 'OpsTrack-clients-template.xlsx';
 export const CLIENT_IMPORT_SKIPPED_NAME = 'OpsTrack-skipped-rows.xlsx';
+/** Clients export (Jomerson, Nov 3): the template layout filled with the clients the user may see. */
+export const clientExportFileName = (phDate: string) => `clients-${phDate}.xlsx`;
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /** FR-CLI-27: row 1 explains each column, row 2 holds the headers, data starts on row 3. */
@@ -165,6 +167,8 @@ export const CLIENT_IMPORT_MESSAGES = {
   UI_BUSY: 'Another import is still running. Wait a moment, then try again. Nothing was saved.',
   /** UIE: any other template download failure (404, 5xx, network). */
   TEMPLATE_FAILED: "Couldn't download the template. Try again.",
+  /** Any other clients export failure (404, 5xx, network). */
+  EXPORT_FAILED: "Download failed. Couldn't get the clients file. Try again.",
 } as const;
 
 /** UIE: error codes whose server text the import modal shows as is (§9 file checks). */

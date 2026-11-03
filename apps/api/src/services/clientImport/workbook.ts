@@ -67,12 +67,33 @@ type DvSheet = {
   dataValidations: { add: (range: string, dv: ExcelJS.DataValidation) => void };
 };
 
+/** Data rows to write under the headers, one value per column field of that sheet. */
+export type WorkbookRows = Record<ClientImportSheet, Partial<RowValues>[]>;
+
+/**
+ * FR-CLI-37 / EC-153 (as the skipped-rows file, DEF-054): every value is a plain string in a Text
+ * ("@") cell, never a formula, so `=1+2` or `+63 900` reads back exactly as stored. The CSV
+ * apostrophe (`csvSafe`) is not used here: in .xlsx it would become part of the value.
+ */
+function writeTextRow(ws: ExcelJS.Worksheet, rowNumber: number, values: string[]) {
+  const row = ws.getRow(rowNumber);
+  values.forEach((v, i) => {
+    const cell = row.getCell(i + 1);
+    if (v) cell.value = String(v); // blank stays an empty cell, as in the template
+    cell.numFmt = '@';
+    cell.protection = { locked: false };
+  });
+}
+
 /**
  * FR-CLI-25..28: two sheets, row 1 explains each column, row 2 holds the headers (both locked
  * by sheet protection without a password, a guide only), data cells unlocked and formatted as
- * Text from row 3, and a Status dropdown with Active / Inactive. No customer data.
+ * Text from row 3, and a Status dropdown with Active / Inactive. With no rows this is the blank
+ * template; the clients export passes the rows it read (same layout, so it imports as is).
  */
-export async function buildTemplate(): Promise<Buffer> {
+export async function buildWorkbook(
+  rows: WorkbookRows = { Clients: [], Contacts: [] },
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'OpsTrack';
   for (const sheet of CLIENT_IMPORT_SHEETS) {
@@ -110,7 +131,8 @@ export async function buildTemplate(): Promise<Buffer> {
     help.height = 54;
     if (sheet === 'Clients') {
       const letter = String.fromCharCode(64 + columns.findIndex((c) => c.field === 'status') + 1);
-      const last = CLIENT_IMPORT_FIRST_DATA_ROW + CLIENT_IMPORT_MAX_ROWS - 1;
+      const last =
+        CLIENT_IMPORT_FIRST_DATA_ROW + Math.max(CLIENT_IMPORT_MAX_ROWS, rows.Clients.length) - 1;
       // exceljs supports a range key here (written as one sqref) but doesn't type it.
       (ws as unknown as DvSheet).dataValidations.add(
         `${letter}${CLIENT_IMPORT_FIRST_DATA_ROW}:${letter}${last}`,
@@ -125,6 +147,13 @@ export async function buildTemplate(): Promise<Buffer> {
         },
       );
     }
+    rows[sheet].forEach((values, i) =>
+      writeTextRow(
+        ws,
+        CLIENT_IMPORT_FIRST_DATA_ROW + i,
+        columns.map((c) => values[c.field] ?? ''),
+      ),
+    );
     await ws.protect('', {
       selectLockedCells: true,
       selectUnlockedCells: true,
@@ -138,6 +167,9 @@ export async function buildTemplate(): Promise<Buffer> {
   }
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
+
+/** The blank template: the workbook with no data rows (no customer data). */
+export const buildTemplate = (): Promise<Buffer> => buildWorkbook();
 
 // ---------------------------------------------------------------------------------------------
 // Upload checks (§9)

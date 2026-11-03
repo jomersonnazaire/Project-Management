@@ -105,6 +105,7 @@ describe('Route policy table', () => {
       'POST /teams/:id/archive teams.delete',
       'POST /teams/:id/unarchive teams.delete',
       'GET /clients/import/template clients.create + clients.edit + contacts.create + contacts.edit',
+      'GET /clients/import/export clients.create + clients.edit + contacts.create + contacts.edit',
       'POST /clients/import/preview clients.create + clients.edit + contacts.create + contacts.edit',
       'POST /clients/import/commit clients.create + clients.edit + contacts.create + contacts.edit',
       'GET /clients clients.view',

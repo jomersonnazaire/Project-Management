@@ -3,6 +3,8 @@ import {
   CLIENT_IMPORT_TEMPLATE_NAME,
   CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
+  clientExportFileName,
+  phDateOf,
   type ClientImportCommitDto,
   type ClientImportPreviewDto,
 } from '@xc8/shared';
@@ -294,3 +296,7 @@ export function useClientImportCommit() {
 
 export const downloadClientTemplate = () =>
   downloadFile('/clients/import/template', CLIENT_IMPORT_TEMPLATE_NAME);
+
+/** The clients the user may see, in the template layout (file name from Content-Disposition). */
+export const downloadClientExport = () =>
+  downloadFile('/clients/import/export', clientExportFileName(phDateOf(new Date())));

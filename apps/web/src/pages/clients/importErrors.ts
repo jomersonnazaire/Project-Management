@@ -42,8 +42,8 @@ export function importProblemOf(e: unknown): ImportProblem {
   return { code: 'IMPORT_FAILED', message: MSG.IMPORT_FAILED };
 }
 
-/** Download template errors (Excel menu and the modal link). */
-export function templateErrorOf(e: unknown): ImportProblem {
+/** File download errors: 403, 503 (amber) or the given fallback for anything else. */
+function downloadErrorOf(e: unknown, fallback: ImportProblem): ImportProblem {
   if (e instanceof ApiError) {
     if (e.status === 403) return { code: e.code, message: NO_LONGER_PERMITTED };
     // Nothing is saved by a download, so UIE's "Nothing was saved." is left off here.
@@ -51,5 +51,13 @@ export function templateErrorOf(e: unknown): ImportProblem {
     if (e.code === 'IMPORT_NOT_CONFIGURED')
       return { code: e.code, message: MSG.UI_NOT_CONFIGURED_TEMPLATE, tone: 'warning' };
   }
-  return { code: 'TEMPLATE_FAILED', message: MSG.TEMPLATE_FAILED };
+  return fallback;
 }
+
+/** Download template errors (the modal link). */
+export const templateErrorOf = (e: unknown): ImportProblem =>
+  downloadErrorOf(e, { code: 'TEMPLATE_FAILED', message: MSG.TEMPLATE_FAILED });
+
+/** Download clients (.xlsx) errors (Excel menu). */
+export const exportErrorOf = (e: unknown): ImportProblem =>
+  downloadErrorOf(e, { code: 'EXPORT_FAILED', message: MSG.EXPORT_FAILED });

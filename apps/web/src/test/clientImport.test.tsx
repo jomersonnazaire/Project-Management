@@ -12,6 +12,7 @@ import {
 } from '@xc8/shared';
 import ExcelJS from 'exceljs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NO_LONGER_PERMITTED } from '../api/client';
 import { App } from '../App';
 import { ACME, meBody } from './fixtures';
 import { mockApi, renderAt } from './utils';
@@ -75,6 +76,7 @@ function setup(
     preview?: () => Reply;
     commit?: () => Reply;
     template?: () => Reply;
+    exportFile?: () => Reply;
   } = {},
 ) {
   return mockApi((url) => {
@@ -85,6 +87,8 @@ function setup(
       return opts.commit?.() ?? { status: 200, body: COMMITTED };
     if (url.includes('/clients/import/template'))
       return opts.template?.() ?? { status: 200, body: {} };
+    if (url.includes('/clients/import/export'))
+      return opts.exportFile?.() ?? { status: 200, body: {} };
     if (url.includes('/clients'))
       return { status: 200, body: { items: [ACME], page: 1, pageSize: 100, total: 1 } };
     return { status: 200, body: { items: [] } };
@@ -148,7 +152,9 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
         excel.compareDocumentPosition(newClient) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       await userEvent.click(excel);
-      expect(screen.getByRole('button', { name: 'Download template' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Download clients (.xlsx)' })).toBeInTheDocument();
+      // The blank template moved into the import modal only.
+      expect(screen.queryByRole('button', { name: 'Download template' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Import from Excel' })).toBeInTheDocument();
     },
   );
@@ -189,11 +195,28 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
     expect(screen.queryByRole('button', { name: /Excel/ })).not.toBeInTheDocument();
   });
 
-  it('AC-61.5 Download template fetches the template file', async () => {
+  it('Download clients (.xlsx) fetches the clients export, not the template', async () => {
     const fetch = setup('ADMIN');
     renderAt('/clients', <App />);
     await userEvent.click(await screen.findByRole('button', { name: /Excel/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'Download template' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
+    await waitFor(() =>
+      expect(fetch.mock.calls.some(([u]) => String(u).endsWith('/clients/import/export'))).toBe(
+        true,
+      ),
+    );
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    expect(fetch.mock.calls.some(([u]) => String(u).includes('/clients/import/template'))).toBe(
+      false,
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('AC-61.5 Download template in the import modal still fetches the blank template', async () => {
+    const fetch = setup('ADMIN');
+    renderAt('/clients', <App />);
+    const { user, dialog } = await openImport();
+    await user.click(within(dialog).getByRole('button', { name: 'Download template' }));
     await waitFor(() =>
       expect(fetch.mock.calls.some(([u]) => String(u).endsWith('/clients/import/template'))).toBe(
         true,
@@ -454,15 +477,15 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     expect(tokens).toEqual(['tok-1', 'tok-2']);
   });
 
-  it('AC-62.23 Download template on the Excel menu shows the "not set up" message on 503', async () => {
+  it('AC-62.23 Download clients on the Excel menu shows the amber "not set up" message on 503', async () => {
     setup('ADMIN', {
-      template: () =>
+      exportFile: () =>
         errorReply(503, 'IMPORT_NOT_CONFIGURED', 'Excel import isn’t set up yet. Ask an Admin.'),
     });
     renderAt('/clients', <App />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Excel/ }));
-    await user.click(screen.getByRole('button', { name: 'Download template' }));
+    await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
     const tpl = await screen.findByText("Excel import isn't available right now.");
     expect(tpl.closest('.alert')).toHaveClass('alert-warning'); // DEF-057
     expect(screen.queryByText(/set up yet/)).toBeNull();
@@ -652,18 +675,31 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     expect(alert).not.toHaveTextContent('stack trace here');
   });
 
-  it('UIE a failed template download on the Excel menu shows the generic copy and can be dismissed', async () => {
-    setup('ADMIN', { template: () => errorReply(500, 'INTERNAL', 'raw server text') });
+  it('UIE a failed clients download on the Excel menu shows red "Download failed" copy and can be dismissed', async () => {
+    setup('ADMIN', { exportFile: () => errorReply(500, 'INTERNAL', 'raw server text') });
     renderAt('/clients', <App />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Excel/ }));
-    await user.click(screen.getByRole('button', { name: 'Download template' }));
-    const alert = await screen.findByText("Couldn't download the template. Try again.");
+    await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
+    const failed = "Download failed. Couldn't get the clients file. Try again.";
+    const alert = await screen.findByText(failed);
+    expect(alert.closest('.alert')).toHaveClass('alert-danger');
     expect(screen.queryByText('raw server text')).toBeNull();
     await user.click(
       within(alert.closest('.alert') as HTMLElement).getByRole('button', { name: 'Dismiss' }),
     );
-    expect(screen.queryByText("Couldn't download the template. Try again.")).toBeNull();
+    expect(screen.queryByText(failed)).toBeNull();
+  });
+
+  it('UIE a 403 on Download clients says the user no longer has permission (red)', async () => {
+    setup('ADMIN', { exportFile: () => errorReply(403, 'FORBIDDEN', 'raw forbidden text') });
+    renderAt('/clients', <App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Excel/ }));
+    await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
+    const alert = await screen.findByText(NO_LONGER_PERMITTED);
+    expect(alert.closest('.alert')).toHaveClass('alert-danger');
+    expect(screen.queryByText('raw forbidden text')).toBeNull();
   });
 
   it('UIE a template error in the modal is cleared when a file is chosen (alerts do not stack)', async () => {
