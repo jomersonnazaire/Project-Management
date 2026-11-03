@@ -2,12 +2,13 @@
 
 **Status:** v0.5 draft (2026-11-03, 12:38 PM SGT) · v0.4 draft (2026-11-03, 12:35 PM SGT) · v0.3 draft (2026-11-03, 12:15 PM SGT) · v0.2 draft (2026-11-03, 12:10 PM SGT) · v0.1 draft (2026-11-03, 12:00 PM SGT) · **Author:** Business Analyst · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Requested by:** Jomerson (lead dev / product owner), 2026-11-03. **Rules locked by:** Lean (tech lead) and Deven, 2026-11-03. Rules marked **Locked** are decided. Rules marked **Lean-accepted default (2026-11-03)** were proposed in v0.1 and accepted by Lean.
-**Part of:** doc 17 (change requests). CR-19 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-18 and uses the next free IDs: **FR-CLI-23 to FR-CLI-41**, **US-61, US-62**, **AC-61.x, AC-62.x**, **EC-139 to EC-158**, **NFR-36 to NFR-42**, **Q-109 to Q-117** (all decided, see §15; no open questions), **A-30 to A-35**.
+**Part of:** doc 17 (change requests). CR-19 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-18 and uses the next free IDs: **FR-CLI-23 to FR-CLI-46**, **US-61 to US-63**, **AC-61.x, AC-62.x, AC-63.x**, **EC-139 to EC-161**, **NFR-36 to NFR-42**, **Q-109 to Q-119** (Q-118 and Q-119 waiting on Lean, see §15), **A-30 to A-35**.
 **UI reference:** UIE's mockup **v0.9.17** (`docs/design/mockup/index-v0.9.17.html#clients`), which mirrors the built Clients page plus the Excel button, and `docs/design/CLIENTS_EXCEL_IMPORT_UI.md` (written for v0.9.16; its role notes are replaced by §3 here). *The v0.9.17 file is in the team's local docs pack and isn't on this branch yet.*
 **Checked against:** docs 01 to 17 (doc 17 with CR-18), and the build at `main` `16854be` (no client code changed since `3bf528e`).
 **Not built.** This is a new request, not a PR review.
 
 **Doc change log:**
+- v0.8 (2026-11-03, 10:50 PM SGT): **Prefilled export added (Jomerson, 2026-11-03, about 10:40 PM SGT; reverses Q-117).** New §7a: **Download clients (.xlsx)** exports the user's real clients and contact persons in the template layout, so a user can download, edit and import the same file. Built by Deven at `f51ac8e`. New **FR-CLI-42 to 46**, **US-63**, **AC-63.1 to 63.7**, **EC-159 to 161**. Q-117 and A-30 updated; §2 scope updated. Two of Deven's build calls are recorded as **Q-118** (PM export scope) and **Q-119** (more than 2,000 rows), waiting on Lean. No IDs renumbered.
 - v0.7.2 (2026-11-03, 3:08 PM SGT): matched to the build (Lean, about 2:54 PM SGT): `IMPORT_BUSY` sends **`Retry-After: 5`**; the 503 `IMPORT_NOT_CONFIGURED` message is an amber warning, not a red error (UI note). The web app blocks a second Import click while a commit is in flight (DEF-056). NFR-41 and AC-62.23/62.24 updated. No rule changes otherwise.
 - v0.7.1 (2026-11-03, 2:23 PM SGT): NFR-41 clarified (Lean, about 2:21 PM SGT): **every commit attempt counts toward the 5**, including ones that fail with 409 or another error. 429 codes named as built: `RATE_LIMITED` (over the limit) and `IMPORT_BUSY` (second commit while one is running), each with its own message (UI note). AC-62.24 updated. No rule changes otherwise.
 - v0.7 (2026-11-03, 1:00 PM SGT): **Lean (2026-11-03, about 12:56 PM SGT): any change to a matched record makes the preview stale; NFR-41 Locked and blocking #46.** The token now also covers each matched client's and contact's version (`updatedAt` and `__v`), so **any** edit to a matched record after the preview, even to a field the file doesn't touch, returns 409 `PREVIEW_STALE`. A commit bumps the version of every client it touches, so other users' open previews of those clients go stale too. FR-CLI-35b, its summary row, AC-62.19, EC-148 and EC-149 reworded. **NFR-41** uses the API's existing rate limiter (`express-rate-limit`, as for sign-in in `app.ts`); a second commit by the same user while one is running gets **429**. New **AC-62.24**. No IDs renumbered.
@@ -49,6 +50,7 @@ Users who can create **and** edit **both** clients and contacts get an **Excel �
 - Template download (FR-CLI-25 to 28).
 - Import preview and commit for clients and contacts (FR-CLI-29 to 37, 41).
 - Skipped-rows file, toast, audit (FR-CLI-36, 38, 39).
+- **Prefilled export** of existing clients and contacts, "Download clients (.xlsx)" (FR-CLI-42 to 46, §7a; v0.8, Jomerson).
 
 **Out of scope**
 - **No delete through import.** A record that is missing from the file is left alone. Import never deletes or deactivates a contact (the Contacts sheet has no Status column).
@@ -56,7 +58,7 @@ Users who can create **and** edit **both** clients and contacts get an **Excel �
 - **No portal access through import.** Import never turns on portal access, sends invites or changes `clientPortalAccounts` (FR-ACL-33 to 36; not built, invites on hold, Q-84). See Q-112 for email changes on contacts that have portal access.
 - **No clearing of fields.** A blank cell on an update keeps the current value (Locked), so a field can't be cleared by import. Use the Edit form.
 - **No rename of a client.** Company name is the match key, so a new name adds a new client. Rename on the client's Edit form.
-- **No prefilled export** of existing clients and contacts (Q-117). No CSV, `.xls`, `.xlsm` or Google Sheets import. No project or active-contact assignment through import. No mobile.
+- No CSV export of clients. No CSV, `.xls`, `.xlsm` or Google Sheets import. No project or active-contact assignment through import. No mobile.
 - No new page, no change to "New client", and no sidebar change.
 
 ## 3. Permissions (Locked, Lean and Deven, 2026-11-03; one gate, Q-111)
@@ -146,7 +148,20 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 - **Modal states (UIE, mockup v0.9.17):** Choose file → Reading file… → Preview (Clients and Contacts tabs, summary chips including "No change", Cancel, Import valid rows) → Done. File-level errors keep the user in the modal (§9 messages).
 - Import valid rows is disabled when there are no New or Update rows, and while a commit is running (no double submit).
 
-## 8. Functional requirements (summary table)
+## 7a. Export clients (prefilled download) (v0.8, Jomerson, 2026-11-03; built at `f51ac8e`)
+Jomerson asked for the download to carry the real Clients and Contact Persons from the database, not only a blank template. The export is the round-trip partner of the import: download, edit in Excel, import the same file.
+
+- **FR-CLI-42 (Must) Download clients button.** The Excel ▾ menu gets **"Download clients (.xlsx)"** as its **first** item, above Import from Excel. It calls `GET /api/v1/clients/import/export`. While the file builds, the item is disabled and shows a small spinner, the same as the template link. The blank **Download template** link inside the Import window stays as it is (FR-CLI-25 to 28).
+- **FR-CLI-43 (Must) Same gate as import.** Export uses the FR-CLI-23/24 gate: `clients.create`, `clients.edit`, `contacts.create` and `contacts.edit`. By default Admin and PM can export; Member and Viewer get no item and the API returns **403 `FORBIDDEN`**. If the signing key is missing (NFR-42), export returns **503 `IMPORT_NOT_CONFIGURED`** with the short amber "Excel import isn't available right now." (same as the template download). Any other failure shows red "Download failed. Couldn't get the clients file. Try again."
+- **FR-CLI-44 (Must) Contents and layout.** The file has the **same two sheets, explanation row and headers as the template** (§4), with one row per record:
+  - **Clients sheet:** every client the user can see on the Clients page (Q-118), **active and inactive**, with Status written as Active or Inactive.
+  - **Contacts sheet:** every contact person of those clients, with Company name set to the client's name.
+  - Values are written as **plain text, never as formulas**; a value starting with `=`, `+`, `-` or `@` gets the same escaping as the skipped-rows file (FR-CLI-37).
+  - Nothing outside the template's columns is exported (no IDs, portal accounts, projects or audit data).
+- **FR-CLI-45 (Must) Round trip.** Importing an **unedited** exported file shows **No change on every row** and saves nothing. Edited rows show as Update, added rows as New, and the usual import rules apply (FR-CLI-29 to 41).
+- **FR-CLI-46 (Must) Audit.** Each export writes one **`clients_exported`** audit entry with the user, time, and client and contact **counts only**, no client data. If a sheet is over the import limit, the entry also flags `overLimit` (Q-119).
+
+
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-CLI-23 | Excel ▾ button on the existing `/clients` list, next to "New client", shown only with `clients.create`, `clients.edit`, `contacts.create` AND `contacts.edit` (Access Rules check) | Must |
@@ -191,6 +206,7 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 
 ## 10. User stories
 - **US-61** As a user who can create and edit clients and contacts, I want to download a ready-made Excel template for clients and contacts, so I can fill it in offline in the right format. (FR-CLI-23 to 28)
+- **US-63** As a user who can create and edit clients and contacts, I want to download all my clients and contact persons as a filled Excel file, so I can review or bulk-edit them in Excel and import the same file back. (FR-CLI-42 to 46)
 - **US-62** As a user who can create and edit clients and contacts, I want to upload the filled template, see what will be added, updated, left unchanged or skipped, and then import the valid rows, so I can load or refresh many clients and contacts at once without duplicates. (FR-CLI-29 to 41)
 
 ## 11. Acceptance criteria
@@ -225,6 +241,14 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 - **AC-62.23 (API)** Given the preview-token signing key (NFR-42) is not set on the API, when an authorised user calls the template, preview or commit endpoint, then the API returns **503** (proposed code `IMPORT_NOT_CONFIGURED`) with a clear message that Excel import isn't set up yet, nothing is saved, and the API still starts, with every other endpoint (including Clients list, New client and Edit client) working normally. The web app shows the message as an amber warning (`alert-warning`), on the page and in the modal, instead of a generic red error.
 - **AC-62.24 (API)** Given a user has a commit still running, when the same user starts a second commit (another tab or a double click), then the second gets **429 `IMPORT_BUSY`** and saves nothing, and the first finishes normally. The `IMPORT_BUSY` response carries `Retry-After: 5`. Given a fast double-click on Import, then only one commit is sent and the done toast shows. Given a user goes over the import rate limit (20 previews or 5 commit attempts in 15 minutes, counting attempts that failed with 409), then the next call gets **429 `RATE_LIMITED`** until the window resets. Other users and other API routes aren't affected (NFR-41).
 
+- **AC-63.1 (UI)** Given an Admin or PM on `/clients`, when they open Excel ▾, then "Download clients (.xlsx)" is the first item, above Import from Excel. Given a Member or Viewer, then they see no Excel button, and calling the export URL directly returns 403.
+- **AC-63.2 (API)** Given 3 active and 1 inactive client with 5 contact persons, when an Admin exports, then the file has the template's two sheets and headers, 4 Clients rows (the inactive one with Status Inactive) and 5 Contacts rows, each with its client's Company name.
+- **AC-63.3 (API)** Given a client whose Notes start with `=HYPERLINK(` or a contact phone `+63 900 000 0000`, when exported, then the cell holds plain text with the escape prefix and Excel runs no formula. The stored values don't change.
+- **AC-63.4 (round trip)** Given a freshly exported file, when the same user imports it unedited, then the preview shows No change on every row and Import valid rows has nothing to save. When they change one client's Industry and add one contact, then the preview shows exactly 1 Update and 1 New.
+- **AC-63.5 (API)** Given an export, then one `clients_exported` audit entry is written with the user, time and counts, and no names, emails, phones or notes.
+- **AC-63.6 (UI)** Given the signing key is missing, when the user clicks Download clients, then the API returns 503 `IMPORT_NOT_CONFIGURED` and the page shows the amber "Excel import isn't available right now." Given any other server error, then the red "Download failed. Couldn't get the clients file. Try again." shows. While the file builds, the item is disabled with a spinner, and a second click starts no second download.
+- **AC-63.7 (API)** Given more than 2,000 clients (or contacts), when exported, then the file still holds every row and the audit entry flags `overLimit`. Importing that file returns `TOO_MANY_ROWS` (Q-119).
+
 ## 12. Non-functional
 - **NFR-36 Limits (Locked):** 5 MB per file, `.xlsx` only (checked by content), 2,000 data rows per sheet. The raw-body limit on the import routes is 5 MB plus a small margin (pattern: `documents.ts:1169`). The 100 kB JSON limit stays for everything else.
 - **NFR-37 In memory (Locked):** the upload is parsed in memory and doesn't depend on Storage. The workbook buffer is dropped after the response. The parser limits decompressed size (zip-bomb guard, for example 50 MB uncompressed) and ignores macros, external links and embedded objects.
@@ -255,9 +279,12 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 - **EC-156** The same file is committed twice: the second preview shows every row as **No change** (or Error), nothing is written, and no duplicates appear (FR-CLI-31).
 - **EC-157** A user without `clients.delete` changes Status on a matched client, together with other fields they may edit: the **whole row** is an Error and **none** of its fields are saved, not even the allowed ones. They set Status back (or blank) and re-import the row (FR-CLI-41, AC-62.15). Other rows in the file still import.
 - **EC-158** The signing key is missing or was removed from App Service settings: import endpoints return 503 (AC-62.23), the rest of the app works, and users with the gate still see the Excel menu but get the "not set up" message. Once the key is added and the API restarts, import works; any token signed before a key change fails with 409 `PREVIEW_STALE` (NFR-42).
+- **EC-159** Data already in the app breaks an import rule (for example two no-email contacts with the same full name under one client, or two client names that differ only by case): the export writes them as they are, and re-importing that file marks those rows as Error (duplicate in file), while every other row still shows No change. The user fixes the duplicates on the Contacts tab or Edit client form. Export never hides or merges records.
+- **EC-160** A client or contact is edited after the export and before the re-import: the import treats the file like any other, so the edited row shows as Update back to the exported value. The preview shows the old and new values, so the user can see it before committing (FR-CLI-35b still applies between preview and commit).
+- **EC-161** A user with no clients in scope exports: the file has the two sheets with the explanation and header rows only, the same as the blank template, and the audit entry shows counts of 0.
 
 ## 14. Assumptions
-- **A-30** The template is blank (no existing clients). A prefilled export is out of scope (Q-117).
+- **A-30** The template from the Import window is blank (no existing clients). The prefilled file comes from Download clients (§7a, FR-CLI-42 to 46).
 - **A-31** Lean's "first row explains each column" means a separate explanation row above the header row (row 1 explanations, row 2 headers). If Lean meant the header row itself carries the explanation (for example as cell notes), FR-CLI-27 and the header check move up one row.
 - **A-32** The commit re-sends the file instead of keeping state on the server, because the upload doesn't depend on Storage (Locked).
 - **A-33** The skipped-rows file is built in the browser from the API result. No server endpoint stores it.
@@ -275,11 +302,13 @@ All text is trimmed. Limits follow `schemas.ts:100-119`, `Client.ts` and `Client
 | Q-114 | Rows matching inactive records | **Lean-accepted default (2026-11-03):** update them, tag "Update (inactive)", active flag unchanged (§5, AC-62.17). |
 | Q-115 | Matched rows with nothing changed | **Locked (Lean, 2026-11-03):** "No change" tag, not written, not counted as an update (FR-CLI-31). |
 | Q-116 | Commit result differs from the preview | **Locked (Lean, 2026-11-03, about 12:32 PM SGT; reverses the v0.2 default):** the server re-checks the file at commit. If the result differs from the preview, 409 "Preview again" and nothing is saved; if it's the same, it commits. Two imports writing at the same time also get the 409 (FR-CLI-35b, EC-148, EC-149, AC-62.19, AC-62.20). |
-| Q-117 | Prefilled "Export clients (.xlsx)" | **Lean-accepted default (2026-11-03):** not in this CR. A prefilled export would be a new request for Jomerson. |
+| Q-117 | Prefilled "Export clients (.xlsx)" | **Reversed by Jomerson (2026-11-03, about 10:40 PM SGT):** in this CR as "Download clients (.xlsx)" (§7a, FR-CLI-42 to 46). |
+| Q-118 | Which clients does a PM's export include? | **Open, Lean to confirm.** As built (Deven, `f51ac8e`): the same list the PM already sees on the Clients page, which by default is all clients. Deven's first note said PMs would get only their own clients; the build exports the full Clients-page list. The rule is "export = what this user sees on `/clients`", so it follows Access Rules and fixed scope (FR-ACL-07) without a rule of its own. |
+| Q-119 | A sheet with more than 2,000 rows | **Open, Lean to confirm.** As built: the file holds every row, the audit entry flags `overLimit`, and re-importing it returns `TOO_MANY_ROWS`. Options: keep as built, or have the UI warn before download that the file can't be imported back in one go. |
 
 | Q-107 (from CR-18) | Block deactivating a client with open projects? | **Closed (Lean, 2026-11-03, about 12:10 PM SGT): no block.** Import follows Edit client / Deactivate client as they are today and has no rule of its own. FR-CLI-18 is deferred; a block, if Jomerson asks for one, is its own future change covering the form and import. |
 
-**No open questions remain.** Only Jomerson's approval of CR-19 is needed.
+**Open:** Q-118 and Q-119 (build calls waiting on Lean). Everything else is decided.
 
 ## 16. Status
 **New, not built.** Rules are decided (Locked or Lean-accepted defaults, 2026-11-03). Jomerson approves the CR; nothing else is pending (Q-107 closed by Lean, 2026-11-03; FR-CLI-18 deferred). UIE's mockup v0.9.17 is the UI reference, and the role notes in `CLIENTS_EXCEL_IMPORT_UI.md` (v0.9.16, "Admin and Member") are replaced by §3. When approved, FR-CLI-23 to 41 go into doc 11 (Clients section), US-61/62 into doc 04, AC-61.x/62.x into doc 05, EC-139 to 157 into doc 08, NFR-36 to 41 into doc 07, and Q-109 to Q-117 into doc 09 as decided.
