@@ -463,7 +463,8 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Excel/ }));
     await user.click(screen.getByRole('button', { name: 'Download template' }));
-    expect(await screen.findByText("Excel import isn't available right now.")).toBeInTheDocument();
+    const tpl = await screen.findByText("Excel import isn't available right now.");
+    expect(tpl.closest('.alert')).toHaveClass('alert-warning'); // DEF-057
     expect(screen.queryByText(/set up yet/)).toBeNull();
   });
 
@@ -476,6 +477,7 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     const { dialog } = await upload();
     const alert = await within(dialog).findByRole('alert');
     expect(alert).toHaveTextContent("Excel import isn't available right now. Nothing was saved.");
+    expect(alert).toHaveClass('alert-warning'); // DEF-057
     expect(alert).not.toHaveTextContent('set up yet');
   });
 
@@ -487,9 +489,9 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     renderAt('/clients', <App />);
     const { user, dialog } = await upload();
     await user.click(await within(dialog).findByRole('button', { name: 'Import valid rows (3)' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      "Excel import isn't available right now. Nothing was saved.",
-    );
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert).toHaveTextContent("Excel import isn't available right now. Nothing was saved.");
+    expect(alert).toHaveClass('alert-warning'); // DEF-057
   });
 
   it.each([

@@ -187,7 +187,7 @@ export function ClientImportModal({
   const [file, setFile] = useState<File | null>(null);
   const [problem, setProblem] = useState<ImportProblem | null>(null);
   const [tab, setTab] = useState<'clients' | 'contacts'>('clients');
-  const [tplError, setTplError] = useState<string | null>(null);
+  const [tplError, setTplError] = useState<ImportProblem | null>(null);
 
   const reset = () => {
     preview.reset();
@@ -342,8 +342,11 @@ export function ClientImportModal({
       </Modal.Header>
       <Modal.Body>
         {tplError && (
-          <div className="alert alert-danger alert-dismissible py-2" role="alert">
-            {tplError}
+          <div
+            className={`alert alert-${tplError.tone ?? 'danger'} alert-dismissible py-2`}
+            role="alert"
+          >
+            {tplError.message}
             <button
               type="button"
               className="btn-close"

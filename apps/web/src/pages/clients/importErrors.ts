@@ -18,7 +18,9 @@ const FILE_CODES: readonly string[] = CLIENT_IMPORT_FILE_ERROR_CODES;
 
 function common(e: ApiError): ImportProblem | null {
   if (e.status === 403) return { code: e.code, message: NO_LONGER_PERMITTED };
-  if (e.code === 'IMPORT_NOT_CONFIGURED') return { code: e.code, message: MSG.UI_NOT_CONFIGURED };
+  // DEF-057: unavailable is a wait state, not the user's fault, so it's amber like the others.
+  if (e.code === 'IMPORT_NOT_CONFIGURED')
+    return { code: e.code, message: MSG.UI_NOT_CONFIGURED, tone: 'warning' };
   return null;
 }
 
@@ -41,11 +43,13 @@ export function importProblemOf(e: unknown): ImportProblem {
 }
 
 /** Download template errors (Excel menu and the modal link). */
-export function templateErrorOf(e: unknown): string {
+export function templateErrorOf(e: unknown): ImportProblem {
   if (e instanceof ApiError) {
-    if (e.status === 403) return NO_LONGER_PERMITTED;
+    if (e.status === 403) return { code: e.code, message: NO_LONGER_PERMITTED };
     // Nothing is saved by a download, so UIE's "Nothing was saved." is left off here.
-    if (e.code === 'IMPORT_NOT_CONFIGURED') return MSG.UI_NOT_CONFIGURED_TEMPLATE;
+    // DEF-057: amber, like the other "wait or re-run" states.
+    if (e.code === 'IMPORT_NOT_CONFIGURED')
+      return { code: e.code, message: MSG.UI_NOT_CONFIGURED_TEMPLATE, tone: 'warning' };
   }
-  return MSG.TEMPLATE_FAILED;
+  return { code: 'TEMPLATE_FAILED', message: MSG.TEMPLATE_FAILED };
 }

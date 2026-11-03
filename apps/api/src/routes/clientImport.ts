@@ -166,7 +166,10 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
   r.post('/commit', IMPORT_GATE, requireKey, commitLimiter, rawXlsx, async (req, res) => {
     // AC-62.24: a second commit by the same user while one runs is refused before any work.
     const userKey = currentUser(req)._id.toString();
-    if (committing.has(userKey)) throw new HttpError(429, 'IMPORT_BUSY', MSG.IMPORT_BUSY);
+    if (committing.has(userKey)) {
+      res.setHeader('Retry-After', '5'); // Lean, Nov 3: tell clients when to try again
+      throw new HttpError(429, 'IMPORT_BUSY', MSG.IMPORT_BUSY);
+    }
     committing.add(userKey);
     try {
       await runCommit(req, res);

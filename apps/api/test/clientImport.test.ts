@@ -1154,6 +1154,7 @@ describe('CR-19 abuse limits (NFR-41, AC-62.24, EC-149)', () => {
     await hold.inside;
     const second = await commitWith(u1.agent, file, p1b.token);
     expect(second.status).toBe(429);
+    expect(second.headers['retry-after']).toBe('5');
     expect(second.body.error).toMatchObject({
       code: 'IMPORT_BUSY',
       message: 'Another import is still running. Wait a moment, then try again. Nothing was saved.',

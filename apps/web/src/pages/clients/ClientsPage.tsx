@@ -8,7 +8,7 @@ import { ActiveBadge } from '../../components/Badges';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { ClientImportModal } from './ClientImportModal';
-import { templateErrorOf } from './importErrors';
+import { templateErrorOf, type ImportProblem } from './importErrors';
 import { ClientModal } from './ClientModal';
 import { downloadSkippedRows } from './skippedRows';
 
@@ -23,7 +23,7 @@ export function ClientsPage() {
   const canImport = canCreate && canEdit && canCreateContact && canEditContact;
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<ClientImportCommitDto | null>(null);
-  const [excelError, setExcelError] = useState<string | null>(null);
+  const [excelError, setExcelError] = useState<ImportProblem | null>(null);
   const [q, setQ] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
   const clients = useClients({ q: q || undefined, includeInactive });
@@ -92,8 +92,11 @@ export function ClientsPage() {
             />
           </div>
           {excelError && (
-            <div className="alert alert-danger alert-dismissible py-2" role="alert">
-              {excelError}
+            <div
+              className={`alert alert-${excelError.tone ?? 'danger'} alert-dismissible py-2`}
+              role="alert"
+            >
+              {excelError.message}
               <button
                 type="button"
                 className="btn-close"
