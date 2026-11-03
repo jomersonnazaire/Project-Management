@@ -1,5 +1,7 @@
 import {
+  CLIENT_EXPORT_ROWS_HEADERS,
   CLIENT_IMPORT_COLUMNS,
+  CLIENT_IMPORT_MAX_ROWS,
   CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
   phDateOf,
@@ -179,6 +181,25 @@ describe('Clients export: layout, file name and audit', () => {
       },
     });
     expect(JSON.stringify(entries[0])).not.toContain('Alpha Foods');
+    expect(entries[0]!.meta).not.toHaveProperty('overLimit');
+  });
+
+  it("Q-119 sends each sheet's row count in headers, exposed to allowed cross-origin callers", async () => {
+    const { agent } = await signedInAs(app, 'ADMIN');
+    const res = await fileOf(agent, EXPORT).set('Origin', 'http://localhost:5173');
+    expect(res.status).toBe(200);
+    expect(res.headers['x-export-clients-rows']).toBe('4');
+    expect(res.headers['x-export-contacts-rows']).toBe('5');
+    const exposed = String(res.headers['access-control-expose-headers']).split(/,\s*/);
+    expect(exposed).toEqual(
+      expect.arrayContaining([
+        CLIENT_EXPORT_ROWS_HEADERS.Clients,
+        CLIENT_EXPORT_ROWS_HEADERS.Contacts,
+      ]),
+    );
+    // The blank template carries no counts.
+    const tpl = await fileOf(agent, '/api/v1/clients/import/template');
+    expect(tpl.headers['x-export-clients-rows']).toBeUndefined();
   });
 
   it('the blank template is still blank (template = export with no rows)', async () => {
@@ -285,5 +306,104 @@ describe('Clients export: formula safety and round trip (FR-CLI-37, EC-153, EC-1
     });
     expect(await ClientModel.find().sort({ _id: 1 }).lean()).toEqual(before.clients);
     expect(await ClientContactModel.find().sort({ _id: 1 }).lean()).toEqual(before.contacts);
+  });
+});
+
+describe('Clients export: same scope as the Clients page (Q-118, AC-63.2)', () => {
+  afterEach(() => resetRules());
+
+  /** Every client GET /clients lists for this user, with inactive shown and no search. */
+  async function listed(agent: Agent) {
+    const res = await agent.get('/api/v1/clients?includeInactive=true&pageSize=100');
+    expect(res.status).toBe(200);
+    return (res.body.items as { name: string }[]).map((c) => c.name).sort();
+  }
+
+  it('for every role that may export, the Clients sheet equals the /clients list (filters ignored)', async () => {
+    await grant(app, 'MEMBER', { clients: allFour, contacts: allFour });
+    const agents: [string, Agent][] = [
+      ['ADMIN', (await signedInAs(app, 'ADMIN')).agent],
+      ['PROJECT_MANAGER', (await signedInAs(app, 'PROJECT_MANAGER')).agent],
+      ['MEMBER (scoped)', await login(app, 'scoped.member@xceler8.example')],
+      ['MEMBER (no projects)', (await signedInAs(app, 'MEMBER')).agent],
+    ];
+    for (const [role, agent] of agents) {
+      // A page search or filter on the request is ignored: the file is always the full list.
+      const res = await fileOf(agent, `${EXPORT}?q=Alpha&includeInactive=false`);
+      expect(res.status, role).toBe(200);
+      const names = dataOf(await load(res.body as Buffer), 'Clients').map((r) => r[0]!);
+      expect([...names].sort(), role).toEqual(await listed(agent));
+    }
+  });
+});
+
+describe('Clients export: edited round trip (AC-63.4, AC-63.8)', () => {
+  it('one Industry change and one added contact preview as exactly 1 Update and 1 New', async () => {
+    const { agent } = await signedInAs(app, 'ADMIN');
+    const wb = await load((await fileOf(agent, EXPORT)).body as Buffer);
+    wb.getWorksheet('Clients')!.getCell('B4').value = 'Shipping'; // beta Logistics
+    const contacts = wb.getWorksheet('Contacts')!;
+    contacts.getRow(3 + ALL_CONTACTS.length).values = ['Alpha Foods', 'New Person'];
+    const p = await send(agent, 'preview', Buffer.from(await wb.xlsx.writeBuffer()));
+    expect(p.status, JSON.stringify(p.body)).toBe(200);
+    const body = p.body as ClientImportPreviewDto;
+    expect(body.counts.total).toEqual({ new: 1, update: 1, noChange: 8, error: 0 });
+    expect(body.clients.find((r) => r.result === 'UPDATE')!.values['Company name']).toBe(
+      'beta Logistics',
+    );
+    expect(body.contacts.find((r) => r.result === 'NEW')!.values['Full Name']).toBe('New Person');
+  });
+
+  it('an inactive contact round-trips as No change, and an edit shows Update (inactive)', async () => {
+    const { agent } = await signedInAs(app, 'ADMIN');
+    const wb = await load((await fileOf(agent, EXPORT)).body as Buffer);
+    const row = 3 + ALL_CONTACTS.findIndex((r) => r[1] === 'Former Contact');
+    const unedited = (await send(agent, 'preview', Buffer.from(await wb.xlsx.writeBuffer())))
+      .body as ClientImportPreviewDto;
+    expect(unedited.contacts.find((r) => r.row === row)!.result).toBe('NO_CHANGE');
+    wb.getWorksheet('Contacts')!.getCell(`C${row}`).value = 'Advisor';
+    const edited = (await send(agent, 'preview', Buffer.from(await wb.xlsx.writeBuffer())))
+      .body as ClientImportPreviewDto;
+    expect(edited.contacts.find((r) => r.row === row)).toMatchObject({
+      result: 'UPDATE',
+      inactive: true,
+    });
+  });
+});
+
+describe('Clients export: over the 2,000-row import limit (Q-119, AC-63.7)', () => {
+  it('keeps every row, flags overLimit, sends the counts; re-importing is TOO_MANY_ROWS', async () => {
+    const bulk = await ClientModel.create({ name: 'Bulk Co', nameKey: 'bulk co' });
+    const extra = CLIENT_IMPORT_MAX_ROWS + 1 - ALL_CONTACTS.length + 1; // contacts total 2,002
+    await ClientContactModel.insertMany(
+      Array.from({ length: extra }, (_, i) => ({
+        clientId: bulk._id,
+        name: `Bulk Person ${i}`,
+        email: `bulk${i}@xceler8.example`,
+      })),
+    );
+    try {
+      const { agent, user } = await signedInAs(app, 'ADMIN');
+      const res = await fileOf(agent, EXPORT);
+      expect(res.status).toBe(200);
+      expect(res.headers['x-export-clients-rows']).toBe('5');
+      expect(res.headers['x-export-contacts-rows']).toBe(String(ALL_CONTACTS.length + extra));
+      const wb = await load(res.body as Buffer);
+      expect(dataOf(wb, 'Contacts')).toHaveLength(ALL_CONTACTS.length + extra);
+      const entry = await ActivityLogModel.findOne({
+        action: 'clients_exported',
+        actorId: user._id,
+      }).lean();
+      expect(entry!.meta).toMatchObject({
+        overLimit: true,
+        counts: { clients: 5, contacts: ALL_CONTACTS.length + extra },
+      });
+      const p = await send(agent, 'preview', res.body as Buffer);
+      expect(p.status).toBe(422);
+      expect(p.body.error.code).toBe('TOO_MANY_ROWS');
+    } finally {
+      await ClientContactModel.deleteMany({ clientId: bulk._id });
+      await ClientModel.deleteOne({ _id: bulk._id });
+    }
   });
 });

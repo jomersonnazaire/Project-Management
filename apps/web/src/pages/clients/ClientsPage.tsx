@@ -1,4 +1,10 @@
-import { clientImportToast, plural, type ClientDto, type ClientImportCommitDto } from '@xc8/shared';
+import {
+  clientExportLimitToast,
+  clientImportToast,
+  plural,
+  type ClientDto,
+  type ClientImportCommitDto,
+} from '@xc8/shared';
 import { useRef, useState } from 'react';
 import { Button, Dropdown, Form, Spinner, ToastContainer } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
@@ -24,9 +30,26 @@ export function ClientsPage() {
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<ClientImportCommitDto | null>(null);
   const [excelError, setExcelError] = useState<ImportProblem | null>(null);
-  // UIE: disabled with a small spinner while the file builds; the ref blocks a fast second click.
+  // UIE (Q-118): the Excel toggle is disabled with a spinner and "Preparing file…" while the
+  // file builds; the ref blocks a fast second click before the re-render lands.
   const [exporting, setExporting] = useState(false);
   const exportingRef = useRef(false);
+  // Q-119: amber notice after a download whose sheet(s) are over the import row limit.
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const downloadClients = () => {
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+    setExporting(true);
+    setExcelError(null);
+    setExportNotice(null);
+    downloadClientExport()
+      .then((counts) => setExportNotice(clientExportLimitToast(counts)))
+      .catch((e: unknown) => setExcelError(exportErrorOf(e)))
+      .finally(() => {
+        exportingRef.current = false;
+        setExporting(false);
+      });
+  };
   const [q, setQ] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
   const clients = useClients({ q: q || undefined, includeInactive });
@@ -42,39 +65,27 @@ export function ClientsPage() {
           <div className="d-flex flex-wrap align-items-center gap-2" data-testid="clients-actions">
             {canImport && (
               <Dropdown>
-                <Dropdown.Toggle variant="outline-secondary" id="clients-excel">
-                  <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
-                  Excel
+                <Dropdown.Toggle
+                  variant="outline-secondary"
+                  id="clients-excel"
+                  disabled={exporting}
+                  aria-busy={exporting || undefined}
+                >
+                  {exporting ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-1" aria-hidden="true" />
+                      Preparing file…
+                    </>
+                  ) : (
+                    <>
+                      <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
+                      Excel
+                    </>
+                  )}
                 </Dropdown.Toggle>
                 <Dropdown.Menu>
-                  <Dropdown.Item
-                    as="button"
-                    disabled={exporting}
-                    aria-busy={exporting || undefined}
-                    onClick={() => {
-                      if (exportingRef.current) return;
-                      exportingRef.current = true;
-                      setExporting(true);
-                      setExcelError(null);
-                      downloadClientExport()
-                        .catch((e: unknown) => setExcelError(exportErrorOf(e)))
-                        .finally(() => {
-                          exportingRef.current = false;
-                          setExporting(false);
-                        });
-                    }}
-                  >
-                    {exporting ? (
-                      <Spinner
-                        animation="border"
-                        size="sm"
-                        className="me-2"
-                        role="status"
-                        aria-label="Preparing file"
-                      />
-                    ) : (
-                      <i className="bx bx-download me-2" aria-hidden="true" />
-                    )}
+                  <Dropdown.Item as="button" onClick={downloadClients}>
+                    <i className="bx bx-download me-2" aria-hidden="true" />
                     Download clients (.xlsx)
                   </Dropdown.Item>
                   <Dropdown.Item as="button" onClick={() => setImporting(true)}>
@@ -241,6 +252,24 @@ export function ClientsPage() {
                 className="btn-close btn-close-white ms-auto"
                 aria-label="Dismiss"
                 onClick={() => setImported(null)}
+              />
+            </div>
+          </div>
+        )}
+        {exportNotice && (
+          <div
+            className="toast show bg-warning client-import-toast"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div className="toast-body d-flex flex-wrap align-items-center gap-2 text-dark">
+              <span>{exportNotice}</span>
+              <button
+                type="button"
+                className="btn-close ms-auto"
+                aria-label="Dismiss"
+                onClick={() => setExportNotice(null)}
               />
             </div>
           </div>

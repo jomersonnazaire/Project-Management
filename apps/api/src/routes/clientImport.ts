@@ -1,4 +1,5 @@
 import {
+  CLIENT_EXPORT_ROWS_HEADERS,
   CLIENT_IMPORT_COMMIT_LIMIT,
   CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MAX_ROWS,
@@ -172,6 +173,9 @@ export function clientImportRouter(config: AppConfig, registry: RouteRegistry) {
     res.setHeader('Content-Type', XLSX_MIME);
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Cache-Control', 'no-store');
+    // Q-119 / AC-63.7: the web app shows the over-limit toast from these counts.
+    res.setHeader(CLIENT_EXPORT_ROWS_HEADERS.Clients, String(counts.clients));
+    res.setHeader(CLIENT_EXPORT_ROWS_HEADERS.Contacts, String(counts.contacts));
     res.send(buf);
   });
 

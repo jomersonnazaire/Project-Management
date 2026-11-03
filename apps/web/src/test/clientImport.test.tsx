@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   CLIENT_IMPORT_TOKEN_HEADER,
@@ -19,7 +19,7 @@ import { mockApi, renderAt } from './utils';
 
 /** CR-19 Clients Excel template download and import: the Excel ▾ button and the import modal. */
 
-type Reply = { status: number; body?: unknown };
+type Reply = { status: number; body?: unknown; headers?: Record<string, string> };
 
 const row = (r: Partial<ClientImportRowDto> & Pick<ClientImportRowDto, 'row' | 'result'>) =>
   ({ sheet: 'Clients', reasons: [], warnings: [], values: {}, ...r }) as ClientImportRowDto;
@@ -222,26 +222,95 @@ describe('CR-19 Excel button visibility (FR-CLI-23/24, Q-111)', () => {
     );
     renderAt('/clients', <App />);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: /Excel/ }));
-    await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
-    if (!screen.queryByRole('button', { name: /Download clients/ }))
-      await user.click(screen.getByRole('button', { name: 'Excel' }));
-    const busy = await screen.findByRole('button', { name: /Download clients \(\.xlsx\)/ });
-    await waitFor(() => expect(busy).toHaveAttribute('aria-disabled', 'true'));
-    expect(within(busy).getByRole('status', { name: 'Preparing file' })).toBeInTheDocument();
-    await user.click(busy);
+    const toggle = await screen.findByRole('button', { name: /Excel/ });
+    await user.click(toggle);
+    const item = screen.getByRole('button', { name: 'Download clients (.xlsx)' });
+    // A fast double click lands before React re-renders: the ref guard keeps it to one fetch.
+    fireEvent.click(item);
+    fireEvent.click(item);
+    // Q-118: the TOGGLE is disabled and reads "Preparing file…" with a small spinner.
+    await waitFor(() => expect(toggle).toBeDisabled());
+    expect(toggle).toHaveTextContent('Preparing file…');
+    expect(toggle).not.toHaveTextContent('Excel');
+    expect(toggle.querySelector('.spinner-border')).not.toBeNull();
+    await user.click(toggle); // disabled: no menu, no second download
     const exportCalls = () =>
       fetch.mock.calls.filter(([u]) => String(u).endsWith('/clients/import/export')).length;
     expect(exportCalls()).toBe(1);
     release();
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Download clients (.xlsx)' })).not.toHaveAttribute(
-        'aria-disabled',
-        'true',
-      ),
-    );
+    await waitFor(() => expect(toggle).not.toBeDisabled());
+    expect(toggle).toHaveTextContent('Excel');
+    expect(toggle).not.toHaveTextContent('Preparing file…');
+    expect(toggle.querySelector('.spinner-border')).toBeNull();
     expect(exportCalls()).toBe(1);
+  });
+
+  it('UIE the Excel toggle is restored when the download fails', async () => {
+    setup('ADMIN', { exportFile: () => errorReply(500, 'INTERNAL', 'boom') });
+    renderAt('/clients', <App />);
+    const user = userEvent.setup();
+    const toggle = await screen.findByRole('button', { name: /Excel/ });
+    await user.click(toggle);
+    await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
+    await screen.findByText("Couldn't download the clients file. Try again.");
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveTextContent('Excel');
+  });
+
+  describe('Q-119 over-limit toast after a download', () => {
+    const counts = (clients: number, contacts: number): Reply => ({
+      status: 200,
+      body: {},
+      headers: {
+        'X-Export-Clients-Rows': String(clients),
+        'X-Export-Contacts-Rows': String(contacts),
+      },
+    });
+    async function download() {
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: /Excel/ }));
+      await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
+      await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+      return user;
+    }
+
+    it('no toast when both sheets are within 2,000 rows', async () => {
+      setup('ADMIN', { exportFile: () => counts(2000, 1999) });
+      renderAt('/clients', <App />);
+      await download();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Excel' })).not.toBeDisabled());
+      expect(screen.queryByText(/over the 2,000 limit/)).toBeNull();
+      expect(document.querySelector('.toast.bg-warning')).toBeNull();
+    });
+
+    it('Contacts only: amber toast names the sheet and count, and can be dismissed', async () => {
+      setup('ADMIN', { exportFile: () => counts(40, 2340) });
+      renderAt('/clients', <App />);
+      const user = await download();
+      const text =
+        'Downloaded. The Contacts sheet has 2,340 rows, over the 2,000 limit, so split it into smaller files before importing.';
+      const toast = (await screen.findByText(text)).closest('.toast') as HTMLElement;
+      expect(toast).toHaveClass('bg-warning');
+      expect(toast).toHaveAttribute('role', 'status');
+      expect(toast).toHaveAttribute('aria-live', 'polite');
+      expect(screen.queryByRole('alert')).toBeNull();
+      await user.click(within(toast).getByRole('button', { name: 'Dismiss' }));
+      expect(screen.queryByText(text)).toBeNull();
+    });
+
+    it('both sheets: one toast naming both', async () => {
+      setup('ADMIN', { exportFile: () => counts(2100, 2340) });
+      renderAt('/clients', <App />);
+      await download();
+      const toast = (
+        await screen.findByText(
+          'Downloaded. The Clients sheet has 2,100 rows and the Contacts sheet has 2,340 rows, over the 2,000 limit, so split them into smaller files before importing.',
+        )
+      ).closest('.toast');
+      expect(toast).toHaveClass('bg-warning');
+      expect(document.querySelectorAll('.toast.bg-warning')).toHaveLength(1);
+    });
   });
 
   it('AC-61.5 Download template in the import modal still fetches the blank template', async () => {
@@ -707,13 +776,13 @@ describe('CR-19 import modal states (FR-CLI-34..38, UIE spec)', () => {
     expect(alert).not.toHaveTextContent('stack trace here');
   });
 
-  it('UIE a failed clients download on the Excel menu shows red "Download failed" copy and can be dismissed', async () => {
+  it('UIE a failed clients download on the Excel menu shows red "Couldn\'t download" copy and can be dismissed', async () => {
     setup('ADMIN', { exportFile: () => errorReply(500, 'INTERNAL', 'raw server text') });
     renderAt('/clients', <App />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Excel/ }));
     await user.click(screen.getByRole('button', { name: 'Download clients (.xlsx)' }));
-    const failed = "Download failed. Couldn't get the clients file. Try again.";
+    const failed = "Couldn't download the clients file. Try again.";
     const alert = await screen.findByText(failed);
     expect(alert.closest('.alert')).toHaveClass('alert-danger');
     expect(screen.queryByText('raw server text')).toBeNull();

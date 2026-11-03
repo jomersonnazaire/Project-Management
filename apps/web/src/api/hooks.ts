@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  CLIENT_EXPORT_ROWS_HEADERS,
   CLIENT_IMPORT_TEMPLATE_NAME,
   CLIENT_IMPORT_TOKEN_HEADER,
   XLSX_MIME,
   clientExportFileName,
   phDateOf,
+  type ClientExportCounts,
   type ClientImportCommitDto,
   type ClientImportPreviewDto,
+  type ClientImportSheet,
 } from '@xc8/shared';
 import type {
   AccessRulesDto,
@@ -297,6 +300,16 @@ export function useClientImportCommit() {
 export const downloadClientTemplate = () =>
   downloadFile('/clients/import/template', CLIENT_IMPORT_TEMPLATE_NAME);
 
-/** The clients the user may see, in the template layout (file name from Content-Disposition). */
-export const downloadClientExport = () =>
-  downloadFile('/clients/import/export', clientExportFileName(phDateOf(new Date())));
+/**
+ * The clients the user may see, in the template layout (file name from Content-Disposition).
+ * Resolves with each sheet's row count (Q-119; a missing header reads as 0).
+ */
+export async function downloadClientExport(): Promise<ClientExportCounts> {
+  const headers = await downloadFile(
+    '/clients/import/export',
+    clientExportFileName(phDateOf(new Date())),
+  );
+  const count = (sheet: ClientImportSheet) =>
+    Number(headers.get(CLIENT_EXPORT_ROWS_HEADERS[sheet])) || 0;
+  return { Clients: count('Clients'), Contacts: count('Contacts') };
+}

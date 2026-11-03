@@ -126,7 +126,8 @@ export function qs(params: Record<string, string | number | boolean | undefined 
  * Downloads a file the API builds (PDF / Excel exports). Errors come back as the usual JSON
  * error body; the file name comes from Content-Disposition.
  */
-export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+/** Fetches a file and saves it; resolves with the response headers (e.g. row counts). */
+export async function downloadFile(path: string, fallbackName: string): Promise<Headers> {
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, { credentials: 'include' });
@@ -152,6 +153,7 @@ export async function downloadFile(path: string, fallbackName: string): Promise<
   const name =
     /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
   saveBlob(blob, name);
+  return res.headers;
 }
 
 /** Saves a Blob built in the browser (or fetched) as a download. */

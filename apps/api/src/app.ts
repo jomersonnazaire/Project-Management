@@ -1,4 +1,8 @@
-import { CLIENT_IMPORT_TOKEN_HEADER, DAR_SEND_RATE_LIMITED } from '@xc8/shared';
+import {
+  CLIENT_EXPORT_ROWS_HEADERS,
+  CLIENT_IMPORT_TOKEN_HEADER,
+  DAR_SEND_RATE_LIMITED,
+} from '@xc8/shared';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
@@ -82,7 +86,15 @@ export function createApp(
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
       // No Authorization: browsers can't send mobile bearer tokens cross-origin.
       allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id', CLIENT_IMPORT_TOKEN_HEADER],
-      exposedHeaders: ['X-Request-Id', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
+      exposedHeaders: [
+        'X-Request-Id',
+        'RateLimit',
+        'RateLimit-Policy',
+        'Retry-After',
+        // Q-119: clients export row counts, read by the web app for the over-limit toast.
+        CLIENT_EXPORT_ROWS_HEADERS.Clients,
+        CLIENT_EXPORT_ROWS_HEADERS.Contacts,
+      ],
       maxAge: 600,
     }),
   );
