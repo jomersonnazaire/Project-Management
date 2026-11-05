@@ -19,6 +19,8 @@ export interface UserDto {
   mustChangePassword: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  /** When the stored Microsoft profile photo was last written; null = no photo (CR-21). */
+  avatarUpdatedAt: string | null;
 }
 
 export interface TeamDto {

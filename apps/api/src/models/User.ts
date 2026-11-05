@@ -52,6 +52,8 @@ const userSchema = new Schema(
     reportCc: { type: [String], default: [] },
     lastLoginAt: { type: Date, default: null },
     deactivatedAt: { type: Date, default: null },
+    /** Last time the Microsoft profile photo was written to blob storage (CR-21). */
+    avatarUpdatedAt: { type: Date, default: null },
   },
   { timestamps: true, strict: 'throw' },
 );

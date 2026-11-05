@@ -3,20 +3,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { Avatar } from '../components/Avatar';
 import { BrandLogo } from '../components/BrandLogo';
 import { NotificationBell } from '../components/NotificationBell';
 import { TopbarContext, type TopbarSlots } from '../components/topbar';
 import { RunningTimerPill } from '../components/tracker/RunningTimerPill';
 import { MAIN, SETUP, visibleItems, type NavItem } from './nav';
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join('');
-}
 
 function MenuItem({ item, active }: { item: NavItem; active: boolean }) {
   if (item.soon) {
@@ -169,9 +161,12 @@ export function AppShell() {
                       aria-label={`Account menu for ${user.name}`}
                     >
                       <span className="avatar avatar-sm">
-                        <span className="avatar-initial rounded-circle bg-label-primary">
-                          {initials(user.name)}
-                        </span>
+                        <Avatar
+                          userId={user.id}
+                          name={user.name}
+                          photo={user.avatarUpdatedAt}
+                          size={32}
+                        />
                       </span>
                     </Dropdown.Toggle>
                     <Dropdown.Menu>

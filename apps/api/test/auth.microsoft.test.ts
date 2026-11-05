@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityLogModel,
   ClientContactModel,
@@ -12,7 +12,10 @@ import {
   type MicrosoftIdClaims,
 } from '../src/services/microsoftAuth.js';
 import { emailLinkBasis } from '../src/services/microsoftSignIn.js';
+import { avatarBlobKey } from '../src/services/userAvatar.js';
+import type { MemoryBlobStore } from '../src/storage/blobStore.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, testConfig, useDatabase } from './helpers.js';
+import sharp from 'sharp';
 
 const loginReq = (a: ReturnType<typeof makeApp>, email: string, password: string) =>
   request(a).post('/api/v1/auth/login').set(CSRF).send({ email, password });
@@ -681,5 +684,55 @@ describe('Microsoft 365 sign-in', () => {
     });
     const denied = await request(a).get('/api/v1/time').set(CSRF).set('Cookie', `xc8_sid=${token}`);
     expect(denied.status).toBe(403);
+  });
+});
+
+describe('CR-21 photo refresh on Microsoft sign-in', () => {
+  beforeEach(() => {
+    exchangeMock.mockReset();
+    loginUrlMock.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('stores the Graph photo after a successful sign-in (AC-68.1)', async () => {
+    const body = await sharp({
+      create: { width: 120, height: 120, channels: 3, background: '#2244aa' },
+    })
+      .png()
+      .toBuffer();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        expect(String(input)).toBe('https://graph.microsoft.com/v1.0/me/photo/$value');
+        return new Response(body, { status: 200 });
+      }),
+    );
+    const a = appMs();
+    const claims = { ...baseClaims(), accessToken: 'tok' };
+    const res = await runCallback(a, claims);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('http://localhost:5173');
+    const user = await UserModel.findOne({ email: claims.email });
+    expect(user?.avatarUpdatedAt).toBeTruthy();
+    const stored = await (a.locals.blobStore as MemoryBlobStore).info(
+      avatarBlobKey(user!._id.toString()),
+    );
+    expect(stored?.size).toBeGreaterThan(0);
+  });
+
+  it('still signs in when the photo step fails (AC-68.4, FR-USR-12)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('graph down');
+      }),
+    );
+    const claims = { ...baseClaims(), accessToken: 'tok' };
+    const res = await runCallback(appMs(), claims);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('http://localhost:5173');
+    const user = await UserModel.findOne({ email: claims.email });
+    expect(user).toBeTruthy();
+    expect(user?.avatarUpdatedAt).toBeNull();
   });
 });
