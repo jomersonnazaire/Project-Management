@@ -201,194 +201,235 @@ a:focus-visible,
   background: currentColor;
 }
 // ---------------------------------------------------------------------------------------------
-// Follow-ups thread in the task panel (CR-20). One block, tuned through the custom properties at
-// the top; colours come from Bootstrap/Sneat tokens so they follow a dark theme too.
+// CR-20 Follow-ups conversation (UI spec v0.9.19, docs/design/FOLLOWUPS_CONVERSATION_UI.md, mockup
+// index-v0.9.19.html#followups). Everything for the thread lives in this block; tweak the custom
+// properties first. Values are the spec's (Sneat THEME_TOKENS colours).
 // ---------------------------------------------------------------------------------------------
-.followups {
-  --fu-radius: 14px;
-  --fu-tail-radius: 4px;
-  --fu-gap: 0.25rem;
-  --fu-avatar: 2rem;
-  --fu-max-width: 85%;
-  --fu-scroll-max: min(26rem, 55vh);
-  --fu-own-bg: var(--#{$prefix}primary-bg-subtle);
-  --fu-own-color: var(--#{$prefix}emphasis-color);
-  --fu-other-bg: var(--#{$prefix}tertiary-bg);
-  --fu-other-color: var(--#{$prefix}body-color);
-  --fu-muted: var(--#{$prefix}secondary-color);
-  --fu-hairline: var(--#{$prefix}border-color);
-  --fu-new: var(--#{$prefix}warning);
+.fu {
+  --fu-other-bg: #f1f3f5;
+  --fu-own-bg: #e7e7ff; // Sneat bg-label-primary background
+  --fu-text: #22303e;
+  --fu-name: #384551;
+  --fu-muted: #5d6878;
+  --fu-chip-bg: #ebeef0;
+  --fu-new-line: #ffb8ab;
+  --fu-new-text: #b8240a;
+  --fu-border: #e4e6e8;
+  --fu-surface: var(--#{$prefix}paper-bg, #fff);
+  --fu-radius: 12px;
+  --fu-corner: 4px;
+  --fu-avatar: 32px;
+  --fu-max: 88%;
+  --fu-thread-max: min(28rem, 60vh);
+  display: flex;
+  flex-direction: column;
   margin-bottom: 1.5rem;
-  border-radius: var(--fu-radius);
-  background: var(--#{$prefix}body-bg);
-
-  .followups-scroll {
-    position: relative; // offsetTop of the New divider is measured from here
-    max-height: var(--fu-scroll-max);
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 0.25rem 0.25rem 0.5rem;
+}
+.fu-thread {
+  flex: 1;
+  min-height: 0;
+  max-height: var(--fu-thread-max);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 2px 8px;
+  &:focus-visible {
+    outline: 2px solid rgba(var(--#{$prefix}primary-rgb), 0.4);
+    outline-offset: 2px;
   }
-  .followups-thread {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fu-gap);
-    font-size: 0.875rem;
+}
+.fu-list {
+  display: flex;
+  flex-direction: column;
+}
+.fu-day {
+  align-self: center;
+  margin: 12px 0 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--fu-chip-bg);
+  color: var(--fu-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.fu-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+  color: var(--fu-new-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid var(--fu-new-line);
   }
-
-  // Day and "New" separators: a small centred label on a hairline.
-  .followup-sep {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin: 0.75rem 0 0.25rem;
-    color: var(--fu-muted);
-    font-size: 0.75rem;
-    font-weight: 500;
-    &::before,
-    &::after {
-      content: '';
-      flex: 1;
-      border-top: 1px solid var(--fu-hairline);
-    }
+}
+.fu-msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  max-width: var(--fu-max);
+  margin-top: 2px;
+  &.first {
+    margin-top: 10px;
   }
-  .followup-sep-new {
-    color: var(--fu-new);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    &::before,
-    &::after {
-      border-top-color: var(--fu-new);
-    }
-  }
-
-  .followup-msg {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    max-width: var(--fu-max-width);
-    min-width: 0;
-  }
-  .followup-group-start {
-    margin-top: 0.5rem;
-  }
-  .followup-own {
-    flex-direction: row-reverse;
+  &.own {
     align-self: flex-end;
-    text-align: right;
+    flex-direction: row-reverse;
   }
-  .followup-other {
-    align-self: flex-start;
+}
+.fu-av {
+  flex: none;
+  width: var(--fu-avatar) !important;
+  height: var(--fu-avatar) !important;
+  &.sp {
+    visibility: hidden;
+    height: 0 !important;
   }
-
-  .followup-avatar-col {
-    flex: 0 0 var(--fu-avatar);
-  }
-  .followup-avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--fu-avatar);
-    height: var(--fu-avatar);
-    border-radius: 50%;
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1;
-  }
-  .followup-body {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .followup-own .followup-body {
+}
+.fu-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  .fu-msg.own & {
     align-items: flex-end;
   }
-  .followup-other .followup-body {
-    align-items: flex-start;
-  }
-  .followup-author {
-    margin-bottom: 0.2rem;
-    color: var(--#{$prefix}heading-color);
-    font-size: 0.8125rem;
-    font-weight: 600;
-  }
-
-  .followup-bubble {
-    padding: 0.5rem 0.8rem;
-    border-radius: var(--fu-radius);
-    background: var(--fu-other-bg);
-    color: var(--fu-other-color);
-    text-align: left;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .followup-other.followup-group-start .followup-bubble {
-    border-top-left-radius: var(--fu-tail-radius);
-  }
-  .followup-own .followup-bubble {
+}
+.fu-name {
+  margin: 0 4px 2px;
+  color: var(--fu-name);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.fu-b {
+  padding: 7px 12px;
+  border-radius: var(--fu-radius);
+  border-top-left-radius: var(--fu-corner);
+  background: var(--fu-other-bg);
+  color: var(--fu-text);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  .fu-msg.own & {
     background: var(--fu-own-bg);
-    color: var(--fu-own-color);
+    border-top-left-radius: var(--fu-radius);
+    border-top-right-radius: var(--fu-corner);
   }
-  .followup-own.followup-group-start .followup-bubble {
-    border-top-right-radius: var(--fu-tail-radius);
+  .fu-msg:not(.first) & {
+    border-top-left-radius: var(--fu-radius);
   }
-  // Unseen when the panel opened (FR-NTF-12): a thin accent on the bubble's leading edge.
-  .followup-new .followup-bubble {
-    box-shadow: inset 3px 0 0 var(--fu-new);
+  .fu-msg.own:not(.first) & {
+    border-top-right-radius: var(--fu-radius);
   }
-
-  .followup-meta {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    margin-top: 0.15rem;
-    padding: 0 0.25rem;
-    color: var(--fu-muted);
-    font-size: 0.6875rem;
-  }
-  .followup-emailed {
-    font-size: 0.8125rem;
-  }
-
-  // Composer pinned under the scroll area.
-  .followups-composer {
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--fu-hairline);
-  }
-  .followups-form {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.25rem 0.25rem 0.9rem;
-    border: 1px solid var(--fu-hairline);
-    border-radius: 999px;
-    background: var(--#{$prefix}body-bg);
-    &:focus-within {
-      border-color: var(--#{$prefix}primary);
-      box-shadow: 0 0 0 0.15rem rgba(var(--#{$prefix}primary-rgb), 0.15);
+}
+.fu-t {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 4px 0;
+  color: var(--fu-muted);
+  font-size: 0.75rem;
+}
+.fu-mail {
+  display: inline-flex;
+  font-size: 13px;
+}
+.fu-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 8px;
+  color: var(--fu-muted);
+  text-align: center;
+}
+.fu-empty-ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: var(--fu-chip-bg);
+  font-size: 20px;
+}
+.fu-empty-title {
+  color: var(--fu-name);
+}
+// Composer: pinned under the thread; sticks to the panel's bottom while the thread is in view.
+.fu-comp {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  flex: none;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--fu-border);
+  background: var(--fu-surface);
+  textarea {
+    min-height: 58px;
+    resize: vertical;
+    color: var(--fu-text);
+    font-size: 0.9375rem;
+    &:focus {
+      border-color: #5355e0;
+      box-shadow: 0 0 0 0.15rem rgba(83, 85, 224, 0.25);
     }
-    .form-control {
-      flex: 1;
-      min-width: 0;
-      padding: 0.25rem 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-    }
   }
-  .followups-send {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 2.125rem;
-    height: 2.125rem;
-    padding: 0;
+}
+.fu-hint {
+  margin: 6px 0 0;
+  color: var(--fu-muted);
+  font-size: 0.8125rem;
+}
+.fu-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  > .mb-2 {
+    margin-bottom: 0 !important;
+    min-width: 0;
+  }
+}
+.fu-post {
+  margin-left: auto;
+}
+@media (max-width: 480px) {
+  .fu {
+    --fu-max: 94%;
+  }
+}
+
+// CR-21: one avatar (photo with an initials fallback) for the top bar, Users list and follow-ups.
+.app-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
-    font-size: 1.05rem;
+    object-fit: cover;
   }
+}
+
+// The task panel is full width on phones (spec "Responsive").
+.task-panel.offcanvas-end {
+  max-width: 100vw;
 }
 
 // --- Tables that become stacked cards on phones (DR-03) ---

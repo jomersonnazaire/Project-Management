@@ -139,6 +139,7 @@ export function TaskPanel({
         show
         onHide={onClose}
         placement="end"
+        className="task-panel"
         style={{ width: 480 }}
         aria-labelledby="task-panel-title"
       >
@@ -312,37 +313,29 @@ export function TaskPanel({
                 composer={
                   t.can.edit &&
                   !archived && (
-                    <>
-                      <Form onSubmit={addNote} className="followups-form" noValidate>
-                        <Form.Control
-                          placeholder="Add a follow-up note"
-                          aria-label="Follow-up note"
-                          value={note}
-                          onChange={(e) => setNote(e.target.value)}
-                        />
-                        <Button
-                          type="submit"
-                          variant="primary"
-                          className="followups-send"
-                          aria-label="Post follow-up"
-                          title="Post follow-up"
-                        >
-                          <i className="bx bx-send" aria-hidden="true" />
-                        </Button>
-                      </Form>
-                      {notifies && (
-                        <p className="small text-body-secondary mt-2 mb-1">Notifies {notifies}</p>
-                      )}
-                      <div className="small">
+                    <Form onSubmit={addNote} noValidate>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        placeholder="Add a follow-up note"
+                        aria-label="Follow-up note"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                      />
+                      {notifies && <p className="fu-hint">Notifies {notifies}</p>}
+                      <div className="fu-row">
                         <EmailCheckbox
                           id="follow-up-email"
                           names={notifies}
                           checked={emailNote}
                           onChange={setEmailNote}
                         />
-                        <ErrorAlert error={emailError} />
+                        <Button type="submit" size="sm" variant="primary" className="fu-post">
+                          Post follow-up
+                        </Button>
                       </div>
-                    </>
+                      <ErrorAlert error={emailError} />
+                    </Form>
                   )
                 }
               />

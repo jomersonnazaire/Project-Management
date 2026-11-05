@@ -1,12 +1,14 @@
 import type { FollowUpDto } from '@xc8/shared';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { Avatar } from '../../components/Avatar';
 import { dateTime } from '../../lib/format';
-import { avatarTone, followUpTime, initials, threadLayout } from '../../lib/followUps';
+import { followUpTime, threadLayout } from '../../lib/followUps';
 
 /**
- * CR-20 follow-ups as a chat thread: bubbles with avatars (mine on the right), runs by one author
- * grouped, day separators, a "New" divider above the first unseen one, and the composer pinned
- * under its own scroll area. Presentation only: what counts as new comes in as `newIds`.
+ * CR-20 follow-ups as a chat thread (UI spec v0.9.19, docs/design/FOLLOWUPS_CONVERSATION_UI.md):
+ * bubbles with avatars (mine on the right, named "You"), runs sharing one avatar and name, day
+ * chips, a "New" divider above the first unseen one, and the composer pinned under the scrolling
+ * thread. Presentation only: what counts as new comes in as `newIds`.
  */
 export function FollowUpThread({
   taskId,
@@ -22,90 +24,90 @@ export function FollowUpThread({
   newIds: ReadonlySet<string>;
   composer?: ReactNode;
 }) {
-  const rows = threadLayout(followUps);
-  const firstNewId = rows.find((r) => newIds.has(r.item.id))?.item.id;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const scrolledFor = useRef('');
+  const rows = threadLayout(followUps, newIds);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const count = followUps.length;
 
-  // On open, show the first New one (or the newest); after posting, follow the newest.
+  // Opens scrolled to the newest message (spec §1), and follows the newest after a post.
   useLayoutEffect(() => {
-    const box = scrollRef.current;
-    const key = `${taskId}:${followUps.length}`;
-    if (!box || scrolledFor.current === key) return;
-    const opening = !scrolledFor.current.startsWith(`${taskId}:`);
-    scrolledFor.current = key;
-    const divider = box.querySelector<HTMLElement>('[data-testid="follow-ups-new-divider"]');
-    box.scrollTop = opening && divider ? divider.offsetTop : box.scrollHeight;
-  }, [taskId, followUps.length]);
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [taskId, count]);
 
   return (
-    <div className="followups">
+    <div className="fu">
       {rows.length === 0 ? (
-        <p className="small text-body-secondary mb-3">No follow-ups yet.</p>
+        <div className="fu-empty">
+          <span className="fu-empty-ic" aria-hidden="true">
+            <i className="bx bx-message-rounded-dots" />
+          </span>
+          <strong className="fu-empty-title">No follow-ups yet</strong>
+          <span className="small">Post the first note below. The team will see it here.</span>
+        </div>
       ) : (
-        <div className="followups-scroll" ref={scrollRef}>
-          <ul className="followups-thread list-unstyled mb-0" aria-label="Follow-up messages">
-            {rows.map(({ item: f, day, groupStart }) => {
+        <div className="fu-thread" ref={threadRef} tabIndex={0} aria-label="Follow-ups thread">
+          <ul className="list-unstyled mb-0 fu-list" aria-label="Follow-up messages">
+            {rows.map(({ item: f, day, newDivider, runStart }) => {
               const own = Boolean(meId) && f.author?.id === meId;
-              const isNew = newIds.has(f.id);
-              const name = f.author?.name ?? 'Unknown';
+              const name = own ? 'You' : (f.author?.name ?? 'Unknown');
               return [
                 day && (
-                  <li key={`day-${f.id}`} className="followup-sep" data-testid="follow-ups-day">
-                    <span>{day}</span>
+                  <li key={`day-${f.id}`} className="fu-day" data-testid="follow-ups-day">
+                    {day}
                   </li>
                 ),
-                f.id === firstNewId && (
+                newDivider && (
                   <li
                     key={`new-${f.id}`}
-                    className="followup-sep followup-sep-new"
+                    className="fu-new"
                     data-testid="follow-ups-new-divider"
+                    aria-label="New follow-ups"
                   >
-                    <span>New</span>
+                    New
                   </li>
                 ),
                 <li
                   key={f.id}
                   data-testid={`follow-up-${f.id}`}
                   data-own={own ? 'true' : 'false'}
+                  data-run-start={runStart ? 'true' : 'false'}
                   className={[
-                    'followup-msg',
-                    own ? 'followup-own' : 'followup-other',
-                    groupStart ? 'followup-group-start' : 'followup-grouped',
-                    isNew ? 'followup-new' : '',
+                    'fu-msg',
+                    own ? 'own' : '',
+                    runStart ? 'first' : '',
+                    newIds.has(f.id) ? 'followup-new' : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
                 >
-                  <div className="followup-avatar-col" aria-hidden="true">
-                    {groupStart && (
-                      <span className={`followup-avatar bg-label-${avatarTone(f.author?.id)}`}>
-                        {initials(f.author?.name)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="followup-body">
-                    {groupStart ? (
-                      <div className="followup-author">{name}</div>
+                  {runStart ? (
+                    <Avatar
+                      className="fu-av"
+                      userId={f.author?.id}
+                      name={f.author?.name}
+                      photo={f.author?.avatarUpdatedAt}
+                    />
+                  ) : (
+                    <span className="fu-av sp" aria-hidden="true" />
+                  )}
+                  <div className="fu-col">
+                    {runStart ? (
+                      <span className="fu-name">{name}</span>
                     ) : (
                       <span className="visually-hidden">{name}</span>
                     )}
-                    <div className="followup-bubble">{f.note}</div>
-                    <div className="followup-meta">
+                    <div className="fu-b">{f.note}</div>
+                    <span className="fu-t">
                       <time dateTime={f.at} title={dateTime(f.at)}>
-                        <span aria-hidden="true">{followUpTime(f.at)}</span>
-                        <span className="visually-hidden">{dateTime(f.at)}</span>
+                        {followUpTime(f.at)}
                       </time>
-                      {isNew && <span className="visually-hidden">New</span>}
                       {f.emailedAt && (
-                        <i
-                          className="bx bx-envelope followup-emailed"
-                          role="img"
-                          aria-label="Emailed"
-                          title="Emailed"
-                        />
+                        <span className="fu-mail" title="Emailed" data-testid="follow-up-emailed">
+                          <i className="bx bx-envelope" aria-hidden="true" />
+                          <span className="visually-hidden">Emailed</span>
+                        </span>
                       )}
-                    </div>
+                    </span>
                   </div>
                 </li>,
               ];
@@ -113,7 +115,7 @@ export function FollowUpThread({
           </ul>
         </div>
       )}
-      {composer && <div className="followups-composer">{composer}</div>}
+      {composer && <div className="fu-comp">{composer}</div>}
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { render, screen, within } from '@testing-library/react';
 import type { FollowUpDto } from '@xc8/shared';
 import { describe, expect, it } from 'vitest';
-import { avatarTone, followUpDayLabel, initials, threadLayout } from '../lib/followUps';
+import { FOLLOW_UP_RUN_GAP_MS, followUpDayLabel, threadLayout } from '../lib/followUps';
+import { avatarInitials, avatarTone } from '../lib/avatar';
 import { FollowUpThread } from '../pages/projects/FollowUpThread';
 
-/** CR-20 follow-ups as a chat thread (presentation only; seen state is covered in cr20.test). */
+/** CR-20 follow-ups as a chat thread (UI spec v0.9.19; seen state is covered in cr20.test). */
 const ME = 'me';
 const fu = (id: string, author: string, at: Date | string, over: Partial<FollowUpDto> = {}) => ({
   id,
@@ -21,36 +22,37 @@ const show = (followUps: FollowUpDto[], newIds: string[] = []) =>
   render(<FollowUpThread taskId="k1" followUps={followUps} meId={ME} newIds={new Set(newIds)} />);
 
 describe('Follow-ups thread (CR-20)', () => {
-  it('is a list; my messages sit on the right, others on the left', () => {
+  it('is a list; my messages sit on the right (named You), others on the left', () => {
     show([fu('a', 'u2', minutesAgo(30)), fu('b', ME, minutesAgo(20))]);
     const list = screen.getByRole('list', { name: 'Follow-up messages' });
+    expect(list).toBeInTheDocument();
     expect(within(list).getByTestId('follow-up-b')).toHaveAttribute('data-own', 'true');
-    expect(screen.getByTestId('follow-up-b')).toHaveClass('followup-own');
+    expect(screen.getByTestId('follow-up-b')).toHaveClass('own');
+    expect(within(screen.getByTestId('follow-up-b')).getByText('You')).toBeInTheDocument();
     expect(screen.getByTestId('follow-up-a')).toHaveAttribute('data-own', 'false');
-    expect(screen.getByTestId('follow-up-a')).toHaveClass('followup-other');
+    expect(screen.getByTestId('follow-up-a')).toHaveClass('fu-msg');
+    expect(within(screen.getByTestId('follow-up-a')).getByText('Maria Member')).toBeInTheDocument();
   });
 
-  it('groups a run by one author within a few minutes: avatar and name once', () => {
+  it('groups a run by one author: avatar and name once until a 5-minute gap', () => {
     show([
       fu('a', 'u2', minutesAgo(30)),
       fu('b', 'u2', minutesAgo(28)),
       fu('c', 'u2', minutesAgo(10)),
       fu('d', ME, minutesAgo(9)),
     ]);
-    expect(screen.getByTestId('follow-up-a')).toHaveClass('followup-group-start');
-    expect(screen.getByTestId('follow-up-b')).toHaveClass('followup-grouped');
-    // More than 5 minutes later starts a new group; so does another author.
-    expect(screen.getByTestId('follow-up-c')).toHaveClass('followup-group-start');
-    expect(screen.getByTestId('follow-up-d')).toHaveClass('followup-group-start');
-    expect(screen.getByTestId('follow-up-b').querySelector('.followup-avatar')).toBeNull();
-    expect(screen.getByTestId('follow-up-a').querySelector('.followup-avatar')).toHaveTextContent(
-      'MM',
-    );
-    // Grouped ones still name the author for screen readers.
+    expect(screen.getByTestId('follow-up-a')).toHaveAttribute('data-run-start', 'true');
+    expect(screen.getByTestId('follow-up-b')).toHaveAttribute('data-run-start', 'false');
+    expect(screen.getByTestId('follow-up-c')).toHaveAttribute('data-run-start', 'true');
+    expect(screen.getByTestId('follow-up-d')).toHaveAttribute('data-run-start', 'true');
+    expect(screen.getByTestId('follow-up-b').querySelector('[data-testid="avatar"]')).toBeNull();
+    expect(
+      screen.getByTestId('follow-up-a').querySelector('[data-testid="avatar"]'),
+    ).toHaveTextContent('MM');
     expect(screen.getByTestId('follow-up-b')).toHaveTextContent('Maria Member');
   });
 
-  it('puts a day separator above each new day', () => {
+  it('puts a day chip above each new day', () => {
     show([
       fu('a', 'u2', '2026-10-01T01:00:00Z'),
       fu('b', 'u2', '2026-10-01T01:02:00Z'),
@@ -68,11 +70,12 @@ describe('Follow-ups thread (CR-20)', () => {
       fu('a', 'u2', minutesAgo(5), { emailedAt: minutesAgo(5).toISOString() }),
       fu('b', 'u2', minutesAgo(4)),
     ]);
-    const icon = within(screen.getByTestId('follow-up-a')).getByRole('img', { name: 'Emailed' });
-    expect(icon).toHaveClass('bx-envelope');
-    expect(
-      within(screen.getByTestId('follow-up-b')).queryByRole('img', { name: 'Emailed' }),
-    ).toBeNull();
+    const mailed = within(screen.getByTestId('follow-up-a')).getByTitle('Emailed');
+    expect(mailed).toHaveAttribute('title', 'Emailed');
+    expect(mailed.querySelector('.bx-envelope')).not.toBeNull();
+    expect(within(screen.getByTestId('follow-up-a')).getByText('Emailed')).toBeInTheDocument();
+    expect(within(screen.getByTestId('follow-up-b')).queryByTitle('Emailed')).toBeNull();
+    expect(screen.getByTestId('follow-up-a').textContent).not.toMatch(/· Emailed/);
   });
 
   it('shows the New divider only when something is unseen, above the first unseen one', () => {
@@ -93,31 +96,57 @@ describe('Follow-ups thread (CR-20)', () => {
     expect(screen.getByTestId('follow-up-a')).not.toHaveClass('followup-new');
   });
 
-  it('says so when there are none', () => {
+  it('says so when there are none, with a prompt to post the first note', () => {
     show([]);
-    expect(screen.getByText('No follow-ups yet.')).toBeInTheDocument();
+    expect(screen.getByText('No follow-ups yet')).toBeInTheDocument();
+    expect(
+      screen.getByText('Post the first note below. The team will see it here.'),
+    ).toBeInTheDocument();
   });
 });
 
 describe('follow-up thread helpers', () => {
   const now = new Date(2026, 10, 5, 16, 52);
+
   it('labels days Today / Yesterday / Nov 4 / with a year when not this year', () => {
     expect(followUpDayLabel(new Date(2026, 10, 5, 8).toISOString(), now)).toBe('Today');
     expect(followUpDayLabel(new Date(2026, 10, 4, 23).toISOString(), now)).toBe('Yesterday');
     expect(followUpDayLabel(new Date(2026, 10, 3, 9).toISOString(), now)).toBe('Nov 3');
     expect(followUpDayLabel(new Date(2025, 11, 31, 9).toISOString(), now)).toBe('Dec 31, 2025');
   });
-  it('initials and a stable avatar tone per user', () => {
-    expect(initials('Maria Member')).toBe('MM');
-    expect(initials('Ana')).toBe('A');
-    expect(initials(null)).toBe('?');
-    expect(avatarTone('u2')).toBe(avatarTone('u2'));
+
+  it('initials: first+last word, or first two letters of a single word; stable tone per name', () => {
+    expect(avatarInitials('Maria Member')).toBe('MM');
+    expect(avatarInitials('Ana')).toBe('AN');
+    expect(avatarInitials('Ken L. (PM)')).toBe('KL');
+    expect(avatarInitials(null)).toBe('?');
+    expect(avatarTone('Rita R.')).toBe(avatarTone('Rita R.'));
   });
+
   it('orders oldest first', () => {
     const rows = threadLayout(
       [fu('b', 'u2', '2026-10-02T00:00:00Z'), fu('a', 'u2', '2026-10-01T00:00:00Z')],
+      new Set(),
       now,
     );
     expect(rows.map((r) => r.item.id)).toEqual(['a', 'b']);
+  });
+
+  it('a 4:59 gap stays one run; a 5:00 gap starts a new run', () => {
+    const t0 = new Date('2026-11-05T08:00:00.000Z');
+    const at459 = new Date(t0.getTime() + FOLLOW_UP_RUN_GAP_MS - 1_000);
+    const at500 = new Date(t0.getTime() + FOLLOW_UP_RUN_GAP_MS);
+    const same = threadLayout([fu('a', 'u2', t0), fu('b', 'u2', at459)], new Set(), t0);
+    expect(same[1]!.runStart).toBe(false);
+    const next = threadLayout([fu('a', 'u2', t0), fu('b', 'u2', at500)], new Set(), t0);
+    expect(next[1]!.runStart).toBe(true);
+  });
+
+  it('a New divider also starts a new run, even under 5 minutes later', () => {
+    const t0 = new Date('2026-11-05T08:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 60_000);
+    const rows = threadLayout([fu('a', 'u2', t0), fu('b', 'u2', t1)], new Set(['b']), t0);
+    expect(rows[1]!.newDivider).toBe(true);
+    expect(rows[1]!.runStart).toBe(true);
   });
 });
