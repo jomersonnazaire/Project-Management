@@ -1,4 +1,8 @@
-import { DAR_SEND_RATE_LIMITED } from '@xc8/shared';
+import {
+  CLIENT_EXPORT_ROWS_HEADERS,
+  CLIENT_IMPORT_TOKEN_HEADER,
+  DAR_SEND_RATE_LIMITED,
+} from '@xc8/shared';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
@@ -24,6 +28,7 @@ import './models/index.js';
 import { accessRulesRouter } from './routes/accessRules.js';
 import { auditRouter } from './routes/audit.js';
 import { authRouter } from './routes/auth.js';
+import { clientImportRouter } from './routes/clientImport.js';
 import { clientsRouter, contactsRouter } from './routes/clients.js';
 import { projectsRouter } from './routes/projects.js';
 import { projectTypesRouter } from './routes/projectTypes.js';
@@ -59,6 +64,12 @@ export function createApp(
   app.set('trust proxy', false);
 
   const isAllowedOrigin = originMatcher(config.CORS_ORIGINS);
+  if (!config.clientImportTokenSecret) {
+    // NFR-42 / EC-158: optional at startup; only the Clients Excel import endpoints return 503.
+    logger.warn(
+      'CLIENT_IMPORT_TOKEN_SECRET is not set (or shorter than 32 characters): Clients Excel import is disabled',
+    );
+  }
 
   app.use(httpLogger(logger));
   app.set('etag', false);
@@ -74,8 +85,16 @@ export function createApp(
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
       // No Authorization: browsers can't send mobile bearer tokens cross-origin.
-      allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id'],
-      exposedHeaders: ['X-Request-Id', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
+      allowedHeaders: ['Content-Type', CSRF_HEADER, 'X-Request-Id', CLIENT_IMPORT_TOKEN_HEADER],
+      exposedHeaders: [
+        'X-Request-Id',
+        'RateLimit',
+        'RateLimit-Policy',
+        'Retry-After',
+        // Q-119: clients export row counts, read by the web app for the over-limit toast.
+        CLIENT_EXPORT_ROWS_HEADERS.Clients,
+        CLIENT_EXPORT_ROWS_HEADERS.Contacts,
+      ],
       maxAge: 600,
     }),
   );
@@ -152,6 +171,8 @@ export function createApp(
     authRouter(config, registry, authLimiter),
     usersRouter(config, registry),
     teamsRouter(registry),
+    // CR-19: before /clients/:id… so /clients/import/* is never read as a client id.
+    clientImportRouter(config, registry),
     clientsRouter(registry),
     contactsRouter(registry),
     templatesRouter(registry),

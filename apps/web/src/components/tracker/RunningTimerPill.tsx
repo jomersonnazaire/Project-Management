@@ -1,4 +1,4 @@
-import { formatHHMM } from '@xc8/shared';
+import { formatHHMM, isLunchTime, lunchMs } from '@xc8/shared';
 import { useEffect, useState } from 'react';
 import { Button } from 'react-bootstrap';
 import { useRunning, useTrackerMutation } from '../../api/trackerHooks';
@@ -26,10 +26,14 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
   if (!entry?.startAt || !running.data) return null;
   // Server "now" plus the time since that answer arrived.
   const skew = new Date(running.data.now).getTime() - running.dataUpdatedAt;
-  const seconds =
-    (Math.max(tick, running.dataUpdatedAt) + skew - new Date(entry.startAt).getTime()) / 1000;
+  const nowMs = Math.max(tick, running.dataUpdatedAt) + skew;
+  const startMs = new Date(entry.startAt).getTime();
+  // CR-20: 12:00–1:00 PM lunch isn't counted, so the timer holds still over lunch.
+  const seconds = (nowMs - startMs - lunchMs(new Date(startMs), new Date(nowMs))) / 1000;
   const minutes = Math.floor(Math.max(0, seconds) / 60);
   const label = entry.task?.name ?? entry.title ?? 'Timer';
+  // CR-20 FR-ACT-37..42: say why the time isn't moving between 12:00 and 1:00 PM.
+  const lunch = isLunchTime(new Date(nowMs));
   return (
     <div
       className="timer-pill d-flex align-items-center gap-2 rounded-pill bg-label-success px-3 py-1 small text-nowrap"
@@ -40,6 +44,15 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
       <span className="notif-dot bg-success timer-pulse" aria-hidden="true" />
       <span className="timer-pill-label text-truncate fw-medium">{label}</span>
       <span className="font-monospace">{elapsedHMS(seconds)}</span>
+      {lunch && (
+        <>
+          {/* Hidden below md so the pill fits 390 px; still read out there (UIE Nov 5). */}
+          <span className="text-body-secondary small d-none d-md-inline" data-testid="timer-lunch">
+            Lunch, not counting
+          </span>
+          <span className="visually-hidden d-md-none">Lunch, not counting</span>
+        </>
+      )}
       <Button
         size="sm"
         variant="danger"

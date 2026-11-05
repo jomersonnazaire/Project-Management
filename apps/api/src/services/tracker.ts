@@ -10,6 +10,9 @@ import {
   formatTime12,
   floorToMinute,
   minutesBetween,
+  workedMinutes,
+  endAfterWorkedMinutes,
+  lunchMinutes as lunchMinutesOf,
   onHoldStoppedMessage,
   overlapMessage,
   phDateOf,
@@ -247,7 +250,7 @@ export async function dayMinutes(userId: Id, date: Date, ignoreId?: Id, now?: Da
     .select('hours minutes running startAt')
     .lean();
   return entries.reduce((n, e) => {
-    if (e.running && e.startAt) return n + Math.max(0, minutesBetween(e.startAt, now));
+    if (e.running && e.startAt) return n + workedMinutes(e.startAt, now);
     return n + (typeof e.minutes === 'number' ? e.minutes : Math.round((e.hours ?? 0) * 60));
   }, 0);
 }
@@ -300,11 +303,13 @@ export async function stopEntry(id: Id, at: Date, opts: { auto?: boolean } = {})
   const others = await dayMinutes(e.userId, e.workDate, e._id, endAt);
   const room = Math.max(0, 24 * 60 - others);
   let capped = false;
-  if (minutesBetween(startAt, endAt) > room) {
-    endAt = new Date(startAt.getTime() + room * 60_000);
+  if (workedMinutes(startAt, endAt) > room) {
+    // CR-20: stop where the counted (lunch-free) minutes reach the room left in the day.
+    // DEF-061: one lunch shift could land inside lunch and stop early; extend until it's exact.
+    endAt = endAfterWorkedMinutes(startAt, room);
     capped = true;
   }
-  const minutes = minutesBetween(startAt, endAt);
+  const minutes = workedMinutes(startAt, endAt);
   const done = (await TimeEntryModel.findOneAndUpdate(
     { _id: id, running: true },
     {
@@ -488,10 +493,20 @@ export async function toTrackerDtos(
     const timed = Boolean(e.startAt);
     const minutes =
       e.running && e.startAt
-        ? minutesBetween(e.startAt, now)
+        ? workedMinutes(e.startAt, now)
         : timed
           ? (e.minutes ?? Math.round(e.hours * 60))
           : Math.round(e.hours * 60);
+    // CR-20: what lunch took off. Read from the stored minutes, so older entries show 0.
+    const lunch =
+      e.running && e.startAt
+        ? lunchMinutesOf(e.startAt, now)
+        : e.startAt && e.endAt
+          ? Math.min(
+              lunchMinutesOf(e.startAt, e.endAt),
+              Math.max(0, minutesBetween(e.startAt, e.endAt) - minutes),
+            )
+          : 0;
     return {
       id: e._id.toString(),
       kind: (e.kind ?? 'TASK') as 'TASK' | 'QUICK',
@@ -505,6 +520,7 @@ export async function toTrackerDtos(
       endAt: e.endAt ? e.endAt.toISOString() : null,
       running: Boolean(e.running),
       minutes,
+      lunchMinutes: lunch,
       timed,
       autoStopped: Boolean(e.autoStopped),
       activityType: ref(e.activityTypeId, lm),

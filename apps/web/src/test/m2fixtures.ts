@@ -80,6 +80,7 @@ export const task = (over: Partial<TaskDto> = {}): TaskDto => ({
   approval: { state: 'NONE', decidedBy: null, decidedAt: null, comment: null },
   evidence: [],
   followUps: [],
+  followUpsUnseen: 0,
   isMilestone: false,
   overdue: false,
   daysLate: 0,

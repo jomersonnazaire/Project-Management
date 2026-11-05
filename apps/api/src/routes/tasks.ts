@@ -60,6 +60,8 @@ import {
 import { audit } from '../services/audit.js';
 import { loadCalendar } from '../services/calendar.js';
 import { taskRecordCounts } from '../services/taskRecords.js';
+import { followUpUnseenCounts, markFollowUpsSeen } from '../services/followUpSeen.js';
+import { renumberProjectTasks } from '../services/taskOrder.js';
 import { notify } from '../services/notify.js';
 import type { AppConfig } from '../config.js';
 import { followUpRecipientIds, saveEmail } from '../services/actionEmail.js';
@@ -232,6 +234,8 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
   // M3.5: planners may delete a task only while nothing is recorded under it.
   const mayDelete = canDeleteTasks(user, perms, project);
   const records = mayDelete ? await taskRecordCounts(tasks.map((t) => t._id)) : null;
+  // CR-20 FR-NTF-09..13: the follow-up badge's "new" count, one query for the whole list.
+  const unseen = await followUpUnseenCounts(user._id, tasks);
   return tasks.map((t) => {
     const status = t.status as TaskStatus;
     const rc = records?.get(t._id.toString()) ?? {};
@@ -296,6 +300,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
         at: (f.at ?? new Date()).toISOString(),
         emailedAt: f.emailedAt ? f.emailedAt.toISOString() : null,
       })),
+      followUpsUnseen: unseen.get(t._id.toString()) ?? 0,
       isMilestone: Boolean(t.isMilestone),
       overdue,
       daysLate: overdue && t.dueDate ? daysBetween(t.dueDate, today) : 0,
@@ -987,6 +992,8 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const names = new Map(projects.map((p) => [p._id.toString(), p.name]));
     // FR-TSK-24: age in working days (Working days setting + holidays).
     const calendar = q.view === 'today' ? await loadCalendar() : null;
+    // CR-20 FR-NTF-09..13: follow-up badge counts for the whole list in one query.
+    const unseen = await followUpUnseenCounts(user._id, list);
     const items: MyTaskDto[] = list.map((t) => {
       const status = t.status as TaskStatus;
       const overdue = isOverdue({ status, dueDate: t.dueDate }, today);
@@ -1014,6 +1021,8 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
           section && t.plannedStart && calendar
             ? workingDaysSince(t.plannedStart, today, calendar)
             : null,
+        followUps: (t.followUps ?? []).length,
+        followUpsUnseen: unseen.get(t._id.toString()) ?? 0,
       };
     });
     if (q.view === 'today') {
@@ -1410,7 +1419,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       authorId: currentUser(req)._id,
       contactId: input.contactId ?? null,
       note: input.note,
-      at: new Date(),
+      at: clockNow(),
     });
     task.version = (task.version ?? 0) + 1;
     await task.save();
@@ -1430,6 +1439,15 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       recipients: followUpRecipientIds(task, project),
     });
     await respondTask(req, res, project, task._id, 201);
+  });
+
+  // CR-20 FR-NTF-09..13: the web calls this when the user opens the task's follow-ups list; every follow-up on
+  // the task now counts as seen for them (the badge goes grey). Anyone who can view the task may,
+  // archived projects too: it only records what this user has read. Notifications never call it.
+  r.post('/:id/follow-ups/seen', perm('tasks', 'view'), async (req, res) => {
+    const { task } = await loadTask(req);
+    await markFollowUpsSeen(currentUser(req)._id, task);
+    res.json({ followUps: task.followUps.length, followUpsUnseen: 0 });
   });
 
   // M3.5: Admins and the project's PM delete a task only while nothing is recorded under it.
@@ -1466,6 +1484,9 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         );
         const gone = await TaskModel.deleteOne({ _id: task._id }, { session });
         if (!gone.deletedCount) throw notFound('Task not found');
+        // CR-20 FR-TSK-31 (Jomerson Nov 5): renumber the project's remaining tasks 1…n in their
+        // current order, so a delete also clears any old gaps or duplicate numbers.
+        await renumberProjectTasks(project._id, { session });
       });
     } finally {
       await session.endSession();

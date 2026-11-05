@@ -35,6 +35,8 @@ export function testConfig(overrides: Record<string, string> = {}): AppConfig {
     AUTH_RATE_LIMIT_MAX: '1000',
     WEB_APP_URL: 'http://localhost:5173',
     CORS_ORIGINS: 'http://localhost:5173,https://xc8-pm-*.vercel.app',
+    // CR-19 NFR-42: fixed test-only key (never a real one); override with '' for the 503 path.
+    CLIENT_IMPORT_TOKEN_SECRET: 'test-only-client-import-token-secret-0123456789',
     ...overrides,
   });
 }

@@ -15,6 +15,7 @@ import { migrateProjectCodes } from './services/projectCodes.js';
 import { ensureDefaultLookups, sweepAutoStop } from './services/tracker.js';
 import { ensureDefaultProjectTypes } from './services/projectTypes.js';
 import { ensureDefaultLeaveTypes } from './services/leave.js';
+import { ensureFollowUpSeenCutoff } from './services/followUpSeen.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
@@ -39,6 +40,8 @@ await ensureDefaultProjectTypes(logger);
 // FR-ACT-21: Module is free text; copy old Modules-list names into it (idempotent).
 await migrateModuleText(logger);
 await ensureDefaultLeaveTypes(logger);
+// CR-20: follow-ups posted before the badge went live count as seen (cutoff written once).
+await ensureFollowUpSeenCutoff();
 const app = createApp(config, logger);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'API listening');

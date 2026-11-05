@@ -1,3 +1,4 @@
+import { csvSafe } from '@xc8/shared';
 import { downloadCsv } from './issuesCsv';
 
 export interface CsvColumn<T> {
@@ -5,12 +6,15 @@ export interface CsvColumn<T> {
   value: (row: T) => string | number | null | undefined;
 }
 
-const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+const quote = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+/** FR-CLI-37: text that looks like a formula is escaped; real numbers (e.g. -5) stay numbers. */
+const cell = (v: string | number | null | undefined) =>
+  typeof v === 'number' ? String(v) : quote(csvSafe(String(v ?? '')));
 
 /** FR-RPT-05 / AC-22.2: the filtered rows with the visible columns, header first. */
 export function toCsv<T>(columns: CsvColumn<T>[], rows: T[]): string {
   const head = columns.map((c) => cell(c.label)).join(',');
-  const body = rows.map((r) => columns.map((c) => cell(String(c.value(r) ?? ''))).join(','));
+  const body = rows.map((r) => columns.map((c) => cell(c.value(r))).join(','));
   return [head, ...body].join('\r\n');
 }
 

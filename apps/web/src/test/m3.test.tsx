@@ -218,7 +218,8 @@ describe('Notification bell (FR-NTF-01..06)', () => {
     });
     expect(screen.getByRole('button', { name: 'Mark all as read' })).toBeInTheDocument();
     await userEvent.click(item!);
-    await waitFor(() => expect(router.state.location.search).toBe('?task=k1'));
+    // CR-20 FR-NTF-12: a follow-up notification opens the panel at its follow-ups.
+    await waitFor(() => expect(router.state.location.search).toBe('?task=k1&focus=follow-ups'));
     expect(router.state.location.pathname).toBe(`/projects/${PID}`);
     expect(
       fetchMock.mock.calls.some(

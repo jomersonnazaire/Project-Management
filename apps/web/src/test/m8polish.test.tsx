@@ -35,6 +35,8 @@ const task = (over: Partial<MyTaskDto>): MyTaskDto => ({
   plannedStart: '2026-10-15',
   section: null,
   ageDays: null,
+  followUps: 0,
+  followUpsUnseen: 0,
   ...over,
 });
 
@@ -152,6 +154,7 @@ describe('FR-TSK-26/27, AC-48.3: Planned column', () => {
       .getAllByRole('columnheader')
       .map((h) => h.textContent);
     expect(headers).toEqual([
+      '#', // CR-20 FR-TSK-35
       'Task',
       'Project',
       'Role',

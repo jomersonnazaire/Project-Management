@@ -4,16 +4,19 @@ import type { ReactElement } from 'react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 
-type Handler = (url: string, init?: RequestInit) => { status: number; body?: unknown };
+type Handler = (
+  url: string,
+  init?: RequestInit,
+) => { status: number; body?: unknown; headers?: Record<string, string> };
 
 /** Replaces fetch with a simple router of canned API responses. */
 export function mockApi(handler: Handler) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
-    const { status, body } = handler(url, init);
+    const { status, body, headers } = handler(url, init);
     return new Response(status === 204 ? null : JSON.stringify(body ?? {}), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
     });
   });
   vi.stubGlobal('fetch', fn);

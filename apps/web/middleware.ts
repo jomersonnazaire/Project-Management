@@ -8,7 +8,7 @@
  * front end appended. Any incoming copies of these headers are dropped first, so a browser
  * can't inject them.
  */
-import { next } from '@vercel/functions/middleware';
+import { next, rewrite } from '@vercel/functions/middleware';
 
 export const config = { matcher: '/api/:path*' };
 
@@ -36,6 +36,32 @@ function env(name: string): string | undefined {
   return g.process?.env?.[name] || undefined;
 }
 
+/**
+ * Preview-only API target (CR-19 staging). When `API_PROXY_ORIGIN` is set as a Vercel
+ * Preview env var (scoped to a branch), /api/* goes there instead of the vercel.json
+ * destination. Ignored in production and when the value isn't a plain https origin, so
+ * production always calls the production API.
+ */
+export function previewApiOrigin(
+  origin: string | undefined,
+  vercelEnv: string | undefined,
+): string | undefined {
+  if (!origin || vercelEnv === 'production') return undefined;
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash) return undefined;
+    return u.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 export default function middleware(request: Request): Response {
-  return next({ request: { headers: edgeRequestHeaders(request, env('EDGE_PROXY_SECRET')) } });
+  const headers = edgeRequestHeaders(request, env('EDGE_PROXY_SECRET'));
+  const origin = previewApiOrigin(env('API_PROXY_ORIGIN'), env('VERCEL_ENV'));
+  if (origin) {
+    const url = new URL(request.url);
+    return rewrite(new URL(url.pathname + url.search, origin), { request: { headers } });
+  }
+  return next({ request: { headers } });
 }

@@ -171,6 +171,40 @@ a:focus-visible,
   }
 }
 
+// CR-20 FR-TSK-35: My tasks row number, a narrow muted first column (48px, right-aligned).
+.cell-index {
+  width: 3rem;
+  padding-inline: 0.75rem 0.5rem;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.task-index {
+  font-variant-numeric: tabular-nums;
+}
+
+// CR-20 FR-NTF-09..13: follow-up count badge after a task title (a button or link).
+.followup-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 0;
+  cursor: pointer;
+  padding: 0.3em 0.6em;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.followup-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+// Follow-ups that were new when the task panel opened (FR-NTF-12).
+.followup-new {
+  background: #fff8e6;
+}
+
 // --- Tables that become stacked cards on phones (DR-03) ---
 @include media-breakpoint-down(md) {
   .table-stack-md {
@@ -212,6 +246,10 @@ a:focus-visible,
     }
     td.cell-primary {
       padding-bottom: 0.5rem;
+    }
+    // CR-20 FR-TSK-35: on phone cards the number moves into the title cell ("#12 Title").
+    td.cell-index {
+      display: none;
     }
     // FR-TSK-27: an empty optional field (e.g. Planned) is left out of the phone card.
     td.cell-omit-empty:empty {
@@ -761,4 +799,44 @@ $board-gap: 0.75rem;
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+// --- CR-19 Clients Excel import drop zone (mockup v0.9.17 .x16drop) ---
+.client-import-drop {
+  border: 2px dashed #b8bcf5;
+  background: #f8f8ff;
+  border-radius: 8px;
+  padding: 34px 18px;
+  text-align: center;
+
+  &.is-over {
+    border-color: $primary;
+  }
+}
+
+.client-import-drop-icon {
+  display: block;
+  margin: 0 auto 6px;
+  font-size: 30px;
+  line-height: 1;
+  color: $primary;
+}
+
+// CR-19 import done toast: bottom centre, above the page (mockup .m93toast).
+.client-import-toast {
+  max-width: 92vw;
+}
+
+// CR-19 DEF-055: at phone widths the import modal footer stacks full width, primary on top.
+@include media-breakpoint-down(sm) {
+  .client-import-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+
+    > .btn {
+      width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
 }

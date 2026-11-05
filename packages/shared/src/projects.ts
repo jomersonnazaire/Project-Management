@@ -1039,6 +1039,11 @@ export interface TaskDto {
   };
   evidence: EvidenceDto[];
   followUps: FollowUpDto[];
+  /**
+   * CR-20 FR-NTF-09..13: follow-ups the caller hasn't seen yet: posted by someone else after they last opened
+   * this task's follow-ups list. The total is `followUps.length`.
+   */
+  followUpsUnseen: number;
   isMilestone: boolean;
   overdue: boolean;
   daysLate: number;
@@ -1197,6 +1202,9 @@ export interface MyTaskDto {
   /** Today tab only (FR-TSK-23): which section the task is in, and its age in working days. */
   section: TodaySection | null;
   ageDays: number | null;
+  /** CR-20 FR-NTF-09..13: how many follow-ups the task has, and how many of them are new for the caller. */
+  followUps: number;
+  followUpsUnseen: number;
 }
 
 export interface MyTasksDto {

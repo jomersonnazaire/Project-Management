@@ -65,15 +65,19 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Don't broadcast 401s (used by the initial /auth/me probe and the sign-in form). */
   quiet401?: boolean;
+  /** Send a file as the raw request body instead of JSON (CR-19 import). */
+  file?: { body: Blob; type: string };
+  /** Extra request headers (CR-19: the import preview token). */
+  headers?: Record<string, string>;
 }
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET';
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { ...opts.headers, Accept: 'application/json' };
   if (method !== 'GET') {
     // Custom header required by the API's CSRF check (NFR-03).
     headers['X-Requested-With'] = 'xc8-web';
-    headers['Content-Type'] = 'application/json';
+    headers['Content-Type'] = opts.file?.type ?? 'application/json';
   }
   let res: Response;
   try {
@@ -81,7 +85,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
       method,
       headers,
       credentials: 'include',
-      body: method === 'GET' ? undefined : JSON.stringify(opts.body ?? {}),
+      body: method === 'GET' ? undefined : (opts.file?.body ?? JSON.stringify(opts.body ?? {})),
       signal: opts.signal,
     });
   } catch (e) {
@@ -122,7 +126,8 @@ export function qs(params: Record<string, string | number | boolean | undefined 
  * Downloads a file the API builds (PDF / Excel exports). Errors come back as the usual JSON
  * error body; the file name comes from Content-Disposition.
  */
-export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+/** Fetches a file and saves it; resolves with the response headers (e.g. row counts). */
+export async function downloadFile(path: string, fallbackName: string): Promise<Headers> {
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, { credentials: 'include' });
@@ -147,6 +152,12 @@ export async function downloadFile(path: string, fallbackName: string): Promise<
   const blob = await res.blob();
   const name =
     /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  saveBlob(blob, name);
+  return res.headers;
+}
+
+/** Saves a Blob built in the browser (or fetched) as a download. */
+export function saveBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { followUpBadgeLabel } from '../lib/followUps';
 import {
   HEALTH_LABELS,
   NO_ESTIMATE_LABEL,
@@ -137,5 +139,48 @@ export function TemplateStatusBadge({ status }: { status: TemplateStatus }) {
     <span className={`badge bg-label-${TEMPLATE_STATUS_VARIANT[status]} text-uppercase`}>
       {TEMPLATE_STATUS_LABELS[status]}
     </span>
+  );
+}
+
+/**
+ * CR-20 FR-NTF-09..13: follow-up count straight after a task's title. Amber with a dot while some
+ * are new to the user, grey once all are seen, not rendered when the task has none. The number is
+ * always the total. Opens the task's follow-ups: a link (`to`, My tasks) or a button (`onOpen`,
+ * the project checklist).
+ */
+export function FollowUpBadge({
+  total,
+  unseen,
+  to,
+  onOpen,
+}: {
+  total: number;
+  unseen: number;
+  to?: string;
+  onOpen?: () => void;
+}) {
+  if (!(total > 0)) return null;
+  const label = followUpBadgeLabel(total, unseen);
+  const props = {
+    className: `badge rounded-pill followup-badge ms-2 ${unseen > 0 ? 'bg-label-warning' : 'bg-label-secondary'}`,
+    'aria-label': label,
+    title: label,
+    'data-testid': 'follow-up-badge',
+  };
+  const content = (
+    <>
+      <i className="bx bx-message-rounded-dots" aria-hidden="true" />
+      <span aria-hidden="true">{total}</span>
+      {unseen > 0 && <span className="followup-dot" aria-hidden="true" />}
+    </>
+  );
+  return to ? (
+    <Link to={to} {...props}>
+      {content}
+    </Link>
+  ) : (
+    <button type="button" onClick={onOpen} {...props}>
+      {content}
+    </button>
   );
 }

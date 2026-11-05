@@ -197,9 +197,10 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
     expect(bad.body.error.message).toMatch(
       /^This overlaps ".+" \(08:00 AM–12:00 PM\)\. Adjust the times so they don't overlap\.$/,
     );
-    const touch = await manual(w.member.agent, { ...base, timeIn: '12:00', timeOut: '13:00' });
+    // CR-20: 12:00–1:00 PM is lunch, so touching 12:00 – 2:00 PM counts 1h.
+    const touch = await manual(w.member.agent, { ...base, timeIn: '12:00', timeOut: '14:00' });
     expect(touch.status).toBe(201);
-    expect(touch.body.entry.minutes).toBe(60);
+    expect(touch.body.entry).toMatchObject({ minutes: 60, lunchMinutes: 60 });
     const hoursOnly = await w.member.agent.post('/api/v1/time').set(CSRF).send({
       taskId: t1,
       workDate: '2026-10-13',
@@ -234,7 +235,7 @@ describe('TC-Q04/Q05: overlaps and the 24-hour cap', () => {
       date: '2026-10-13',
       dayLocationId: l.onsite,
       timeIn: '08:00',
-      timeOut: '12:30',
+      timeOut: '13:30', // 4h 30m once lunch is out (CR-20)
     });
     expect(res.status).toBe(422);
     expect(res.body.error.message).toBe(
@@ -612,16 +613,19 @@ describe('TC-Q05 mixed: hours-only entries, timed entries and a running timer sh
     expect((await start(w.member.agent, { ...task(l, t1), dayLocationId: l.onsite })).status).toBe(
       201,
     );
-    at('2026-10-14T06:00:00Z'); // 14:00 PHT: the timer has run 4h, so the day holds 22h
-    const over = await hoursOnly(3);
+    // 14:00 PHT: the timer has run 4h, 3h once lunch is out (CR-20), so the day holds 21h
+    at('2026-10-14T06:00:00Z');
+    const over = await hoursOnly(4);
     expect(over.status).toBe(422);
     expect(over.body.error.code).toBe('DAILY_LIMIT');
     expect(over.body.error.message).toContain('25h 00m');
-    expect((await hoursOnly(1)).status).toBe(201); // 23h
-    at('2026-10-14T08:30:00Z'); // 16:30 PHT: 6.5h on the timer would make 25.5h
+    expect((await hoursOnly(2)).status).toBe(201); // 23h
+    at('2026-10-14T08:30:00Z'); // 16:30 PHT: 5.5h counted on the timer would make 25.5h
     const stopped = await stop(w.member.agent);
     expect(stopped.status).toBe(200);
-    expect(stopped.body.entry).toMatchObject({ minutes: 300, autoStopped: true });
+    // Stopped where the counted time fills the day: 10:00 AM + 4h + the lunch hour = 3:00 PM.
+    expect(stopped.body.entry).toMatchObject({ minutes: 240, lunchMinutes: 60, autoStopped: true });
+    expect(stopped.body.entry.endAt).toBe('2026-10-14T07:00:00.000Z');
     const d = await day(w.member.agent, '2026-10-14');
     expect(d.body.day.totalMinutes).toBe(24 * 60);
     const again = await start(w.member.agent, { ...task(l, t1) });
