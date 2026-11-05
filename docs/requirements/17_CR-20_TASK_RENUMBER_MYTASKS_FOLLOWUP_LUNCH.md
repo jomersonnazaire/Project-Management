@@ -1,13 +1,14 @@
 # CR-20 — Task order numbers without gaps, # column in My tasks, follow-up badge, lunch break on the Day timesheet
 
-**Status:** v0.2.3 draft (2026-11-05, SGT; v0.2.2, v0.2.1, v0.2 and v0.1 earlier same day) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Status:** v0.2.4 draft (2026-11-05, SGT; v0.2.3, v0.2.2, v0.2.1, v0.2 and v0.1 earlier same day) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Requested by:** Jomerson (lead dev / product owner), 2026-11-05. **Rules locked by:** Lean (tech lead), 2026-11-05 PM room. Rules marked **Locked** are Lean's. Anything not locked is listed as an assumption (§11) or an open question (§12). Nothing here adds a product decision beyond what Lean locked.
 **Part of:** doc 17 (change requests). CR-20 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-19 and uses the next free IDs: **FR-TSK-31 to FR-TSK-36**, **FR-NTF-09 to FR-NTF-13** (FR-NTF-07 and 08 are reserved in doc 17 §3), **FR-ACT-37 to FR-ACT-42**, **US-64 to US-67**, **AC-64.x to AC-67.x**, **EC-162 to EC-175**, **NFR-43 to NFR-46**, **Q-120 to Q-125**, **A-36 to A-41**.
 **Checked against:** docs 01 to 17 (with CR-19), and the build at `main` `dfa1f38` (merge of PR #46).
 **Not built.** This is a new request, not a PR review.
-**UI reference:** Locked UI / UIE design notes in §4 (# column) and §5 (badge); UIE confirmed keep `Lunch 1h 00m not counted` (FR-ACT-37a).
+**UI reference:** Locked UI / UIE design notes in §4 (# column) and §5 (badge); UIE confirmed keep `Lunch 1h 00m not counted` (FR-ACT-37a). Mockup: `docs/design/mockup/index-v0.9.18.html` (`#cr20tasks`, `#cr20check`, `#cr20sheet`); spec note: `docs/design/CR20_TASK_INDEX_FOLLOWUP_UI.md`. No UI beyond what Lean / UIE locked.
 
 **Doc change log:**
+- v0.2.4 (2026-11-05, SGT): **Pre-release follow-up seen cutoff (Lean + Deven) and Day-timesheet-only 8–5.** Follow-ups posted before the release count as already seen: one app-wide cutoff time, written once when the release first starts; no seen rows created per user (FR-NTF-11b). Unseen = posted after both the cutoff and the user's `seenAt`, and not written by the reader; no `seenAt` row = unset (FR-NTF-10a). Seen state in its own `followUpSeen` collection `{ userId, taskId, seenAt }`, unique on `userId + taskId`, marked via `POST /tasks/:id/follow-ups/seen`; opening the follow-ups list, arriving from `?task=`, or opening the task panel / badge moves `seenAt` to now (FR-NTF-11, FR-NTF-11a). My tasks # on Today and Due counts 1…n across both sections of the tab (FR-TSK-35a). 8:00 AM–5:00 PM default applies **only** to new Day timesheet entries; **Add quick activity keeps its current times** (FR-ACT-37b). Add entry form live helper `Counts as 8h 00m. Lunch 1h 00m not counted.` replaces any fixed lunch line (FR-ACT-37c); timer pill shows muted `Lunch, not counting` while running inside lunch (FR-ACT-39b). `lunchMinutes` still returned, not stored. Adds AC-65.7, AC-66.8 to 66.12, AC-67.20 to 67.23, EC-174a/174b, A-38a. **Q-120 stays open.** No IDs renumbered.
 - v0.2.3 (2026-11-05, SGT): **Deven wording + UIE UI notes.** `lunchMinutes` is **not stored** on the entry; the API **computes and returns** it when returning the entry (time between in/out minus the stored minutes). Older entries return 0 with **no migration** (FR-ACT-42a, AC-67.11, AC-67.17). **Q-120 stays open.** Locked UI / UIE design notes: # column (~48px, header `#`, right-aligned, `text-body-secondary` tabular, not sortable; on 390 muted `#12` before the title); badge right after the task title (`badge rounded-pill` + `bx-message-rounded-dots` + count; unseen `bg-label-warning` + dot / seen `bg-label-secondary`; hidden at 0; click opens that task's follow-ups). UIE confirmed keep `Lunch 1h 00m not counted`. No IDs renumbered.
 - v0.2.2 (2026-11-05, SGT): **Matches Deven's build** (local `346d52d`, branch `fix/nov5-tasks-timesheet`, items 1 and 4). Entirely-inside-lunch refusal returns code `LUNCH_BREAK` (FR-ACT-38a). Each entry stores `lunchMinutes` derived from its times; older entries show 0, so nothing changes for them unless Q-120 is answered yes (FR-ACT-42a; Q-120 stays open). Day timesheet shows `Lunch 1h 00m not counted` under the hours (FR-ACT-37a). Lunch also taken out of the running timer's live count (FR-ACT-39a); 24 h cap on reduced minutes (FR-ACT-41, already). Confirmed already covered: renumber all 1…n in one transaction, [12:00, 13:00) Manila every day, defaults 8–5, hours-only as typed. Adds AC-67.16 to 67.19. No IDs renumbered; no new product decisions.
 - v0.2.1 (2026-11-05, SGT): **Lean's audit call.** Day-to-day delete renumber: the existing delete audit covers it, no extra audit (confirmed by Lean). One-time renumber on live (FR-TSK-33): one audit entry per project it changes, listing old and new numbers, so it can be traced or undone. FR-TSK-34 and Q-124 updated; AC-64.8 added. No IDs renumbered.
@@ -60,6 +61,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 
 ## 4. # column in My tasks (Locked, Lean, 2026-11-05)
 - **FR-TSK-35 (Must)** My tasks gets a **#** column, the **first column, left of the task name, in every My tasks tab** (Locked, Q-121). It is a plain row count **1 to n in the current sort and filter**. It is a **row position**, not the task's project order number (FR-TSK-11), and it is recalculated when the sort, filter or tab changes. Amends FR-TSK-26 (column list) and FR-TSK-13.
+- **FR-TSK-35a (Must, Locked Lean 2026-11-05)** On the **Today** and **Due** tabs, which each have two sections, the # keeps counting **across both sections of the tab** (1…n per tab), not restarting per section.
 - **FR-TSK-36 (Must)** My tasks has **no paging**: the # runs 1 to n over each tab's whole filtered list (Q-122 closed). *Note for later:* if paging is ever added, numbering across pages becomes a new requirement then; it is not one now.
 - **Locked UI / UIE design notes (# column):** first column, about **48px**, header **`#`**, **right-aligned**, `text-body-secondary` with **tabular numbers**, **not sortable**. On **390** it shows as a muted **`#12`** before the title.
 
@@ -67,19 +69,25 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **Unchanged:** FR-NTF-01 to 06, US-40 and AC-40.1. People on a task still get an in-app notification when a follow-up is added.
 - **FR-NTF-09 (Must)** Each task row in the **project checklist** and in **My tasks** shows a badge with the **total number of follow-ups** on the task. No follow-ups: no badge.
 - **FR-NTF-10 (Must)** The badge is **highlighted** while **any** follow-up on the task is **unseen by the signed-in user**. UI (UIE): **amber with a dot** while unseen; plain otherwise (count still shown). See Locked UI / UIE design notes below.
-- **FR-NTF-11 (Must)** "Seen" is **per user per task**. It is set when the user **opens that task's follow-ups list**, which marks **every** follow-up there as seen. A **notification alone doesn't count** (clicking the bell marks only the notification read, FR-NTF-03). One user's seen state never changes anyone else's.
+- **FR-NTF-10a (Must, Locked Lean + Deven 2026-11-05)** A follow-up is **unseen** by a user only if it was posted **after both** the app-wide cutoff (FR-NTF-11b) **and** that user's `seenAt` for the task, **and** the user didn't write it (FR-NTF-12). If the user has **no `seenAt` row** for the task yet, `seenAt` is treated as unset (before any post), so follow-ups posted after the cutoff count as unseen until the user opens them.
+- **FR-NTF-11 (Must)** "Seen" is **per user per task**. It is set (`seenAt` moved up to now) when the user **opens that task's follow-ups list**, **arrives from a `?task=` link**, or **opens the task panel / clicks the badge**, which marks **every** follow-up there as seen. A **notification alone doesn't count** (clicking the bell marks only the notification read, FR-NTF-03). One user's seen state never changes anyone else's.
+- **FR-NTF-11a (Must, Deven)** Seen state is stored in its own collection **`followUpSeen`**: one record per user per task `{ userId, taskId, seenAt }`, **unique index on `userId + taskId`**. The web app marks seen via **`POST /tasks/:id/follow-ups/seen`** (or equivalent), which upserts the record with `seenAt` = now.
+- **FR-NTF-11b (Must, Locked Lean + Deven 2026-11-05)** **Follow-ups posted before the release count as already seen.** The app stores **one cutoff time for the whole app**, written **once** when the release first starts (not changed by later restarts). **No seen rows are created for users at release.**
 - **FR-NTF-12 (Must)** A user's **own follow-ups are seen by them from the start**. Notification recipients unchanged (FR-NTF-01).
 - **FR-NTF-13 (Must)** The badge follows access at read time, the same as FR-NTF-04: a user only sees counts for tasks they can see.
 - **Locked UI / UIE design notes (badge):** right after the task title, `badge rounded-pill` with `bx-message-rounded-dots` and the count. **Unseen:** `bg-label-warning` plus a small dot, aria-label like `"3 follow-ups, 1 new"`. **Seen:** `bg-label-secondary`, aria-label `"3 follow-ups"`. **Hidden at 0.** Clicking opens that task's follow-ups.
 
 ## 6. Day timesheet defaults and lunch break (Locked, Lean, 2026-11-05)
 - **FR-ACT-37 (Must)** The standard day is **8:00 AM to 5:00 PM**. On the Day timesheet, a new manual entry defaults to **time in 8:00 AM** and **time out 5:00 PM**. The user can change both before saving. The saved entry row **shows the lunch time taken off**. Amends FR-ACT-10.
+- **FR-ACT-37b (Must, Locked Lean; confirmed Deven)** The 8:00 AM–5:00 PM default applies **only to new Day timesheet entries**. **Add quick activity does not get it**; it keeps its current empty / current times.
+- **FR-ACT-37c (Must, Locked UI / UIE)** The Add entry form shows a **live helper** under the times, e.g. `Counts as 8h 00m. Lunch 1h 00m not counted.`, updated as the times change. It replaces any fixed `12:00–1:00 PM is lunch…` line.
 - **FR-ACT-37a (Must, as built `346d52d`)** The Day timesheet shows a line under the hours: **`Lunch 1h 00m not counted`**. The minutes follow the entries' actual lunch overlap (e.g. `Lunch 0h 30m not counted` for 11:30 AM to 12:30 PM); no line when the overlap is 0. **UIE confirmed** keep this wording.
 - **FR-ACT-38 (Must)** **Lunch window is half-open [12:00, 13:00) Manila time**, applied **every day, weekends and holidays included**. For any entry with a time in and time out, hours = (time out − time in) minus its overlap with [12:00, 13:00). An entry ending at 12:00 or starting at 1:00 PM loses nothing. A full 8:00 AM to 5:00 PM entry is **8 hours**. Computed **on save / timer stop**.
 - **FR-ACT-38a (Must)** An entry **entirely inside** [12:00, 13:00) is **refused**, nothing saved, with error code **`LUNCH_BREAK`** and the message: `This time is inside the 12:00–1:00 PM lunch break.` (Q-125 closed; code as built `346d52d`.)
 - **FR-ACT-38b (Must)** **Hours-only entries** (FR-TIME-01, no time in/out): **nothing deducted**; the hours typed are taken as already excluding lunch. (Q-124 closed.)
 - **FR-ACT-39 (Must)** The rule applies to **manual entries and the timer** (FR-ACT-02) the same way, including auto-stopped timers (FR-ACT-04).
 - **FR-ACT-39a (Must, as built `346d52d`)** While the timer is **running**, its live count also leaves out the lunch overlap so far, so the live count matches what will be saved on stop.
+- **FR-ACT-39b (Must, Locked UI / UIE)** While a running timer is inside [12:00, 13:00), the timer pill shows a muted **`Lunch, not counting`** next to the time.
 - **FR-ACT-40 (Must)** **Reports use the same hours**: Hours rendered (FR-ACT-10), task actual hours (FR-TIME-07), weekly totals (FR-ACT-34), Team & workload Recorded (FR-WL-01) and the DAR (FR-DAR-08). There is one stored hours value and every screen reads it.
 - **FR-ACT-41 (Must)** The daily cap (FR-TIME-03) and other hour checks run on the **reduced** minutes (after lunch is taken out), never raw duration.
 - **FR-ACT-42 (Must)** Time logged **before** this change: **not decided** (Q-120). Until Jomerson answers, the build must not recalculate existing entries.
@@ -109,6 +117,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **AC-65.3 (UI)** A filter that leaves 3 rows shows # 1 to 3.
 - **AC-65.4** N/A: no paging (FR-TSK-36). Queen dropped across-pages cases.
 - **AC-65.6 (UI)** In every My tasks tab, # is the first column, left of the task name; about 48px, header `#`, right-aligned, `text-body-secondary` tabular numbers, not sortable; on 390 a muted `#12` before the title. (FR-TSK-35; Locked UI / UIE)
+- **AC-65.7 (UI)** Today tab with 3 rows in its first section and 2 in its second: # shows 1 to 5, not 1–3 then 1–2. Same on Due. (FR-TSK-35a)
 - **AC-65.5 (UI)** The My tasks # is not the project order: a task that is #4 in its project may show as #1 in My tasks.
 
 **US-66 — follow-up badge**
@@ -120,6 +129,11 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **AC-66.5 (UI)** The writer of a follow-up doesn't see their own new follow-up as highlighted. (FR-NTF-12)
 - **AC-66.6 (UI)** A task with no follow-ups shows no badge.
 - **AC-66.7 (UI)** Clicking the bell notification alone doesn't clear the highlight. (FR-NTF-11)
+- **AC-66.8 (API)** A task whose follow-ups were all posted before the cutoff shows a plain (seen) badge for every user, with no `followUpSeen` rows existing. (FR-NTF-11b)
+- **AC-66.9 (API)** User with no `followUpSeen` row for a task: a follow-up by someone else posted after the cutoff makes the badge highlighted. (FR-NTF-10a)
+- **AC-66.10 (API)** `POST /tasks/:id/follow-ups/seen` twice leaves one record for that user and task, `seenAt` = latest call. (FR-NTF-11a)
+- **AC-66.11 (UI)** Arriving from a `?task=` link or opening the task panel / badge clears the highlight, same as opening the follow-ups list. (FR-NTF-11)
+- **AC-66.12 (API)** Restarting the app after release doesn't change the cutoff time. (FR-NTF-11b)
 
 **US-67 — defaults and lunch** (all times Philippine time)
 - **AC-67.1 (UI)** New manual entry on the Day timesheet opens with time in 8:00 AM and time out 5:00 PM.
@@ -140,6 +154,10 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **AC-67.16 (API)** The refusal in AC-67.7 returns error code `LUNCH_BREAK` with the exact message. (FR-ACT-38a)
 - **AC-67.17 (API)** When the API returns the entry, an 8:00 AM to 5:00 PM entry has `lunchMinutes` = 60; 11:30 AM to 12:30 PM returns 30; 1:00 PM to 5:00 PM and hours-only return 0. `lunchMinutes` is **not stored**. (FR-ACT-42a)
 - **AC-67.18 (UI)** Day with an 8:00 AM to 5:00 PM entry shows `Lunch 1h 00m not counted` under the hours; a day with no lunch overlap shows no line. (FR-ACT-37a)
+- **AC-67.20 (UI)** Add quick activity opens with its current times, **not** 8:00 AM / 5:00 PM. (FR-ACT-37b)
+- **AC-67.21 (UI)** Add entry form with 8:00 AM to 5:00 PM shows `Counts as 8h 00m. Lunch 1h 00m not counted.`; changing time out to 12:00 PM updates it to `Counts as 4h 00m.` with no lunch part. No fixed lunch line. (FR-ACT-37c)
+- **AC-67.22 (UI)** Timer running at 12:20 PM: pill shows muted `Lunch, not counting` next to the time; at 1:00 PM it goes away. (FR-ACT-39b)
+- **AC-67.23 (API)** `lunchMinutes` is still returned and not stored (unchanged from v0.2.3). (FR-ACT-42a)
 - **AC-67.19 (UI)** Timer started 11:00 AM, still running at 1:30 PM: the live count shows 1h 30m, not 2h 30m. (FR-ACT-39a)
 
 ## 9. Non-functional
@@ -162,12 +180,15 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **EC-172** My tasks with 0 rows: no # shown (empty state as today).
 - **EC-173** N/A: no paging (FR-TSK-36).
 - **EC-174** A follow-up is deleted or edited (if allowed today): the count follows what exists; an edit doesn't re-highlight (A-40).
+- **EC-174a** A follow-up posted exactly at the cutoff time counts as seen (unseen needs *after* the cutoff).
+- **EC-174b** A user's `seenAt` is earlier than the cutoff (e.g. clock skew): the cutoff still applies; only posts after both count.
 - **EC-175** User loses access to a project: its badges disappear with the task rows (FR-NTF-13).
 
 ## 11. Assumptions
 - **A-36** The lunch window is Philippine time (Asia/Manila), as all tracker times are (FR-ACT-09). Lean didn't say otherwise.
 - **A-37** Confirmed by Lean (Locked): renumbering is per project on the project-wide `order` (FR-TSK-11), not within a phase.
 - **A-38** Confirmed by Lean (Locked): own follow-ups are seen from the start (FR-NTF-12).
+- **A-38a** Confirmed by Lean + Deven (Locked): the cutoff is one app-wide value set once at first release start; no per-user rows are backfilled (FR-NTF-11b).
 - **A-39** Confirmed by Lean (Locked): the daily cap runs on reduced minutes (FR-ACT-41).
 - **A-40** Editing a follow-up doesn't make it unseen again; only a new follow-up does.
 - **A-41** Mobile is out of scope. If the mobile app shows the same lists, it reads the same server hours (lunch included) but gets no badge or # until a later change.
@@ -183,10 +204,10 @@ Four fixes Jomerson asked for, as Lean defined them:
 | Q-125 | Entry entirely inside lunch; show deduction? | **Closed (Lean):** refused, nothing saved, message `This time is inside the 12:00–1:00 PM lunch break.` Row shows the lunch deduction. | Lean |
 
 ## 13. Status
-- **Draft v0.2.3**, matched to Deven's build `346d52d` (items 1 and 4); `lunchMinutes` returned not stored; UIE # and badge notes recorded. Awaiting **Jomerson** on **Q-120** and his overall OK. Q-121 to Q-125 closed by Lean (2026-11-05).
+- **Draft v0.2.4**: pre-release follow-up seen cutoff and `followUpSeen` storage locked (Lean + Deven); 8–5 default Day timesheet only (not quick activity); live helper and timer pill noted. v0.2.3 base: matched to Deven's build `346d52d`; `lunchMinutes` returned not stored; UIE # and badge notes recorded. Awaiting **Jomerson** on **Q-120** and his overall OK. Q-121 to Q-125 closed by Lean (2026-11-05).
 - **Build:** Deven builds on **one branch off `main`**; no push until Jomerson OKs.
 - **One-time renumber** (FR-TSK-33) runs on live only with Jomerson's OK.
-- **Design (Locked UI / UIE):** # first column (~48px, right-aligned tabular `#`); badge after title (`rounded-pill` + icon + count; warning+dot unseen / secondary seen); keep `Lunch 1h 00m not counted`.
+- **Design (Locked UI / UIE):** # first column (~48px, right-aligned tabular `#`); badge after title (`rounded-pill` + icon + count; warning+dot unseen / secondary seen); keep `Lunch 1h 00m not counted`; Add entry live helper; timer pill `Lunch, not counting`. Mockup `docs/design/mockup/index-v0.9.18.html`.
 - **Test:** Queen's cases are AC-64.x to AC-67.x (delete then renumber, badge seen state, entries that cross or sit inside [12:00, 13:00), refusal message; across-pages cases dropped).
 - Once approved: FR-TSK-31 to 36 go into doc 12 / doc 14, FR-NTF-09 to 13 into doc 12, FR-ACT-37 to 42 into doc 14, US/AC into docs 04/05, EC into doc 08, NFR into doc 07, Q-120 to Q-125 into doc 09.
 
