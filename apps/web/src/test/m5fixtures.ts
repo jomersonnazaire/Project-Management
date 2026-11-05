@@ -15,6 +15,7 @@ export const entry = (over: Partial<TrackerEntryDto> = {}): TrackerEntryDto => (
   endAt: '2026-10-09T03:45:00.000Z',
   running: false,
   minutes: 75,
+  lunchMinutes: 0,
   timed: true,
   autoStopped: false,
   activityType: { id: 'at1', name: 'Configuration' },

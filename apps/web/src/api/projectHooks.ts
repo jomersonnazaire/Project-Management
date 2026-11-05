@@ -256,6 +256,35 @@ export function useTaskMutation() {
   });
 }
 
+/**
+ * CR-20 FR-NTF-12: the user opened a task's follow-ups list, so all its follow-ups are seen.
+ * Clears the badge's "new" state in the cached lists at once, then refetches them to confirm. The
+ * open panel keeps its copy (so it can still mark which ones were new) and refetches next time.
+ */
+export function useMarkFollowUpsSeen() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      api<{ followUps: number; followUpsUnseen: number }>(`/tasks/${taskId}/follow-ups/seen`, {
+        method: 'POST',
+      }),
+    onMutate: (taskId) => {
+      const clear = <T extends { id: string; followUpsUnseen: number }>(t: T): T =>
+        t.id === taskId ? { ...t, followUpsUnseen: 0 } : t;
+      qc.setQueriesData<TaskDto[]>({ queryKey: ['tasks', 'project'] }, (list) => list?.map(clear));
+      qc.setQueriesData<MyTasksDto>(
+        { queryKey: ['tasks', 'mine'] },
+        (d) => d && { ...d, items: d.items.map(clear) },
+      );
+    },
+    onSettled: (_data, _error, taskId) => {
+      void qc.invalidateQueries({ queryKey: ['tasks', 'project'] });
+      void qc.invalidateQueries({ queryKey: ['tasks', 'mine'] });
+      void qc.invalidateQueries({ queryKey: ['tasks', 'detail', taskId], refetchType: 'none' });
+    },
+  });
+}
+
 export function taskPatch(id: string, body: UpdateTaskInput) {
   return { path: `/tasks/${id}`, method: 'PATCH' as const, body };
 }

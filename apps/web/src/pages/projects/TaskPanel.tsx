@@ -8,10 +8,15 @@ import {
   type ProjectDto,
   type TaskDto,
 } from '@xc8/shared';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Form, Offcanvas } from 'react-bootstrap';
 import { useAllIssues } from '../../api/issueHooks';
-import { useTask, useTaskHistory, useTaskMutation } from '../../api/projectHooks';
+import {
+  useMarkFollowUpsSeen,
+  useTask,
+  useTaskHistory,
+  useTaskMutation,
+} from '../../api/projectHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
@@ -41,11 +46,14 @@ export function TaskPanel({
   taskId,
   project,
   tasks,
+  focusFollowUps = false,
   onClose,
 }: {
   taskId: string;
   project: ProjectDto;
   tasks: TaskDto[];
+  /** CR-20 FR-NTF-09..13: opened from the follow-up badge, so scroll to the follow-ups list. */
+  focusFollowUps?: boolean;
   onClose: () => void;
 }) {
   const [confirm, confirmDialog] = useConfirm();
@@ -65,6 +73,35 @@ export function TaskPanel({
   const { permissions } = useAuth();
   const canIssues = hasPermission(permissions, 'issues', 'view');
   const notifies = t ? followUpRecipients(t, project, user?.id) : '';
+  // CR-20 FR-NTF-12: the follow-ups list is on screen (opened from the badge, a ?task= link or the
+  // title), so everything on it is now seen. Once per task and follow-up count.
+  const { mutate: markSeen } = useMarkFollowUpsSeen();
+  const markedFor = useRef('');
+  const shownId = t?.id;
+  const unseen = t?.followUpsUnseen ?? 0;
+  const followUpCount = t?.followUps.length ?? 0;
+  useEffect(() => {
+    const key = `${shownId}:${followUpCount}`;
+    if (!shownId || unseen === 0 || markedFor.current === key) return;
+    markedFor.current = key;
+    markSeen(shownId);
+  }, [shownId, followUpCount, unseen, markSeen]);
+  // FR-NTF-12: the ones that were new when the panel opened: the newest `followUpsUnseen`
+  // follow-ups by other people (the panel keeps this copy until it is opened again).
+  const newIds = new Set(
+    (t?.followUps ?? [])
+      .filter((f) => f.author?.id !== user?.id)
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, unseen)
+      .map((f) => f.id),
+  );
+  const followUpsRef = useRef<HTMLHeadingElement>(null);
+  const loaded = Boolean(t);
+  useEffect(() => {
+    if (!focusFollowUps || !loaded) return;
+    followUpsRef.current?.scrollIntoView?.({ block: 'start' });
+    followUpsRef.current?.focus();
+  }, [focusFollowUps, loaded]);
   const nameOf = (id: string) => {
     const d = tasks.find((x) => x.id === id);
     return d ? `#${d.order} ${d.name}` : 'Removed task';
@@ -263,18 +300,24 @@ export function TaskPanel({
 
               {canIssues && <LinkedIssues task={t} project={project} />}
 
-              <h3 className="h6">Follow-ups</h3>
+              <h3 className="h6" id="task-follow-ups" ref={followUpsRef} tabIndex={-1}>
+                Follow-ups
+              </h3>
               {t.followUps.length === 0 ? (
                 <p className="small text-body-secondary">No follow-ups yet.</p>
               ) : (
                 <ul className="list-unstyled small">
                   {t.followUps.map((f) => (
-                    <li key={f.id} className="mb-2">
+                    <li
+                      key={f.id}
+                      className={`mb-2 ${newIds.has(f.id) ? 'followup-new rounded px-2 py-1' : ''}`}
+                    >
                       <div>{f.note}</div>
                       <span className="text-body-secondary">
                         {f.author?.name ?? 'Unknown'} · {dateTime(f.at)}
                         {f.emailedAt && ' · Emailed'}
                       </span>
+                      {newIds.has(f.id) && <span className="badge bg-label-warning ms-2">New</span>}
                     </li>
                   ))}
                 </ul>

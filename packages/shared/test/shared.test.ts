@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LUNCH_ONLY_MESSAGE,
+  countsAsLabel,
+  endAfterWorkedMinutes,
+  phInstant,
+  isLunchTime,
   GRID_ACTIONS,
+  lunchMinutes,
+  workedMinutes,
   initialCell,
   ADMIN_FULL_REASON,
   initialRow,
@@ -324,5 +331,58 @@ describe('Reports and Team & workload rows (doc 11 v0.4.8, FR-ACL-14..17)', () =
     );
     expect(initialRow('ADMIN', 'workload', { reports: { view: false } }).view).toBe(true);
     expect(initialRow('VIEWER', 'workload', null).view).toBe(true);
+  });
+});
+
+describe('CR-20 lunch deduction (Jomerson Nov 5)', () => {
+  const at = (hm: string, d = '2026-11-05') => new Date(`${d}T${hm}:00+08:00`);
+  it('takes 12:00–1:00 PM out of the counted minutes', () => {
+    expect(workedMinutes(at('08:00'), at('17:00'))).toBe(480);
+    expect(workedMinutes(at('08:00'), at('12:00'))).toBe(240);
+    expect(workedMinutes(at('13:00'), at('17:00'))).toBe(240);
+    expect(workedMinutes(at('11:30'), at('12:30'))).toBe(30);
+    expect(workedMinutes(at('12:15'), at('12:45'))).toBe(0);
+    expect(workedMinutes(at('12:30'), at('15:00'))).toBe(120);
+    expect(lunchMinutes(at('08:00'), at('17:00'))).toBe(60);
+    expect(lunchMinutes(at('17:00'), at('08:00'))).toBe(0);
+  });
+
+  it('FR-ACT-37..42: the live "Counts as" helper', () => {
+    const d = '2026-11-05';
+    expect(countsAsLabel(d, '08:00', '17:00')).toBe('Counts as 8h 00m. Lunch 1h 00m not counted.');
+    expect(countsAsLabel(d, '11:30', '12:30')).toBe('Counts as 0h 30m. Lunch 0h 30m not counted.');
+    expect(countsAsLabel(d, '08:30', '10:30')).toBe('Counts as 2h 00m.');
+    expect(countsAsLabel(d, '13:00', '14:05')).toBe('Counts as 1h 05m.');
+    expect(countsAsLabel(d, '12:00', '13:00')).toBe(LUNCH_ONLY_MESSAGE);
+    expect(countsAsLabel(d, '12:15', '12:45')).toBe(LUNCH_ONLY_MESSAGE);
+    expect(countsAsLabel(d, '17:00', '08:00')).toBeNull();
+    expect(countsAsLabel(d, '08:00', '08:00')).toBeNull();
+    expect(countsAsLabel(d, '', '17:00')).toBeNull();
+    expect(countsAsLabel(d, '08:00', '')).toBeNull();
+  });
+
+  it('FR-ACT-37..42: lunch time is [12:00, 1:00 PM) Philippine time', () => {
+    expect(isLunchTime(at('11:59'))).toBe(false);
+    expect(isLunchTime(at('12:00'))).toBe(true);
+    expect(isLunchTime(at('12:59'))).toBe(true);
+    expect(isLunchTime(at('13:00'))).toBe(false);
+  });
+  it('DEF-061: the cap end counts exactly the room left, even when one shift lands in lunch', () => {
+    const at = (hhmm: string) => phInstant('2026-11-04', hhmm);
+    const cases: [string, number, string][] = [
+      ['11:00', 90, '13:30'],
+      ['11:30', 60, '13:30'],
+      ['10:00', 150, '13:30'],
+      ['11:59', 2, '13:01'],
+      ['12:30', 60, '14:00'],
+      ['09:00', 120, '11:00'],
+      ['11:00', 60, '12:00'],
+      ['08:00', 600, '19:00'],
+    ];
+    for (const [start, room, end] of cases) {
+      const got = endAfterWorkedMinutes(at(start), room);
+      expect(got.toISOString(), `${start} + ${room}`).toBe(at(end).toISOString());
+      expect(workedMinutes(at(start), got)).toBe(room);
+    }
   });
 });

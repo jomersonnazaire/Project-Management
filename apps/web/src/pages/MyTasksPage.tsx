@@ -9,6 +9,7 @@ import {
   resolveMyTasksTab,
   type MyTaskDto,
   type TrackerDayDto,
+  lunchMs,
 } from '@xc8/shared';
 import { useEffect, useState } from 'react';
 import { Button, Form, Nav } from 'react-bootstrap';
@@ -26,7 +27,7 @@ import { useCan } from '../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../components/Feedback';
 import { LogTimeModal } from '../components/LogTimeModal';
 import { PageHeader } from '../components/PageHeader';
-import { EstAct, TaskStatusBadge } from '../components/ProjectBadges';
+import { EstAct, FollowUpBadge, TaskStatusBadge } from '../components/ProjectBadges';
 import { hoursLabel, longDay, shortDate } from '../lib/format';
 
 const VIEWS = [
@@ -67,12 +68,44 @@ function PlannedCell({ t }: { t: MyTaskDto }) {
 /** Legacy deep-link aliases (e.g. notifications sent before m8-polish used ?tab=day). */
 const TAB_ALIASES: Record<string, string> = { day: 'day-timesheet' };
 
-function TaskCell({ t }: { t: MyTaskDto }) {
+/**
+ * CR-20 FR-TSK-35: the row's place (1…n) in the tab's current sort and search, not `task.order`.
+ * A narrow first column on desktop; on phone cards it moves into the title cell (IndexPrefix), so
+ * only one of the two is visible and a screen reader hears the number once.
+ */
+function IndexHead() {
+  return (
+    <th scope="col" className="cell-index">
+      #
+    </th>
+  );
+}
+function IndexCell({ n }: { n: number }) {
+  return <td className="cell-index text-body-secondary">{n}</td>;
+}
+function IndexPrefix({ n }: { n: number }) {
+  return <span className="task-index d-md-none small text-body-secondary me-1">#{n}</span>;
+}
+
+/** CR-20 FR-NTF-09..13: the follow-up badge; opens the task panel at its follow-ups. */
+function TaskFollowUps({ t }: { t: MyTaskDto }) {
+  return (
+    <FollowUpBadge
+      total={t.followUps}
+      unseen={t.followUpsUnseen}
+      to={`/projects/${t.project.id}?task=${t.id}&focus=follow-ups`}
+    />
+  );
+}
+
+function TaskCell({ t, n }: { t: MyTaskDto; n: number }) {
   return (
     <td className="cell-primary">
+      <IndexPrefix n={n} />
       <Link className="fw-medium" to={`/projects/${t.project.id}?task=${t.id}`}>
         {t.name}
       </Link>
+      <TaskFollowUps t={t} />
       <div className="small text-body-secondary">
         {t.project.name}
         {t.phase && ` · ${t.phase}`}
@@ -113,7 +146,16 @@ function TodayPlan({
   // DR-31: a running entry counts up live from its start, not from when the day was fetched.
   // Server minutes at fetch time plus the time since, so the browser clock doesn't matter.
   const entryMinutes = (e: (typeof entries)[number]) =>
-    e.running ? e.minutes + Math.max(0, Math.floor((now - fetchedAt) / 60_000)) : e.minutes;
+    e.running
+      ? e.minutes +
+        Math.max(
+          0,
+          Math.floor(
+            (now - fetchedAt - lunchMs(new Date(fetchedAt), new Date(Math.max(now, fetchedAt)))) /
+              60_000,
+          ),
+        )
+      : e.minutes;
   const minutesOn = (taskId: string) =>
     entries.filter((e) => e.task?.id === taskId).reduce((s, e) => s + entryMinutes(e), 0);
   const loading = hasTracker && !tracker;
@@ -219,6 +261,7 @@ function TodayPlan({
                 <table className="table table-stack-md">
                   <thead>
                     <tr>
+                      <IndexHead />
                       <th scope="col">Task</th>
                       <th scope="col">Planned</th>
                       <th scope="col">Due</th>
@@ -230,9 +273,10 @@ function TodayPlan({
                     </tr>
                   </thead>
                   <tbody>
-                    {planned.map((t) => (
+                    {planned.map((t, i) => (
                       <tr key={t.id} data-testid={`planned-${t.id}`} className={rowClass(t)}>
-                        <TaskCell t={t} />
+                        <IndexCell n={i + 1} />
+                        <TaskCell t={t} n={i + 1} />
                         <td data-label="Planned" className="text-nowrap">
                           {t.plannedStart === today
                             ? shortDate(t.plannedStart)
@@ -263,6 +307,7 @@ function TodayPlan({
                 <table className="table table-stack-md">
                   <thead>
                     <tr>
+                      <IndexHead />
                       <th scope="col">Task</th>
                       <th scope="col">Planned</th>
                       <th scope="col">Due</th>
@@ -275,12 +320,15 @@ function TodayPlan({
                     </tr>
                   </thead>
                   <tbody>
-                    {aging.map((t) => {
+                    {aging.map((t, i) => {
                       const age = t.ageDays ?? 0;
                       const tone = ageTone(age);
+                      // CR-20 FR-TSK-35: counts on from Planned for today (one count per tab).
+                      const n = planned.length + i + 1;
                       return (
                         <tr key={t.id} data-testid={`aging-${t.id}`} className={rowClass(t)}>
-                          <TaskCell t={t} />
+                          <IndexCell n={n} />
+                          <TaskCell t={t} n={n} />
                           <td data-label="Planned" className="text-nowrap">
                             {shortDate(t.plannedStart)}
                           </td>
@@ -395,7 +443,8 @@ function DueList({
 }) {
   const overdue = items.filter((t) => t.overdue);
   const dueToday = items.filter((t) => !t.overdue);
-  const section = (title: string, rows: MyTaskDto[], danger: boolean) =>
+  // CR-20 FR-TSK-35: `first` keeps the # running from Overdue into Due today.
+  const section = (title: string, rows: MyTaskDto[], danger: boolean, first: number) =>
     rows.length > 0 && (
       <>
         <h3 className={`h6 mt-4 mb-2 ${danger ? 'text-danger' : ''}`}>
@@ -405,6 +454,7 @@ function DueList({
           <table className="table table-stack-md">
             <thead>
               <tr>
+                <IndexHead />
                 <th scope="col">Task</th>
                 <th scope="col">Planned</th>
                 <th scope="col">Due</th>
@@ -415,12 +465,15 @@ function DueList({
               </tr>
             </thead>
             <tbody>
-              {rows.map((t) => (
-                <tr key={t.id}>
+              {rows.map((t, i) => (
+                <tr key={t.id} data-testid={`due-${t.id}`}>
+                  <IndexCell n={first + i} />
                   <td className="cell-primary">
+                    <IndexPrefix n={first + i} />
                     <Link className="fw-medium" to={`/projects/${t.project.id}?task=${t.id}`}>
                       {t.name}
                     </Link>
+                    <TaskFollowUps t={t} />
                     <div className="small text-body-secondary">
                       {t.project.name}
                       {t.phase && ` · ${t.phase}`}
@@ -460,8 +513,8 @@ function DueList({
         </EmptyState>
       ) : (
         <>
-          {section('Overdue', overdue, true)}
-          {section('Due today', dueToday, false)}
+          {section('Overdue', overdue, true, 1)}
+          {section('Due today', dueToday, false, overdue.length + 1)}
         </>
       )}
       <p className="small text-body-secondary mt-3 mb-0">
@@ -674,6 +727,7 @@ export function MyTasksPage() {
               <table className="table table-stack-md">
                 <thead>
                   <tr>
+                    <IndexHead />
                     <th scope="col">Task</th>
                     <th scope="col">Project</th>
                     <th scope="col">Role</th>
@@ -684,10 +738,13 @@ export function MyTasksPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((t) => (
-                    <tr key={`${t.id}-${t.role}`}>
+                  {items.map((t, i) => (
+                    <tr key={`${t.id}-${t.role}`} data-testid={`row-${t.id}`}>
+                      <IndexCell n={i + 1} />
                       <td className="text-heading fw-medium cell-primary">
+                        <IndexPrefix n={i + 1} />
                         <Link to={`/projects/${t.project.id}?task=${t.id}`}>{t.name}</Link>
+                        <TaskFollowUps t={t} />
                         {t.party === 'CLIENT' && (
                           <span className="badge bg-label-info ms-2">Client</span>
                         )}

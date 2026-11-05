@@ -91,10 +91,13 @@ export function ProjectDetailPage() {
   }
 
   const list = tasks.data ?? [];
-  const setTask = (taskId: string | null) => {
+  const setTask = (taskId: string | null, focus?: 'follow-ups') => {
     const next = new URLSearchParams(params);
     if (taskId) next.set('task', taskId);
     else next.delete('task');
+    // CR-20 FR-NTF-09..13: the follow-up badge opens the panel at its follow-ups list.
+    if (taskId && focus) next.set('focus', focus);
+    else next.delete('focus');
     setParams(next);
   };
   const tabs = [
@@ -297,7 +300,13 @@ export function ProjectDetailPage() {
         )}
 
         {openTask && (
-          <TaskPanel taskId={openTask} project={p} tasks={list} onClose={() => setTask(null)} />
+          <TaskPanel
+            taskId={openTask}
+            project={p}
+            tasks={list}
+            focusFollowUps={params.get('focus') === 'follow-ups'}
+            onClose={() => setTask(null)}
+          />
         )}
         {raising && <RaiseIssueModal projectId={p.id} onClose={() => setRaising(false)} />}
         {openIssues && (

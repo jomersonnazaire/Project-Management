@@ -13,7 +13,8 @@ import {
   dayQuerySchema,
   lookupInUseMessage,
   lookupSchema,
-  minutesBetween,
+  workedMinutes,
+  LUNCH_ONLY_MESSAGE,
   parseDateOnly,
   phInstant,
   reopenDaySchema,
@@ -78,6 +79,17 @@ function dateParam(req: Request): Date {
   const d = parseDateOnly(v);
   if (Number.isNaN(d.getTime()) || toDateOnly(d) !== v) throw notFound();
   return d;
+}
+
+/** CR-20 (Jomerson Nov 5): lunch isn't counted; an entry entirely inside it is refused (Q-125). */
+function countedMinutes(startAt: Date, endAt: Date) {
+  const minutes = workedMinutes(startAt, endAt);
+  if (minutes === 0 && endAt > startAt) {
+    throw unprocessable(LUNCH_ONLY_MESSAGE, 'LUNCH_BREAK', [
+      { path: 'timeIn', message: LUNCH_ONLY_MESSAGE },
+    ]);
+  }
+  return minutes;
 }
 
 /** FR-ACT-33 (doc 14 v1.2.3): no time logging on a date after today (PH): 422 FUTURE_DATE. */
@@ -416,7 +428,7 @@ export function trackerRouter(registry: RouteRegistry) {
     const fields = await resolveFields(input, target.kind);
     await assertDayEditable(user._id, date);
     await assertLeaveAllowsTime(user._id, date, input.confirmLeave);
-    const minutes = minutesBetween(startAt, endAt);
+    const minutes = countedMinutes(startAt, endAt); // CR-20: lunch not counted
     await assertNoOverlap(user._id, startAt, endAt);
     await assertDailyCap(user._id, date, minutes);
     const { inherit } = await ensureDayLocation(
@@ -514,7 +526,7 @@ export function trackerRouter(registry: RouteRegistry) {
           'VALIDATION_ERROR',
         );
       }
-      const minutes = minutesBetween(startAt, endAt);
+      const minutes = countedMinutes(startAt, endAt); // CR-20: lunch not counted
       await assertNoOverlap(user._id, startAt, endAt, entry._id);
       await assertDailyCap(user._id, entry.workDate, minutes, entry._id);
       entry.startAt = startAt;

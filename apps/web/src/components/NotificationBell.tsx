@@ -79,7 +79,8 @@ export function NotificationBell() {
                       : n.issue
                         ? `/issues/${n.issue.id}`
                         : n.task && n.project
-                          ? `/projects/${n.project.id}?task=${n.task.id}`
+                          ? // CR-20 FR-NTF-12: a follow-up opens the panel at its follow-ups.
+                            `/projects/${n.project.id}?task=${n.task.id}${n.type === 'FOLLOW_UP' ? '&focus=follow-ups' : ''}`
                           : n.project?.id
                             ? `/projects/${n.project.id}`
                             : null;

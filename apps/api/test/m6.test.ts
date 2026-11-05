@@ -489,3 +489,45 @@ describe('FR-DAR-19: blank remarks fall back to the task name or quick activity 
     expect(pdf).toMatch(/0 0\.2745\d* 0\.498\d* scn/);
   });
 });
+
+describe('CR-20 (Jomerson Nov 5): 12:00–1:00 PM lunch is not counted', () => {
+  it('counts 8:00 AM – 5:00 PM as 8 hours, in the entry and the DAR, and on edit', async () => {
+    const s = await setup();
+    const res = await manual(s.w.member.agent, {
+      taskId: s.t1,
+      activityTypeId: s.l.integration,
+      module: s.l.financials,
+      date: '2026-10-13',
+      timeIn: '08:00',
+      timeOut: '17:00',
+      dayLocationId: s.l.wfh,
+      notes: 'Full day',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.entry.minutes).toBe(480);
+    const report = await dar(s.w.member.agent, '2026-10-13', '2026-10-13');
+    expect(report.body.report).toMatchObject({ totalMinutes: 480, totalRendered: '08:00' });
+    expect(report.body.report.rows[0]).toMatchObject({
+      timeIn: '08:00 AM',
+      timeOut: '05:00 PM',
+      minutes: 480,
+    });
+    // Editing to 12:30 – 3:00 PM counts only 1:00 – 3:00 PM.
+    const edit = await s.w.member.agent
+      .patch(`/api/v1/tracker/entries/${res.body.entry.id}`)
+      .set(CSRF)
+      .send({ timeIn: '12:30', timeOut: '15:00' });
+    expect(edit.status).toBe(200);
+    expect(edit.body.entry.minutes).toBe(120);
+    // Q-125: an entry entirely inside lunch is refused and nothing is saved.
+    const inside = await s.w.member.agent
+      .patch(`/api/v1/tracker/entries/${res.body.entry.id}`)
+      .set(CSRF)
+      .send({ timeIn: '12:15', timeOut: '12:45' });
+    expect(inside.status).toBe(422);
+    expect(inside.body.error).toMatchObject({
+      code: 'LUNCH_BREAK',
+      message: 'This time is inside the 12:00–1:00 PM lunch break.',
+    });
+  });
+});

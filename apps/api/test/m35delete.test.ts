@@ -48,6 +48,44 @@ describe('Delete a task', () => {
     expect(log!.actorId!.toString()).toBe(w.pm.user._id.toString());
   });
 
+  it('Jomerson Nov 5: deleting a task renumbers the tasks after it, so the checklist stays #1…n', async () => {
+    const w = await world(app);
+    const extra = await TaskModel.create({
+      projectId: w.project.id,
+      name: 'Renumber me',
+      order: (await TaskModel.countDocuments({ projectId: w.project.id })) + 1,
+    });
+    const before = (await w.pm.agent.get(`${base(w)}/tasks`)).body.items as {
+      id: string;
+      order: number;
+    }[];
+    expect(before.length).toBeGreaterThanOrEqual(3);
+    const first = before[0]!;
+    expect((await del(w.pm.agent, first.id)).status).toBe(204);
+    const after = (await w.pm.agent.get(`${base(w)}/tasks`)).body.items as {
+      id: string;
+      order: number;
+    }[];
+    expect(after.map((t) => t.order)).toEqual(after.map((_, i) => i + 1));
+    expect(after.map((t) => t.id)).toEqual(before.slice(1).map((t) => t.id));
+    expect(after.find((t) => t.id === extra.id.toString())!.order).toBe(before.length - 1);
+  });
+
+  it('CR-20: a delete also clears old gaps and duplicate numbers in the project', async () => {
+    const w = await world(app);
+    const pid = w.project.id;
+    const n = await TaskModel.countDocuments({ projectId: pid });
+    await TaskModel.create({ projectId: pid, name: 'Gap', order: n + 5 });
+    await TaskModel.create({ projectId: pid, name: 'Dup A', order: n + 9 });
+    await TaskModel.create({ projectId: pid, name: 'Dup B', order: n + 9 });
+    const victim = await TaskModel.create({ projectId: pid, name: 'Delete me', order: n + 12 });
+    expect((await del(w.pm.agent, victim.id.toString())).status).toBe(204);
+    const orders = (await TaskModel.find({ projectId: pid }).sort({ order: 1 }).lean()).map(
+      (t) => t.order,
+    );
+    expect(orders).toEqual(orders.map((_, i) => i + 1));
+  });
+
   it('409 TASK_HAS_RECORDS lists what blocks it: time, follow-ups, comments, evidence, documents, issues', async () => {
     const w = await world(app);
     const [t] = await tasks(w);

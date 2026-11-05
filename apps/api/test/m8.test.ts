@@ -93,8 +93,8 @@ describe('FR-ACT-20: Module is optional free text', () => {
     const html = '<b>ADFS</b> <img src=x onerror=alert(1)>';
     const h = await manual(w.member.agent, {
       ...base,
-      timeIn: '12:00',
-      timeOut: '13:00',
+      timeIn: '13:00', // CR-20: 12:00–1:00 PM alone is lunch and would be refused
+      timeOut: '14:00',
       module: html,
     });
     expect(h.body.entry.module).toBe(html);
