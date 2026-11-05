@@ -501,7 +501,10 @@ export async function toTrackerDtos(
       e.running && e.startAt
         ? lunchMinutesOf(e.startAt, now)
         : e.startAt && e.endAt
-          ? Math.max(0, minutesBetween(e.startAt, e.endAt) - minutes)
+          ? Math.min(
+              lunchMinutesOf(e.startAt, e.endAt),
+              Math.max(0, minutesBetween(e.startAt, e.endAt) - minutes),
+            )
           : 0;
     return {
       id: e._id.toString(),
