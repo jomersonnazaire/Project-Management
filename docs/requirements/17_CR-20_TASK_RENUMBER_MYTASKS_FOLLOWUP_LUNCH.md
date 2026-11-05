@@ -1,6 +1,6 @@
 # CR-20 — Task order numbers without gaps, # column in My tasks, follow-up badge, lunch break on the Day timesheet
 
-**Status:** v0.2 draft (2026-11-05, SGT; v0.1 earlier same day) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Status:** v0.2.1 draft (2026-11-05, SGT; v0.2 and v0.1 earlier same day) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Requested by:** Jomerson (lead dev / product owner), 2026-11-05. **Rules locked by:** Lean (tech lead), 2026-11-05 PM room. Rules marked **Locked** are Lean's. Anything not locked is listed as an assumption (§11) or an open question (§12). Nothing here adds a product decision beyond what Lean locked.
 **Part of:** doc 17 (change requests). CR-20 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-19 and uses the next free IDs: **FR-TSK-31 to FR-TSK-36**, **FR-NTF-09 to FR-NTF-13** (FR-NTF-07 and 08 are reserved in doc 17 §3), **FR-ACT-37 to FR-ACT-42**, **US-64 to US-67**, **AC-64.x to AC-67.x**, **EC-162 to EC-175**, **NFR-43 to NFR-46**, **Q-120 to Q-125**, **A-36 to A-41**.
 **Checked against:** docs 01 to 17 (with CR-19), and the build at `main` `dfa1f38` (merge of PR #46).
@@ -8,6 +8,7 @@
 **UI reference:** none yet. Placement Locked by Lean (# first column); badge look from UIE (amber with a dot while unseen).
 
 **Doc change log:**
+- v0.2.1 (2026-11-05, SGT): **Lean's audit call.** Day-to-day delete renumber: the existing delete audit covers it, no extra audit (confirmed by Lean). One-time renumber on live (FR-TSK-33): one audit entry per project it changes, listing old and new numbers, so it can be traced or undone. FR-TSK-34 and Q-124 updated; AC-64.8 added. No IDs renumbered.
 - v0.2 (2026-11-05, SGT): **Lean's technical locks (PM room).** Renumber is per project: every delete renumbers all remaining tasks 1…n in one transaction (also cleans old gaps/duplicates). My tasks # is a plain row count, no paging. Badge shows the total, highlighted (amber with a dot, UIE) while any are unseen; seen = opening the task's follow-ups list; own posts seen; notifications alone don't count. Lunch every day incl. weekends/holidays, half-open [12:00, 13:00) Manila; entries entirely inside lunch refused; row shows the deduction; daily cap on reduced minutes; hours-only entries not deducted. **Q-121 to Q-125 closed.** Only Q-120 (Jomerson) open. AC-65.4 and EC-173 marked N/A (no paging); AC/EC added for refusal and boundaries.
 - v0.1 (2026-11-05, SGT): first draft. Four items from Jomerson, rules locked by Lean. Q-120 (recalculate old time with lunch taken out?) waits on Jomerson. Q-121 to Q-125 are gaps found while writing, waiting on Lean, Deven or UIE.
 
@@ -52,7 +53,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **FR-TSK-31 (Must)** Numbering is **per project** (the project-wide `order`). When a task is deleted, **all** of that project's remaining tasks are renumbered **1 to n in their current order** (sorted by existing `order`), **inside the same transaction** as the delete. This also cleans any existing gaps or duplicate numbers in that project the next time anyone deletes one of its tasks. Amends FR-TSK-11 (the # shown stays the stored order).
 - **FR-TSK-32 (Must)** If the delete is refused (403, 404, 409 `ACTIVITY_IN_USE`, 409 `TASK_HAS_RECORDS`), **no number changes**.
 - **FR-TSK-33 (Must)** A **one-time renumber** closes gaps in projects that already have them, keeping the current order. It runs on **live only with Jomerson's OK**. It's run once, can be run again safely (a project with no gaps is left as is), and reports how many projects and tasks it changed.
-- **FR-TSK-34 (Must)** The renumber (both FR-TSK-31 and FR-TSK-33) changes only the order number. It doesn't change the task, its version for other fields, its links or its history. Audit: no separate audit entry per renumbered task; the delete's existing audit covers it (Lean didn't ask for more).
+- **FR-TSK-34 (Must)** The renumber (both FR-TSK-31 and FR-TSK-33) changes only the order number. It doesn't change the task, its version for other fields, its links or its history. Audit (Locked, Lean 2026-11-05): for the day-to-day delete renumber (FR-TSK-31), no extra audit; the delete's existing audit entry covers it. For the one-time renumber (FR-TSK-33), write **one audit entry per project it changes**, listing each task's **old and new number**, so the change can be traced or undone. Projects it leaves unchanged get no entry.
 - **Effect to note:** the same `#{order}` label is used in the task pickers (§0), so numbers there shift too. Anyone who wrote "task #5" in a note or DAR will find a different task at #5 after a delete. That is the expected result of the rule, not a defect.
 
 ## 4. # column in My tasks (Locked, Lean, 2026-11-05)
@@ -92,6 +93,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **AC-64.4 (API)** A delete refused with 409 `ACTIVITY_IN_USE` leaves every number unchanged. (FR-TSK-32)
 - **AC-64.5 (API)** Two deletes in the same project at the same time: afterwards numbers are still 1 to n with no gap and no duplicate. (EC-163, NFR-43)
 - **AC-64.6 (script)** On a copy of live data, the one-time renumber turns a project numbered 1, 2, 4, 7 into 1, 2, 3, 4 in the same order; a project with no gaps is unchanged; running it a second time changes nothing. (FR-TSK-33)
+- **AC-64.8 (script)** The one-time renumber on a copy of live data writes exactly one audit entry for each project it changed, listing every changed task's old and new number (e.g. 4→3, 7→4); an unchanged project, or a second run, writes none. A delete's renumber writes no audit entry beyond the delete's own. (FR-TSK-33, FR-TSK-34)
 - **AC-64.7 (UI)** After a delete, the task pickers (documents, conversations, task form) show the new numbers.
 
 **US-65 — My tasks #**
@@ -166,7 +168,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 | Q-121 | My tasks #: tabs and placement. | **Closed (Lean, 2026-11-05):** first column, left of the task name, in every My tasks tab. | Lean |
 | Q-122 | My tasks paging? | **Closed (Lean):** no paging; # runs 1…n over each tab's filtered list. Across-pages dropped. | Lean |
 | Q-123 | What counts as "seen"? | **Closed (Lean):** opening the task's follow-ups list marks every follow-up there seen; a notification alone doesn't count; own follow-ups seen from the start. Badge shows total count. | Lean |
-| Q-124 | Lunch for hours-only entries; renumber audit. | **Closed (Lean):** hours-only entries have nothing deducted (hours typed already exclude lunch). Renumber: no extra audit. | Lean |
+| Q-124 | Lunch for hours-only entries; renumber audit. | **Closed (Lean):** hours-only entries have nothing deducted (hours typed already exclude lunch). Renumber: no extra audit for the delete renumber (delete's audit covers it); v0.2.1: the one-time renumber writes one audit entry per changed project with old and new numbers (FR-TSK-34). | Lean |
 | Q-125 | Entry entirely inside lunch; show deduction? | **Closed (Lean):** refused, nothing saved, message `This time is inside the 12:00–1:00 PM lunch break.` Row shows the lunch deduction. | Lean |
 
 ## 13. Status
