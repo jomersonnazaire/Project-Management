@@ -358,10 +358,22 @@ export function countsAsLabel(date: string, timeIn: string, timeOut: string): st
   const b = phInstant(date, timeOut);
   const lunch = lunchMinutes(a, b);
   const worked = workedMinutes(a, b);
-  // Fully inside lunch: no helper; the API refuses it under Time in on save (UIE Nov 5).
-  if (worked === 0) return null;
+  if (worked === 0) return LUNCH_ONLY_MESSAGE;
   const counts = `Counts as ${formatHoursMinutes(worked)}.`;
   return lunch > 0 ? `${counts} ${lunchTakenLabel(lunch)}.` : counts;
+}
+
+/**
+ * CR-20 DEF-061: the earliest end where `minutes` of work (lunch taken out) have passed since
+ * `start`. Each step adds only the shortfall, so it never overshoots and lands past lunch.
+ */
+export function endAfterWorkedMinutes(start: Date, minutes: number): Date {
+  let end = new Date(start.getTime() + minutes * 60_000);
+  for (let short = minutes - workedMinutes(start, end); short > 0;) {
+    end = new Date(end.getTime() + short * 60_000);
+    short = minutes - workedMinutes(start, end);
+  }
+  return end;
 }
 
 /** CR-20 FR-ACT-37..42: true while it is 12:00–1:00 PM Philippine time (a running timer holds still). */

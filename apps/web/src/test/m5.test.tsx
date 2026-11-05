@@ -293,13 +293,12 @@ describe('CR-20 FR-ACT-37..42: 8:00–5:00 defaults and the live "Counts as" hel
     expect(timeIn).toHaveAttribute('aria-describedby', helper.id);
     expect(timeOut).toHaveAttribute('aria-describedby', helper.id);
     expect(within(dialog).getByText(/^Philippine time · /)).not.toHaveTextContent('lunch');
-    // Inside lunch only, or Time out before Time in → no helper (the refusal comes on save).
+    // Inside lunch only → the shared refusal text, before saving (Lean Nov 5); Time out before Time in → no helper.
     await userEvent.clear(timeIn);
     await userEvent.type(timeIn, '12:10');
     await userEvent.clear(timeOut);
     await userEvent.type(timeOut, '12:50');
-    expect(helper).toBeEmptyDOMElement();
-    expect(helper).not.toHaveTextContent(LUNCH_ONLY_MESSAGE);
+    expect(helper).toHaveTextContent(LUNCH_ONLY_MESSAGE);
     await userEvent.clear(timeOut);
     await userEvent.type(timeOut, '11:00');
     expect(helper).toBeEmptyDOMElement();

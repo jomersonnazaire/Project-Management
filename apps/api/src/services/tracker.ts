@@ -11,6 +11,7 @@ import {
   floorToMinute,
   minutesBetween,
   workedMinutes,
+  endAfterWorkedMinutes,
   lunchMinutes as lunchMinutesOf,
   onHoldStoppedMessage,
   overlapMessage,
@@ -304,8 +305,8 @@ export async function stopEntry(id: Id, at: Date, opts: { auto?: boolean } = {})
   let capped = false;
   if (workedMinutes(startAt, endAt) > room) {
     // CR-20: stop where the counted (lunch-free) minutes reach the room left in the day.
-    endAt = new Date(startAt.getTime() + room * 60_000);
-    endAt = new Date(endAt.getTime() + lunchMinutesOf(startAt, endAt) * 60_000);
+    // DEF-061: one lunch shift could land inside lunch and stop early; extend until it's exact.
+    endAt = endAfterWorkedMinutes(startAt, room);
     capped = true;
   }
   const minutes = workedMinutes(startAt, endAt);

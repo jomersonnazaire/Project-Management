@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LUNCH_ONLY_MESSAGE,
   countsAsLabel,
+  endAfterWorkedMinutes,
+  phInstant,
   isLunchTime,
   GRID_ACTIONS,
   lunchMinutes,
@@ -350,8 +353,8 @@ describe('CR-20 lunch deduction (Jomerson Nov 5)', () => {
     expect(countsAsLabel(d, '11:30', '12:30')).toBe('Counts as 0h 30m. Lunch 0h 30m not counted.');
     expect(countsAsLabel(d, '08:30', '10:30')).toBe('Counts as 2h 00m.');
     expect(countsAsLabel(d, '13:00', '14:05')).toBe('Counts as 1h 05m.');
-    expect(countsAsLabel(d, '12:00', '13:00')).toBeNull();
-    expect(countsAsLabel(d, '12:15', '12:45')).toBeNull();
+    expect(countsAsLabel(d, '12:00', '13:00')).toBe(LUNCH_ONLY_MESSAGE);
+    expect(countsAsLabel(d, '12:15', '12:45')).toBe(LUNCH_ONLY_MESSAGE);
     expect(countsAsLabel(d, '17:00', '08:00')).toBeNull();
     expect(countsAsLabel(d, '08:00', '08:00')).toBeNull();
     expect(countsAsLabel(d, '', '17:00')).toBeNull();
@@ -363,5 +366,23 @@ describe('CR-20 lunch deduction (Jomerson Nov 5)', () => {
     expect(isLunchTime(at('12:00'))).toBe(true);
     expect(isLunchTime(at('12:59'))).toBe(true);
     expect(isLunchTime(at('13:00'))).toBe(false);
+  });
+  it('DEF-061: the cap end counts exactly the room left, even when one shift lands in lunch', () => {
+    const at = (hhmm: string) => phInstant('2026-11-04', hhmm);
+    const cases: [string, number, string][] = [
+      ['11:00', 90, '13:30'],
+      ['11:30', 60, '13:30'],
+      ['10:00', 150, '13:30'],
+      ['11:59', 2, '13:01'],
+      ['12:30', 60, '14:00'],
+      ['09:00', 120, '11:00'],
+      ['11:00', 60, '12:00'],
+      ['08:00', 600, '19:00'],
+    ];
+    for (const [start, room, end] of cases) {
+      const got = endAfterWorkedMinutes(at(start), room);
+      expect(got.toISOString(), `${start} + ${room}`).toBe(at(end).toISOString());
+      expect(workedMinutes(at(start), got)).toBe(room);
+    }
   });
 });
