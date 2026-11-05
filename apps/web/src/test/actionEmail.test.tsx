@@ -137,6 +137,19 @@ describe('Follow-up "Email {name}"', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it('unticked for one follow-up: the box is ticked again for the next one', async () => {
+    const { emailCalls } = setup({ enabled: true, linked: true });
+    renderAt(`/projects/${PID}?task=k1`, <App />);
+    const box = await screen.findByRole('checkbox', { name: 'Email Maria M.' });
+    await userEvent.click(box);
+    expect(box).not.toBeChecked();
+    await userEvent.type(screen.getByLabelText('Follow-up note'), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Post follow-up' }));
+    await waitFor(() => expect(screen.getByLabelText('Follow-up note')).toHaveValue(''));
+    expect(emailCalls()).toHaveLength(0);
+    expect(await screen.findByRole('checkbox', { name: 'Email Maria M.' })).toBeChecked();
+  });
+
   it('unlinked: disabled with the hint; the follow-up still posts (FE-02)', async () => {
     const { assign, emailCalls } = setup({ enabled: true, linked: false });
     renderAt(`/projects/${PID}?task=k1`, <App />);

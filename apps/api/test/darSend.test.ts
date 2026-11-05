@@ -26,7 +26,7 @@ import {
   sendMailAsUser,
   sendMailWithPdf,
 } from '../src/services/graphMail.js';
-import { darMailContent } from '../src/services/darSend.js';
+import { buildDarCc, darMailContent } from '../src/services/darSend.js';
 import { consentReason, msalMailFailureReason } from '../src/services/microsoftAuth.js';
 import { MS_MAIL_COOKIE } from '../src/services/microsoftOAuthCookie.js';
 import { CSRF, PASSWORD, createUser, login, makeApp, useDatabase } from './helpers.js';
@@ -363,6 +363,46 @@ describe('DAR Send (Microsoft Mail.Send)', () => {
       { emailAddress: { address: 'cc2@xceler8.example' } },
     ]);
     fetchSpy.mockRestore();
+  });
+
+  it('CC outside our domain is never blocked: shown on send-status and sent on CC (Jomerson, Oct 22)', async () => {
+    const { a, agent, member } = await setupLinkedMember();
+    // MS_ALLOWED_DOMAINS is xceler8.example; that list only governs Microsoft sign-in.
+    await UserModel.updateOne(
+      { _id: member._id },
+      { $set: { reportCc: ['cc1@xceler8.example', 'Partner@Client.example.org'] } },
+    );
+    const status = await agent.get('/api/v1/dar/send-status');
+    expect(status.body.enabled).toBe(true);
+    expect(status.body.cc).toEqual(['cc1@xceler8.example', 'partner@client.example.org']);
+
+    const savedId = await saveReport(agent, '2026-10-13', '2026-10-13');
+    const { state, cookie } = await startSend(agent, savedId);
+    mailExchangeMock.mockResolvedValueOnce(goodToken());
+    const fetchSpy = graph202();
+    const done = await callback(a, cookie, { code: 'c', state });
+    expect(done.headers.location).toContain(`sent=${savedId}`);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]![1]!.body));
+    expect(body.message.ccRecipients).toEqual([
+      { emailAddress: { address: 'cc1@xceler8.example' } },
+      { emailAddress: { address: 'partner@client.example.org' } },
+    ]);
+    const audit = await ActivityLogModel.findOne({ action: 'report_sent', entityId: savedId });
+    expect(audit?.meta).toMatchObject({
+      cc: ['cc1@xceler8.example', 'partner@client.example.org'],
+    });
+    fetchSpy.mockRestore();
+  });
+
+  it('buildDarCc keeps outside-domain addresses (only drops To, the sender and repeats)', () => {
+    const cc = buildDarCc(
+      {
+        reportCc: ['a@client.example.org', 'sup@xceler8.example', 'A@client.example.org'],
+      } as never,
+      'sup@xceler8.example',
+      'mem@xceler8.example',
+    );
+    expect(cc).toEqual(['a@client.example.org']);
   });
 
   it('D1: Send is not a GET, and the POST needs the CSRF header and an allowed Origin', async () => {

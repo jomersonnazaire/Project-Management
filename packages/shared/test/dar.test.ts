@@ -46,6 +46,11 @@ describe('DAR helpers (doc 14 §3)', () => {
       reportCcSchema.safeParse(Array.from({ length: 6 }, (_, i) => `u${i}@x.example`)).success,
     ).toBe(false);
   });
+  it('CC emails outside our domain are allowed (Jomerson, Oct 22)', () => {
+    const r = reportCcSchema.safeParse(['hr@xceler8.example', 'Partner@Client.example.org']);
+    expect(r.success).toBe(true);
+    expect(r.data).toEqual(['hr@xceler8.example', 'partner@client.example.org']);
+  });
   it('Send copy matches §11, and the PDF limit is 2.5 MB raw', () => {
     expect(DAR_MAX_PDF_BYTES).toBe(2_621_440);
     expect(DAR_TOO_LARGE).toBe(
