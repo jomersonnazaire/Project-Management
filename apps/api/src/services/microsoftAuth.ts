@@ -2,7 +2,7 @@ import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node'
 import type { AppConfig } from '../config.js';
 import { verifyMicrosoftIdToken } from './msIdToken.js';
 
-const DEFAULT_SCOPES = ['openid', 'profile', 'email'];
+export const DEFAULT_SCOPES = ['openid', 'profile', 'email', 'User.Read'];
 const MAIL_SCOPES = ['Mail.Send'];
 
 export interface MicrosoftIdClaims {

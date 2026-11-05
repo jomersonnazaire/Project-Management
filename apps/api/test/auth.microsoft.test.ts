@@ -8,6 +8,7 @@ import {
   UserModel,
 } from '../src/models/index.js';
 import {
+  DEFAULT_SCOPES,
   readEmailFromIdTokenClaims,
   type MicrosoftIdClaims,
 } from '../src/services/microsoftAuth.js';
@@ -734,5 +735,11 @@ describe('CR-21 photo refresh on Microsoft sign-in', () => {
     const user = await UserModel.findOne({ email: claims.email });
     expect(user).toBeTruthy();
     expect(user?.avatarUpdatedAt).toBeNull();
+  });
+});
+
+describe('Microsoft sign-in scopes (FR-SSO-12a)', () => {
+  it('includes delegated User.Read so the callback can fetch the Graph photo', () => {
+    expect(DEFAULT_SCOPES).toEqual(['openid', 'profile', 'email', 'User.Read']);
   });
 });
