@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.9 (2026-11-05 ~5:07 PM SGT): **CR-21 spec v0.1.1 — Q-126 closed (Lean).** Add **`User.Read` only** to Microsoft sign-in scopes for Graph photo (FR-SSO-12a). Deven checks app-registration listing; Jomerson can grant tenant-wide consent once in Entra if staging shows a prompt. No other Graph scopes. No IDs renumbered.
 - v0.6.8 (2026-11-05, SGT): **CR-21 (Microsoft profile photo) v0.1** added. Lean locks: Graph `/me/photo/$value` on Microsoft sign-in callback; resize 96px to blob; signed-in `GET /users/:id/avatar` (404 → initials); refresh every MS sign-in; never keep MS token for later photo; failed fetch must not block sign-in. Full spec [`17_CR-21_MICROSOFT_PROFILE_PHOTO.md`](17_CR-21_MICROSOFT_PROFILE_PHOTO.md). IDs FR-USR-07 to 12, FR-SSO-12, US-68, AC-68.x, EC-176 to 182, NFR-47 to 49, Q-126, A-42 to 46. **CR-20 spec v0.2.7:** pointer to UIE Follow-ups conversation restyle (`docs/design/FOLLOWUPS_CONVERSATION_UI.md`, mockup `#followups`); UI-only, no new CR; Lean 5-minute same-author run gap. No IDs renumbered on CR-20.
 - v0.6.7 (2026-11-05, SGT): **CR-20 spec v0.2.6.** Lean: grey lunch-break helper kept for Add entry times entirely inside lunch, save still refused with red `LUNCH_BREAK` error (FR-ACT-37e). Timer stop at the 24 h cap: counted minutes (lunch out) equal the room left exactly; fixes DEF-061 (FR-ACT-41a). No IDs renumbered; Q-120 stays closed.
 - v0.6.6 (2026-11-05, SGT): **CR-20 spec v0.2.5.** **Q-120 closed** (Jomerson): lunch only on new and edited entries (create, edit, timer stop); old unedited entries keep their hours, no backfill, DARs unchanged. Lunch line shown only where lunch was taken out (FR-ACT-37d, UIE). Cutoff stored in `appMarkers`. Deven's PR #47 into main open (not merged). No IDs renumbered.
@@ -295,12 +296,12 @@ Jomerson (lead developer) gave these decisions in the room. Each row maps a deci
 - **Status:** items 1 and 4 shipped via PR #47 into main. Pending Jomerson's approval of the CR pack. Follow-ups restyle is UI-only (v0.2.7 pointer).
 
 ### CR-21 — Microsoft profile photo (requested / rules locked by Lean, 2026-11-05)
-- **Full spec:** [`17_CR-21_MICROSOFT_PROFILE_PHOTO.md`](17_CR-21_MICROSOFT_PROFILE_PHOTO.md) (v0.1).
+- **Full spec:** [`17_CR-21_MICROSOFT_PROFILE_PHOTO.md`](17_CR-21_MICROSOFT_PROFILE_PHOTO.md) (v0.1.1).
 - **What (Locked):** on Microsoft sign-in the API fetches Graph `/me/photo/$value`, resizes to **96px**, stores in blob, serves via signed-in **`GET /users/:id/avatar`** (missing → **404** → UI initials). Refresh on every Microsoft sign-in; **never** keep the Microsoft token for a later photo fetch. Password / no photo → initials. Photo fetch failure must **not** block sign-in. Shows in top bar, Users list, and Follow-ups (one component; UIE Avatars section).
-- **Scope note:** `User.Read` is **not** in today's sign-in scopes (`openid profile email`; setup guide removes it). This CR requires adding **`User.Read` only** (Q-126). No other Graph scopes.
+- **Scopes (Locked, Q-126):** add delegated **`User.Read` only** to Microsoft sign-in scopes (FR-SSO-12a). Basic delegated; listed by default, normally no admin consent. Deven checks app-registration API permissions listing; if staging shows a consent prompt, Jomerson grants tenant-wide consent once in Entra. No other Graph scopes.
 - **Related:** same branch as Follow-ups thread redesign (web + API) is fine; the thread restyle itself is UI-only (CR-20 v0.2.7 / UIE note), not this CR.
-- **IDs:** FR-USR-07 to 12, FR-SSO-12, US-68, AC-68.1 to 68.8, EC-176 to 182, NFR-47 to 49, Q-126, A-42 to 46.
-- **Status:** **not built.** Q-126 open. Pending Jomerson's approval.
+- **IDs:** FR-USR-07 to 12, FR-SSO-12 / FR-SSO-12a, US-68, AC-68.1 to 68.8, EC-176 to 182, NFR-47 to 49, Q-126, A-42 to 46.
+- **Status:** **not built.** Q-126 **closed**. Pending Jomerson's approval.
 
 ## 2. New questions for Jomerson (Q-87 to Q-106)
 **Update v0.3.1 (Jomerson, 2026-10-22, 8:38 PM SGT):** Q-91 and CR-03 (the mobile sign-in part of Q-92) are **decided**. So Q-91 is no longer open, and Q-92 now has only the M8 catch-up (CR-12) left.
@@ -310,7 +311,7 @@ Q-87 Lift the Microsoft sign-in hold? (moot/closed: sign-in is live) · Q-88 One
 
 **Added v0.6 (CR-20):** Q-120 to Q-125. **v0.6.1:** Q-121 to Q-125 closed by Lean; only Q-120 (lunch backfill, Jomerson) open. **v0.6.6:** Q-120 closed (new and edited only). See the CR-20 spec §12.
 
-**Added v0.6.8 (CR-21):** **Q-126** (add `User.Read` to Microsoft sign-in scopes for Graph photo). See the CR-21 spec §8.
+**Added v0.6.8 (CR-21):** **Q-126** (add `User.Read` to Microsoft sign-in scopes for Graph photo). **v0.6.9:** Q-126 **closed** (Lean): `User.Read` only (FR-SSO-12a); Deven listing check; Jomerson tenant consent if staging prompts. See the CR-21 spec §8.
 
 **Added v0.5 (CR-19):** Q-109 to Q-117, all decided on 2026-11-03 (Locked: Q-109, Q-110, Q-111, Q-115, Q-116 (reversed to the stricter rule, v0.5.2); Lean-accepted defaults: Q-112, Q-113, Q-114, Q-117). See the CR-19 spec §15.
 
@@ -326,7 +327,7 @@ Q-87 Lift the Microsoft sign-in hold? (moot/closed: sign-in is live) · Q-88 One
 - **FR-USR-01** amended if a job role can be empty.
 - **CR-18 (v0.4.1):** FR-CLI-13 to FR-CLI-17 describe built behaviour (`main` 3bf528e) and only need writing up in doc 11. New: ~~**FR-CLI-18** (open-project check, after Q-107)~~ (deferred v0.5.1: Q-107 closed, no block), **FR-CLI-19** and EC-134 (portal, once the portal exists), and the **FR-CLI-20** optional reason (nice-to-have), with a user story and acceptance criteria (next free US and AC numbers when written). FR-CLI-01 and doc 07 `clients`: `active` = deactivated (Q-108). (v0.4.2) Also **FR-CLI-21** with EC-137 (time on an inactive client's projects) and **FR-CLI-22** with EC-138 (reopening). These amend FR-TIME-08 and the project status rules.
 - **CR-19 (v0.5):** once approved, FR-CLI-23 to 41 go into doc 11, US-61/62 into doc 04, AC-61.x/62.x into doc 05, EC-139 to 157 into doc 08, NFR-36 to 41 into doc 07, and Q-109 to Q-117 into doc 09 as decided.
-- **CR-21 (v0.6.8):** once approved, FR-USR-07 to 12 go into doc 03, FR-SSO-12 into doc 14, US-68 / AC-68.x into docs 04/05, EC-176 to 182 into doc 08, NFR-47 to 49 into doc 07, and Q-126 into doc 09.
+- **CR-21 (v0.6.9):** once approved, FR-USR-07 to 12 go into doc 03, FR-SSO-12 / FR-SSO-12a into doc 14, US-68 / AC-68.x into docs 04/05, EC-176 to 182 into doc 08, NFR-47 to 49 into doc 07, and Q-126 into doc 09 (closed).
 - Edge cases to add: EC-128 (user removed in Entra keeps an open session up to 12 h), EC-129 (Microsoft user with no mailbox), EC-130 (a follow-up already emailed is not emailed again).
 - **Conflict resolved:** decisions 1, 3 and 4 depend on Microsoft sign-in, which is live (PR #27/#32/#28), so Q-87 is moot/closed.
 
