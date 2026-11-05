@@ -1,6 +1,6 @@
 # CR-20 — Task order numbers without gaps, # column in My tasks, follow-up badge, lunch break on the Day timesheet
 
-**Status:** v0.2.1 draft (2026-11-05, SGT; v0.2 and v0.1 earlier same day) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Status:** v0.2.2 draft (2026-11-05, SGT; v0.2.1, v0.2 and v0.1 earlier same day) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Requested by:** Jomerson (lead dev / product owner), 2026-11-05. **Rules locked by:** Lean (tech lead), 2026-11-05 PM room. Rules marked **Locked** are Lean's. Anything not locked is listed as an assumption (§11) or an open question (§12). Nothing here adds a product decision beyond what Lean locked.
 **Part of:** doc 17 (change requests). CR-20 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-19 and uses the next free IDs: **FR-TSK-31 to FR-TSK-36**, **FR-NTF-09 to FR-NTF-13** (FR-NTF-07 and 08 are reserved in doc 17 §3), **FR-ACT-37 to FR-ACT-42**, **US-64 to US-67**, **AC-64.x to AC-67.x**, **EC-162 to EC-175**, **NFR-43 to NFR-46**, **Q-120 to Q-125**, **A-36 to A-41**.
 **Checked against:** docs 01 to 17 (with CR-19), and the build at `main` `dfa1f38` (merge of PR #46).
@@ -8,6 +8,7 @@
 **UI reference:** none yet. Placement Locked by Lean (# first column); badge look from UIE (amber with a dot while unseen).
 
 **Doc change log:**
+- v0.2.2 (2026-11-05, SGT): **Matches Deven's build** (local `346d52d`, branch `fix/nov5-tasks-timesheet`, items 1 and 4). Entirely-inside-lunch refusal returns code `LUNCH_BREAK` (FR-ACT-38a). Each entry stores `lunchMinutes` derived from its times; older entries show 0, so nothing changes for them unless Q-120 is answered yes (FR-ACT-42a; Q-120 stays open). Day timesheet shows `Lunch 1h 00m not counted` under the hours (FR-ACT-37a). Lunch also taken out of the running timer's live count (FR-ACT-39a); 24 h cap on reduced minutes (FR-ACT-41, already). Confirmed already covered: renumber all 1…n in one transaction, [12:00, 13:00) Manila every day, defaults 8–5, hours-only as typed. Adds AC-67.16 to 67.19. No IDs renumbered; no new product decisions.
 - v0.2.1 (2026-11-05, SGT): **Lean's audit call.** Day-to-day delete renumber: the existing delete audit covers it, no extra audit (confirmed by Lean). One-time renumber on live (FR-TSK-33): one audit entry per project it changes, listing old and new numbers, so it can be traced or undone. FR-TSK-34 and Q-124 updated; AC-64.8 added. No IDs renumbered.
 - v0.2 (2026-11-05, SGT): **Lean's technical locks (PM room).** Renumber is per project: every delete renumbers all remaining tasks 1…n in one transaction (also cleans old gaps/duplicates). My tasks # is a plain row count, no paging. Badge shows the total, highlighted (amber with a dot, UIE) while any are unseen; seen = opening the task's follow-ups list; own posts seen; notifications alone don't count. Lunch every day incl. weekends/holidays, half-open [12:00, 13:00) Manila; entries entirely inside lunch refused; row shows the deduction; daily cap on reduced minutes; hours-only entries not deducted. **Q-121 to Q-125 closed.** Only Q-120 (Jomerson) open. AC-65.4 and EC-173 marked N/A (no paging); AC/EC added for refusal and boundaries.
 - v0.1 (2026-11-05, SGT): first draft. Four items from Jomerson, rules locked by Lean. Q-120 (recalculate old time with lunch taken out?) waits on Jomerson. Q-121 to Q-125 are gaps found while writing, waiting on Lean, Deven or UIE.
@@ -69,14 +70,17 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **FR-NTF-13 (Must)** The badge follows access at read time, the same as FR-NTF-04: a user only sees counts for tasks they can see.
 
 ## 6. Day timesheet defaults and lunch break (Locked, Lean, 2026-11-05)
-- **FR-ACT-37 (Must)** The standard day is **8:00 AM to 5:00 PM**. On the Day timesheet, a new manual entry defaults to **time in 8:00 AM** and **time out 5:00 PM**. The user can change both before saving. The saved entry row **shows the lunch time taken off** (e.g. "−1h lunch"). Amends FR-ACT-10.
+- **FR-ACT-37 (Must)** The standard day is **8:00 AM to 5:00 PM**. On the Day timesheet, a new manual entry defaults to **time in 8:00 AM** and **time out 5:00 PM**. The user can change both before saving. The saved entry row **shows the lunch time taken off**. Amends FR-ACT-10.
+- **FR-ACT-37a (Must, as built `346d52d`)** The Day timesheet shows a line under the hours: **`Lunch 1h 00m not counted`**. The minutes follow the entries' actual lunch overlap (e.g. `Lunch 0h 30m not counted` for 11:30 AM to 12:30 PM); no line when the overlap is 0.
 - **FR-ACT-38 (Must)** **Lunch window is half-open [12:00, 13:00) Manila time**, applied **every day, weekends and holidays included**. For any entry with a time in and time out, hours = (time out − time in) minus its overlap with [12:00, 13:00). An entry ending at 12:00 or starting at 1:00 PM loses nothing. A full 8:00 AM to 5:00 PM entry is **8 hours**. Computed **on save / timer stop**.
-- **FR-ACT-38a (Must)** An entry **entirely inside** [12:00, 13:00) is **refused**, nothing saved, with the message: `This time is inside the 12:00–1:00 PM lunch break.` (Q-125 closed.)
+- **FR-ACT-38a (Must)** An entry **entirely inside** [12:00, 13:00) is **refused**, nothing saved, with error code **`LUNCH_BREAK`** and the message: `This time is inside the 12:00–1:00 PM lunch break.` (Q-125 closed; code as built `346d52d`.)
 - **FR-ACT-38b (Must)** **Hours-only entries** (FR-TIME-01, no time in/out): **nothing deducted**; the hours typed are taken as already excluding lunch. (Q-124 closed.)
 - **FR-ACT-39 (Must)** The rule applies to **manual entries and the timer** (FR-ACT-02) the same way, including auto-stopped timers (FR-ACT-04).
+- **FR-ACT-39a (Must, as built `346d52d`)** While the timer is **running**, its live count also leaves out the lunch overlap so far, so the live count matches what will be saved on stop.
 - **FR-ACT-40 (Must)** **Reports use the same hours**: Hours rendered (FR-ACT-10), task actual hours (FR-TIME-07), weekly totals (FR-ACT-34), Team & workload Recorded (FR-WL-01) and the DAR (FR-DAR-08). There is one stored hours value and every screen reads it.
 - **FR-ACT-41 (Must)** The daily cap (FR-TIME-03) and other hour checks run on the **reduced** minutes (after lunch is taken out), never raw duration.
 - **FR-ACT-42 (Must)** Time logged **before** this change: **not decided** (Q-120). Until Jomerson answers, the build must not recalculate existing entries.
+- **FR-ACT-42a (Must, as built `346d52d`)** Each entry stores **`lunchMinutes`**, derived from its time in/out on save or timer stop (0 for hours-only). Entries saved before the change show **`lunchMinutes` = 0** and keep their hours. This is how the build behaves **until Q-120 is decided** (Lean's suggested default); if Jomerson answers yes, old entries get recalculated then. Q-120 stays open.
 
 ## 7. User stories
 - **US-64** As a PM, I want task numbers to close up after I delete a task, so the checklist reads 1 to n without gaps.
@@ -129,7 +133,11 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **AC-67.13 (UI)** An 8:00 AM to 5:00 PM row shows the 1 h lunch deduction.
 - **AC-67.14 (API)** Daily cap checks use reduced minutes: entries totalling 25 h clock time with 1 h lunch overlap (24 h counted) pass the 24 h cap.
 - **AC-67.15 (API)** Hours-only entry of 8 h saves as 8.00 h, nothing deducted. (FR-ACT-38b)
-- **AC-67.11 (API)** An entry saved before the change keeps its hours (until Q-120 is answered). (FR-ACT-42)
+- **AC-67.11 (API)** An entry saved before the change keeps its hours and has `lunchMinutes` = 0 (until Q-120 is answered). (FR-ACT-42, FR-ACT-42a)
+- **AC-67.16 (API)** The refusal in AC-67.7 returns error code `LUNCH_BREAK` with the exact message. (FR-ACT-38a)
+- **AC-67.17 (API)** An 8:00 AM to 5:00 PM entry stores `lunchMinutes` = 60; 11:30 AM to 12:30 PM stores 30; 1:00 PM to 5:00 PM and hours-only store 0. (FR-ACT-42a)
+- **AC-67.18 (UI)** Day with an 8:00 AM to 5:00 PM entry shows `Lunch 1h 00m not counted` under the hours; a day with no lunch overlap shows no line. (FR-ACT-37a)
+- **AC-67.19 (UI)** Timer started 11:00 AM, still running at 1:30 PM: the live count shows 1h 30m, not 2h 30m. (FR-ACT-39a)
 
 ## 9. Non-functional
 - **NFR-43 (Must)** The delete and the renumber of all the project's remaining tasks run in **one transaction**. Concurrent deletes in one project never leave a gap or a duplicate number.
@@ -143,7 +151,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 - **EC-164** A task is created or moved (Move up / Move down) while another is being deleted: numbers still end 1 to n, no duplicates.
 - **EC-165** Delete is a **hard delete** today (§0). If soft delete is ever added, the soft-deleted task must leave the numbering too. Not in scope now.
 - **EC-166** Entry entirely inside [12:00, 13:00) is refused with the lunch message; nothing saved.
-- **EC-167** Timer running across lunch: the lunch part isn't counted, whether it's stopped by hand or by Switch (FR-ACT-26).
+- **EC-167** Timer running across lunch: the lunch part isn't counted, whether it's stopped by hand or by Switch (FR-ACT-26); the live count while running also leaves it out (FR-ACT-39a).
 - **EC-168** Auto-stopped timer (23:59) that spans lunch: lunch taken out.
 - **EC-169** Hours-only entries (FR-TIME-01, no time in / out; FR-ACT-05): nothing deducted; hours taken as already excluding lunch.
 - **EC-170** Editing an old entry after the change (time in or out changed): whether it gets the lunch rule depends on Q-120 (Lean's suggestion: yes).
@@ -164,7 +172,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 ## 12. Decisions and open questions
 | ID | Question | Status / proposed default | Who |
 |---|---|---|---|
-| **Q-120** | Should time logged **before** this change be recalculated with lunch taken out, or keep its current hours? | **Open.** Lean's suggestion (proposed default): **only new and edited entries** get the lunch rule, so totals already sent in DARs don't shift. | **Jomerson** |
+| **Q-120** | Should time logged **before** this change be recalculated with lunch taken out, or keep its current hours? | **Open.** Lean's suggestion (proposed default): **only new and edited entries** get the lunch rule, so totals already sent in DARs don't shift. **Build (`346d52d`) behaves this way until decided:** old entries show `lunchMinutes` = 0 (FR-ACT-42a). | **Jomerson** |
 | Q-121 | My tasks #: tabs and placement. | **Closed (Lean, 2026-11-05):** first column, left of the task name, in every My tasks tab. | Lean |
 | Q-122 | My tasks paging? | **Closed (Lean):** no paging; # runs 1…n over each tab's filtered list. Across-pages dropped. | Lean |
 | Q-123 | What counts as "seen"? | **Closed (Lean):** opening the task's follow-ups list marks every follow-up there seen; a notification alone doesn't count; own follow-ups seen from the start. Badge shows total count. | Lean |
@@ -172,7 +180,7 @@ Four fixes Jomerson asked for, as Lean defined them:
 | Q-125 | Entry entirely inside lunch; show deduction? | **Closed (Lean):** refused, nothing saved, message `This time is inside the 12:00–1:00 PM lunch break.` Row shows the lunch deduction. | Lean |
 
 ## 13. Status
-- **Draft v0.2.** Awaiting **Jomerson** on **Q-120** and his overall OK. Q-121 to Q-125 closed by Lean (2026-11-05).
+- **Draft v0.2.2**, matched to Deven's build `346d52d` (items 1 and 4). Awaiting **Jomerson** on **Q-120** and his overall OK. Q-121 to Q-125 closed by Lean (2026-11-05).
 - **Build:** Deven builds on **one branch off `main`**; no push until Jomerson OKs.
 - **One-time renumber** (FR-TSK-33) runs on live only with Jomerson's OK.
 - **Design:** # first column (Locked); badge amber with a dot while unseen (UIE).
