@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { FollowUpSeenModel, ProjectModel, TaskModel } from '../src/models/index.js';
 import { CSRF, makeApp, signedInAs, useDatabase } from './helpers.js';
+import { resetTestTime, setTestTime } from '../src/lib/clock.js';
+import { ensureFollowUpSeenCutoff } from '../src/services/followUpSeen.js';
 import { resetRules, world } from './m2helpers.js';
 
 /** CR-20 FR-NTF-09..13: the follow-up count badge and its per-user "seen" state. */
@@ -152,5 +154,26 @@ describe('CR-20 FR-NTF-09..13: follow-up seen state', () => {
     }[];
     const unseen = Object.fromEntries(items.map((t) => [t.id, t.followUpsUnseen]));
     expect([unseen[taskId], unseen[others[0]!], unseen[others[1]!]]).toEqual([1, 0, 1]);
+  });
+});
+
+describe('CR-20 (Lean Nov 5): follow-ups posted before the release count as seen', () => {
+  afterEach(resetTestTime);
+  it('uses one app-wide cutoff, written once, without seen rows per user', async () => {
+    const w = await world(app);
+    const { a, b, taskId } = await team(w);
+    setTestTime('2026-11-05T01:00:00Z');
+    expect((await followUp(b.agent, taskId, 'Before the release')).status).toBe(201);
+    expect(await checklist(a.agent, w, taskId)).toEqual([1, 1]);
+    setTestTime('2026-11-05T02:00:00Z');
+    const cutoff = await ensureFollowUpSeenCutoff();
+    setTestTime('2026-11-05T03:00:00Z');
+    // A later start keeps the first cutoff.
+    expect((await ensureFollowUpSeenCutoff()).getTime()).toBe(cutoff.getTime());
+    expect(await checklist(a.agent, w, taskId)).toEqual([1, 0]);
+    expect(await FollowUpSeenModel.countDocuments({ taskId })).toBe(0);
+    expect((await followUp(b.agent, taskId, 'After the release')).status).toBe(201);
+    expect(await checklist(a.agent, w, taskId)).toEqual([2, 1]);
+    expect(await mine(a.agent, taskId)).toEqual([2, 1]);
   });
 });

@@ -19,3 +19,18 @@ followUpSeenSchema.index({ taskId: 1 });
 
 export type FollowUpSeen = InferSchemaType<typeof followUpSeenSchema>;
 export const FollowUpSeenModel = model('FollowUpSeen', followUpSeenSchema);
+
+/**
+ * CR-20 (Lean, Nov 5): app-wide settings written once. `followUpSeenCutoff` is the moment the
+ * follow-up badge first went live: follow-ups posted before it count as seen for everyone, so no
+ * per-user rows need backfilling.
+ */
+const appMarkerSchema = new Schema(
+  {
+    _id: { type: String, required: true },
+    at: { type: Date, required: true },
+  },
+  { strict: 'throw', collection: 'appMarkers', versionKey: false },
+);
+export const AppMarkerModel = model('AppMarker', appMarkerSchema);
+export const FOLLOW_UP_SEEN_CUTOFF = 'followUpSeenCutoff';

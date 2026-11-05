@@ -1419,7 +1419,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       authorId: currentUser(req)._id,
       contactId: input.contactId ?? null,
       note: input.note,
-      at: new Date(),
+      at: clockNow(),
     });
     task.version = (task.version ?? 0) + 1;
     await task.save();
