@@ -30,6 +30,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { PageHeader } from '../../components/PageHeader';
 import { LeaveBalance } from '../../components/LeaveBalance';
+import { RowActionsMenu } from '../../components/RowActions';
 import { daysLabel, shortDate } from '../../lib/format';
 
 /** Days with a real minus sign (DR-38): the shared helper. */
@@ -170,7 +171,7 @@ function MyLeave({ onRecord }: { onRecord: () => void }) {
                         <Dropdown.Toggle size="sm" variant="outline-danger" id={`cancel-${l.id}`}>
                           Cancel
                         </Dropdown.Toggle>
-                        <Dropdown.Menu>
+                        <RowActionsMenu>
                           {l.halves.map(
                             (h) =>
                               h.can.cancel && (
@@ -183,7 +184,7 @@ function MyLeave({ onRecord }: { onRecord: () => void }) {
                                 </Dropdown.Item>
                               ),
                           )}
-                        </Dropdown.Menu>
+                        </RowActionsMenu>
                       </Dropdown>
                     ) : l.can.cancel ? (
                       <Button size="sm" variant="outline-danger" onClick={() => setCancelling(l)}>
