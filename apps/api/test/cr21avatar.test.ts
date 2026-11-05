@@ -125,6 +125,16 @@ describe('CR-21 Microsoft profile photo', () => {
     expect(res.status).toBe(401);
   });
 
+  it('refuses an open session once the account is deactivated (Queen TC-AV-003b)', async () => {
+    const user = await createUser({ password: PASSWORD });
+    const app = makeApp();
+    const agent = await login(app, user.email);
+    await UserModel.updateOne({ _id: user._id }, { active: false });
+    const res = await agent.get(`/api/v1/users/${user._id.toString()}/avatar`);
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('SESSION_EXPIRED');
+  });
+
   it('sign-in still completes when the photo step throws (FR-USR-12)', async () => {
     const user = await createUser({ password: PASSWORD });
     vi.stubGlobal(
