@@ -4,9 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'config.dart';
 import 'data/api_client.dart' show disconnectedMessage;
 import 'data/http_factory.dart';
+import 'data/dar_send.dart';
 import 'data/ms_sign_in.dart';
 import 'router.dart';
 import 'state/providers.dart';
+import 'data/action_email.dart' show ActionEmailResult;
+import 'state/p2_providers.dart' show taskExtrasProvider;
+import 'state/v2_providers.dart'
+    show
+        EmailBanner,
+        darMailSendProvider,
+        darSendResultProvider,
+        emailBannerProvider,
+        partlyEmailedFollowUpsProvider;
+import 'ui/v2/action_email_ui.dart' show EmailResultBanner;
 import 'theme/app_theme.dart';
 
 class XceleratePmApp extends ConsumerStatefulWidget {
@@ -39,6 +50,15 @@ class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
 
   Future<void> _onMicrosoftDeepLink(Uri uri) async {
     if (!mounted) return;
+    // PR #36: a mobile DAR Send comes back to opstrack://auth/mail?code=… (60 s, single use):
+    // trade the code in straight away; only the confirm response can say "sent".
+    if (isMailReturnLink(uri)) {
+      await handleMailLink(
+        ProviderScope.containerOf(context, listen: false),
+        uri,
+      );
+      return;
+    }
     String? message;
     try {
       final user = await ref.read(msSignInProvider).handle(uri);
@@ -78,6 +98,7 @@ class _XceleratePmAppState extends ConsumerState<XceleratePmApp> {
         children: [
           if (AppConfig.demoMode) const DemoBanner(),
           if (!ref.watch(connectionProvider)) const DisconnectedBanner(),
+          const EmailResultBanner(),
           Expanded(child: child ?? const SizedBox()),
         ],
       ),
@@ -184,4 +205,29 @@ class DisconnectedScreen extends ConsumerWidget {
       ),
     ),
   );
+}
+
+/// `opstrack://auth/mail?…` (PR #36/#37): confirm straight away (60 s code) and route the
+/// result by flow: DAR → the saved report's card; action emails → the app-wide result banner.
+Future<void> handleMailLink(ProviderContainer c, Uri uri) async {
+  final any = await c.read(darMailSendProvider).handleAny(uri);
+  if (any == null) return;
+  if (any is ActionEmailResult) {
+    c
+        .read(emailBannerProvider.notifier)
+        .set(EmailBanner(any.message, ok: any.sent && !any.partial));
+    if (any.flow == 'action_email' && any.partial && any.followUpId != null) {
+      c.read(partlyEmailedFollowUpsProvider.notifier).add(any.followUpId!);
+    }
+    if (any.taskId != null) c.invalidate(taskExtrasProvider(any.taskId!));
+    return;
+  }
+  final r = any as DarSendResult;
+  c.read(darSendResultProvider.notifier).set(r);
+  if (r.reportId.isNotEmpty) {
+    final router = c.read(routerProvider);
+    final here = router.routeInformationProvider.value.uri.path;
+    final target = '/dar/saved/${r.reportId}';
+    if (here != target) router.push(target);
+  }
 }
