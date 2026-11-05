@@ -1,4 +1,4 @@
-import { formatHHMM } from '@xc8/shared';
+import { formatHHMM, lunchMs } from '@xc8/shared';
 import { useEffect, useState } from 'react';
 import { Button } from 'react-bootstrap';
 import { useRunning, useTrackerMutation } from '../../api/trackerHooks';
@@ -26,8 +26,10 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
   if (!entry?.startAt || !running.data) return null;
   // Server "now" plus the time since that answer arrived.
   const skew = new Date(running.data.now).getTime() - running.dataUpdatedAt;
-  const seconds =
-    (Math.max(tick, running.dataUpdatedAt) + skew - new Date(entry.startAt).getTime()) / 1000;
+  const nowMs = Math.max(tick, running.dataUpdatedAt) + skew;
+  const startMs = new Date(entry.startAt).getTime();
+  // CR-20: 12:00–1:00 PM lunch isn't counted, so the timer holds still over lunch.
+  const seconds = (nowMs - startMs - lunchMs(new Date(startMs), new Date(nowMs))) / 1000;
   const minutes = Math.floor(Math.max(0, seconds) / 60);
   const label = entry.task?.name ?? entry.title ?? 'Timer';
   return (

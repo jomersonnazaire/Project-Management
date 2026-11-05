@@ -1466,12 +1466,19 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         );
         const gone = await TaskModel.deleteOne({ _id: task._id }, { session });
         if (!gone.deletedCount) throw notFound('Task not found');
-        // Jomerson (Nov 5): close the gap so the checklist stays #1…n after a delete.
-        await TaskModel.updateMany(
-          { projectId: project._id, order: { $gt: task.order ?? 0 } },
-          { $inc: { order: -1 } },
-          { session },
-        );
+        // CR-20 FR-TSK-31 (Jomerson Nov 5): renumber the project's remaining tasks 1…n in their
+        // current order, so a delete also clears any old gaps or duplicate numbers.
+        const rest = await TaskModel.find({ projectId: project._id }, { _id: 1, order: 1 })
+          .sort({ order: 1, _id: 1 })
+          .session(session)
+          .lean();
+        const ops = rest
+          .map((t, i) => ({ id: t._id, from: t.order, to: i + 1 }))
+          .filter((t) => t.from !== t.to)
+          .map((t) => ({
+            updateOne: { filter: { _id: t.id }, update: { $set: { order: t.to } } },
+          }));
+        if (ops.length > 0) await TaskModel.bulkWrite(ops, { session });
       });
     } finally {
       await session.endSession();

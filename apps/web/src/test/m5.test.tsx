@@ -249,7 +249,15 @@ describe('+ Quick activity (TC-Q06)', () => {
       'Internal meeting',
     );
     await userEvent.click(within(dialog).getByLabelText('Enter time in and time out'));
+    // CR-20: a new entry opens on the standard day, 8:00 AM – 5:00 PM, and names the lunch rule.
+    expect(within(dialog).getByLabelText('Time in *')).toHaveValue('08:00');
+    expect(within(dialog).getByLabelText('Time out *')).toHaveValue('17:00');
+    expect(
+      within(dialog).getByText(/12:00–1:00 PM is lunch and isn't counted\./),
+    ).toBeInTheDocument();
+    await userEvent.clear(within(dialog).getByLabelText('Time in *'));
     await userEvent.type(within(dialog).getByLabelText('Time in *'), '08:30');
+    await userEvent.clear(within(dialog).getByLabelText('Time out *'));
     await userEvent.type(within(dialog).getByLabelText('Time out *'), '08:58');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save entry' }));
     await waitFor(() =>

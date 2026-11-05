@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   GRID_ACTIONS,
+  lunchMinutes,
+  workedMinutes,
   initialCell,
   ADMIN_FULL_REASON,
   initialRow,
@@ -324,5 +326,19 @@ describe('Reports and Team & workload rows (doc 11 v0.4.8, FR-ACL-14..17)', () =
     );
     expect(initialRow('ADMIN', 'workload', { reports: { view: false } }).view).toBe(true);
     expect(initialRow('VIEWER', 'workload', null).view).toBe(true);
+  });
+});
+
+describe('CR-20 lunch deduction (Jomerson Nov 5)', () => {
+  const at = (hm: string, d = '2026-11-05') => new Date(`${d}T${hm}:00+08:00`);
+  it('takes 12:00–1:00 PM out of the counted minutes', () => {
+    expect(workedMinutes(at('08:00'), at('17:00'))).toBe(480);
+    expect(workedMinutes(at('08:00'), at('12:00'))).toBe(240);
+    expect(workedMinutes(at('13:00'), at('17:00'))).toBe(240);
+    expect(workedMinutes(at('11:30'), at('12:30'))).toBe(30);
+    expect(workedMinutes(at('12:15'), at('12:45'))).toBe(0);
+    expect(workedMinutes(at('12:30'), at('15:00'))).toBe(120);
+    expect(lunchMinutes(at('08:00'), at('17:00'))).toBe(60);
+    expect(lunchMinutes(at('17:00'), at('08:00'))).toBe(0);
   });
 });

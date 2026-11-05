@@ -71,6 +71,21 @@ describe('Delete a task', () => {
     expect(after.find((t) => t.id === extra.id.toString())!.order).toBe(before.length - 1);
   });
 
+  it('CR-20: a delete also clears old gaps and duplicate numbers in the project', async () => {
+    const w = await world(app);
+    const pid = w.project.id;
+    const n = await TaskModel.countDocuments({ projectId: pid });
+    await TaskModel.create({ projectId: pid, name: 'Gap', order: n + 5 });
+    await TaskModel.create({ projectId: pid, name: 'Dup A', order: n + 9 });
+    await TaskModel.create({ projectId: pid, name: 'Dup B', order: n + 9 });
+    const victim = await TaskModel.create({ projectId: pid, name: 'Delete me', order: n + 12 });
+    expect((await del(w.pm.agent, victim.id.toString())).status).toBe(204);
+    const orders = (await TaskModel.find({ projectId: pid }).sort({ order: 1 }).lean()).map(
+      (t) => t.order,
+    );
+    expect(orders).toEqual(orders.map((_, i) => i + 1));
+  });
+
   it('409 TASK_HAS_RECORDS lists what blocks it: time, follow-ups, comments, evidence, documents, issues', async () => {
     const w = await world(app);
     const [t] = await tasks(w);

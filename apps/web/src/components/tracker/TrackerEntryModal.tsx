@@ -1,5 +1,8 @@
 import {
+  LUNCH_NOTE,
   QUICK_ACTIVITY_KEY,
+  WORKDAY_END,
+  WORKDAY_START,
   formatHHMM,
   formatTime24,
   PROJECT_TYPE_NOT_SET,
@@ -161,8 +164,13 @@ export function TrackerEntryModal({
   const [when, setWhen] = useState<'now' | 'times'>(
     mode.kind === 'add' || mode.kind === 'edit' ? 'times' : 'now',
   );
-  const [timeIn, setTimeIn] = useState(editing?.startAt ? formatTime24(editing.startAt) : '');
-  const [timeOut, setTimeOut] = useState(editing?.endAt ? formatTime24(editing.endAt) : '');
+  // CR-20 (Jomerson Nov 5): a new entry starts on the standard day, 8:00 AM – 5:00 PM.
+  const [timeIn, setTimeIn] = useState(
+    editing ? (editing.startAt ? formatTime24(editing.startAt) : '') : WORKDAY_START,
+  );
+  const [timeOut, setTimeOut] = useState(
+    editing ? (editing.endAt ? formatTime24(editing.endAt) : '') : WORKDAY_END,
+  );
   // v0.9.11: every new entry asks "Where are you working today? *", prefilled with the day's
   // location. It is per day only (no per-entry override): a different pick is sent as
   // dayLocationId, which the API saves on the day after its lock checks.
@@ -500,7 +508,9 @@ export function TrackerEntryModal({
                 />
                 <Form.Control.Feedback type="invalid">{errors.timeOut}</Form.Control.Feedback>
               </Form.Group>
-              <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
+              <Form.Text className="col-12 mt-1">
+                Philippine time · {longDayShort(date)} · {LUNCH_NOTE}
+              </Form.Text>
             </div>
           )}
           {dayLocked && !editing && (

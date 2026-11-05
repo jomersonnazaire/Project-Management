@@ -9,6 +9,7 @@ import {
   resolveMyTasksTab,
   type MyTaskDto,
   type TrackerDayDto,
+  lunchMs,
 } from '@xc8/shared';
 import { useEffect, useState } from 'react';
 import { Button, Form, Nav } from 'react-bootstrap';
@@ -113,7 +114,16 @@ function TodayPlan({
   // DR-31: a running entry counts up live from its start, not from when the day was fetched.
   // Server minutes at fetch time plus the time since, so the browser clock doesn't matter.
   const entryMinutes = (e: (typeof entries)[number]) =>
-    e.running ? e.minutes + Math.max(0, Math.floor((now - fetchedAt) / 60_000)) : e.minutes;
+    e.running
+      ? e.minutes +
+        Math.max(
+          0,
+          Math.floor(
+            (now - fetchedAt - lunchMs(new Date(fetchedAt), new Date(Math.max(now, fetchedAt)))) /
+              60_000,
+          ),
+        )
+      : e.minutes;
   const minutesOn = (taskId: string) =>
     entries.filter((e) => e.task?.id === taskId).reduce((s, e) => s + entryMinutes(e), 0);
   const loading = hasTracker && !tracker;

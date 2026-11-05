@@ -4,6 +4,7 @@ import {
   addDays,
   formatHHMM,
   formatTime12,
+  lunchTakenLabel,
   moduleLabel,
   parseDateOnly,
   toDateOnly,
@@ -358,6 +359,14 @@ export function DayTimesheet({
                       </td>
                       <td data-label="Rendered" className="font-monospace">
                         {formatHHMM(e.minutes)}
+                        {e.lunchMinutes > 0 && (
+                          <span
+                            className="d-block small text-body-secondary font-sans-serif"
+                            data-testid="lunch-taken"
+                          >
+                            {lunchTakenLabel(e.lunchMinutes)}
+                          </span>
+                        )}
                       </td>
                       <td className="cell-primary">
                         <span className="fw-medium">{entryName(e)}</span>

@@ -207,8 +207,10 @@ export interface TrackerEntryDto {
   startAt: string | null;
   endAt: string | null;
   running: boolean;
-  /** Exact minutes (running: up to now). */
+  /** Exact minutes (running: up to now), with the 12:00–1:00 PM lunch taken out (CR-20). */
   minutes: number;
+  /** CR-20 FR-ACT-41: lunch minutes taken off this entry (0 for hours-only or older entries). */
+  lunchMinutes: number;
   /** Hours-only entries (FR-TIME) have no times. */
   timed: boolean;
   autoStopped: boolean;
@@ -305,6 +307,44 @@ export const floorToMinute = (d: Date) => new Date(Math.floor(d.getTime() / 60_0
 
 export const minutesBetween = (a: Date, b: Date) =>
   Math.max(0, Math.round((b.getTime() - a.getTime()) / 60_000));
+
+// ---------- Lunch break (CR-20, Jomerson Nov 5) ----------
+/** The standard day is 08:00 AM – 05:00 PM Philippine time, with 12:00 – 1:00 PM as unpaid lunch. */
+export const WORKDAY_START = '08:00';
+export const WORKDAY_END = '17:00';
+export const LUNCH_START = '12:00';
+export const LUNCH_END = '13:00';
+export const LUNCH_NOTE = "12:00–1:00 PM is lunch and isn't counted.";
+/** CR-20 Q-125: an entry entirely inside lunch is refused. */
+export const LUNCH_ONLY_MESSAGE = 'This time is inside the 12:00–1:00 PM lunch break.';
+/** "Lunch 1h 00m not counted" for an entry that lost lunch time. */
+export const lunchTakenLabel = (minutes: number) =>
+  `Lunch ${formatHoursMinutes(minutes)} not counted`;
+
+const phDateKey = (d: Date) =>
+  new Date(d.getTime() + PH_OFFSET_MINUTES * 60_000).toISOString().slice(0, 10);
+const nextDateKey = (date: string) =>
+  new Date(new Date(`${date}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+
+/** Milliseconds of [a, b) that fall in a 12:00–1:00 PM lunch hour (Philippine time), any day. */
+export function lunchMs(a: Date, b: Date): number {
+  if (b <= a) return 0;
+  let total = 0;
+  const last = phDateKey(b);
+  for (let day = phDateKey(a), n = 0; day <= last && n < 400; day = nextDateKey(day), n++) {
+    const ls = phInstant(day, LUNCH_START).getTime();
+    const le = phInstant(day, LUNCH_END).getTime();
+    const overlap = Math.min(b.getTime(), le) - Math.max(a.getTime(), ls);
+    if (overlap > 0) total += overlap;
+  }
+  return total;
+}
+/** Whole minutes of [a, b) inside lunch (times are on whole minutes, DR-45). */
+export const lunchMinutes = (a: Date, b: Date) => Math.round(lunchMs(a, b) / 60_000);
+
+/** Counted minutes of a timed entry: end minus start, less any 12:00–1:00 PM lunch overlap. */
+export const workedMinutes = (a: Date, b: Date) =>
+  Math.max(0, minutesBetween(a, b) - lunchMinutes(a, b));
 
 // ---------- Messages (doc 14 §11, §12.3) ----------
 export const dailyCapMessage = (date: string, minutes: number) =>
