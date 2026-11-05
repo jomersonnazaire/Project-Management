@@ -16,3 +16,4 @@ export * from './Issue.js';
 export * from './Tracker.js';
 export * from './Leave.js';
 export * from './ProjectType.js';
+export * from './FollowUpSeen.js';

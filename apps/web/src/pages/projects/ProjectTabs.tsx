@@ -38,7 +38,7 @@ import { useTaskMutation, useTemplate, useTemplates } from '../../api/projectHoo
 import { ApiError } from '../../api/client';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
-import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
+import { EstAct, FollowUpBadge, TaskStatusBadge } from '../../components/ProjectBadges';
 import { dateTime, initials, shortDate } from '../../lib/format';
 import { moveLabel, useStatusMove } from './useStatusMove';
 import { useConfirm } from '../../components/ConfirmModal';
@@ -46,7 +46,8 @@ import { useConfirm } from '../../components/ConfirmModal';
 interface TabProps {
   project: ProjectDto;
   tasks: TaskDto[];
-  onOpen: (id: string) => void;
+  /** Opens the task panel; `follow-ups` scrolls it to the follow-ups list (CR-20 FR-NTF-12). */
+  onOpen: (id: string, focus?: 'follow-ups') => void;
 }
 
 function DueCell({ t }: { t: TaskDto }) {
@@ -332,6 +333,12 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                             >
                               {t.name}
                             </Button>
+                            {/* CR-20 FR-NTF-09: follow-up count; opens the task's follow-ups. */}
+                            <FollowUpBadge
+                              total={t.followUps.length}
+                              unseen={t.followUpsUnseen}
+                              onOpen={() => onOpen(t.id, 'follow-ups')}
+                            />
                             {t.party === 'CLIENT' && (
                               <span className="badge bg-label-info ms-2">Client</span>
                             )}

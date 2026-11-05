@@ -34,6 +34,7 @@ import {
   ProjectModel,
   ProjectTypeModel,
   TaskModel,
+  FollowUpSeenModel,
   TemplateModel,
   UserModel,
   type Project,
@@ -883,6 +884,14 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
+        // CR-20 FR-NTF-09..13: the tasks' follow-up "seen" marks go with them.
+        const taskIds = await TaskModel.find({ projectId: project._id }, { _id: 1 })
+          .session(session)
+          .lean();
+        await FollowUpSeenModel.deleteMany(
+          { taskId: { $in: taskIds.map((t) => t._id) } },
+          { session },
+        );
         await TaskModel.deleteMany({ projectId: project._id }, { session });
         await project.deleteOne({ session });
       });
