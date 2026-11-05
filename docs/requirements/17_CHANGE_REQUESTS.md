@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.6 (2026-11-05, SGT): **CR-20 spec v0.2.5.** **Q-120 closed** (Jomerson): lunch only on new and edited entries (create, edit, timer stop); old unedited entries keep their hours, no backfill, DARs unchanged. Lunch line shown only where lunch was taken out (FR-ACT-37d, UIE). Cutoff stored in `appMarkers`. Deven's PR #47 into main open (not merged). No IDs renumbered.
 - v0.6.5 (2026-11-05, SGT): **CR-20 spec v0.2.4.** Follow-ups posted before the release count as seen (one app-wide cutoff, written once at first release start; no per-user seen rows); unseen = after both cutoff and user's `seenAt`, not own; `followUpSeen` `{ userId, taskId, seenAt }` unique on userId+taskId, `POST /tasks/:id/follow-ups/seen`. My tasks # on Today/Due counts across both sections. 8–5 default on Day timesheet only (not Add quick activity); Add entry live helper; timer pill `Lunch, not counting`. Q-120 still open. No IDs renumbered.
 - v0.6.4 (2026-11-05, SGT): **CR-20 spec v0.2.3.** `lunchMinutes` returned on each entry (computed when the API returns it; not stored; older entries 0, no migration); Q-120 still open. UIE Locked UI notes for # column and follow-up badge; keep `Lunch 1h 00m not counted`. No IDs renumbered.
 - v0.6.3 (2026-11-05, SGT): **CR-20 spec v0.2.2, matches Deven's build `346d52d`** (items 1 and 4): refusal code `LUNCH_BREAK`; `lunchMinutes` stored per entry, old entries 0 until Q-120 (still open); `Lunch 1h 00m not counted` line; lunch out of the running timer's live count. Adds FR-ACT-37a, 39a, 42a and AC-67.16 to 67.19. No IDs renumbered.
@@ -282,13 +283,13 @@ Jomerson (lead developer) gave these decisions in the room. Each row maps a deci
 - **Status:** **new, not built.** Pending Jomerson's approval. No open questions.
 
 ### CR-20 — Task order numbers without gaps, My tasks #, follow-up badge, lunch break (requested by Jomerson, 2026-11-05; rules locked by Lean)
-- **Full spec:** [`17_CR-20_TASK_RENUMBER_MYTASKS_FOLLOWUP_LUNCH.md`](17_CR-20_TASK_RENUMBER_MYTASKS_FOLLOWUP_LUNCH.md) (v0.2.4).
+- **Full spec:** [`17_CR-20_TASK_RENUMBER_MYTASKS_FOLLOWUP_LUNCH.md`](17_CR-20_TASK_RENUMBER_MYTASKS_FOLLOWUP_LUNCH.md) (v0.2.5).
 - **Task numbers (Locked):** deleting a task renumbers all of the project's remaining tasks 1 to n in current order in one transaction, also cleaning old gaps or duplicates (FR-TSK-31 to 34; amends FR-TSK-11). Projects that already have gaps get a one-time renumber, on live only with Jomerson's OK, writing one audit entry per changed project with old and new numbers (delete renumbers need no extra audit).
 - **My tasks # (Locked):** first column in every tab, a plain row count 1 to n in the current sort and filter; no paging (FR-TSK-35, 36). Locked UI / UIE: ~48px, header `#`, right-aligned, `text-body-secondary` tabular, not sortable; on 390 muted `#12` before the title.
 - **Follow-ups (Locked):** FR-NTF-01 to 06 unchanged. Badge with the total follow-up count on checklist and My tasks rows; seen = opening the task's follow-ups list (notification alone doesn't count); own follow-ups seen (FR-NTF-09 to 13). Locked UI / UIE: after the title, `badge rounded-pill` + `bx-message-rounded-dots` + count; unseen `bg-label-warning` + dot / seen `bg-label-secondary`; hidden at 0; click opens that task's follow-ups.
 - **Lunch (Locked):** Day timesheet defaults to 8:00 AM to 5:00 PM; overlap with [12:00, 13:00) Manila time isn't counted, every day incl. weekends/holidays; entries entirely inside lunch refused; hours-only entries not deducted; row shows the deduction; daily cap on reduced minutes (FR-ACT-37 to 42). As built (`346d52d`): refusal code `LUNCH_BREAK`; `lunchMinutes` **returned** on each entry (computed when the API returns it; **not stored**; older entries 0, no migration); `Lunch 1h 00m not counted` line (UIE confirmed keep); lunch out of the live timer count.
-- **Open:** **Q-120** (Jomerson): recalculate time logged before the change? Lean's suggestion: only new and edited entries, so DAR totals already sent don't shift. Q-121 to Q-125 **closed** by Lean (v0.2).
-- **Status:** items 1 and 4 in Deven's local build `346d52d` (`fix/nov5-tasks-timesheet`, not merged). Pending Jomerson's approval and Q-120.
+- **Closed:** **Q-120** (Jomerson, v0.2.5): lunch only on new and edited entries; old unedited entries keep their hours, so DAR totals already sent don't shift; lunch line only where lunch was taken out. Q-121 to Q-125 **closed** by Lean (v0.2).
+- **Status:** items 1 and 4 in Deven's local build `346d52d` (`fix/nov5-tasks-timesheet`, not merged). Q-120 implemented by Deven in PR #47 into main (open, not merged). Pending Jomerson's approval.
 
 ## 2. New questions for Jomerson (Q-87 to Q-106)
 **Update v0.3.1 (Jomerson, 2026-10-22, 8:38 PM SGT):** Q-91 and CR-03 (the mobile sign-in part of Q-92) are **decided**. So Q-91 is no longer open, and Q-92 now has only the M8 catch-up (CR-12) left.
@@ -296,7 +297,7 @@ Jomerson (lead developer) gave these decisions in the room. Each row maps a deci
 
 Q-87 Lift the Microsoft sign-in hold? (moot/closed: sign-in is live) · Q-88 One tenant ID only? · Q-89 §11 sign-in messages · Q-90 Auto-create or refuse unknown accounts? · Q-91 Users without a job role (decided v0.3.1: none until an Admin sets it) · Q-92 Is mobile in scope (sign-in, DAR, emails, M8 catch-up)? · Q-93 Delegated own-mailbox sender confirmed? · Q-94 Mail.Send admin consent confirmed? · Q-95 HTML DAR body before go-live? · Q-96 Saved copy showing stale recipients · Q-97 Manual or automatic supervisor notice · Q-98 Last send only, or send history? · Q-99 Bring email notifications forward? · Q-100 Action email sender · Q-101 Email box ticked by default? · Q-102 Who controls the email flag in production · Q-103 Keep the "added you to" notice? · Q-104 Refuse and audit a different Microsoft account with the same email? · Q-105 Idempotent Send, "outcome unknown" status and an already-sent warning? · Q-106 Company-domain-only DAR CC, or external addresses allowed?
 
-**Added v0.6 (CR-20):** Q-120 to Q-125. **v0.6.1:** Q-121 to Q-125 closed by Lean; only Q-120 (lunch backfill, Jomerson) open. See the CR-20 spec §12.
+**Added v0.6 (CR-20):** Q-120 to Q-125. **v0.6.1:** Q-121 to Q-125 closed by Lean; only Q-120 (lunch backfill, Jomerson) open. **v0.6.6:** Q-120 closed (new and edited only). See the CR-20 spec §12.
 
 **Added v0.5 (CR-19):** Q-109 to Q-117, all decided on 2026-11-03 (Locked: Q-109, Q-110, Q-111, Q-115, Q-116 (reversed to the stricter rule, v0.5.2); Lean-accepted defaults: Q-112, Q-113, Q-114, Q-117). See the CR-19 spec §15.
 
