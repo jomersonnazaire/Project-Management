@@ -148,7 +148,7 @@ export function TaskPanel({
             {t ? `#${t.order} ${t.name}` : 'Task'}
           </Offcanvas.Title>
         </Offcanvas.Header>
-        <Offcanvas.Body>
+        <Offcanvas.Body className="task-panel-body">
           <ErrorAlert error={task.error} />
           {!t ? (
             <LoadingRows rows={4} />

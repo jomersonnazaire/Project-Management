@@ -46,6 +46,9 @@ describe('Follow-ups thread (CR-20)', () => {
     expect(screen.getByTestId('follow-up-c')).toHaveAttribute('data-run-start', 'true');
     expect(screen.getByTestId('follow-up-d')).toHaveAttribute('data-run-start', 'true');
     expect(screen.getByTestId('follow-up-b').querySelector('[data-testid="avatar"]')).toBeNull();
+    const spacer = screen.getByTestId('follow-up-b').querySelector('.fu-av.sp');
+    expect(spacer).not.toBeNull();
+    expect(spacer).toHaveClass('fu-av', 'sp');
     expect(
       screen.getByTestId('follow-up-a').querySelector('[data-testid="avatar"]'),
     ).toHaveTextContent('MM');
@@ -63,6 +66,17 @@ describe('Follow-ups thread (CR-20)', () => {
     expect(screen.getAllByTestId('follow-ups-day')[0]!.nextElementSibling).toBe(
       screen.getByTestId('follow-up-a'),
     );
+  });
+
+  it('labels a previous calendar day as Yesterday on the day chip', () => {
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    y.setHours(15, 0, 0, 0);
+    show([fu('y', 'u2', y), fu('t', 'u2', minutesAgo(1))]);
+    expect(screen.getAllByTestId('follow-ups-day').map((d) => d.textContent)).toEqual([
+      'Yesterday',
+      'Today',
+    ]);
   });
 
   it('shows Emailed as a labelled envelope icon, not meta text', () => {
@@ -92,8 +106,9 @@ describe('Follow-ups thread (CR-20)', () => {
     expect(screen.getByTestId('follow-ups-new-divider').nextElementSibling).toBe(
       screen.getByTestId('follow-up-b'),
     );
-    expect(screen.getByTestId('follow-up-b')).toHaveClass('followup-new');
-    expect(screen.getByTestId('follow-up-a')).not.toHaveClass('followup-new');
+    expect(screen.getByTestId('follow-ups-new-divider').previousElementSibling).toBe(
+      screen.getByTestId('follow-up-a'),
+    );
   });
 
   it('says so when there are none, with a prompt to post the first note', () => {

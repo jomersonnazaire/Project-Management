@@ -71,12 +71,7 @@ export function FollowUpThread({
                   data-testid={`follow-up-${f.id}`}
                   data-own={own ? 'true' : 'false'}
                   data-run-start={runStart ? 'true' : 'false'}
-                  className={[
-                    'fu-msg',
-                    own ? 'own' : '',
-                    runStart ? 'first' : '',
-                    newIds.has(f.id) ? 'followup-new' : '',
-                  ]
+                  className={['fu-msg', own ? 'own' : '', runStart ? 'first' : '']
                     .filter(Boolean)
                     .join(' ')}
                 >
