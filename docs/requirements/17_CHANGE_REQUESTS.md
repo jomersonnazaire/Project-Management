@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.10 (2026-11-05 ~5:39 PM SGT): **CR-21 spec v0.1.2 — A-44 updated (Lean).** Any signed-in active staff may fetch `GET /users/:id/avatar`; never public (unauthenticated 401/403, AC-68.5); deactivated cannot fetch (Queen TC-AV-003b). FR-USR-09 wording aligned. No IDs renumbered.
 - v0.6.9 (2026-11-05 ~5:07 PM SGT): **CR-21 spec v0.1.1 — Q-126 closed (Lean).** Add **`User.Read` only** to Microsoft sign-in scopes for Graph photo (FR-SSO-12a). Deven checks app-registration listing; Jomerson can grant tenant-wide consent once in Entra if staging shows a prompt. No other Graph scopes. No IDs renumbered.
 - v0.6.8 (2026-11-05, SGT): **CR-21 (Microsoft profile photo) v0.1** added. Lean locks: Graph `/me/photo/$value` on Microsoft sign-in callback; resize 96px to blob; signed-in `GET /users/:id/avatar` (404 → initials); refresh every MS sign-in; never keep MS token for later photo; failed fetch must not block sign-in. Full spec [`17_CR-21_MICROSOFT_PROFILE_PHOTO.md`](17_CR-21_MICROSOFT_PROFILE_PHOTO.md). IDs FR-USR-07 to 12, FR-SSO-12, US-68, AC-68.x, EC-176 to 182, NFR-47 to 49, Q-126, A-42 to 46. **CR-20 spec v0.2.7:** pointer to UIE Follow-ups conversation restyle (`docs/design/FOLLOWUPS_CONVERSATION_UI.md`, mockup `#followups`); UI-only, no new CR; Lean 5-minute same-author run gap. No IDs renumbered on CR-20.
 - v0.6.7 (2026-11-05, SGT): **CR-20 spec v0.2.6.** Lean: grey lunch-break helper kept for Add entry times entirely inside lunch, save still refused with red `LUNCH_BREAK` error (FR-ACT-37e). Timer stop at the 24 h cap: counted minutes (lunch out) equal the room left exactly; fixes DEF-061 (FR-ACT-41a). No IDs renumbered; Q-120 stays closed.
@@ -296,7 +297,7 @@ Jomerson (lead developer) gave these decisions in the room. Each row maps a deci
 - **Status:** items 1 and 4 shipped via PR #47 into main. Pending Jomerson's approval of the CR pack. Follow-ups restyle is UI-only (v0.2.7 pointer).
 
 ### CR-21 — Microsoft profile photo (requested / rules locked by Lean, 2026-11-05)
-- **Full spec:** [`17_CR-21_MICROSOFT_PROFILE_PHOTO.md`](17_CR-21_MICROSOFT_PROFILE_PHOTO.md) (v0.1.1).
+- **Full spec:** [`17_CR-21_MICROSOFT_PROFILE_PHOTO.md`](17_CR-21_MICROSOFT_PROFILE_PHOTO.md) (v0.1.2).
 - **What (Locked):** on Microsoft sign-in the API fetches Graph `/me/photo/$value`, resizes to **96px**, stores in blob, serves via signed-in **`GET /users/:id/avatar`** (missing → **404** → UI initials). Refresh on every Microsoft sign-in; **never** keep the Microsoft token for a later photo fetch. Password / no photo → initials. Photo fetch failure must **not** block sign-in. Shows in top bar, Users list, and Follow-ups (one component; UIE Avatars section).
 - **Scopes (Locked, Q-126):** add delegated **`User.Read` only** to Microsoft sign-in scopes (FR-SSO-12a). Basic delegated; listed by default, normally no admin consent. Deven checks app-registration API permissions listing; if staging shows a consent prompt, Jomerson grants tenant-wide consent once in Entra. No other Graph scopes.
 - **Related:** same branch as Follow-ups thread redesign (web + API) is fine; the thread restyle itself is UI-only (CR-20 v0.2.7 / UIE note), not this CR.
