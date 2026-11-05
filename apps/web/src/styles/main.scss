@@ -403,6 +403,9 @@ a:focus-visible,
     margin-bottom: 0 !important;
     min-width: 0;
   }
+  .form-check {
+    margin-bottom: 0;
+  }
 }
 .fu-post {
   margin-left: auto;
@@ -437,8 +440,9 @@ a:focus-visible,
 }
 
 // The task panel is full width on phones (spec "Responsive").
-// Flex column: Follow-ups (.fu) fills leftover height; the thread scrolls; composer
-// stays pinned; History stays below. Body still scrolls if the details above are long (390).
+// Follow-ups does not shrink below the thread floor; the thread has its own min/max and
+// scrolls inside. Composer stays pinned under the thread; History stays below. The panel
+// body still scrolls when Details/Evidence above are long.
 .task-panel.offcanvas-end {
   max-width: 100vw;
 }
@@ -452,11 +456,12 @@ a:focus-visible,
   min-height: 0;
 }
 .task-panel .fu {
-  flex: 1 1 auto;
-  min-height: 12rem;
+  flex: 1 0 auto;
 }
 .task-panel .fu-thread {
-  max-height: none;
+  min-height: min(20rem, 45vh);
+  max-height: min(28rem, 60vh);
+  overflow-y: auto;
 }
 
 // --- Tables that become stacked cards on phones (DR-03) ---
