@@ -293,12 +293,13 @@ describe('CR-20 FR-ACT-37..42: 8:00–5:00 defaults and the live "Counts as" hel
     expect(timeIn).toHaveAttribute('aria-describedby', helper.id);
     expect(timeOut).toHaveAttribute('aria-describedby', helper.id);
     expect(within(dialog).getByText(/^Philippine time · /)).not.toHaveTextContent('lunch');
-    // Inside lunch only → the shared refusal text; Time out before Time in → no helper.
+    // Inside lunch only, or Time out before Time in → no helper (the refusal comes on save).
     await userEvent.clear(timeIn);
     await userEvent.type(timeIn, '12:10');
     await userEvent.clear(timeOut);
     await userEvent.type(timeOut, '12:50');
-    expect(helper).toHaveTextContent(LUNCH_ONLY_MESSAGE);
+    expect(helper).toBeEmptyDOMElement();
+    expect(helper).not.toHaveTextContent(LUNCH_ONLY_MESSAGE);
     await userEvent.clear(timeOut);
     await userEvent.type(timeOut, '11:00');
     expect(helper).toBeEmptyDOMElement();
@@ -344,7 +345,12 @@ describe('CR-20 FR-ACT-37..42: 8:00–5:00 defaults and the live "Counts as" hel
     expect(await within(pill).findByTestId('timer-lunch', {}, { timeout: 3000 })).toHaveTextContent(
       'Lunch, not counting',
     );
-    expect(within(pill).getByTestId('timer-lunch')).toHaveClass('text-body-secondary', 'small');
+    expect(within(pill).getByTestId('timer-lunch')).toHaveClass(
+      'text-body-secondary',
+      'small',
+      'd-none',
+      'd-md-inline',
+    );
     vi.setSystemTime(new Date('2026-10-09T05:00:01Z')); // 1:00:01 PM
     await waitFor(() => expect(within(pill).queryByTestId('timer-lunch')).not.toBeInTheDocument(), {
       timeout: 3000,

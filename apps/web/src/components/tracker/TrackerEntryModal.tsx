@@ -518,16 +518,16 @@ export function TrackerEntryModal({
                 />
                 <Form.Control.Feedback type="invalid">{errors.timeOut}</Form.Control.Feedback>
               </Form.Group>
-              <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
               {/* Always in the DOM so screen readers announce changes (aria-live). */}
               <Form.Text
                 id="tracker-counts-as"
-                className="col-12 mt-0"
+                className="col-12 mt-1"
                 aria-live="polite"
                 data-testid="tracker-counts-as"
               >
                 {countsAs}
               </Form.Text>
+              <Form.Text className="col-12 mt-0">Philippine time · {longDayShort(date)}</Form.Text>
             </div>
           )}
           {dayLocked && !editing && (

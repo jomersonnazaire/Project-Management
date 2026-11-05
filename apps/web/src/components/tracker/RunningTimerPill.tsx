@@ -45,9 +45,13 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
       <span className="timer-pill-label text-truncate fw-medium">{label}</span>
       <span className="font-monospace">{elapsedHMS(seconds)}</span>
       {lunch && (
-        <span className="text-body-secondary small" data-testid="timer-lunch">
-          Lunch, not counting
-        </span>
+        <>
+          {/* Hidden below md so the pill fits 390 px; still read out there (UIE Nov 5). */}
+          <span className="text-body-secondary small d-none d-md-inline" data-testid="timer-lunch">
+            Lunch, not counting
+          </span>
+          <span className="visually-hidden d-md-none">Lunch, not counting</span>
+        </>
       )}
       <Button
         size="sm"

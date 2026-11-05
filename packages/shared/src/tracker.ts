@@ -358,7 +358,8 @@ export function countsAsLabel(date: string, timeIn: string, timeOut: string): st
   const b = phInstant(date, timeOut);
   const lunch = lunchMinutes(a, b);
   const worked = workedMinutes(a, b);
-  if (worked === 0) return LUNCH_ONLY_MESSAGE;
+  // Fully inside lunch: no helper; the API refuses it under Time in on save (UIE Nov 5).
+  if (worked === 0) return null;
   const counts = `Counts as ${formatHoursMinutes(worked)}.`;
   return lunch > 0 ? `${counts} ${lunchTakenLabel(lunch)}.` : counts;
 }

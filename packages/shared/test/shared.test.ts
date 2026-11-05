@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LUNCH_ONLY_MESSAGE,
   countsAsLabel,
   isLunchTime,
   GRID_ACTIONS,
@@ -351,8 +350,8 @@ describe('CR-20 lunch deduction (Jomerson Nov 5)', () => {
     expect(countsAsLabel(d, '11:30', '12:30')).toBe('Counts as 0h 30m. Lunch 0h 30m not counted.');
     expect(countsAsLabel(d, '08:30', '10:30')).toBe('Counts as 2h 00m.');
     expect(countsAsLabel(d, '13:00', '14:05')).toBe('Counts as 1h 05m.');
-    expect(countsAsLabel(d, '12:00', '13:00')).toBe(LUNCH_ONLY_MESSAGE);
-    expect(countsAsLabel(d, '12:15', '12:45')).toBe(LUNCH_ONLY_MESSAGE);
+    expect(countsAsLabel(d, '12:00', '13:00')).toBeNull();
+    expect(countsAsLabel(d, '12:15', '12:45')).toBeNull();
     expect(countsAsLabel(d, '17:00', '08:00')).toBeNull();
     expect(countsAsLabel(d, '08:00', '08:00')).toBeNull();
     expect(countsAsLabel(d, '', '17:00')).toBeNull();
