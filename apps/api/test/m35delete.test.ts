@@ -48,6 +48,29 @@ describe('Delete a task', () => {
     expect(log!.actorId!.toString()).toBe(w.pm.user._id.toString());
   });
 
+  it('Jomerson Nov 5: deleting a task renumbers the tasks after it, so the checklist stays #1…n', async () => {
+    const w = await world(app);
+    const extra = await TaskModel.create({
+      projectId: w.project.id,
+      name: 'Renumber me',
+      order: (await TaskModel.countDocuments({ projectId: w.project.id })) + 1,
+    });
+    const before = (await w.pm.agent.get(`${base(w)}/tasks`)).body.items as {
+      id: string;
+      order: number;
+    }[];
+    expect(before.length).toBeGreaterThanOrEqual(3);
+    const first = before[0]!;
+    expect((await del(w.pm.agent, first.id)).status).toBe(204);
+    const after = (await w.pm.agent.get(`${base(w)}/tasks`)).body.items as {
+      id: string;
+      order: number;
+    }[];
+    expect(after.map((t) => t.order)).toEqual(after.map((_, i) => i + 1));
+    expect(after.map((t) => t.id)).toEqual(before.slice(1).map((t) => t.id));
+    expect(after.find((t) => t.id === extra.id.toString())!.order).toBe(before.length - 1);
+  });
+
   it('409 TASK_HAS_RECORDS lists what blocks it: time, follow-ups, comments, evidence, documents, issues', async () => {
     const w = await world(app);
     const [t] = await tasks(w);

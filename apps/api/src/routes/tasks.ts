@@ -1466,6 +1466,12 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         );
         const gone = await TaskModel.deleteOne({ _id: task._id }, { session });
         if (!gone.deletedCount) throw notFound('Task not found');
+        // Jomerson (Nov 5): close the gap so the checklist stays #1…n after a delete.
+        await TaskModel.updateMany(
+          { projectId: project._id, order: { $gt: task.order ?? 0 } },
+          { $inc: { order: -1 } },
+          { session },
+        );
       });
     } finally {
       await session.endSession();
