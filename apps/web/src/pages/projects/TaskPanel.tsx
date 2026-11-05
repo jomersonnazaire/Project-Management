@@ -24,6 +24,7 @@ import { ReasonModal } from '../../components/ReasonModal';
 import { dateTime, shortDate } from '../../lib/format';
 import { followUpRecipients } from '../../lib/m3ui';
 import { EvidenceSection } from './EvidenceSection';
+import { FollowUpThread } from './FollowUpThread';
 import { TaskFormModal } from './TaskFormModal';
 import { IssueStatusBadge, RaiseIssueModal, SeverityBadge } from '../issues/IssueUi';
 import { Link } from 'react-router-dom';
@@ -303,53 +304,48 @@ export function TaskPanel({
               <h3 className="h6" id="task-follow-ups" ref={followUpsRef} tabIndex={-1}>
                 Follow-ups
               </h3>
-              {t.followUps.length === 0 ? (
-                <p className="small text-body-secondary">No follow-ups yet.</p>
-              ) : (
-                <ul className="list-unstyled small">
-                  {t.followUps.map((f) => (
-                    <li
-                      key={f.id}
-                      className={`mb-2 ${newIds.has(f.id) ? 'followup-new rounded px-2 py-1' : ''}`}
-                    >
-                      <div>{f.note}</div>
-                      <span className="text-body-secondary">
-                        {f.author?.name ?? 'Unknown'} · {dateTime(f.at)}
-                        {f.emailedAt && ' · Emailed'}
-                      </span>
-                      {newIds.has(f.id) && <span className="badge bg-label-warning ms-2">New</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {t.can.edit && !archived && (
-                <Form onSubmit={addNote} className="d-flex gap-2 mb-4" noValidate>
-                  <Form.Control
-                    size="sm"
-                    placeholder="Add a follow-up note"
-                    aria-label="Follow-up note"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                  <Button size="sm" type="submit" variant="outline-primary" className="text-nowrap">
-                    Post follow-up
-                  </Button>
-                </Form>
-              )}
-              {t.can.edit && !archived && notifies && (
-                <p className="small text-body-secondary mt-n2 mb-2">Notifies {notifies}</p>
-              )}
-              {t.can.edit && !archived && (
-                <div className="small mb-4">
-                  <EmailCheckbox
-                    id="follow-up-email"
-                    names={notifies}
-                    checked={emailNote}
-                    onChange={setEmailNote}
-                  />
-                  <ErrorAlert error={emailError} />
-                </div>
-              )}
+              <FollowUpThread
+                taskId={t.id}
+                followUps={t.followUps}
+                meId={user?.id}
+                newIds={newIds}
+                composer={
+                  t.can.edit &&
+                  !archived && (
+                    <>
+                      <Form onSubmit={addNote} className="followups-form" noValidate>
+                        <Form.Control
+                          placeholder="Add a follow-up note"
+                          aria-label="Follow-up note"
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                        />
+                        <Button
+                          type="submit"
+                          variant="primary"
+                          className="followups-send"
+                          aria-label="Post follow-up"
+                          title="Post follow-up"
+                        >
+                          <i className="bx bx-send" aria-hidden="true" />
+                        </Button>
+                      </Form>
+                      {notifies && (
+                        <p className="small text-body-secondary mt-2 mb-1">Notifies {notifies}</p>
+                      )}
+                      <div className="small">
+                        <EmailCheckbox
+                          id="follow-up-email"
+                          names={notifies}
+                          checked={emailNote}
+                          onChange={setEmailNote}
+                        />
+                        <ErrorAlert error={emailError} />
+                      </div>
+                    </>
+                  )
+                }
+              />
 
               <h3 className="h6">History</h3>
               <ul className="list-unstyled small mb-0">

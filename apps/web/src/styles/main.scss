@@ -200,9 +200,195 @@ a:focus-visible,
   border-radius: 50%;
   background: currentColor;
 }
-// Follow-ups that were new when the task panel opened (FR-NTF-12).
-.followup-new {
-  background: #fff8e6;
+// ---------------------------------------------------------------------------------------------
+// Follow-ups thread in the task panel (CR-20). One block, tuned through the custom properties at
+// the top; colours come from Bootstrap/Sneat tokens so they follow a dark theme too.
+// ---------------------------------------------------------------------------------------------
+.followups {
+  --fu-radius: 14px;
+  --fu-tail-radius: 4px;
+  --fu-gap: 0.25rem;
+  --fu-avatar: 2rem;
+  --fu-max-width: 85%;
+  --fu-scroll-max: min(26rem, 55vh);
+  --fu-own-bg: var(--#{$prefix}primary-bg-subtle);
+  --fu-own-color: var(--#{$prefix}emphasis-color);
+  --fu-other-bg: var(--#{$prefix}tertiary-bg);
+  --fu-other-color: var(--#{$prefix}body-color);
+  --fu-muted: var(--#{$prefix}secondary-color);
+  --fu-hairline: var(--#{$prefix}border-color);
+  --fu-new: var(--#{$prefix}warning);
+  margin-bottom: 1.5rem;
+  border-radius: var(--fu-radius);
+  background: var(--#{$prefix}body-bg);
+
+  .followups-scroll {
+    position: relative; // offsetTop of the New divider is measured from here
+    max-height: var(--fu-scroll-max);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.25rem 0.25rem 0.5rem;
+  }
+  .followups-thread {
+    display: flex;
+    flex-direction: column;
+    gap: var(--fu-gap);
+    font-size: 0.875rem;
+  }
+
+  // Day and "New" separators: a small centred label on a hairline.
+  .followup-sep {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 0 0.25rem;
+    color: var(--fu-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    &::before,
+    &::after {
+      content: '';
+      flex: 1;
+      border-top: 1px solid var(--fu-hairline);
+    }
+  }
+  .followup-sep-new {
+    color: var(--fu-new);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    &::before,
+    &::after {
+      border-top-color: var(--fu-new);
+    }
+  }
+
+  .followup-msg {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    max-width: var(--fu-max-width);
+    min-width: 0;
+  }
+  .followup-group-start {
+    margin-top: 0.5rem;
+  }
+  .followup-own {
+    flex-direction: row-reverse;
+    align-self: flex-end;
+    text-align: right;
+  }
+  .followup-other {
+    align-self: flex-start;
+  }
+
+  .followup-avatar-col {
+    flex: 0 0 var(--fu-avatar);
+  }
+  .followup-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--fu-avatar);
+    height: var(--fu-avatar);
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .followup-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .followup-own .followup-body {
+    align-items: flex-end;
+  }
+  .followup-other .followup-body {
+    align-items: flex-start;
+  }
+  .followup-author {
+    margin-bottom: 0.2rem;
+    color: var(--#{$prefix}heading-color);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .followup-bubble {
+    padding: 0.5rem 0.8rem;
+    border-radius: var(--fu-radius);
+    background: var(--fu-other-bg);
+    color: var(--fu-other-color);
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .followup-other.followup-group-start .followup-bubble {
+    border-top-left-radius: var(--fu-tail-radius);
+  }
+  .followup-own .followup-bubble {
+    background: var(--fu-own-bg);
+    color: var(--fu-own-color);
+  }
+  .followup-own.followup-group-start .followup-bubble {
+    border-top-right-radius: var(--fu-tail-radius);
+  }
+  // Unseen when the panel opened (FR-NTF-12): a thin accent on the bubble's leading edge.
+  .followup-new .followup-bubble {
+    box-shadow: inset 3px 0 0 var(--fu-new);
+  }
+
+  .followup-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.15rem;
+    padding: 0 0.25rem;
+    color: var(--fu-muted);
+    font-size: 0.6875rem;
+  }
+  .followup-emailed {
+    font-size: 0.8125rem;
+  }
+
+  // Composer pinned under the scroll area.
+  .followups-composer {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--fu-hairline);
+  }
+  .followups-form {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.25rem 0.25rem 0.9rem;
+    border: 1px solid var(--fu-hairline);
+    border-radius: 999px;
+    background: var(--#{$prefix}body-bg);
+    &:focus-within {
+      border-color: var(--#{$prefix}primary);
+      box-shadow: 0 0 0 0.15rem rgba(var(--#{$prefix}primary-rgb), 0.15);
+    }
+    .form-control {
+      flex: 1;
+      min-width: 0;
+      padding: 0.25rem 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+  }
+  .followups-send {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 2.125rem;
+    height: 2.125rem;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 1.05rem;
+  }
 }
 
 // --- Tables that become stacked cards on phones (DR-03) ---

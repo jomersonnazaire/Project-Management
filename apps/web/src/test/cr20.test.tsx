@@ -220,7 +220,11 @@ describe('Follow-up badge (CR-20 FR-NTF-09..13)', () => {
     // Only the newest one by someone else was new; mine and the older one are not flagged.
     const newest = await screen.findByText('Note f3');
     expect(newest.closest('li')).toHaveClass('followup-new');
-    expect(within(newest.closest('li')!).getByText('New')).toHaveClass('badge', 'bg-label-warning');
+    // One thin "New" divider, right above the first unseen one.
+    const divider = screen.getByTestId('follow-ups-new-divider');
+    expect(divider).toHaveTextContent('New');
+    expect(divider.nextElementSibling).toBe(newest.closest('li'));
+    expect(screen.getAllByTestId('follow-ups-new-divider')).toHaveLength(1);
     expect(screen.getByText('Note f1').closest('li')).not.toHaveClass('followup-new');
     expect(screen.getByText('Note f2').closest('li')).not.toHaveClass('followup-new');
   });
