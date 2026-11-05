@@ -314,7 +314,6 @@ export const WORKDAY_START = '08:00';
 export const WORKDAY_END = '17:00';
 export const LUNCH_START = '12:00';
 export const LUNCH_END = '13:00';
-export const LUNCH_NOTE = "12:00–1:00 PM is lunch and isn't counted.";
 /** CR-20 Q-125: an entry entirely inside lunch is refused. */
 export const LUNCH_ONLY_MESSAGE = 'This time is inside the 12:00–1:00 PM lunch break.';
 /** "Lunch 1h 00m not counted" for an entry that lost lunch time. */
@@ -345,6 +344,27 @@ export const lunchMinutes = (a: Date, b: Date) => Math.round(lunchMs(a, b) / 60_
 /** Counted minutes of a timed entry: end minus start, less any 12:00–1:00 PM lunch overlap. */
 export const workedMinutes = (a: Date, b: Date) =>
   Math.max(0, minutesBetween(a, b) - lunchMinutes(a, b));
+
+/**
+ * CR-20 FR-ACT-37..42: the live helper under Time in / Time out, for "08:00"–"17:00" on a
+ * Philippine date: "Counts as 8h 00m. Lunch 1h 00m not counted." ("Counts as 2h 00m." with no
+ * lunch; LUNCH_ONLY_MESSAGE when the whole range is lunch). Null unless both times are valid and
+ * Time out is after Time in.
+ */
+export function countsAsLabel(date: string, timeIn: string, timeOut: string): string | null {
+  const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!hhmm.test(timeIn) || !hhmm.test(timeOut) || timeOut <= timeIn) return null;
+  const a = phInstant(date, timeIn);
+  const b = phInstant(date, timeOut);
+  const lunch = lunchMinutes(a, b);
+  const worked = workedMinutes(a, b);
+  if (worked === 0) return LUNCH_ONLY_MESSAGE;
+  const counts = `Counts as ${formatHoursMinutes(worked)}.`;
+  return lunch > 0 ? `${counts} ${lunchTakenLabel(lunch)}.` : counts;
+}
+
+/** CR-20 FR-ACT-37..42: true while it is 12:00–1:00 PM Philippine time (a running timer holds still). */
+export const isLunchTime = (at: Date) => lunchMs(at, new Date(at.getTime() + 1)) > 0;
 
 // ---------- Messages (doc 14 §11, §12.3) ----------
 export const dailyCapMessage = (date: string, minutes: number) =>

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LUNCH_ONLY_MESSAGE,
+  countsAsLabel,
+  isLunchTime,
   GRID_ACTIONS,
   lunchMinutes,
   workedMinutes,
@@ -340,5 +343,26 @@ describe('CR-20 lunch deduction (Jomerson Nov 5)', () => {
     expect(workedMinutes(at('12:30'), at('15:00'))).toBe(120);
     expect(lunchMinutes(at('08:00'), at('17:00'))).toBe(60);
     expect(lunchMinutes(at('17:00'), at('08:00'))).toBe(0);
+  });
+
+  it('FR-ACT-37..42: the live "Counts as" helper', () => {
+    const d = '2026-11-05';
+    expect(countsAsLabel(d, '08:00', '17:00')).toBe('Counts as 8h 00m. Lunch 1h 00m not counted.');
+    expect(countsAsLabel(d, '11:30', '12:30')).toBe('Counts as 0h 30m. Lunch 0h 30m not counted.');
+    expect(countsAsLabel(d, '08:30', '10:30')).toBe('Counts as 2h 00m.');
+    expect(countsAsLabel(d, '13:00', '14:05')).toBe('Counts as 1h 05m.');
+    expect(countsAsLabel(d, '12:00', '13:00')).toBe(LUNCH_ONLY_MESSAGE);
+    expect(countsAsLabel(d, '12:15', '12:45')).toBe(LUNCH_ONLY_MESSAGE);
+    expect(countsAsLabel(d, '17:00', '08:00')).toBeNull();
+    expect(countsAsLabel(d, '08:00', '08:00')).toBeNull();
+    expect(countsAsLabel(d, '', '17:00')).toBeNull();
+    expect(countsAsLabel(d, '08:00', '')).toBeNull();
+  });
+
+  it('FR-ACT-37..42: lunch time is [12:00, 1:00 PM) Philippine time', () => {
+    expect(isLunchTime(at('11:59'))).toBe(false);
+    expect(isLunchTime(at('12:00'))).toBe(true);
+    expect(isLunchTime(at('12:59'))).toBe(true);
+    expect(isLunchTime(at('13:00'))).toBe(false);
   });
 });

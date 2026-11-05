@@ -251,7 +251,7 @@ export function DayTimesheet({
                 <LockableButton
                   locked={!d.can.edit}
                   size="sm"
-                  onClick={() => setModal({ kind: 'add', date })}
+                  onClick={() => setModal({ kind: 'add', date, defaultTimes: true })}
                 >
                   Log task time
                 </LockableButton>

@@ -1,4 +1,4 @@
-import { formatHHMM, lunchMs } from '@xc8/shared';
+import { formatHHMM, isLunchTime, lunchMs } from '@xc8/shared';
 import { useEffect, useState } from 'react';
 import { Button } from 'react-bootstrap';
 import { useRunning, useTrackerMutation } from '../../api/trackerHooks';
@@ -32,6 +32,8 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
   const seconds = (nowMs - startMs - lunchMs(new Date(startMs), new Date(nowMs))) / 1000;
   const minutes = Math.floor(Math.max(0, seconds) / 60);
   const label = entry.task?.name ?? entry.title ?? 'Timer';
+  // CR-20 FR-ACT-37..42: say why the time isn't moving between 12:00 and 1:00 PM.
+  const lunch = isLunchTime(new Date(nowMs));
   return (
     <div
       className="timer-pill d-flex align-items-center gap-2 rounded-pill bg-label-success px-3 py-1 small text-nowrap"
@@ -42,6 +44,11 @@ export function RunningTimerPill({ enabled }: { enabled: boolean }) {
       <span className="notif-dot bg-success timer-pulse" aria-hidden="true" />
       <span className="timer-pill-label text-truncate fw-medium">{label}</span>
       <span className="font-monospace">{elapsedHMS(seconds)}</span>
+      {lunch && (
+        <span className="text-body-secondary small" data-testid="timer-lunch">
+          Lunch, not counting
+        </span>
+      )}
       <Button
         size="sm"
         variant="danger"

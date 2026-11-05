@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { SystemRole } from '@xc8/shared';
+import { LUNCH_ONLY_MESSAGE, countsAsLabel, type SystemRole } from '@xc8/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { LOOKUPS, makeUser } from './fixtures';
@@ -249,16 +249,18 @@ describe('+ Quick activity (TC-Q06)', () => {
       'Internal meeting',
     );
     await userEvent.click(within(dialog).getByLabelText('Enter time in and time out'));
-    // CR-20: a new entry opens on the standard day, 8:00 AM – 5:00 PM, and names the lunch rule.
-    expect(within(dialog).getByLabelText('Time in *')).toHaveValue('08:00');
-    expect(within(dialog).getByLabelText('Time out *')).toHaveValue('17:00');
-    expect(
-      within(dialog).getByText(/12:00–1:00 PM is lunch and isn't counted\./),
-    ).toBeInTheDocument();
-    await userEvent.clear(within(dialog).getByLabelText('Time in *'));
+    // CR-20: quick activity has no 8:00–5:00 default, and no fixed lunch line; the live helper
+    // appears once both times make a range.
+    expect(within(dialog).getByLabelText('Time in *')).toHaveValue('');
+    expect(within(dialog).getByLabelText('Time out *')).toHaveValue('');
+    expect(within(dialog).queryByText(/is lunch and isn't counted/)).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId('tracker-counts-as')).toBeEmptyDOMElement();
     await userEvent.type(within(dialog).getByLabelText('Time in *'), '08:30');
-    await userEvent.clear(within(dialog).getByLabelText('Time out *'));
     await userEvent.type(within(dialog).getByLabelText('Time out *'), '08:58');
+    expect(within(dialog).getByTestId('tracker-counts-as')).toHaveTextContent(
+      countsAsLabel('2026-10-09', '08:30', '08:58')!,
+    );
+    expect(within(dialog).getByTestId('tracker-counts-as')).toHaveTextContent('Counts as 0h 28m.');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save entry' }));
     await waitFor(() =>
       expect(sent(fetchMock, '/tracker/entries')).toEqual({
@@ -271,6 +273,82 @@ describe('+ Quick activity (TC-Q06)', () => {
         timeOut: '08:58',
       }),
     );
+  });
+});
+
+describe('CR-20 FR-ACT-37..42: 8:00–5:00 defaults and the live "Counts as" helper', () => {
+  it('Day timesheet Log task time opens on 08:00–17:00 with the helper, tied to both inputs', async () => {
+    tracker('MEMBER');
+    renderAt('/my-tasks?tab=day-timesheet', <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Log task time' }));
+    const dialog = await screen.findByRole('dialog');
+    const timeIn = within(dialog).getByLabelText('Time in *');
+    const timeOut = within(dialog).getByLabelText('Time out *');
+    expect(timeIn).toHaveValue('08:00');
+    expect(timeOut).toHaveValue('17:00');
+    const helper = within(dialog).getByTestId('tracker-counts-as');
+    expect(helper).toHaveTextContent('Counts as 8h 00m. Lunch 1h 00m not counted.');
+    expect(helper).toHaveTextContent(countsAsLabel('2026-10-09', '08:00', '17:00')!);
+    expect(helper).toHaveAttribute('aria-live', 'polite');
+    expect(timeIn).toHaveAttribute('aria-describedby', helper.id);
+    expect(timeOut).toHaveAttribute('aria-describedby', helper.id);
+    expect(within(dialog).getByText(/^Philippine time · /)).not.toHaveTextContent('lunch');
+    // Inside lunch only → the shared refusal text; Time out before Time in → no helper.
+    await userEvent.clear(timeIn);
+    await userEvent.type(timeIn, '12:10');
+    await userEvent.clear(timeOut);
+    await userEvent.type(timeOut, '12:50');
+    expect(helper).toHaveTextContent(LUNCH_ONLY_MESSAGE);
+    await userEvent.clear(timeOut);
+    await userEvent.type(timeOut, '11:00');
+    expect(helper).toBeEmptyDOMElement();
+    expect(timeIn).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('Day timesheet quick activity and Time logging › Log task time start with empty times', async () => {
+    tracker('MEMBER');
+    const first = renderAt('/my-tasks?tab=day-timesheet', <App />);
+    const quickButtons = await screen.findAllByRole('button', { name: 'Add quick activity' });
+    await userEvent.click(quickButtons[quickButtons.length - 1]!);
+    const quick = await screen.findByRole('dialog', { name: 'Add quick activity' });
+    await userEvent.click(within(quick).getByLabelText('Enter time in and time out'));
+    expect(within(quick).getByLabelText('Time in *')).toHaveValue('');
+    expect(within(quick).getByLabelText('Time out *')).toHaveValue('');
+    first.unmount();
+
+    renderAt('/time', <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Log task time' }));
+    const add = await screen.findByRole('dialog');
+    expect(within(add).getByLabelText('Time in *')).toHaveValue('');
+    expect(within(add).getByLabelText('Time out *')).toHaveValue('');
+  });
+
+  it('the running timer pill says "Lunch, not counting" only from 12:00 to 1:00 PM', async () => {
+    // 11:59:58 AM Philippine time; the server's clock agrees with the (fake) browser clock.
+    vi.setSystemTime(new Date('2026-10-09T03:59:58Z'));
+    const running = entry({
+      id: 'r1',
+      running: true,
+      endAt: null,
+      startAt: '2026-10-09T01:00:00Z',
+    });
+    tracker('MEMBER', trackerDay({ entries: [running] }), (url) =>
+      url.includes('/tracker/running')
+        ? { status: 200, body: { entry: running, now: new Date().toISOString() } }
+        : undefined,
+    );
+    renderAt('/my-tasks', <App />);
+    const pill = await screen.findByTestId('running-timer');
+    expect(within(pill).queryByTestId('timer-lunch')).not.toBeInTheDocument();
+    vi.setSystemTime(new Date('2026-10-09T04:00:01Z')); // 12:00:01 PM
+    expect(await within(pill).findByTestId('timer-lunch', {}, { timeout: 3000 })).toHaveTextContent(
+      'Lunch, not counting',
+    );
+    expect(within(pill).getByTestId('timer-lunch')).toHaveClass('text-body-secondary', 'small');
+    vi.setSystemTime(new Date('2026-10-09T05:00:01Z')); // 1:00:01 PM
+    await waitFor(() => expect(within(pill).queryByTestId('timer-lunch')).not.toBeInTheDocument(), {
+      timeout: 3000,
+    });
   });
 });
 

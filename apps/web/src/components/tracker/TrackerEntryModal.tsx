@@ -1,8 +1,8 @@
 import {
-  LUNCH_NOTE,
   QUICK_ACTIVITY_KEY,
   WORKDAY_END,
   WORKDAY_START,
+  countsAsLabel,
   formatHHMM,
   formatTime24,
   PROJECT_TYPE_NOT_SET,
@@ -33,7 +33,11 @@ export type TrackerModalMode =
       last?: TrackerEntryDto;
     }
   | { kind: 'quick'; date: string }
-  | { kind: 'add'; date: string }
+  /**
+   * `defaultTimes`: start on the standard day, 8:00 AM – 5:00 PM. Only the Day timesheet's
+   * Add entry sets it (CR-20); every other way in starts with empty times.
+   */
+  | { kind: 'add'; date: string; defaultTimes?: boolean }
   | { kind: 'edit'; entry: TrackerEntryDto };
 
 const QUICK = '__quick__';
@@ -164,13 +168,17 @@ export function TrackerEntryModal({
   const [when, setWhen] = useState<'now' | 'times'>(
     mode.kind === 'add' || mode.kind === 'edit' ? 'times' : 'now',
   );
-  // CR-20 (Jomerson Nov 5): a new entry starts on the standard day, 8:00 AM – 5:00 PM.
+  // CR-20 (Jomerson Nov 5): a new entry from the Day timesheet's Add entry starts on the
+  // standard day, 8:00 AM – 5:00 PM. Quick activity and every other way in start empty.
+  const workday = mode.kind === 'add' && mode.defaultTimes === true;
   const [timeIn, setTimeIn] = useState(
-    editing ? (editing.startAt ? formatTime24(editing.startAt) : '') : WORKDAY_START,
+    editing ? (editing.startAt ? formatTime24(editing.startAt) : '') : workday ? WORKDAY_START : '',
   );
   const [timeOut, setTimeOut] = useState(
-    editing ? (editing.endAt ? formatTime24(editing.endAt) : '') : WORKDAY_END,
+    editing ? (editing.endAt ? formatTime24(editing.endAt) : '') : workday ? WORKDAY_END : '',
   );
+  // CR-20 FR-ACT-37..42: what the range counts as, live, with the lunch hour left out.
+  const countsAs = countsAsLabel(date, timeIn, timeOut);
   // v0.9.11: every new entry asks "Where are you working today? *", prefilled with the day's
   // location. It is per day only (no per-entry override): a different pick is sent as
   // dayLocationId, which the API saves on the day after its lock checks.
@@ -492,6 +500,7 @@ export function TrackerEntryModal({
                 <Form.Label>Time in *</Form.Label>
                 <Form.Control
                   type="time"
+                  aria-describedby={countsAs ? 'tracker-counts-as' : undefined}
                   value={timeIn}
                   isInvalid={Boolean(errors.timeIn)}
                   onChange={(e) => setTimeIn(e.target.value)}
@@ -502,14 +511,22 @@ export function TrackerEntryModal({
                 <Form.Label>Time out *</Form.Label>
                 <Form.Control
                   type="time"
+                  aria-describedby={countsAs ? 'tracker-counts-as' : undefined}
                   value={timeOut}
                   isInvalid={Boolean(errors.timeOut)}
                   onChange={(e) => setTimeOut(e.target.value)}
                 />
                 <Form.Control.Feedback type="invalid">{errors.timeOut}</Form.Control.Feedback>
               </Form.Group>
-              <Form.Text className="col-12 mt-1">
-                Philippine time · {longDayShort(date)} · {LUNCH_NOTE}
+              <Form.Text className="col-12 mt-1">Philippine time · {longDayShort(date)}</Form.Text>
+              {/* Always in the DOM so screen readers announce changes (aria-live). */}
+              <Form.Text
+                id="tracker-counts-as"
+                className="col-12 mt-0"
+                aria-live="polite"
+                data-testid="tracker-counts-as"
+              >
+                {countsAs}
               </Form.Text>
             </div>
           )}
