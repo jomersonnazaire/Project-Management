@@ -911,6 +911,8 @@ export interface TemplateDto extends TemplateSummaryDto {
 export interface UserRefDto extends Ref {
   active: boolean;
   email?: string;
+  /** When this user's Microsoft profile photo was last stored; omitted or null = initials (CR-21). */
+  avatarUpdatedAt?: string | null;
 }
 
 export interface ProjectListItemDto {
@@ -998,7 +1000,8 @@ export interface EvidenceDto {
 export interface FollowUpDto {
   id: string;
   note: string;
-  author: Ref | null;
+  /** Author includes avatarUpdatedAt when a Microsoft photo is stored (CR-21). */
+  author: (Ref & { avatarUpdatedAt?: string | null }) | null;
   contact: Ref | null;
   at: string;
   /** When the author emailed it from their own Outlook (follow-up emails); null if never. */

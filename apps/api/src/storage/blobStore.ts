@@ -30,6 +30,7 @@ export interface BlobStore {
   downloadUrl(key: string, minutes: number, fileName: string, contentType: string): Promise<string>;
   info(key: string): Promise<BlobInfo | null>;
   read(key: string, maxBytes: number): Promise<Buffer>;
+  write(key: string, data: Buffer, contentType?: string): Promise<void>;
   remove(key: string): Promise<void>;
 }
 
@@ -127,6 +128,12 @@ export class AzureBlobStore implements BlobStore {
     return Buffer.concat(chunks).subarray(0, maxBytes);
   }
 
+  async write(key: string, data: Buffer, contentType = 'application/octet-stream') {
+    await this.container.getBlockBlobClient(key).upload(data, data.length, {
+      blobHTTPHeaders: { blobContentType: contentType },
+    });
+  }
+
   async remove(key: string) {
     await this.container.getBlockBlobClient(key).deleteIfExists({ deleteSnapshots: 'include' });
   }
@@ -157,6 +164,10 @@ export class MemoryBlobStore implements BlobStore {
 
   async read(key: string, maxBytes: number) {
     return (this.blobs.get(key)?.data ?? Buffer.alloc(0)).subarray(0, maxBytes);
+  }
+
+  async write(key: string, data: Buffer, _contentType?: string) {
+    this.put(key, data);
   }
 
   async remove(key: string) {

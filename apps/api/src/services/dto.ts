@@ -27,6 +27,7 @@ interface UserLike {
   passwordHash?: string | null;
   lastLoginAt?: Date | null;
   createdAt?: Date | null;
+  avatarUpdatedAt?: Date | null;
 }
 
 export function userStatus(u: {
@@ -56,6 +57,7 @@ export function toUserDto(u: UserLike): UserDto {
     mustChangePassword: Boolean(u.mustChangePassword),
     lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
     createdAt: (u.createdAt ?? new Date()).toISOString(),
+    avatarUpdatedAt: u.avatarUpdatedAt ? u.avatarUpdatedAt.toISOString() : null,
   };
 }
 
