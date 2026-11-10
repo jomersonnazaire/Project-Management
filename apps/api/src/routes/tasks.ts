@@ -224,10 +224,24 @@ function mayManagePhases(user: ScopeUser, perms: PermissionGrid, project: Projec
 }
 
 /** FR-PRJ-23 (Q-53/Q-55): PMs change phase details only while the project is in Planning. */
-function phaseEditableNow(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+export function phaseEditableNow(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
   return (
     mayManagePhases(user, perms, project) &&
     (user.systemRole === 'ADMIN' || project.status === 'PLANNING')
+  );
+}
+
+/** CR-22 FR-TL-14 / AC-74.5: Excel template and export, for the project's planners. */
+export function timelineExcelAllowed(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  return !project.archived && perms.tasks.edit && isPlanner(user, project);
+}
+
+/** CR-22 Q-141: import is for planners while the project is Planning, Active or On hold. */
+export const TIMELINE_IMPORT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD'] as const;
+export function timelineImportAllowed(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  return (
+    timelineExcelAllowed(user, perms, project) &&
+    (TIMELINE_IMPORT_STATUSES as readonly string[]).includes(project.status ?? '')
   );
 }
 
@@ -1278,6 +1292,8 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         editPhaseTargets: phaseTargetsEditableNow(user, perms, project),
         editPhaseNames: phaseEditableNow(user, perms, project),
         saveBaseline: planner,
+        excel: timelineExcelAllowed(user, perms, project),
+        importExcel: timelineImportAllowed(user, perms, project),
       },
     };
     res.json(dto);
