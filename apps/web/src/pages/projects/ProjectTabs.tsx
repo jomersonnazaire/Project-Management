@@ -107,7 +107,9 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   const canPlan = project.can.planTasks && !project.archived;
   // M3.5: planners delete a phase once it has no tasks (and its folder holds no documents).
   const phaseInfo = useProjectPhases(project.id, canPlan);
-  const infoOf = (ph: string) => phaseInfo.data?.find((x) => x.name === ph);
+  // CR-22: phase names match ignoring case and spaces (doc 14 §J).
+  const infoOf = (ph: string) =>
+    phaseInfo.data?.find((x) => x.name.trim().toLowerCase() === ph.trim().toLowerCase());
   const emptyPhases = (phaseInfo.data ?? []).filter(
     (x) => x.taskCount === 0 && !phases.includes(x.name),
   );

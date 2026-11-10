@@ -5,6 +5,7 @@ import { App } from '../App';
 import { meBody } from './fixtures';
 import { PID, api, project } from './m2fixtures';
 import { mockApi, renderAt } from './utils';
+import { timelineDto } from './cr22bFixtures';
 
 /** Milestone 3.5 first push: DR-13, DR-17 and Members deleting their own time. */
 beforeEach(() => {
@@ -68,14 +69,19 @@ describe('Access rules v0.6.8: Members delete their own time entries', () => {
 });
 
 describe('Design review', () => {
-  it('DR-13: the Timeline placeholder has no "planned for Milestone 3" line', async () => {
+  it('DR-13 / CR-22: the Timeline tab shows the timeline, with no placeholder lines', async () => {
     api('PROJECT_MANAGER', (url) =>
-      url.endsWith(`/projects/${PID}`) ? { status: 200, body: { project: project() } } : undefined,
+      url.endsWith(`/projects/${PID}/timeline`)
+        ? { status: 200, body: timelineDto() }
+        : url.endsWith(`/projects/${PID}`)
+          ? { status: 200, body: { project: project() } }
+          : undefined,
     );
     renderAt(`/projects/${PID}/timeline`, <App />);
+    expect(await screen.findByTestId('timeline')).toBeInTheDocument();
     expect(
-      await screen.findByText('The timeline is coming in a later milestone'),
-    ).toBeInTheDocument();
+      screen.queryByText('The timeline is coming in a later milestone'),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/planned for Milestone/)).not.toBeInTheDocument();
   });
 

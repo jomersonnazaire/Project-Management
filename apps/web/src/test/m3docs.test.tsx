@@ -408,12 +408,13 @@ describe('M3 QA and design fixes', () => {
     expect(await screen.findByText('Showing the last 90 days')).toBeInTheDocument();
   });
 
-  it('DR-16: the sidebar has no Documents "Soon" item; DR-13: Timeline says "coming in a later milestone"', async () => {
+  it('DR-16: the sidebar has no Documents "Soon" item; CR-22: the Timeline tab is no longer a placeholder', async () => {
     docsApi('PROJECT_MANAGER', [folder()], []);
     renderAt(`/projects/${PID}/timeline`, <App />);
+    expect(await screen.findByRole('link', { name: 'Timeline' })).toBeInTheDocument();
     expect(
-      await screen.findByText('The timeline is coming in a later milestone'),
-    ).toBeInTheDocument();
+      screen.queryByText('The timeline is coming in a later milestone'),
+    ).not.toBeInTheDocument();
     const nav = screen.getByRole('complementary', { name: 'Main navigation' });
     expect(within(nav).queryByText('Documents')).not.toBeInTheDocument();
   });

@@ -4,6 +4,9 @@ import {
   type JobRole,
   type PersonDto,
   NO_ESTIMATE_LABEL,
+  BROKEN_LINK_TITLE,
+  brokenDependencies,
+  type TimelineDto,
   PARTIES,
   PARTY_LABELS,
   PRIORITIES,
@@ -13,6 +16,7 @@ import {
   type ProjectDto,
   type TaskDto,
 } from '@xc8/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
@@ -20,6 +24,8 @@ import { ApiError, saveErrorMessage } from '../../api/client';
 import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { DependsOnPicker } from '../../components/DependsOnPicker';
+import { timelineKey } from '../../api/timelineHooks';
+import { shortDate } from '../../lib/format';
 import { EmailCheckbox } from '../../components/EmailCheckbox';
 import {
   taskCreate,
@@ -92,7 +98,23 @@ export function TaskFormModal({
 
   const serverErrors = mutation.error instanceof ApiError ? mutation.error.fieldErrors() : {};
   const err = (k: string) => errors[k] ?? serverErrors[k];
-  const phases = Array.from(new Set(tasks.map((t) => t.phase).filter(Boolean))) as string[];
+  // CR-22 FR-TL-23: phases come from the project's phase list (when the Timeline has loaded it),
+  // then any phase text on tasks.
+  const qc = useQueryClient();
+  const timeline = qc.getQueryData<TimelineDto>(timelineKey(project.id));
+  const phases = Array.from(
+    new Set(
+      [...(timeline?.phases ?? []).map((p) => p.name), ...tasks.map((t) => t.phase)].filter(
+        Boolean,
+      ),
+    ),
+  ) as string[];
+  // CR-22 FR-TL-07 / AC-72.8: warn (never block) when the start is before a predecessor finishes.
+  const broken = brokenDependencies(
+    { id: task?.id ?? '', plannedStart: plannedStart || null, dueDate: dueDate || null, dependsOn },
+    tasks,
+    timeline?.calendar,
+  );
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -384,6 +406,17 @@ export function TaskFormModal({
                 onChange={setDependsOn}
                 error={err('dependsOn')}
               />
+              {broken.map((b) => (
+                <Alert
+                  key={b.id}
+                  variant="warning"
+                  className="py-2 small mt-2 mb-0"
+                  data-testid="task-broken-dependency"
+                >
+                  <strong>{BROKEN_LINK_TITLE}</strong> #{b.order} {b.name} finishes{' '}
+                  {shortDate(b.finish)}. You can still save. Dates aren’t moved.
+                </Alert>
+              ))}
             </div>
             <Form.Group className="col-md-6" controlId="task-deliverable">
               <Form.Label>Deliverable</Form.Label>
