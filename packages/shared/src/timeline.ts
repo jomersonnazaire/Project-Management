@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   addDays,
+  addWorkingDays,
   isWorkingDay,
   parseDateOnly,
   toDateOnly,
@@ -15,7 +16,7 @@ import {
 } from './projects.js';
 
 /**
- * CR-22 Part B, slice 1 (FR-TL-01 to 07, 23): the project timeline. Pure and calendar-driven, so
+ * CR-22 Part B, slices 1 and 2 (FR-TL-01 to 14, 23, 27 to 31): the project timeline. Pure and calendar-driven, so
  * the web and any later mobile app draw the same chart (NFR-50). Dates are calendar dates as
  * YYYY-MM-DD and never shift with the viewer's time zone (NFR-51).
  */
@@ -39,6 +40,14 @@ export interface TimelineTaskInput {
   isMilestone: boolean;
   dependsOn: readonly string[];
   owner: { id: string; name: string } | null;
+  /** FR-TL-10: set on the first move to In Progress / on Completed; PM-editable. */
+  actualStart?: string | null;
+  actualFinish?: string | null;
+  /** FR-TL-08: the task's dates at the last Save baseline; null before one (or no dates then). */
+  baselineStart?: string | null;
+  baselineFinish?: string | null;
+  /** FR-TL-31: the date a Completed task was marked Done (from history), if it has no actual finish. */
+  doneOn?: string | null;
 }
 
 export interface TimelinePhaseInput {
@@ -153,6 +162,205 @@ export function brokenDependencies(
     .map((p) => ({ id: p.id, order: p.order, name: p.name, finish: p.dueDate! }));
 }
 
+// ---------- Forecast and critical path (FR-TL-12, 27, 29, 31) ----------
+/** The date itself when it's a working day, else the next working day. */
+export function workingDayOnOrAfter(date: string, cal: WorkCalendar = DEFAULT_CALENDAR): string {
+  return isWorkingDay(parseDateOnly(date), cal) ? date : nextWorkingDayAfter(date, cal);
+}
+
+/** The working day before `date`. */
+export function previousWorkingDayBefore(
+  date: string,
+  cal: WorkCalendar = DEFAULT_CALENDAR,
+): string {
+  let d = addDays(parseDateOnly(date), -1);
+  for (let steps = 0; !isWorkingDay(d, cal); steps++) {
+    if (steps > MAX_CALENDAR_SCAN_DAYS) throw new CalendarLimitError();
+    d = addDays(d, -1);
+  }
+  return toDateOnly(d);
+}
+
+/** Working days from `start` to `finish`, both included; at least 1 (a planned task takes a day). */
+export function workingDuration(
+  start: string,
+  finish: string,
+  cal: WorkCalendar = DEFAULT_CALENDAR,
+): number {
+  if (finish < start) return 1;
+  const first = isWorkingDay(parseDateOnly(start), cal) ? 1 : 0;
+  return Math.max(1, first + workingDaysSince(parseDateOnly(start), parseDateOnly(finish), cal));
+}
+
+const plusWorkingDays = (date: string, n: number, cal: WorkCalendar) =>
+  toDateOnly(addWorkingDays(parseDateOnly(date), n, cal));
+function minusWorkingDays(date: string, n: number, cal: WorkCalendar) {
+  let d = workingDayOnOrBefore(date, cal);
+  for (let i = 0; i < n; i++) d = previousWorkingDayBefore(d, cal);
+  return d;
+}
+function workingDayOnOrBefore(date: string, cal: WorkCalendar) {
+  return isWorkingDay(parseDateOnly(date), cal) ? date : previousWorkingDayBefore(date, cal);
+}
+
+/** FR-TL-31: a Done task's finish: actual finish, else the date marked Done, else its planned finish. */
+export function doneFinish(t: {
+  actualFinish?: string | null;
+  doneOn?: string | null;
+  dueDate: string | null;
+}): string | null {
+  return t.actualFinish ?? t.doneOn ?? t.dueDate ?? null;
+}
+
+const STARTED: readonly TaskStatus[] = ['IN_PROGRESS', 'FOR_REVIEW'];
+
+export interface TaskForecast {
+  id: string;
+  /** Forecast start and finish (FR-TL-29). */
+  start: string;
+  finish: string;
+  done: boolean;
+  /** Latest finish from the backward pass (open tasks only). */
+  lateFinish: string | null;
+  /** Total float in working days (open tasks only, FR-TL-12). */
+  float: number | null;
+  /** Open with zero slack (FR-TL-12, AC-73.13). Done tasks never are. */
+  critical: boolean;
+}
+
+export interface ForecastResult {
+  byId: Record<string, TaskForecast>;
+  /** Latest forecast finish; null with no scheduled tasks (EC-188). */
+  end: string | null;
+}
+
+/**
+ * FR-TL-29: forward pass from today over scheduled, non-cancelled tasks, then FR-TL-12's backward
+ * pass from the forecast end. Done tasks use their FR-TL-31 finish; started tasks (In progress,
+ * For review, or any with an actual start) finish on the later of their planned finish and today;
+ * not-started tasks start on the latest of their planned start, the next working day after their
+ * predecessors finish (FR-TL-27) and today, rolled to a working day, and keep their planned
+ * working-day duration (a milestone stays a single day). Links to unscheduled or cancelled tasks
+ * are ignored (FR-TL-28, EC-190). A dependency cycle (blocked by the API) is broken at the first
+ * task seen again, so this never loops.
+ */
+export function forecastSchedule(
+  input: readonly TimelineTaskInput[],
+  today: string,
+  cal: WorkCalendar = DEFAULT_CALENDAR,
+): ForecastResult {
+  const tasks = input.filter((t) => isScheduled(t) && t.status !== 'CANCELLED');
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const preds = new Map(
+    tasks.map((t) => [t.id, [...new Set(t.dependsOn)].filter((d) => d !== t.id && byId.has(d))]),
+  );
+  const order: string[] = [];
+  const state = new Map<string, 'visiting' | 'done'>();
+  const visit = (id: string) => {
+    if (state.has(id)) return;
+    state.set(id, 'visiting');
+    for (const p of preds.get(id)!) if (state.get(p) !== 'visiting') visit(p);
+    state.set(id, 'done');
+    order.push(id);
+  };
+  for (const t of [...tasks].sort((a, b) => a.order - b.order)) visit(t.id);
+
+  const out: Record<string, TaskForecast> = {};
+  const durations = new Map<string, number>();
+  for (const id of order) {
+    const t = byId.get(id)!;
+    const done = t.status === 'COMPLETED';
+    let start: string;
+    let finish: string;
+    if (done) {
+      finish = doneFinish(t)!;
+      start = t.actualStart ?? t.plannedStart!;
+      if (start > finish) start = finish;
+    } else if (t.actualStart || STARTED.includes(t.status)) {
+      start = t.actualStart ?? t.plannedStart!;
+      finish = t.dueDate! > today ? t.dueDate! : today;
+      if (start > finish) start = finish;
+    } else {
+      let es = t.plannedStart! > today ? t.plannedStart! : today;
+      for (const p of preds.get(id)!) {
+        if (!out[p]) continue; // only in a cycle
+        const after = nextWorkingDayAfter(out[p].finish, cal);
+        if (after > es) es = after;
+      }
+      start = workingDayOnOrAfter(es, cal);
+      finish = t.isMilestone
+        ? start
+        : plusWorkingDays(start, workingDuration(t.plannedStart!, t.dueDate!, cal) - 1, cal);
+    }
+    durations.set(id, t.isMilestone ? 1 : workingDuration(start, finish, cal));
+    out[id] = { id, start, finish, done, lateFinish: null, float: null, critical: false };
+  }
+  const end = maxDate(Object.values(out).map((f) => f.finish));
+  if (!end) return { byId: out, end: null };
+
+  // Backward pass from the forecast end over open tasks (FR-TL-12).
+  const succs = new Map<string, string[]>();
+  for (const [id, ps] of preds) for (const p of ps) succs.set(p, [...(succs.get(p) ?? []), id]);
+  const lateStart = new Map<string, string>();
+  for (const id of [...order].reverse()) {
+    const f = out[id]!;
+    if (f.done) continue;
+    const next = (succs.get(id) ?? []).filter((s) => !out[s]!.done && lateStart.has(s));
+    const lf = next.length
+      ? minDate(next.map((s) => previousWorkingDayBefore(lateStart.get(s)!, cal)))!
+      : end;
+    lateStart.set(id, minusWorkingDays(lf, durations.get(id)! - 1, cal));
+    f.lateFinish = lf;
+    f.float = Math.max(0, workingDayVariance(f.finish, lf, cal));
+    f.critical = f.float === 0;
+  }
+  return { byId: out, end };
+}
+
+/** FR-TL-11 / UIE §2.6: why an open task is Delayed. */
+export type DelayReason = 'PAST_DUE' | 'FORECAST_AFTER_BASELINE';
+
+export interface TaskStatusFlags {
+  delayed: boolean;
+  delayReason: DelayReason | null;
+  /** Completed after its baseline finish: neutral "Finished late", never red. */
+  finishedLate: boolean;
+  /** Finish (Done: FR-TL-31; open: forecast) vs baseline finish, working days, late positive. */
+  variance: number | null;
+}
+
+/**
+ * FR-TL-11 (Q-135): Delayed = not Completed or Cancelled, and its planned finish is before today
+ * or its forecast finish is after its baseline finish. No baseline: planned finish only. An
+ * unscheduled task is judged on its due date if it has one.
+ */
+export function taskFlags(
+  t: TimelineTaskInput,
+  forecast: TaskForecast | undefined,
+  today: string,
+  cal: WorkCalendar = DEFAULT_CALENDAR,
+): TaskStatusFlags {
+  const none = { delayed: false, delayReason: null, finishedLate: false, variance: null };
+  if (t.status === 'CANCELLED') return none;
+  const base = t.baselineFinish ?? null;
+  if (t.status === 'COMPLETED') {
+    const fin = doneFinish(t);
+    return {
+      ...none,
+      finishedLate: Boolean(base && fin && fin > base),
+      variance: base && fin ? workingDayVariance(base, fin, cal) : null,
+    };
+  }
+  const pastDue = Boolean(t.dueDate && t.dueDate < today);
+  const afterBaseline = Boolean(base && forecast && forecast.finish > base);
+  return {
+    delayed: pastDue || afterBaseline,
+    delayReason: pastDue ? 'PAST_DUE' : afterBaseline ? 'FORECAST_AFTER_BASELINE' : null,
+    finishedLate: false,
+    variance: base && forecast ? workingDayVariance(base, forecast.finish, cal) : null,
+  };
+}
+
 // ---------- Groups ----------
 export type TimelineGroupKind = 'PHASE' | 'NO_PHASE' | 'UNSCHEDULED';
 
@@ -173,7 +381,9 @@ export interface TimelineGroup {
   complete: boolean;
   allCancelled: boolean;
   completedOn: string | null;
-  /** Completed: completion vs target; otherwise latest planned finish vs target (working days). */
+  /** Latest forecast finish of its open scheduled tasks (FR-TL-29); null when complete. */
+  forecastFinish: string | null;
+  /** Completed: completion vs target; otherwise forecast finish vs target (working days). */
   variance: number | null;
 }
 
@@ -187,13 +397,18 @@ export interface TimelineModel {
   taskCount: number;
   range: { start: string; end: string };
   milestoneCount: number;
-}
-
-/** Done task's finish for phase completion. Slice 2 adds actual finish and the Done date (FR-TL-31). */
-function doneFinish(
-  t: TimelineTaskInput & { actualFinish?: string | null; doneAt?: string | null },
-) {
-  return t.actualFinish ?? t.doneAt ?? t.dueDate ?? null;
+  /** FR-TL-29 per scheduled, non-cancelled task, and the project forecast end. */
+  forecast: Record<string, TaskForecast>;
+  forecastEnd: string | null;
+  /** Forecast end vs target delivery, working days, late positive (FR-TL-13, 30). */
+  forecastVariance: number | null;
+  flags: Record<string, TaskStatusFlags>;
+  delayedCount: number;
+  criticalCount: number;
+  /** Links whose two ends are both critical (highlighted with the path, FR-TL-12). */
+  criticalLinks: TimelineLink[];
+  /** At least one task has a baseline (FR-TL-09). */
+  hasBaseline: boolean;
 }
 
 const maxDate = (xs: (string | null | undefined)[]) =>
@@ -248,6 +463,7 @@ export function buildTimeline(input: {
       complete: false,
       allCancelled: false,
       completedOn: null,
+      forecastFinish: null,
       variance: null,
     };
     groups.set(key, g);
@@ -280,6 +496,7 @@ export function buildTimeline(input: {
     members.get(key)!.push(t);
   }
   if (members.has('')) mk('NO_PHASE', '', 'No phase');
+  const fc = forecastSchedule(tasks, input.today, cal);
   const unscheduled = mk('UNSCHEDULED', '\u0000unscheduled', 'Unscheduled');
   for (const [key, list] of members) {
     const g = groups.get(key)!;
@@ -292,7 +509,8 @@ export function buildTimeline(input: {
     g.allCancelled = list.length > 0 && active.length === 0;
     g.complete = active.length > 0 && active.every((t) => t.status === 'COMPLETED');
     if (g.complete) g.completedOn = maxDate(active.map(doneFinish));
-    const compare = g.complete ? g.completedOn : g.finish;
+    else g.forecastFinish = maxDate(activeScheduled.map((t) => fc.byId[t.id]?.finish));
+    const compare = g.complete ? g.completedOn : (g.forecastFinish ?? g.finish);
     if (g.kind === 'PHASE' && g.targetDate && compare) {
       g.variance = workingDayVariance(g.targetDate, compare, cal);
     }
@@ -300,9 +518,22 @@ export function buildTimeline(input: {
   unscheduled.memberCount = unscheduled.tasks.length;
   const links = timelineLinks(tasks, cal);
   const scheduledCount = tasks.filter(isScheduled).length;
+  const flags: Record<string, TaskStatusFlags> = {};
+  for (const t of tasks) flags[t.id] = taskFlags(t, fc.byId[t.id], input.today, cal);
+  const critical = (id: string) => Boolean(fc.byId[id]?.critical);
   const range = timelineRange(
     [
-      ...tasks.filter(isScheduled).flatMap((t) => [t.plannedStart, t.dueDate]),
+      ...tasks
+        .filter(isScheduled)
+        .flatMap((t) => [
+          t.plannedStart,
+          t.dueDate,
+          t.actualStart,
+          t.actualFinish,
+          t.baselineStart,
+          t.baselineFinish,
+          fc.byId[t.id]?.finish,
+        ]),
       input.plannedEndDate,
       ...ordered.map((g) => g.targetDate),
     ],
@@ -320,6 +551,17 @@ export function buildTimeline(input: {
     taskCount: tasks.length,
     range,
     milestoneCount: tasks.filter((t) => t.isMilestone).length,
+    forecast: fc.byId,
+    forecastEnd: fc.end,
+    forecastVariance:
+      fc.end && input.plannedEndDate ? workingDayVariance(input.plannedEndDate, fc.end, cal) : null,
+    flags,
+    delayedCount: Object.values(flags).filter((f) => f.delayed).length,
+    criticalCount: Object.values(fc.byId).filter((f) => f.critical).length,
+    criticalLinks: links.filter(
+      (l) => (l.state === 'OK' || l.state === 'BROKEN') && critical(l.from) && critical(l.to),
+    ),
+    hasBaseline: tasks.some((t) => t.baselineStart || t.baselineFinish),
   };
 }
 
@@ -395,6 +637,58 @@ export const PHASE_PICK_HINT = 'New phases are added in Phases on the Timeline t
 export const UNKNOWN_PHASE_MESSAGE =
   'Pick a phase from this project\u2019s phase list. New phases are added in Phases on the Timeline.';
 
+// ---------- Slice 2 copy (UIE §2.1, 2.6, 2.7) ----------
+/** UIE §2.1.1 (Lean): forecast end vs target. Always pluralised; U+2212 for early. */
+export function forecastVarianceBadge(days: number): { text: string; tone: 'danger' | 'success' } {
+  if (days === 0) return { text: 'On track', tone: 'success' };
+  const n = Math.abs(days);
+  const unit = `working day${n === 1 ? '' : 's'}`;
+  return days > 0
+    ? { text: `+${n} ${unit} late`, tone: 'danger' }
+    : { text: `\u2212${n} ${unit} early`, tone: 'success' };
+}
+export const NO_FORECAST_LINE = 'No forecast without scheduled tasks';
+export const DELAYED_SUB = 'Open, and past due or forecast after baseline';
+export const DELAYED_SUB_NO_BASELINE = 'Open and past their planned finish';
+export const NO_BASELINE_TITLE = 'No baseline yet';
+export const NO_BASELINE_SUB = 'Save one to compare plan with actual.';
+export const VARIANCE_HEADER_TIP = 'Finish compared with baseline finish, in working days';
+export const BASELINE_HISTORY_FOOTER =
+  'Times in Philippine time. The timeline compares with the current baseline only.';
+export function saveBaselineIntro(taskCount: number): string {
+  return `This copies the planned start and finish of all ${taskCount} task${taskCount === 1 ? '' : 's'} into their baseline. From now on the timeline compares each task with these dates.`;
+}
+export function saveBaselineReplaces(savedOn: string, by: string): string {
+  return `The current baseline (saved ${savedOn} by ${by}) is replaced. It stays in Baseline history.`;
+}
+export function saveBaselineUnscheduled(n: number): string {
+  return n === 1
+    ? '1 task has no dates, so its baseline stays empty.'
+    : `${n} tasks have no dates, so their baseline stays empty.`;
+}
+export function baselineSavedToast(n: number): string {
+  return `Baseline saved for ${n} task${n === 1 ? '' : 's'}. It\u2019s now the current entry in Baseline history.`;
+}
+/** Float in the popover (UIE §2.6): "9 working days", or "0 · Critical". */
+export function floatLabel(days: number): string {
+  return days === 0 ? '0 \u00b7 Critical' : `${days} working day${days === 1 ? '' : 's'}`;
+}
+
+/** FR-TL-08 / Q-133: Save baseline (Admin or a PM on the project); the reason is optional. */
+export const saveBaselineSchema = z.strictObject({
+  reason: z.string().trim().max(500).nullable().optional(),
+});
+export type SaveBaselineInput = z.infer<typeof saveBaselineSchema>;
+
+export interface TimelineBaselineDto {
+  id: string;
+  savedAt: string;
+  savedBy: { id: string; name: string } | null;
+  reason: string | null;
+  /** Tasks that got baseline dates (scheduled ones). */
+  taskCount: number;
+}
+
 // ---------- API DTO ----------
 export interface TimelinePhaseDto extends TimelinePhaseInput {
   taskCount: number;
@@ -418,6 +712,8 @@ export interface TimelineDto {
   };
   phases: TimelinePhaseDto[];
   tasks: TimelineTaskInput[];
+  /** FR-TL-08: Save baseline entries, newest (current) first. */
+  baselines: TimelineBaselineDto[];
   can: {
     /** Planners (Admin, PM on the project): task dates and the plan (FR-TL-14). */
     plan: boolean;
@@ -425,5 +721,7 @@ export interface TimelineDto {
     editPhaseTargets: boolean;
     /** Add, rename, reorder and remove phases: Admin any time, PM in Planning only. */
     editPhaseNames: boolean;
+    /** Save baseline: Admin or a PM on the project, project open (FR-TL-08, Q-133). */
+    saveBaseline: boolean;
   };
 }

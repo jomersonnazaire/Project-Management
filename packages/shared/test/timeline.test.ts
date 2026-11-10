@@ -202,7 +202,13 @@ describe('CR-22 B slice 1: buildTimeline (FR-TL-01 to 05, 23; AC-72.1, 72.5, 73.
       completedOn: '2026-10-13',
       variance: 1,
     });
-    expect(g('Design')).toMatchObject({ complete: false, completedOn: null, variance: -8 });
+    // Slice 2: an open phase compares its forecast finish (t3 starts today, 6 working days).
+    expect(g('Design')).toMatchObject({
+      complete: false,
+      completedOn: null,
+      forecastFinish: '2026-11-18',
+      variance: 13,
+    });
   });
 
   it('A-53: a phase whose tasks are all cancelled has no completion and no summary bar', () => {

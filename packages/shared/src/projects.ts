@@ -753,6 +753,9 @@ const taskFields = {
   clientContactId: objectId.nullable(),
   plannedStart: dateOnlySchema('Planned start').nullable(),
   dueDate: dateOnlySchema('Due date').nullable(),
+  /** CR-22 FR-TL-10: set by status changes; the PM can edit both (audited). */
+  actualStart: dateOnlySchema('Actual start').nullable().optional(),
+  actualFinish: dateOnlySchema('Actual finish').nullable().optional(),
   /** null = no estimate (EC-58). */
   estHours: z.number().min(0).max(10_000).nullable(),
   dependsOn: z.array(objectId).max(50),
@@ -778,6 +781,10 @@ const emailNewAssignees = z.boolean().optional();
 
 const datesInOrder = (v: { plannedStart?: string | null; dueDate?: string | null }) =>
   !v.plannedStart || !v.dueDate || v.dueDate >= v.plannedStart;
+/** CR-22 FR-TL-10. */
+export const ACTUAL_FINISH_BEFORE_START = 'Actual finish can\u2019t be before actual start.';
+const actualsInOrder = (v: { actualStart?: string | null; actualFinish?: string | null }) =>
+  !v.actualStart || !v.actualFinish || v.actualFinish >= v.actualStart;
 
 export const createTaskSchema = z
   .strictObject({
@@ -801,6 +808,7 @@ export const createTaskSchema = z
     ...emailReturnFields,
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START })
+  .refine(actualsInOrder, { path: ['actualFinish'], message: ACTUAL_FINISH_BEFORE_START })
   .refine(emailReturnOk, emailReturnIssue);
 export type CreateTaskInput = z.input<typeof createTaskSchema>;
 
@@ -817,6 +825,7 @@ export const updateTaskSchema = z
     emailNewAssignees: typeof emailNewAssignees;
   } & typeof emailReturnFields)
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START })
+  .refine(actualsInOrder, { path: ['actualFinish'], message: ACTUAL_FINISH_BEFORE_START })
   .refine(emailReturnOk, emailReturnIssue);
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
 
@@ -1063,6 +1072,9 @@ export interface TaskDto {
   clientContact: (Ref & { active: boolean }) | null;
   plannedStart: string | null;
   dueDate: string | null;
+  /** CR-22 FR-TL-10. */
+  actualStart: string | null;
+  actualFinish: string | null;
   /** null = no estimate (EC-58). */
   estHours: number | null;
   actualHours: number;
