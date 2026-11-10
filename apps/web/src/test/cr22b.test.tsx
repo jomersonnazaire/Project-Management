@@ -117,7 +117,14 @@ describe('CR-22 B: Timeline tab (desktop)', () => {
   it('Q-142: read-only users get the lock note and no planner buttons', async () => {
     timelineApi(
       timelineDto({
-        can: { plan: false, editPhaseTargets: false, editPhaseNames: false, saveBaseline: false, excel: false, importExcel: false },
+        can: {
+          plan: false,
+          editPhaseTargets: false,
+          editPhaseNames: false,
+          saveBaseline: false,
+          excel: false,
+          importExcel: false,
+        },
       }),
       'MEMBER',
     );
@@ -188,7 +195,14 @@ describe('CR-22 B: phase manager (FR-TL-23, UIE §2.7)', () => {
   it('Planning PM: add, reorder and remove an empty phase; duplicate names are caught', async () => {
     const m = timelineApi(
       timelineDto({
-        can: { plan: true, editPhaseTargets: true, editPhaseNames: true, saveBaseline: true, excel: true, importExcel: true },
+        can: {
+          plan: true,
+          editPhaseTargets: true,
+          editPhaseNames: true,
+          saveBaseline: true,
+          excel: true,
+          importExcel: true,
+        },
       }),
     );
     const tl = await open();

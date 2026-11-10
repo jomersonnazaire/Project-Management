@@ -208,7 +208,7 @@ export const changedAlertLead = (n: number) =>
 export const changedAlertRest = (n: number) =>
   `Nothing is saved for ${n === 1 ? 'it' : 'them'} unless you confirm. Confirming replaces the OpsTrack values with the file values.`;
 export const notConfirmedHelp = (n: number) =>
-  `${n} changed row${n === 1 ? '' : 's'} not confirmed will be left as they are.`;
+  `${n} changed row${n === 1 ? '' : 's'} not confirmed will be left as ${n === 1 ? 'it is' : 'they are'}.`;
 export const newPhaseNotice = (name: string) =>
   `New phase ${name} will be added at the end of the phase list.`;
 export const numberingLine = (pairs: { file: number; final: number }[]) =>
