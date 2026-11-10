@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.20 (2026-11-11 ~12:59 AM SGT): **CR-22 spec v0.3.7.** UI reference set to UIE's design (mockup v0.9.20, `CR22_PROJECT_TIMELINE_UI.md`, sample/blank templates) on `docs/cr22-timeline-design`. Still locked except Q-144.
 - v0.6.19 (2026-11-11 ~12:53 AM SGT): **CR-22 spec v0.3.6.** From Queen's Part A review (Lean): no lose-access note when an Admin outgoing manager unticks (FR-PRJ-40); new FR-PRJ-40b, 44px chip remove tap area at 390px. Still locked except Q-144.
 - v0.6.18 (2026-11-11 ~12:48 AM SGT): **CR-22 spec v0.3.5.** Creation note reads "You won't have access to this project after you create it." (Deven's build); `keepCreatorOnTeam` on `POST /projects` confirmed, omitted = ticked. Still locked except Q-144.
 - v0.6.17 (2026-11-11 ~12:46 AM SGT): **CR-22 spec v0.3.4.** Lean: project creation gets the "Stay on the project team" checkbox too, shown only when a PM picks a manager who isn't themselves, ticked by default, same lose-access note when unticked, not for Admins (FR-PRJ-40a, AC-69.10, EC-203). Suggested API field `keepCreatorOnTeam` on `POST /projects` (Deven's choice). Deven adds it to Part A before the push. Still locked except Q-144.
