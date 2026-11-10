@@ -260,7 +260,9 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
     expect(msgs(2)).toContain('Task name is required.');
     expect(msgs(2).some((m) => m.startsWith('Depends on: circular dependency'))).toBe(true);
     expect(msgs(3)).toContain("Finish can't be before Start.");
-    expect(msgs(4)).toContain("Depends on: 42 isn't a task in this project or this file.");
+    expect(msgs(4)).toContain(
+      "Depends on: 42 isn't a task number in this file. To link an existing task, include its row from a downloaded timeline.",
+    );
     expect(msgs(5)).toEqual(
       expect.arrayContaining([
         'Task number must be a whole number of 1 or more.',
@@ -683,6 +685,20 @@ describe('CR-22 B3: UIE review of 6cc0f3e', () => {
     expect(res.body.error.message).toBe(
       'Some columns are missing or out of order: Milestone. Keep row 1 of the template as it is, then try again. Nothing was imported.',
     );
+  });
+
+  it('Lean: a Depends on number not in the file is an error even if the project has that task', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    // Only rows 1 and 2 of the export; row 2 now depends on task 3 (in the project, not the file).
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.spliceRows(4, 1);
+      ws.getRow(3).getCell(col('dependsOn')).value = '3';
+    });
+    const p = await preview(w.pm.agent, pid, file);
+    expect(p.rows[1]!.errors.map((e) => e.message)).toEqual([
+      "Depends on: 3 isn't a task number in this file. To link an existing task, include its row from a downloaded timeline.",
+    ]);
   });
 
   it('one dependency cycle counts as one error; clears read Owner, then Depends on', async () => {

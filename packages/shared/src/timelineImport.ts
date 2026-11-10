@@ -126,8 +126,9 @@ export const duplicateNumberMessage = (n: number | string) =>
   `Task number ${n} appears more than once in the file.`;
 export const badDateMessage = (column: string) =>
   `${column} isn't a valid date. Use a date cell or YYYY-MM-DD.`;
+/** Lean (UIE review item 6): Depends on numbers only point to rows in the same file. */
 export const missingDependencyMessage = (n: number) =>
-  `Depends on: ${n} isn't a task in this project or this file.`;
+  `Depends on: ${n} isn't a task number in this file. To link an existing task, include its row from a downloaded timeline.`;
 export const cycleMessage = (labels: (number | string)[]) =>
   `Depends on: circular dependency ${labels.join(' → ')}.`;
 export const unknownOwnerMessage = (email: string) =>
