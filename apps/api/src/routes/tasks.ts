@@ -536,7 +536,7 @@ function assertPhaseEdit(user: ScopeUser, perms: PermissionGrid, project: Projec
   assertNotArchived(project);
   assertNotOutsidePm(user, project);
   if (!mayManagePhases(user, perms, project)) {
-    throw forbidden('Only an Admin or this project’s PM can change its phases.');
+    throw forbidden("Only an Admin or this project's PM can change its phases.");
   }
   if (!phaseEditableNow(user, perms, project)) {
     throw unprocessable(PROJECT_NOT_PLANNING_MESSAGE, 'PROJECT_NOT_PLANNING');
@@ -1185,7 +1185,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     assertNotArchived(project);
     assertNotOutsidePm(user, project);
     if (!mayManagePhases(user, perms, project)) {
-      throw forbidden('Only an Admin or this project’s PM can change its phases.');
+      throw forbidden("Only an Admin or this project's PM can change its phases.");
     }
     if (!phaseTargetsEditableNow(user, perms, project)) {
       throw unprocessable(
@@ -1308,7 +1308,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     assertNotArchived(project);
     assertPlanOpen(project);
     if (!isPlanner(user, project)) {
-      throw forbidden('Only an Admin or this project\u2019s PM can save the baseline.');
+      throw forbidden("Only an Admin or this project's PM can save the baseline.");
     }
     const tasks = await TaskModel.find({ projectId: project._id })
       .select('plannedStart dueDate')

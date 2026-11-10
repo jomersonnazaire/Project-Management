@@ -195,7 +195,7 @@ describe('CR-22 B2: baseline (FR-TL-08, 09; UIE §2.7)', () => {
     await waitFor(() =>
       expect(
         screen.getByText(
-          'Baseline saved for 5 tasks. It\u2019s now the current entry in Baseline history.',
+          "Baseline saved for 5 tasks. It's now the current entry in Baseline history.",
         ),
       ).toBeInTheDocument(),
     );
@@ -267,7 +267,7 @@ describe('CR-22 B2: task form actual dates (FR-TL-10)', () => {
     await userEvent.type(finish, '2026-11-02');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save task' }));
     expect(
-      within(dialog).getByText('Actual finish can\u2019t be before actual start.'),
+      within(dialog).getByText("Actual finish can't be before actual start."),
     ).toBeInTheDocument();
     await userEvent.clear(finish);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save task' }));

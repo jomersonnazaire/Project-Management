@@ -114,7 +114,18 @@ export function PhaseManagerModal({
       <Modal.Body>
         {!namesOk && (
           <Alert variant="info" id={lockId} data-testid="phase-lock-alert">
-            {phasesLockedAlert(timeline.project.status)}
+            {/* UIE: the status word is bold ("This project is **Active**."). */}
+            {(() => {
+              const text = phasesLockedAlert(timeline.project.status);
+              const m = /^This project is ([^.]+)\.(.*)$/.exec(text);
+              return m ? (
+                <>
+                  This project is <strong>{m[1]}</strong>.{m[2]}
+                </>
+              ) : (
+                text
+              );
+            })()}
           </Alert>
         )}
         <p className="text-body-secondary small">{PHASES_INTRO}</p>
@@ -202,7 +213,8 @@ export function PhaseManagerModal({
                       <Locked locked={removeLocked} tip={removeTip}>
                         <Button
                           size="sm"
-                          variant="outline-danger"
+                          variant="link"
+                          className="text-body-secondary p-0"
                           aria-describedby={describedBy}
                           disabled={removeLocked}
                           onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}

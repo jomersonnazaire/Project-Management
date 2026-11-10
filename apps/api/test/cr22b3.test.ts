@@ -670,3 +670,40 @@ describe('CR-22 B3: Q24 copy (UIE §5.1, §5.2) and NFR-52 limits (5 MB, 2,000 r
     );
   });
 });
+
+describe('CR-22 B3: UIE review of 6cc0f3e', () => {
+  it('columns are compared by name: a deleted column is the only one listed', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.spliceColumns(col('milestone'), 1);
+    });
+    const res = await send(w.pm.agent, pid, 'preview', file);
+    expect([res.status, res.body.error.code]).toEqual([422, 'COLUMNS']);
+    expect(res.body.error.message).toBe(
+      'Some columns are missing or out of order: Milestone. Keep row 1 of the template as it is, then try again. Nothing was imported.',
+    );
+  });
+
+  it('one dependency cycle counts as one error; clears read Owner, then Depends on', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    await TaskModel.updateMany({ projectId: pid }, { $set: { ownerId: w.member.user._id } });
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('dependsOn')).value = '3'; // 1 → 3 → 2 → 1
+    });
+    const p = await preview(w.pm.agent, pid, file);
+    const cycleRows = p.rows.filter((r) =>
+      r.errors.some((e) => e.message.startsWith('Depends on: circular dependency')),
+    );
+    expect(cycleRows.length).toBeGreaterThan(1);
+    expect(p.counts.errorMessages).toBe(1);
+
+    const clears = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(3).getCell(col('owner')).value = null;
+      ws.getRow(3).getCell(col('dependsOn')).value = null;
+    });
+    const c = await preview(w.pm.agent, pid, clears);
+    expect(c.rows[1]!.clears).toEqual(['owner', 'dependsOn']);
+  });
+});

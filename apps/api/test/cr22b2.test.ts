@@ -25,7 +25,7 @@ async function move(agent: Agent, id: string, body: Record<string, unknown>) {
 }
 
 describe('CR-22 B2: Save baseline (FR-TL-08, Q-133, AC-73.1)', () => {
-  it('copies every scheduled task’s planned dates, adds a history entry and audits it', async () => {
+  it("copies every scheduled task's planned dates, adds a history entry and audits it", async () => {
     const w = await world(app);
     const pid = w.project.id as string;
     let tl = await timeline(w.pm.agent, pid);

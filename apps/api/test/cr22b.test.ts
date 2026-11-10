@@ -290,11 +290,17 @@ describe('CR-22 B: one-time phase migration (FR-TL-24, AC-72.7)', () => {
     const dry = await migrateAllPhases({ apply: false });
     const mine = dry.changed.find((p) => p.projectId === pid)!;
     expect(mine.added).toEqual(['Phase A', 'Phase B']);
-    expect(mine.tasksLinked).toEqual([
-      { taskId: tasks[0]!._id.toString(), from: 'Phase A', to: 'Phase A' },
-      { taskId: tasks[1]!._id.toString(), from: ' phase a', to: 'Phase A' },
-      { taskId: tasks[2]!._id.toString(), from: 'Phase B', to: 'Phase B' },
+    expect(
+      mine.tasksLinked.map(({ taskId, from, to, fromId }) => ({ taskId, from, to, fromId })),
+    ).toEqual([
+      { taskId: tasks[0]!._id.toString(), from: 'Phase A', to: 'Phase A', fromId: null },
+      { taskId: tasks[1]!._id.toString(), from: ' phase a', to: 'Phase A', fromId: null },
+      { taskId: tasks[2]!._id.toString(), from: 'Phase B', to: 'Phase B', fromId: null },
     ]);
+    // Each task links to the record of its phase (the same id for both Phase A tasks).
+    expect(mine.tasksLinked[0]!.toId).toBeTruthy();
+    expect(mine.tasksLinked[1]!.toId).toBe(mine.tasksLinked[0]!.toId);
+    expect(mine.tasksLinked[2]!.toId).not.toBe(mine.tasksLinked[0]!.toId);
     expect((await TaskModel.find({ projectId: pid }).lean()).every((t) => !t.phaseId)).toBe(true);
     expect((await ProjectModel.findById(pid).lean())!.phases).toEqual([]);
 

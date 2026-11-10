@@ -393,7 +393,7 @@ export interface TimelineModel {
   broken: TimelineLink[];
   scheduledCount: number;
   unscheduledCount: number;
-  /** Tasks shown (cancelled included). */
+  /** Tasks counted in "All N": cancelled tasks are left out (UIE review). */
   taskCount: number;
   range: { start: string; end: string };
   milestoneCount: number;
@@ -548,7 +548,8 @@ export function buildTimeline(input: {
     broken: links.filter((l) => l.state === 'BROKEN'),
     scheduledCount,
     unscheduledCount: tasks.length - scheduledCount,
-    taskCount: tasks.length,
+    // The "All N" filter count: cancelled tasks are left out (UIE review).
+    taskCount: tasks.filter((t) => t.status !== 'CANCELLED').length,
     range,
     milestoneCount: tasks.filter((t) => t.isMilestone).length,
     forecast: fc.byId,
@@ -630,12 +631,12 @@ export const savePhaseListSchema = z.strictObject({
 export type SavePhaseListInput = z.infer<typeof savePhaseListSchema>;
 
 export const PHASE_NAME_REQUIRED = 'Enter a phase name.';
-export const PHASE_NAME_DUPLICATE = 'There\u2019s already a phase with this name.';
+export const PHASE_NAME_DUPLICATE = "There's already a phase with this name.";
 /** Under the task form's phase pick (Lead: no free-text phases). */
 export const PHASE_PICK_HINT = 'New phases are added in Phases on the Timeline tab.';
 /** 422 UNKNOWN_PHASE (Lead): a task's phase must be one of its project's phases. */
 export const UNKNOWN_PHASE_MESSAGE =
-  'Pick a phase from this project\u2019s phase list. New phases are added in Phases on the Timeline.';
+  "Pick a phase from this project's phase list. New phases are added in Phases on the Timeline.";
 
 // ---------- Slice 2 copy (UIE §2.1, 2.6, 2.7) ----------
 /** UIE §2.1.1 (Lean): forecast end vs target. Always pluralised; U+2212 for early. */
@@ -667,7 +668,7 @@ export function saveBaselineUnscheduled(n: number): string {
     : `${n} tasks have no dates, so their baseline stays empty.`;
 }
 export function baselineSavedToast(n: number): string {
-  return `Baseline saved for ${n} task${n === 1 ? '' : 's'}. It\u2019s now the current entry in Baseline history.`;
+  return `Baseline saved for ${n} task${n === 1 ? '' : 's'}. It's now the current entry in Baseline history.`;
 }
 /** Float in the popover (UIE §2.6): "9 working days", or "0 · Critical". */
 export function floatLabel(days: number): string {

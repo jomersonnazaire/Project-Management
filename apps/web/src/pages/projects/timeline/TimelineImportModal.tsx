@@ -222,6 +222,24 @@ function ResultCell({
   );
 }
 
+const DATE_FIELDS: readonly TimelineImportField[] = [
+  'start',
+  'finish',
+  'baselineStart',
+  'baselineFinish',
+];
+/** UIE review 5: an email may wrap before its "@" (no sideways scroll at 1440). */
+const breakable = (f: TimelineImportField, v: string): ReactNode =>
+  f === 'owner' && v.includes('@') ? (
+    <>
+      {v.slice(0, v.indexOf('@'))}
+      <wbr />
+      {v.slice(v.indexOf('@'))}
+    </>
+  ) : (
+    v
+  );
+
 function Cell({ r, f }: { r: TimelineImportRowDto; f: TimelineImportField }) {
   const value = r.values[f];
   const ro = BASELINE.includes(f);
@@ -234,19 +252,20 @@ function Cell({ r, f }: { r: TimelineImportRowDto; f: TimelineImportField }) {
     bad ? 'tli-bad' : '',
     changed && !bad ? 'tli-chg' : '',
     ro ? 'tli-ro' : '',
+    DATE_FIELDS.includes(f) ? 'tli-date' : '',
   ]
     .filter(Boolean)
     .join(' ');
   return (
     <td className={cls}>
       {value ? (
-        value
+        breakable(f, value)
       ) : cleared ? (
         <span className="text-danger">(blank)</span>
       ) : (
         <span className="text-body-secondary">—</span>
       )}
-      {old !== undefined && <s className="tli-was">{old || 'blank'}</s>}
+      {old !== undefined && <s className="tli-was">{old ? breakable(f, old) : 'blank'}</s>}
     </td>
   );
 }
@@ -372,8 +391,8 @@ export function TimelineImportModal({
         </Alert>
         <DropZone onFile={choose} />
         <p className="small text-body-secondary mb-0">
-          To edit this project’s tasks, use <strong>Excel › Download timeline (.xlsx)</strong> on
-          the Timeline, change the file, then import it here. To start a plan from scratch,{' '}
+          To edit this project&apos;s tasks, use <strong>Excel › Download timeline (.xlsx)</strong>{' '}
+          on the Timeline, change the file, then import it here. To start a plan from scratch,{' '}
           <Button variant="link" className="p-0 align-baseline small" onClick={template}>
             download the template
           </Button>

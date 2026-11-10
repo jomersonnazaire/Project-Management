@@ -446,6 +446,61 @@ function readMeta(wb: ExcelJS.Workbook): TimelineMeta | null {
   };
 }
 
+/**
+ * Template headers that are missing, or present but out of order (not in the longest run of
+ * headers already in template order), in template order; then unknown extra headers.
+ */
+function headerProblems(head: ExcelJS.Row): string[] {
+  const want = TIMELINE_COLUMNS.map((c) => norm(c.header));
+  const found: { idx: number }[] = [];
+  const extra: string[] = [];
+  const seen = new Set<number>();
+  head.eachCell((cell) => {
+    const t = cellText(cell).trim();
+    if (!t) return;
+    const idx = want.indexOf(norm(t));
+    if (idx < 0 || seen.has(idx)) extra.push(t);
+    else {
+      seen.add(idx);
+      found.push({ idx });
+    }
+  });
+  // Longest increasing subsequence of template indexes = the columns already in order.
+  const seq = found.map((f) => f.idx);
+  const len: number[] = [];
+  const prev: number[] = [];
+  seq.forEach((v, i) => {
+    len[i] = 1;
+    prev[i] = -1;
+    for (let j = 0; j < i; j++)
+      if (seq[j]! < v && len[j]! + 1 > len[i]!) {
+        len[i] = len[j]! + 1;
+        prev[i] = j;
+      }
+  });
+  const inOrder = new Set<number>();
+  let k = len.length ? len.indexOf(Math.max(...len)) : -1;
+  while (k >= 0) {
+    inOrder.add(seq[k]!);
+    k = prev[k]!;
+  }
+  // In order but not at its template position (e.g. a column inserted before it) also counts.
+  const positions = new Map<number, number>();
+  head.eachCell((cell, col) => {
+    const idx = want.indexOf(norm(cellText(cell)));
+    if (idx >= 0 && !positions.has(idx)) positions.set(idx, col - 1);
+  });
+  const bad = TIMELINE_COLUMNS.map((c, i) => ({ c, i })).filter(
+    ({ i }) => !seen.has(i) || !inOrder.has(i),
+  );
+  const shifted =
+    // (a blank-header column pushed them right; an extra named column is reported itself)
+    bad.length === 0 && extra.length === 0 && [...positions].some(([idx, pos]) => idx !== pos)
+      ? TIMELINE_COLUMNS.filter((_, i) => positions.get(i) !== i)
+      : [];
+  return [...bad.map(({ c }) => c.header), ...shifted.map((c) => c.header), ...extra];
+}
+
 /** §B4/§B5 file checks, then the Timeline rows (blank rows dropped, cells trimmed). */
 export async function readTimelineWorkbook(buf: Buffer): Promise<ParsedTimeline> {
   checkTimelineUpload(buf);
@@ -453,17 +508,10 @@ export async function readTimelineWorkbook(buf: Buffer): Promise<ParsedTimeline>
   const ws = wb.worksheets.find((w) => norm(w.name) === norm(TIMELINE_SHEET));
   if (!ws)
     throw timelineFileError(422, 'NO_TIMELINE_SHEET', TIMELINE_FILE_ERRORS.NO_TIMELINE_SHEET);
-  // §B4: headers match ignoring case and surrounding spaces; missing, renamed, moved or extra
-  // columns are a file error naming them.
-  const head = ws.getRow(1);
-  const wrong: string[] = [];
-  TIMELINE_COLUMNS.forEach((c, i) => {
-    if (norm(cellText(head.getCell(i + 1))) !== norm(c.header)) wrong.push(c.header);
-  });
-  head.eachCell((cell, col) => {
-    const t = cellText(cell).trim();
-    if (col > TIMELINE_COLUMNS.length && t) wrong.push(t);
-  });
+  // §B4: headers match ignoring case and surrounding spaces. UIE review: compared BY NAME, so
+  // the error lists only the missing or misplaced columns (a deleted column doesn't make every
+  // later one "wrong"), then any unknown extra headers.
+  const wrong = headerProblems(ws.getRow(1));
   if (wrong.length) throw timelineFileError(422, 'COLUMNS', columnsError(wrong));
   const rows: TimelineFileRow[] = [];
   ws.eachRow((r, n) => {

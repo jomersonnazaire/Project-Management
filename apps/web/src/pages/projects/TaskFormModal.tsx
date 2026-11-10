@@ -456,7 +456,7 @@ export function TaskFormModal({
                 </Form.Group>
                 <div className="col-md-4 d-flex align-items-end">
                   <Form.Text id="task-actual-hint">
-                    Set when the task starts and is completed. Change them if they’re wrong.
+                    Set when the task starts and is completed. Change them if they&apos;re wrong.
                   </Form.Text>
                 </div>
               </>
@@ -482,7 +482,7 @@ export function TaskFormModal({
                   data-testid="task-broken-dependency"
                 >
                   <strong>{BROKEN_LINK_TITLE}</strong> #{b.order} {b.name} finishes{' '}
-                  {shortDate(b.finish)}. You can still save. Dates aren’t moved.
+                  {shortDate(b.finish)}. You can still save. Dates aren&apos;t moved.
                 </Alert>
               ))}
             </div>

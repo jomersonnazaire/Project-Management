@@ -83,7 +83,7 @@ describe('CR-22 B: Timeline tab (desktop)', () => {
     const banner = within(tl).getByTestId('broken-banner');
     expect(banner).toHaveTextContent('1 broken dependency.');
     expect(banner).toHaveTextContent(
-      '#4 Load test data is planned to start Nov 9, but #3 Data migration scripts finishes Nov 9. Dates weren’t moved.',
+      "#4 Load test data is planned to start Nov 9, but #3 Data migration scripts finishes Nov 9. Dates weren't moved.",
     );
     await userEvent.click(
       within(tl).getByRole('button', {
@@ -221,7 +221,7 @@ describe('CR-22 B: phase manager (FR-TL-23, UIE §2.7)', () => {
     await userEvent.type(names[2]!, ' build ');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save phases' }));
     expect(
-      await within(dialog).findByText('There’s already a phase with this name.'),
+      await within(dialog).findByText("There's already a phase with this name."),
     ).toBeInTheDocument();
     await userEvent.clear(names[2]!);
     await userEvent.type(names[2]!, 'Go-live');

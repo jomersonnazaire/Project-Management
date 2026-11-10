@@ -254,12 +254,14 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
     if (w) return w.number ?? `row ${w.file.row}`;
     return `#${taskById.get(ref.slice(5))?.order ?? '?'}`;
   };
+  const cycleMessages = new Set<string>();
   for (let i = 0; i < 25; i++) {
     const cycle = findCycle([...nodes].map(([id, dependsOn]) => ({ id, dependsOn })));
     if (!cycle) break;
     // findCycle walks successor → predecessor; show it in the order work flows.
     const labels = [...cycle].reverse().map(label);
     const msg = cycleMessage(labels);
+    cycleMessages.add(msg);
     for (const ref of new Set(cycle)) {
       const w = inFile.get(ref);
       if (w && !w.errors.some((e) => e.message === msg))
@@ -377,7 +379,11 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
     unchanged: dtos.filter((r) => r.result === 'UNCHANGED').length,
     changed: dtos.filter((r) => r.result === 'CHANGED').length,
     error: dtos.filter((r) => r.result === 'ERROR').length,
-    errorMessages: dtos.reduce((n, r) => n + r.errors.length, 0),
+    // One cycle is one error, however many rows it runs through (UIE review).
+    errorMessages:
+      dtos.reduce((n, r) => n + r.errors.filter((e) => !cycleMessages.has(e.message)).length, 0) +
+      [...cycleMessages].filter((m) => dtos.some((r) => r.errors.some((e) => e.message === m)))
+        .length,
     clears: dtos.filter((r) => r.clears.length > 0).length,
   };
   // New phases only matter when they'd be used by a row that saves.

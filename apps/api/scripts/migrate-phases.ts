@@ -39,8 +39,17 @@ async function main() {
       `\n${p.projectName} (${p.projectId}): ${p.added.length} phase(s) added` +
         `${p.added.length ? `: ${p.added.join(', ')}` : ''}; ${p.tasksLinked.length} task(s) linked and ${p.foldersRespelled} folder(s) respelled`,
     );
-    for (const t of p.tasksLinked)
-      console.log(`  task ${t.taskId}: "${t.from ?? ''}" → "${t.to ?? ''}"`);
+    // Say what changes: the link to a phase record, and the spelling only when it differs.
+    for (const t of p.tasksLinked) {
+      if (t.toId !== t.fromId)
+        console.log(
+          t.toId
+            ? `  task ${t.taskId}: linked to phase "${t.to ?? ''}" (${t.toId})`
+            : `  task ${t.taskId}: unlinked from phase (${t.fromId ?? ''})`,
+        );
+      if ((t.from ?? '') !== (t.to ?? ''))
+        console.log(`  task ${t.taskId}: phase respelled "${t.from ?? ''}" → "${t.to ?? ''}"`);
+    }
   }
   console.log(
     r.changed.length

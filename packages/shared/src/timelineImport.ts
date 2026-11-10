@@ -31,8 +31,9 @@ export const TIMELINE_PLAN_FIELDS = [
   'milestone',
   'start',
   'finish',
-  'dependsOn',
+  // Owner before Depends on, so "Clears: Owner, Depends on" reads as UIE's copy.
   'owner',
+  'dependsOn',
 ] as const satisfies readonly TimelineImportField[];
 export type TimelinePlanField = (typeof TIMELINE_PLAN_FIELDS)[number];
 

@@ -1178,11 +1178,23 @@ $board-gap: 0.75rem;
 }
 .tlx-name-link {
   font-size: 13px;
-  text-align: left;
-  white-space: nowrap;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  white-space: nowrap;
+  text-align: left;
+}
+// UIE review 1: the text clips at the END with an ellipsis (a button alone centres overflow).
+.tlx-name-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tlx-badge {
+  flex: none;
 }
 .tlx-chart-head {
   position: relative;
@@ -1387,8 +1399,8 @@ $board-gap: 0.75rem;
   white-space: nowrap;
 }
 .tlx-nodates {
+  // `left` is set inline to the left column's width, so the note sticks at its edge.
   position: sticky;
-  left: 530px;
   display: inline-block;
   padding-top: 8px;
   white-space: nowrap;
@@ -1432,6 +1444,11 @@ $board-gap: 0.75rem;
 .tlx-lg-flag {
   width: 3px;
   background: var(--tlx-dark);
+}
+.tlx-lg-line {
+  width: 0;
+  height: 12px;
+  border-radius: 0;
 }
 .tlx-lg-broken {
   height: 0;
@@ -1557,15 +1574,19 @@ $board-gap: 0.75rem;
   cursor: not-allowed;
 }
 @media (max-width: 767.98px) {
-  .tlx-nodates {
-    left: 176px;
-  }
   .tlx-toolbar .btn,
   .tlx-toolbar .form-select {
     min-height: 44px;
   }
-  .tlx-name-link {
-    max-width: 120px;
+  // UIE review 3: 44 px tap targets at 390 (popover buttons, List links, Baseline history).
+  .tlx-tap {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .tlx-popover .tlx-tap {
+    min-width: 44px;
+    justify-content: center;
   }
 }
 
@@ -1669,7 +1690,17 @@ $board-gap: 0.75rem;
 }
 .tli-tbl {
   font-size: 0.8125rem;
-  min-width: 1100px;
+  // UIE review 5: fits the 1180 px modal at 1440 (no sideways scroll); dates don't wrap,
+  // emails wrap before "@", and the Result column is narrower.
+  width: 100%;
+  table-layout: auto;
+  th,
+  td {
+    padding: 6px 6px;
+  }
+  .tli-date {
+    white-space: nowrap;
+  }
 
   thead th {
     position: sticky;
@@ -1691,7 +1722,8 @@ $board-gap: 0.75rem;
     background: #f5f5f9;
   }
   .tli-result {
-    min-width: 190px;
+    width: 150px;
+    min-width: 150px;
   }
   td {
     vertical-align: top;

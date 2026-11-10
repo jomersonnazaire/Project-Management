@@ -397,3 +397,74 @@ describe('CR-22 B3 NFR-52: 5 MB and 2,000 rows are checked before upload (Q24 co
     expect(called(fetch, '/timeline/import/preview')).toHaveLength(0);
   });
 });
+
+describe('CR-22 B UIE review of 6cc0f3e (Gantt)', () => {
+  const withCancelled = () => {
+    const base = timelineDto();
+    return timelineDto({
+      tasks: base.tasks.map((t) =>
+        t.id === 'b3'
+          ? {
+              ...t,
+              status: 'CANCELLED' as const,
+              baselineStart: '2026-12-01',
+              baselineFinish: '2026-12-03',
+            }
+          : t.id === 'b1' || t.id === 'a1'
+            ? { ...t, baselineStart: t.plannedStart, baselineFinish: t.dueDate }
+            : t,
+      ),
+    });
+  };
+
+  it('"All N" leaves cancelled tasks out; a cancelled task has no baseline bar', async () => {
+    mount({ tl: withCancelled() });
+    const tl = await open();
+    const all = within(tl).getByRole('button', { name: /^All/ });
+    expect(all).toHaveTextContent('All 5'); // 6 tasks, 1 cancelled
+    expect(within(tl).queryByTestId('baseline-b3')).not.toBeInTheDocument();
+    expect(within(tl).getByTestId('baseline-b1')).toBeInTheDocument();
+  });
+
+  it('names clip at the end (inner span), zero variance reads 0d, one-day tasks read as a range', async () => {
+    mount({ tl: withCancelled() });
+    const tl = await open();
+    const row = within(tl).getByTestId('row-b1');
+    expect(row.querySelector('.tlx-name-link > .tlx-name-text')).toHaveTextContent(/.+/);
+    expect(within(tl).getByTestId('var-a1')).toHaveTextContent('0d');
+    expect(within(tl).getByTestId('row-a1')).toHaveTextContent('Oct 5 – Oct 5');
+  });
+
+  it("the Unscheduled note sticks at the left column's edge; the legend has the review's items", async () => {
+    mount();
+    const tl = await open();
+    const note = within(tl).getByTestId('row-u1').querySelector('.tlx-nodates') as HTMLElement;
+    expect(note.style.left).toBe('588px'); // LEFT_W 580 + 8
+    const legend = within(tl).getByTestId('timeline-legend');
+    for (const text of [
+      'Finished late',
+      'Today',
+      'Target delivery',
+      'Forecast end',
+      'Linked task has no dates',
+    ])
+      expect(legend).toHaveTextContent(text);
+  });
+
+  it('at 390 the Delayed and Finished late badges are hidden in the Gantt', async () => {
+    compact = true;
+    mount();
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: 'Gantt' }));
+    const row = await screen.findByTestId('row-b1');
+    expect(within(row).queryByText('Delayed')).not.toBeInTheDocument();
+  });
+
+  it('the empty state has no toolbar', async () => {
+    mount({ tl: timelineDto({ tasks: [] }) });
+    await open();
+    expect(await screen.findByTestId('timeline-empty')).toBeInTheDocument();
+    expect(screen.queryByTestId('timeline-toolbar')).not.toBeInTheDocument();
+  });
+});

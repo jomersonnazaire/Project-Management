@@ -379,7 +379,7 @@ export function timelineImportRouter(config: AppConfig, registry: RouteRegistry)
     const project = (await loadProject(req, 'view')).toObject() as ProjectDoc;
     assertNotArchived(project);
     if (!timelineExcelAllowed(currentUser(req), currentPermissions(req), project)) {
-      throw forbidden('Only an Admin or this project\u2019s PM can use Excel for its timeline.');
+      throw forbidden("Only an Admin or this project's PM can use Excel for its timeline.");
     }
     return project;
   }

@@ -19,7 +19,13 @@ export interface ProjectPhaseMigration {
   /** Phase records added at the end of the list, in order. */
   added: string[];
   /** Tasks that get a phaseId (and/or the record's spelling). */
-  tasksLinked: { taskId: string; from: string | null; to: string | null }[];
+  tasksLinked: {
+    taskId: string;
+    from: string | null;
+    to: string | null;
+    fromId: string | null;
+    toId: string | null;
+  }[];
   foldersRespelled: number;
 }
 
@@ -33,7 +39,13 @@ const summary = (p: { _id: mongoose.Types.ObjectId; name: string }, plan: PhaseS
   projectId: p._id.toString(),
   projectName: p.name,
   added: plan.added.map((a) => a.name),
-  tasksLinked: plan.tasks.map((t) => ({ taskId: t.taskId, from: t.from, to: t.to })),
+  tasksLinked: plan.tasks.map((t) => ({
+    taskId: t.taskId,
+    from: t.from,
+    to: t.to,
+    fromId: t.fromId,
+    toId: t.toId,
+  })),
   foldersRespelled: plan.folders.length,
 });
 

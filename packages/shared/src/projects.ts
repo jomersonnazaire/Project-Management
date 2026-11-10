@@ -782,7 +782,7 @@ const emailNewAssignees = z.boolean().optional();
 const datesInOrder = (v: { plannedStart?: string | null; dueDate?: string | null }) =>
   !v.plannedStart || !v.dueDate || v.dueDate >= v.plannedStart;
 /** CR-22 FR-TL-10. */
-export const ACTUAL_FINISH_BEFORE_START = 'Actual finish can\u2019t be before actual start.';
+export const ACTUAL_FINISH_BEFORE_START = "Actual finish can't be before actual start.";
 const actualsInOrder = (v: { actualStart?: string | null; actualFinish?: string | null }) =>
   !v.actualStart || !v.actualFinish || v.actualFinish >= v.actualStart;
 

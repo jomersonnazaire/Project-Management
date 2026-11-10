@@ -93,9 +93,10 @@ const longDate = (d: string | null) =>
 const dates = (t: TimelineTaskInput) =>
   !t.plannedStart || !t.dueDate
     ? 'No dates'
-    : t.isMilestone || t.plannedStart === t.dueDate
+    : t.isMilestone
       ? shortDate(t.dueDate)
-      : `${shortDate(t.plannedStart)} – ${shortDate(t.dueDate)}`;
+      : // Mockup v0.9.20: a one-day task still reads as a range ("Oct 5 – Oct 5").
+        `${shortDate(t.plannedStart)} – ${shortDate(t.dueDate)}`;
 
 const groupCount = (g: TimelineGroup) => {
   if (g.kind === 'UNSCHEDULED') {
@@ -107,7 +108,7 @@ const groupCount = (g: TimelineGroup) => {
 
 /** UIE §2.4 Var. column: `+2d`, `0`, `−1d`; `—` without a baseline. */
 const varText = (v: number | null) =>
-  v === null ? '—' : v === 0 ? '0' : v > 0 ? `+${v}d` : `\u2212${-v}d`;
+  v === null ? '—' : v === 0 ? '0d' : v > 0 ? `+${v}d` : `\u2212${-v}d`;
 
 /** Where a task's bar is drawn (UIE §2.5): completed = actual; in progress = actual start on. */
 function barSpan(t: TimelineTaskInput): { start: string; finish: string } {
@@ -268,154 +269,157 @@ export function TimelineTab({
       )}
       <SummaryCards data={data} model={model} onHistory={() => setHistoryOpen(true)} />
 
-      <div
-        className="tlx-toolbar d-flex flex-wrap align-items-center gap-2 mb-3"
-        data-testid="timeline-toolbar"
-      >
-        {showGantt && (
-          <>
-            <ButtonGroup size="sm" aria-label="Zoom">
-              {(['days', 'weeks', 'months'] as Zoom[]).map((z) => (
+      {/* UIE review: the empty state has no toolbar (its own Excel buttons stand in). */}
+      {model.scheduledCount > 0 && (
+        <div
+          className="tlx-toolbar d-flex flex-wrap align-items-center gap-2 mb-3"
+          data-testid="timeline-toolbar"
+        >
+          {showGantt && (
+            <>
+              <ButtonGroup size="sm" aria-label="Zoom">
+                {(['days', 'weeks', 'months'] as Zoom[]).map((z) => (
+                  <Button
+                    key={z}
+                    variant={zoom === z ? 'primary' : 'outline-secondary'}
+                    aria-pressed={zoom === z}
+                    onClick={() => setZoom(z)}
+                  >
+                    {z[0]!.toUpperCase() + z.slice(1)}
+                  </Button>
+                ))}
+              </ButtonGroup>
+              <Button
+                size="sm"
+                variant="outline-secondary"
+                onClick={() => {
+                  const el = scrollRef.current;
+                  if (el)
+                    el.scrollLeft = Math.max(
+                      0,
+                      dayIndex(model.range.start, data.today) * ZOOMS[zoom] - 40,
+                    );
+                }}
+              >
+                <i className="bx bx-target-lock me-1" aria-hidden="true" />
+                Today
+              </Button>
+              <Form.Check
+                type="switch"
+                id="tlx-critical-switch"
+                className="mb-0 tlx-switch"
+                label="Critical path"
+                checked={showCritical}
+                onChange={(e) => setShowCritical(e.target.checked)}
+              />
+              <Form.Check
+                type="switch"
+                id="tlx-baseline-switch"
+                className="mb-0 tlx-switch"
+                label="Baseline"
+                checked={showBaseline}
+                onChange={(e) => setShowBaseline(e.target.checked)}
+              />
+            </>
+          )}
+          {compact ? (
+            <Form.Select
+              size="sm"
+              className="w-auto"
+              aria-label="Show"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as Filter)}
+            >
+              <option value="all">All {model.taskCount}</option>
+              <option value="delayed">Delayed {model.delayedCount}</option>
+              <option value="critical">Critical path {model.criticalCount}</option>
+              <option value="milestones">Milestones {model.milestoneCount}</option>
+            </Form.Select>
+          ) : (
+            <div className="d-flex gap-1" role="group" aria-label="Show">
+              <FilterPill
+                on={filter === 'all'}
+                onClick={() => setFilter('all')}
+                label="All"
+                count={model.taskCount}
+              />
+              <FilterPill
+                on={filter === 'delayed'}
+                onClick={() => setFilter('delayed')}
+                label="Delayed"
+                count={model.delayedCount}
+              />
+              <FilterPill
+                on={filter === 'critical'}
+                onClick={() => setFilter('critical')}
+                label="Critical path"
+                count={model.criticalCount}
+              />
+              <FilterPill
+                on={filter === 'milestones'}
+                onClick={() => setFilter('milestones')}
+                label="Milestones"
+                count={model.milestoneCount}
+              />
+            </div>
+          )}
+          {compact && (
+            <ButtonGroup size="sm" aria-label="View" className="ms-auto">
+              {(['list', 'gantt'] as const).map((v) => (
                 <Button
-                  key={z}
-                  variant={zoom === z ? 'primary' : 'outline-secondary'}
-                  aria-pressed={zoom === z}
-                  onClick={() => setZoom(z)}
+                  key={v}
+                  variant={view === v ? 'primary' : 'outline-secondary'}
+                  aria-pressed={view === v}
+                  onClick={() => setView(v)}
                 >
-                  {z[0]!.toUpperCase() + z.slice(1)}
+                  {v === 'list' ? 'List' : 'Gantt'}
                 </Button>
               ))}
             </ButtonGroup>
-            <Button
-              size="sm"
-              variant="outline-secondary"
-              onClick={() => {
-                const el = scrollRef.current;
-                if (el)
-                  el.scrollLeft = Math.max(
-                    0,
-                    dayIndex(model.range.start, data.today) * ZOOMS[zoom] - 40,
-                  );
-              }}
-            >
-              <i className="bx bx-target-lock me-1" aria-hidden="true" />
-              Today
-            </Button>
-            <Form.Check
-              type="switch"
-              id="tlx-critical-switch"
-              className="mb-0 tlx-switch"
-              label="Critical path"
-              checked={showCritical}
-              onChange={(e) => setShowCritical(e.target.checked)}
-            />
-            <Form.Check
-              type="switch"
-              id="tlx-baseline-switch"
-              className="mb-0 tlx-switch"
-              label="Baseline"
-              checked={showBaseline}
-              onChange={(e) => setShowBaseline(e.target.checked)}
-            />
-          </>
-        )}
-        {compact ? (
-          <Form.Select
-            size="sm"
-            className="w-auto"
-            aria-label="Show"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as Filter)}
-          >
-            <option value="all">All {model.taskCount}</option>
-            <option value="delayed">Delayed {model.delayedCount}</option>
-            <option value="critical">Critical path {model.criticalCount}</option>
-            <option value="milestones">Milestones {model.milestoneCount}</option>
-          </Form.Select>
-        ) : (
-          <div className="d-flex gap-1" role="group" aria-label="Show">
-            <FilterPill
-              on={filter === 'all'}
-              onClick={() => setFilter('all')}
-              label="All"
-              count={model.taskCount}
-            />
-            <FilterPill
-              on={filter === 'delayed'}
-              onClick={() => setFilter('delayed')}
-              label="Delayed"
-              count={model.delayedCount}
-            />
-            <FilterPill
-              on={filter === 'critical'}
-              onClick={() => setFilter('critical')}
-              label="Critical path"
-              count={model.criticalCount}
-            />
-            <FilterPill
-              on={filter === 'milestones'}
-              onClick={() => setFilter('milestones')}
-              label="Milestones"
-              count={model.milestoneCount}
-            />
-          </div>
-        )}
-        {compact && (
-          <ButtonGroup size="sm" aria-label="View" className="ms-auto">
-            {(['list', 'gantt'] as const).map((v) => (
-              <Button
-                key={v}
-                variant={view === v ? 'primary' : 'outline-secondary'}
-                aria-pressed={view === v}
-                onClick={() => setView(v)}
-              >
-                {v === 'list' ? 'List' : 'Gantt'}
-              </Button>
-            ))}
-          </ButtonGroup>
-        )}
-        {(canPhases || data.can.saveBaseline || data.can.excel) && (
-          <div className={`d-flex gap-2${compact ? '' : ' ms-auto'}`}>
-            {canPhases && (
-              <Button size="sm" variant="outline-secondary" onClick={openPhases}>
-                <i className="bx bx-layer me-1" aria-hidden="true" />
-                Phases
-              </Button>
-            )}
-            {data.can.saveBaseline && (
-              <Button size="sm" variant="outline-primary" onClick={openBaseline}>
-                <i className="bx bx-save me-1" aria-hidden="true" />
-                Save baseline
-              </Button>
-            )}
-            {data.can.excel && (
-              <Dropdown align="end">
-                <Dropdown.Toggle size="sm" variant="outline-secondary" id="tlx-excel">
-                  <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
-                  Excel
-                </Dropdown.Toggle>
-                <Dropdown.Menu>
-                  {data.can.importExcel && (
-                    <Dropdown.Item as="button" onClick={openImport}>
-                      <i className="bx bx-upload me-2" aria-hidden="true" />
-                      Import from Excel…
+          )}
+          {(canPhases || data.can.saveBaseline || data.can.excel) && (
+            <div className={`d-flex gap-2${compact ? '' : ' ms-auto'}`}>
+              {canPhases && (
+                <Button size="sm" variant="outline-secondary" onClick={openPhases}>
+                  <i className="bx bx-layer me-1" aria-hidden="true" />
+                  Phases
+                </Button>
+              )}
+              {data.can.saveBaseline && (
+                <Button size="sm" variant="outline-primary" onClick={openBaseline}>
+                  <i className="bx bx-save me-1" aria-hidden="true" />
+                  Save baseline
+                </Button>
+              )}
+              {data.can.excel && (
+                <Dropdown align="end">
+                  <Dropdown.Toggle size="sm" variant="outline-secondary" id="tlx-excel">
+                    <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
+                    Excel
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu>
+                    {data.can.importExcel && (
+                      <Dropdown.Item as="button" onClick={openImport}>
+                        <i className="bx bx-upload me-2" aria-hidden="true" />
+                        Import from Excel…
+                      </Dropdown.Item>
+                    )}
+                    <Dropdown.Item as="button" onClick={downloadExport}>
+                      <i className="bx bx-download me-2" aria-hidden="true" />
+                      Download timeline (.xlsx)
                     </Dropdown.Item>
-                  )}
-                  <Dropdown.Item as="button" onClick={downloadExport}>
-                    <i className="bx bx-download me-2" aria-hidden="true" />
-                    Download timeline (.xlsx)
-                  </Dropdown.Item>
-                  <Dropdown.Divider />
-                  <Dropdown.Item as="button" onClick={downloadTemplate}>
-                    <i className="bx bx-file-blank me-2" aria-hidden="true" />
-                    Download template
-                  </Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown>
-            )}
-          </div>
-        )}
-      </div>
+                    <Dropdown.Divider />
+                    <Dropdown.Item as="button" onClick={downloadTemplate}>
+                      <i className="bx bx-file-blank me-2" aria-hidden="true" />
+                      Download template
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {compact && <p className="small text-body-secondary mb-2">{TIMELINE_PHONE_NOTE}</p>}
       {readOnly && <LockNotice>{TIMELINE_READ_ONLY_NOTE}</LockNotice>}
 
@@ -429,7 +433,7 @@ export function TimelineTab({
             return (
               <>
                 #{s.order} {s.name} is planned to start {shortDate(s.plannedStart)}, but #{p.order}{' '}
-                {p.name} finishes {shortDate(p.dueDate)}. Dates weren’t moved.{' '}
+                {p.name} finishes {shortDate(p.dueDate)}. Dates weren&apos;t moved.{' '}
                 {model.forecast[s.id] && model.forecast[p.id] && (
                   <>
                     The forecast assumes #{s.order} starts after #{p.order} finishes (
@@ -441,7 +445,7 @@ export function TimelineTab({
                 <Button
                   variant="link"
                   size="sm"
-                  className="p-0 align-baseline"
+                  className="p-0 align-baseline tlx-tap"
                   onClick={(e) => setPop({ id: s.id, el: e.currentTarget })}
                 >
                   Show task
@@ -678,7 +682,12 @@ function SummaryCards({
             </div>
             <div className="small text-body-secondary">
               by {current.savedBy?.name ?? 'Unknown user'} ·{' '}
-              <Button variant="link" size="sm" className="p-0 align-baseline" onClick={onHistory}>
+              <Button
+                variant="link"
+                size="sm"
+                className="p-0 align-baseline tlx-tap"
+                onClick={onHistory}
+              >
                 Baseline history ({data.baselines.length})
               </Button>
             </div>
@@ -1055,7 +1064,9 @@ function TaskRow({
   const finishedLate = Boolean(flags?.finishedLate);
   const critical = display.critical && Boolean(forecast?.critical);
   const span = scheduled ? barSpan(t) : null;
-  const showBase = display.baseline && t.baselineStart && t.baselineFinish && !t.isMilestone;
+  // UIE review: a cancelled task gets no baseline bar.
+  const showBase =
+    display.baseline && t.baselineStart && t.baselineFinish && !t.isMilestone && !cancelled;
   const forecastTail =
     span && forecast && !done && !cancelled && forecast.finish > span.finish
       ? forecast.finish
@@ -1082,7 +1093,7 @@ function TaskRow({
           {t.isMilestone && <span className="tlx-diamond-icon" aria-hidden="true" />}
           {broken && (
             <i
-              className="bx bx-error-circle text-danger me-1"
+              className="bx bx-error text-danger me-1"
               role="img"
               aria-label={BROKEN_LINK_TITLE}
               title={BROKEN_LINK_TITLE}
@@ -1100,12 +1111,19 @@ function TaskRow({
             type="button"
             className={`btn btn-link p-0 tlx-name-link${cancelled ? ' text-decoration-line-through' : ''}`}
             onClick={(e) => onPick(t.id, e.currentTarget)}
+            title={t.name}
           >
-            {t.name}
+            {/* A button centres overflowing text; the inner span clips at the end with "…". */}
+            <span className="tlx-name-text">{t.name}</span>
           </button>
-          {cancelled && <span className="badge bg-label-secondary ms-1">Cancelled</span>}
-          {delayed && <span className="badge bg-label-danger ms-1">Delayed</span>}
-          {finishedLate && <span className="badge bg-label-secondary ms-1">Finished late</span>}
+          {cancelled && <span className="badge bg-label-secondary ms-1 tlx-badge">Cancelled</span>}
+          {/* UIE §4: at 390 the left column shows the number and name only. */}
+          {delayed && !compact && (
+            <span className="badge bg-label-danger ms-1 tlx-badge">Delayed</span>
+          )}
+          {finishedLate && !compact && (
+            <span className="badge bg-label-secondary ms-1 tlx-badge">Finished late</span>
+          )}
         </span>
         {!compact && (
           <span className="tlx-c-owner text-truncate">
@@ -1149,7 +1167,8 @@ function TaskRow({
           />
         )}
         {!scheduled ? (
-          <span className="tlx-nodates small text-body-secondary">
+          // Sticky at the left column's edge, so it reads after the scroll to today.
+          <span className="tlx-nodates small text-body-secondary" style={{ left: leftW + 8 }}>
             {dependents.length > 0 && (
               <>
                 <i className="bx bx-error tlx-warn me-1" aria-hidden="true" />
@@ -1197,12 +1216,15 @@ function Legend() {
     ['tlx-lg-done', 'Completed'],
     ['tlx-lg-delayed', 'Delayed'],
     ['tlx-lg-baseline', 'Baseline'],
-    ['tlx-lg-forecast', 'Forecast'],
+    ['tlx-lg-forecast', 'Forecast, when later than planned'],
     ['tlx-lg-critical', 'Critical path'],
     ['tlx-lg-cancelled', 'Cancelled (left out of phase)'],
     ['tlx-lg-milestone', 'Milestone'],
     ['tlx-lg-phase', 'Phase'],
     ['tlx-lg-flag', 'Phase target'],
+    ['tlx-lg-line tlx-line-today', 'Today'],
+    ['tlx-lg-line tlx-line-target', 'Target delivery'],
+    ['tlx-lg-line tlx-line-forecast', 'Forecast end'],
     ['tlx-lg-broken', 'Broken dependency'],
     ['tlx-lg-weekend', 'Weekend'],
     ['tlx-lg-holiday', 'Holiday'],
@@ -1214,6 +1236,13 @@ function Legend() {
           <span className={`tlx-lg ${cls}`} aria-hidden="true" /> {text}
         </span>
       ))}
+      <span className="me-3 text-nowrap">
+        <span className="badge bg-label-secondary">Finished late</span> Completed after baseline
+        finish
+      </span>
+      <span className="me-3 text-nowrap">
+        <i className="bx bx-error tlx-warn" aria-hidden="true" /> Linked task has no dates
+      </span>
     </div>
   );
 }
@@ -1316,6 +1345,16 @@ function TaskPopover({
                   ))}
             </dd>
           </dl>
+          {broken.map((l) => {
+            const p = byId.get(l.from)!;
+            return (
+              <Alert key={l.from} variant="warning" className="py-2 small mb-2">
+                <i className="bx bx-error me-1" aria-hidden="true" />
+                <strong>{BROKEN_LINK_TITLE}</strong> #{p.order} {p.name} finishes{' '}
+                {shortDate(p.dueDate)}. You can still save. Dates aren't moved.
+              </Alert>
+            );
+          })}
           {flags?.delayed && (
             <p className="small text-danger mb-2" data-testid="pop-delayed">
               <strong>Delayed:</strong>{' '}
@@ -1330,20 +1369,11 @@ function TaskPopover({
               finish ({shortDate(task.baselineFinish ?? null)}).
             </p>
           )}
-          {broken.map((l) => {
-            const p = byId.get(l.from)!;
-            return (
-              <Alert key={l.from} variant="warning" className="py-2 small mb-2">
-                <strong>{BROKEN_LINK_TITLE}</strong> #{p.order} {p.name} finishes{' '}
-                {shortDate(p.dueDate)}. You can still save. Dates aren’t moved.
-              </Alert>
-            );
-          })}
           <div className="d-flex gap-2 justify-content-end">
-            <Button ref={openRef} size="sm" variant="primary" onClick={onOpen}>
+            <Button ref={openRef} size="sm" variant="primary" className="tlx-tap" onClick={onOpen}>
               Open task
             </Button>
-            <Button size="sm" variant="outline-secondary" onClick={onClose}>
+            <Button size="sm" variant="outline-secondary" className="tlx-tap" onClick={onClose}>
               Close
             </Button>
           </div>
@@ -1421,7 +1451,7 @@ function TimelineList({
                     <li key={t.id} className="list-group-item py-2">
                       <button
                         type="button"
-                        className={`btn btn-link p-0 text-start${t.status === 'CANCELLED' ? ' text-decoration-line-through' : ''}`}
+                        className={`btn btn-link p-0 text-start tlx-tap${t.status === 'CANCELLED' ? ' text-decoration-line-through' : ''}`}
                         onClick={(e) => onPick(t.id, e.currentTarget)}
                       >
                         #{t.order} {t.name}

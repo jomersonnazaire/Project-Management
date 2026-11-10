@@ -181,7 +181,12 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     const stay = screen.getByLabelText('Stay on the project team');
     expect(stay).toBeChecked();
     expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
+    // UIE §7: the help line shows while ticked.
+    expect(screen.getByTestId('stay-help')).toHaveTextContent(
+      'You stay a project member after the handover.',
+    );
     await userEvent.click(stay);
+    expect(screen.queryByTestId('stay-help')).not.toBeInTheDocument();
     expect(screen.getByTestId('lose-access-note')).toHaveTextContent(
       "You'll lose access to this project after the handover.",
     );
