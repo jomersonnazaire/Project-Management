@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.25 (2026-11-11 ~1:55 AM SGT): **CR-22 spec v0.3.12.** Lean's slice 1 calls: broken link = successor start on or before predecessor finish (FR-TL-07 aligned with AC-72.4); tasks link to phases by id; task-form phase is a strict pick plus "No phase" (FR-TL-23, 24, AC-72.6, 72.7).
 - v0.6.24 (2026-11-11 ~1:34 AM SGT): **CR-22 spec v0.3.11.** Q-144 closed by Jomerson ("for now use the free"): free Gantt library, our own baseline and critical-path calculations, no dragging. All CR-22 questions closed; Part B builds now in three slices.
 - v0.6.23 (2026-11-11 ~1:27 AM SGT): **CR-22 spec v0.3.10.** Jomerson approved UIE's sample Excel template for now and the timeline mockup v0.9.20. Still locked except Q-144.
 - v0.6.22 (2026-11-11 ~1:03 AM SGT): **CR-22 spec v0.3.9.** Lean: phase reorder Planning-only for PMs; timeline read-only on phones; singular variance label for one day. Still locked except Q-144.
