@@ -3,6 +3,11 @@ import {
   TIMELINE_MAX_DEPENDENCIES,
   TIMELINE_PLAN_FIELDS,
   TIMELINE_ROW_MESSAGES as MSG,
+  TIMELINE_MAX_DEPENDS_TEXT,
+  TIMELINE_MAX_NAME,
+  TIMELINE_MAX_PHASE,
+  nameTooLongMessage,
+  phaseTooLongMessage,
   badDateMessage,
   badTaskIdMessage,
   cycleMessage,
@@ -137,7 +142,7 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
 
     const name = v.name.trim();
     if (!name) err('name', MSG.NAME_REQUIRED);
-    else if (name.length > 200) err('name', MSG.NAME_TOO_LONG);
+    else if (name.length > TIMELINE_MAX_NAME) err('name', nameTooLongMessage(name.length));
 
     let task: PlanTask | null = null;
     if (v.taskId) {
@@ -166,7 +171,7 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
     const phaseText = v.phase.trim();
     if (phaseText) {
       const key = phaseKey(phaseText);
-      if (phaseText.length > 120) err('phase', MSG.PHASE_TOO_LONG);
+      if (phaseText.length > TIMELINE_MAX_PHASE) err('phase', phaseTooLongMessage());
       else if (phaseByKey.has(key)) phase = { key, name: phaseByKey.get(key)!.name };
       else if (!ctx.canAddPhase) err('phase', phaseNotAllowedMessage(phaseText, ctx.statusLabel));
       else {
@@ -187,8 +192,10 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
 
     // Depends on: Task numbers in this file (Q-149).
     let deps: number[] = [];
-    const parsed = parseDependsOn(v.dependsOn);
-    if (parsed === null) err('dependsOn', MSG.DEPENDENCY_FORMAT);
+    const depsTooLong = v.dependsOn.trim().length > TIMELINE_MAX_DEPENDS_TEXT;
+    const parsed = depsTooLong ? null : parseDependsOn(v.dependsOn);
+    if (depsTooLong) err('dependsOn', MSG.DEPENDS_ON_TOO_LONG);
+    else if (parsed === null) err('dependsOn', MSG.DEPENDENCY_FORMAT);
     else {
       deps = parsed;
       if (deps.length > TIMELINE_MAX_DEPENDENCIES) err('dependsOn', MSG.TOO_MANY_DEPENDENCIES);

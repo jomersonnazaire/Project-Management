@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import ExcelJS from 'exceljs';
 import {
   XLSX_MIME,
   type TimelineDto,
@@ -362,5 +363,37 @@ describe('CR-22 B3 Q20: one assignment notice per import', () => {
     });
     await userEvent.click(item);
     await waitFor(() => expect(router.state.location.pathname).toBe(`/projects/${PID}/timeline`));
+  });
+});
+
+describe('CR-22 B3 NFR-52: 5 MB and 2,000 rows are checked before upload (Q24 copy)', () => {
+  const pick = async (file: File) => {
+    const fetch = mount();
+    const { user, dialog } = await openModal();
+    await user.upload(within(dialog).getByTestId('timeline-import-file'), file);
+    return { fetch, dialog };
+  };
+
+  it('over 5 MB: refused in the browser with its size; nothing is uploaded', async () => {
+    const { fetch, dialog } = await pick(
+      new File([new Uint8Array(6 * 1024 * 1024)], 'big.xlsx', { type: XLSX_MIME }),
+    );
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'This file is 6 MB. The limit is 5 MB. Remove extra sheets or images and try again. Nothing was imported.',
+    );
+    expect(called(fetch, '/timeline/import/preview')).toHaveLength(0);
+  });
+
+  it('over 2,000 rows: refused in the browser with the row count; nothing is uploaded', async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Timeline');
+    ws.addRow(['Task number', 'Task name']);
+    for (let i = 1; i <= 2001; i++) ws.addRow([i, `Task ${i}`]);
+    const buf = await wb.xlsx.writeBuffer();
+    const { fetch, dialog } = await pick(new File([buf], 'many.xlsx', { type: XLSX_MIME }));
+    expect(await within(dialog).findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent(
+      'This file has 2,001 rows. You can import up to 2,000 at a time. Split it into smaller files and import them one by one. Nothing was imported.',
+    );
+    expect(called(fetch, '/timeline/import/preview')).toHaveLength(0);
   });
 });

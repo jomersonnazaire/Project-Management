@@ -1,12 +1,13 @@
 import {
   CLIENT_IMPORT_COMMIT_LIMIT,
-  CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MESSAGES,
   CLIENT_IMPORT_PREVIEW_LIMIT,
   CLIENT_IMPORT_RATE_WINDOW_MS,
   CLIENT_IMPORT_TOKEN_HEADER,
   PROJECT_STATUS_LABELS,
   TIMELINE_FILE_ERRORS,
+  TIMELINE_MAX_BYTES,
+  fileTooLargeError,
   TIMELINE_IMPORT_COPY,
   TIMELINE_ROW_MESSAGES,
   TIMELINE_TEMPLATE_NAME,
@@ -96,11 +97,14 @@ const uploadQuerySchema = z.strictObject({
     .optional(),
 });
 
-const rawParser = express.raw({ type: () => true, limit: CLIENT_IMPORT_MAX_BYTES + 64 * 1024 });
+const rawParser = express.raw({ type: () => true, limit: TIMELINE_MAX_BYTES + 64 * 1024 });
 function rawXlsx(req: Request, res: Response, next: NextFunction) {
   rawParser(req, res, (err?: unknown) => {
-    if ((err as { type?: string } | undefined)?.type === 'entity.too.large') {
-      return next(timelineFileError(413, 'FILE_TOO_LARGE', TIMELINE_FILE_ERRORS.FILE_TOO_LARGE));
+    const e = err as { type?: string; length?: number } | undefined;
+    if (e?.type === 'entity.too.large') {
+      // The body isn't read past the limit; the size comes from Content-Length.
+      const size = Number(e.length ?? req.headers['content-length']) || TIMELINE_MAX_BYTES + 1;
+      return next(timelineFileError(413, 'FILE_TOO_LARGE', fileTooLargeError(size)));
     }
     next(err);
   });

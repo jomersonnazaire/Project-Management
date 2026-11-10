@@ -2,6 +2,8 @@ import {
   CLIENT_IMPORT_MAX_ROWS,
   TIMELINE_COLUMNS,
   TIMELINE_FILE_ERRORS,
+  TIMELINE_MAX_BYTES,
+  fileTooLargeError,
   TIMELINE_INSTRUCTIONS_SHEET,
   TIMELINE_META_SHEET,
   TIMELINE_SHEET,
@@ -407,12 +409,14 @@ async function load(buf: Buffer): Promise<ExcelJS.Workbook> {
 
 /** CR-19's checks, with UIE's timeline copy (UIE §5.1 file errors). */
 function checkTimelineUpload(buf: Buffer) {
+  if (buf.length > TIMELINE_MAX_BYTES)
+    throw timelineFileError(413, 'FILE_TOO_LARGE', fileTooLargeError(buf.length));
   try {
     checkUpload(buf);
   } catch (err) {
     const code = err instanceof HttpError ? err.code : null;
     if (code === 'FILE_TOO_LARGE')
-      throw timelineFileError(413, 'FILE_TOO_LARGE', TIMELINE_FILE_ERRORS.FILE_TOO_LARGE);
+      throw timelineFileError(413, 'FILE_TOO_LARGE', fileTooLargeError(buf.length));
     if (code === 'UNREADABLE_FILE')
       throw timelineFileError(422, 'UNREADABLE_FILE', TIMELINE_FILE_ERRORS.UNREADABLE_FILE);
     throw timelineFileError(415, 'NOT_XLSX', TIMELINE_FILE_ERRORS.NOT_XLSX);

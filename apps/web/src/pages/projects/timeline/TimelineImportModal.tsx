@@ -1,17 +1,20 @@
 import {
-  CLIENT_IMPORT_MAX_BYTES,
+  CLIENT_IMPORT_MAX_ROWS,
   TIMELINE_COLUMN_LABEL,
   TIMELINE_FILE_ERRORS,
   TIMELINE_IMPORT_COPY as COPY,
+  TIMELINE_MAX_BYTES,
   TIMELINE_RESULT_LABELS,
   TIMELINE_VISIBLE_FIELDS,
   changedAlertLead,
   changedAlertRest,
   errorsAlertLead,
+  fileTooLargeError,
   importDoneLine,
   newPhaseNotice,
   notConfirmedHelp,
   numberingLine,
+  tooManyTimelineRowsError,
   type TimelineImportCommitDto,
   type TimelineImportField,
   type TimelineImportPreviewDto,
@@ -27,6 +30,7 @@ import {
   useTimelineImportCommit,
   useTimelineImportPreview,
 } from '../../../api/timelineHooks';
+import { timelineRowCount } from './timelineRowCount';
 
 /**
  * CR-22 Part B slice 3: Import timeline from Excel (UIE §5, `modal-xl`). Choose file → Check rows
@@ -64,9 +68,13 @@ function problemOf(e: unknown): Problem {
     : { lead: message, rest: '' };
 }
 
-function localProblem(f: File): Problem | null {
+/** NFR-52 checks before upload: type, 5 MB and 2,000 rows (the API checks all three again). */
+async function localProblem(f: File): Promise<Problem | null> {
   if (!/\.xlsx$/i.test(f.name)) return TIMELINE_FILE_ERRORS.NOT_XLSX;
-  if (f.size > CLIENT_IMPORT_MAX_BYTES) return TIMELINE_FILE_ERRORS.FILE_TOO_LARGE;
+  if (f.size > TIMELINE_MAX_BYTES) return fileTooLargeError(f.size);
+  const rows = await timelineRowCount(f);
+  if (rows !== null && rows > CLIENT_IMPORT_MAX_ROWS)
+    return tooManyTimelineRowsError(rows, CLIENT_IMPORT_MAX_ROWS);
   return null;
 }
 
@@ -260,8 +268,12 @@ export function TimelineImportModal({
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
   const [done, setDone] = useState<TimelineImportCommitDto | null>(null);
   const [tplError, setTplError] = useState<string | null>(null);
+  const [counting, setCounting] = useState(false);
+  const chosen = useRef(0);
 
   const reset = () => {
+    chosen.current++; // a row count still running for an earlier file is dropped
+    setCounting(false);
     preview.reset();
     commit.reset();
     setFile(null);
@@ -282,12 +294,17 @@ export function TimelineImportModal({
   const choose = (f: File) => {
     reset();
     setFile(f);
-    const local = localProblem(f);
-    if (local) {
-      setFile(null);
-      return setProblem(local);
-    }
-    check(f);
+    const mine = ++chosen.current;
+    setCounting(true);
+    void localProblem(f).then((local) => {
+      if (mine !== chosen.current) return; // another file was chosen meanwhile
+      setCounting(false);
+      if (local) {
+        setFile(null);
+        return setProblem(local);
+      }
+      check(f);
+    });
   };
   const template = () => {
     setTplError(null);
@@ -330,7 +347,7 @@ export function TimelineImportModal({
         </div>
       </>
     );
-  } else if (preview.isPending) {
+  } else if (preview.isPending || counting) {
     body = (
       <>
         <Steps at={1} />

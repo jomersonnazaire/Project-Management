@@ -43,6 +43,11 @@ export const TIMELINE_TEMPLATE_ID = 'opstrack-timeline';
 export const TIMELINE_TEMPLATE_VERSION = 1;
 export const TIMELINE_TEMPLATE_NAME = 'OpsTrack-timeline-template.xlsx';
 export const TIMELINE_MAX_DEPENDENCIES = 50;
+/** Q24 length limits (task model: name 200; phase names 120). */
+export const TIMELINE_MAX_NAME = 200;
+export const TIMELINE_MAX_PHASE = 120;
+/** Q24: a Depends on cell longer than this isn't parsed (50 numbers fit easily). */
+export const TIMELINE_MAX_DEPENDS_TEXT = 500;
 
 /** File names: `acme-test-co-rollout-timeline-2026-11-09.xlsx` (UIE §5.1 file chip). */
 export function timelineSlug(projectName: string): string {
@@ -100,8 +105,6 @@ export function parseTaskNumber(text: string): number | null {
 /** §B5 / UIE §5.2 row messages (exact copy). */
 export const TIMELINE_ROW_MESSAGES = {
   NAME_REQUIRED: 'Task name is required.',
-  NAME_TOO_LONG: 'Task name can be up to 200 characters.',
-  PHASE_TOO_LONG: 'Phase can be up to 120 characters.',
   BAD_NUMBER: 'Task number must be a whole number of 1 or more.',
   FINISH_BEFORE_START: "Finish can't be before Start.",
   BASELINE_FINISH_BEFORE_START: "Baseline finish can't be before Baseline start.",
@@ -109,9 +112,15 @@ export const TIMELINE_ROW_MESSAGES = {
   SELF_DEPENDENCY: "Depends on: a task can't depend on itself.",
   DEPENDENCY_FORMAT: 'Depends on: use task numbers only, e.g. 3, 5.',
   TOO_MANY_DEPENDENCIES: `More than ${TIMELINE_MAX_DEPENDENCIES} dependencies.`,
+  DEPENDS_ON_TOO_LONG: 'Depends on is too long. Use task numbers only, e.g. 3, 5.',
   CHANGED_SINCE_EXPORT:
     'This task was changed in OpsTrack after the file was exported. Confirm to overwrite it.',
 } as const;
+/** Q24 (UIE §5.2). */
+export const nameTooLongMessage = (n: number, max = TIMELINE_MAX_NAME) =>
+  `Task name can be up to ${max} characters (this one has ${n}).`;
+export const phaseTooLongMessage = (max = TIMELINE_MAX_PHASE) =>
+  `Phase can be up to ${max} characters.`;
 export const duplicateNumberMessage = (n: number | string) =>
   `Task number ${n} appears more than once in the file.`;
 export const badDateMessage = (column: string) =>
@@ -139,25 +148,37 @@ export const TIMELINE_FILE_ERRORS = {
     lead: "This file isn't an .xlsx workbook.",
     rest: 'Save it as Excel Workbook (.xlsx) and try again. Nothing was imported.',
   },
+  // Q24 (UIE §5.1), word for word.
   UNREADABLE_FILE: {
-    lead: "This file can't be read.",
-    rest: 'Save it again as Excel Workbook (.xlsx), without a password, and try again. Nothing was imported.',
-  },
-  FILE_TOO_LARGE: {
-    lead: 'This file is larger than 5 MB.',
-    rest: 'Remove unused sheets or rows, then try again. Nothing was imported.',
+    lead: "We couldn't open this file.",
+    rest: 'It may be damaged or password-protected. Open it in Excel, save it again as Excel Workbook (.xlsx), then try again. Nothing was imported.',
   },
   NO_TIMELINE_SHEET: {
     lead: 'This file has no Timeline sheet.',
-    rest: 'Start from Download template or Download timeline (.xlsx), then try again. Nothing was imported.',
+    rest: 'Use the OpsTrack template or a downloaded timeline, and keep the sheet name Timeline. Nothing was imported.',
   },
   EMPTY_FILE: {
-    lead: 'No task rows found in the file.',
-    rest: 'Add rows under the header on the Timeline sheet, then try again. Nothing was imported.',
+    lead: 'This file has no tasks.',
+    rest: 'Add at least one row under the headers on the Timeline sheet and try again. Nothing was imported.',
   },
 } as const;
+/** The 5 MB upload limit (same as CR-19), checked in the browser and by the API. */
+export const TIMELINE_MAX_BYTES = 5 * 1024 * 1024;
+/** "{size} MB" rounded UP to one decimal, so a file just over the limit never reads "5 MB". */
+export const fileSizeMb = (bytes: number) => {
+  const mb = Math.ceil((bytes / (1024 * 1024)) * 10) / 10;
+  return mb.toFixed(1).replace(/\.0$/, '');
+};
+export const fileTooLargeError = (bytes: number) => ({
+  lead: `This file is ${fileSizeMb(bytes)} MB.`,
+  rest: 'The limit is 5 MB. Remove extra sheets or images and try again. Nothing was imported.',
+});
 export type TimelineFileErrorCode =
-  keyof typeof TIMELINE_FILE_ERRORS | 'COLUMNS' | 'OTHER_PROJECT' | 'TOO_MANY_ROWS';
+  | keyof typeof TIMELINE_FILE_ERRORS
+  | 'COLUMNS'
+  | 'OTHER_PROJECT'
+  | 'TOO_MANY_ROWS'
+  | 'FILE_TOO_LARGE';
 export const columnsError = (names: string[]) => ({
   lead: `Some columns are missing or out of order: ${names.join(', ')}.`,
   rest: 'Keep row 1 of the template as it is, then try again. Nothing was imported.',
@@ -167,8 +188,8 @@ export const otherProjectError = (projectName: string) => ({
   rest: `Export the timeline from ${projectName}, or start from the blank template. Nothing was imported.`,
 });
 export const tooManyTimelineRowsError = (n: number, max: number) => ({
-  lead: `Too many rows: the Timeline sheet has ${n.toLocaleString('en-US')}.`,
-  rest: `The limit is ${max.toLocaleString('en-US')}. Nothing was imported.`,
+  lead: `This file has ${n.toLocaleString('en-US')} rows.`,
+  rest: `You can import up to ${max.toLocaleString('en-US')} at a time. Split it into smaller files and import them one by one. Nothing was imported.`,
 });
 export const TIMELINE_FILE_ERROR_CODES = [
   'NOT_XLSX',

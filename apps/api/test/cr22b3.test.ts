@@ -16,7 +16,7 @@ import {
   ProjectModel,
   TaskModel,
 } from '../src/models/index.js';
-import { CSRF, makeApp, useDatabase } from './helpers.js';
+import { CSRF, createUser, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world } from './m2helpers.js';
 
 /** CR-22 Part B slice 3: timeline Excel template, export and import (FR-TL-15 to 22, 25, 26; AC-74.x). */
@@ -302,12 +302,11 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
     expect(res.body.error.message).toBe(
       'Some columns are missing or out of order: Phase, Finish. Keep row 1 of the template as it is, then try again. Nothing was imported.',
     );
-    // UIE's sample (written by another tool, with header comments) reads, and is refused as
-    // another project's file.
-    const sample = readFileSync(
-      new URL('./fixtures/cr22-timeline-template-sample.xlsx', import.meta.url),
-    );
-    res = await send(w.pm.agent, pid, 'preview', sample);
+    // FR-TL-26 / Q26: a made-up project id (no such project) is refused like another project's.
+    const madeUp = await edit(await exported(w.pm.agent, pid), (_ws, wb) => {
+      wb.getWorksheet('_meta')!.getCell('B4').value = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+    });
+    res = await send(w.pm.agent, pid, 'preview', madeUp);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('OTHER_PROJECT');
     expect(res.body.error.message).toContain('Export the timeline from Rollout P');
@@ -553,5 +552,121 @@ describe("CR-22 B3: Lead's slice-3 rulings (Q20 notices, phase targets)", () => 
     await commit(w.admin.agent, pid, file);
     const after = (await tl(w.pm.agent, pid)).phases.map((ph) => [ph.name, ph.targetDate]);
     expect(after).toEqual([...targets, ['Support', null]]);
+  });
+});
+
+describe('CR-22 B3: Q24 copy (UIE §5.1, §5.2) and NFR-52 limits (5 MB, 2,000 rows)', () => {
+  const fileError = async (agent: Agent, pid: string, buf: Buffer) => {
+    const res = await send(agent, pid, 'preview', buf);
+    return [res.status, res.body.error?.code, res.body.error?.message];
+  };
+
+  it('empty file, no Timeline sheet and an unreadable file, word for word', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const blank = (await fileOf(w.pm.agent, `${base(pid)}/template`)).body as Buffer;
+    expect(await fileError(w.pm.agent, pid, blank)).toEqual([
+      422,
+      'EMPTY_FILE',
+      'This file has no tasks. Add at least one row under the headers on the Timeline sheet and try again. Nothing was imported.',
+    ]);
+    const renamed = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.name = 'Plan';
+    });
+    expect(await fileError(w.pm.agent, pid, renamed)).toEqual([
+      422,
+      'NO_TIMELINE_SHEET',
+      'This file has no Timeline sheet. Use the OpsTrack template or a downloaded timeline, and keep the sheet name Timeline. Nothing was imported.',
+    ]);
+    // A zip header with nothing readable behind it (a damaged workbook).
+    const damaged = Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(2048, 7)]);
+    const [status, code, message] = await fileError(w.pm.agent, pid, damaged);
+    expect([status, code]).toEqual([422, 'UNREADABLE_FILE']);
+    expect(message).toBe(
+      "We couldn't open this file. It may be damaged or password-protected. Open it in Excel, save it again as Excel Workbook (.xlsx), then try again. Nothing was imported.",
+    );
+  });
+
+  it('more than 2,000 rows is refused with the row count; exactly 2,000 is fine', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const blank = (await fileOf(w.pm.agent, `${base(pid)}/template`)).body as Buffer;
+    const rows = (n: number) =>
+      edit(blank, (ws) => {
+        for (let i = 0; i < n; i++) ws.getRow(i + 2).values = [i + 1, `Task ${i + 1}`];
+      });
+    expect(await fileError(w.pm.agent, pid, await rows(2001))).toEqual([
+      422,
+      'TOO_MANY_ROWS',
+      'This file has 2,001 rows. You can import up to 2,000 at a time. Split it into smaller files and import them one by one. Nothing was imported.',
+    ]);
+    const ok = await send(w.pm.agent, pid, 'preview', await rows(2000));
+    expect(ok.status, JSON.stringify(ok.body.error)).toBe(200);
+    expect(ok.body.counts.total).toBe(2000);
+  });
+
+  it('over 5 MB is refused with its size, inside and beyond the upload buffer', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const just = Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(5 * 1024 * 1024)]);
+    expect(await fileError(w.pm.agent, pid, just)).toEqual([
+      413,
+      'FILE_TOO_LARGE',
+      'This file is 5.1 MB. The limit is 5 MB. Remove extra sheets or images and try again. Nothing was imported.',
+    ]);
+    const big = Buffer.alloc(7 * 1024 * 1024, 1);
+    expect(await fileError(w.pm.agent, pid, big)).toEqual([
+      413,
+      'FILE_TOO_LARGE',
+      'This file is 7 MB. The limit is 5 MB. Remove extra sheets or images and try again. Nothing was imported.',
+    ]);
+  });
+
+  it('row errors: name, phase and Depends on length limits', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('name')).value = 'n'.repeat(201);
+      ws.getRow(3).getCell(col('phase')).value = 'p'.repeat(121);
+      ws.getRow(4).getCell(col('dependsOn')).value = Array(200).fill('1').join(', ');
+    });
+    const p = await preview(w.admin.agent, pid, file);
+    const msgs = (row: number) => p.rows.find((r) => r.row === row)!.errors.map((e) => e.message);
+    expect(msgs(2)).toEqual(['Task name can be up to 200 characters (this one has 201).']);
+    expect(msgs(3)).toEqual(['Phase can be up to 120 characters.']);
+    expect(msgs(4)).toEqual(['Depends on is too long. Use task numbers only, e.g. 3, 5.']);
+  });
+
+  it("UIE's re-saved sample (blank project and Task IDs, 7dc7dc2) imports as 19 new tasks", async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const people = await Promise.all(
+      ['pm', 'ba', 'member', 'dev1', 'dev2', 'qa'].map((n) =>
+        createUser({ email: `${n}@xceler8.example` }),
+      ),
+    );
+    await ProjectModel.updateOne(
+      { _id: pid },
+      { $addToSet: { memberIds: { $each: people.map((u) => u._id) } } },
+    );
+    const sample = readFileSync(
+      new URL('./fixtures/cr22-timeline-template-sample.xlsx', import.meta.url),
+    );
+    const { preview: p, done } = await commit(w.pm.agent, pid, sample);
+    expect(p.exported).toBeNull();
+    expect(p.counts).toMatchObject({ total: 19, new: 19, error: 0 });
+    expect(p.newPhases).toEqual(['Initiation', 'Design', 'Build and test', 'Go-live']);
+    expect(done.created).toEqual(Array.from({ length: 19 }, (_, i) => i + 4));
+    const tasks = await TaskModel.find({ projectId: pid, order: { $gte: 4 } })
+      .sort({ order: 1 })
+      .lean();
+    expect(tasks).toHaveLength(19);
+    expect(tasks[0]!.name).toBe('Project kickoff');
+    // "Data cutover" (sample 17) depends on sample 14, 15, 16 and 19 → #17, #18, #19, #22.
+    const byOrder = new Map(tasks.map((t) => [t.order, t._id.toString()]));
+    const cutover = tasks.find((t) => t.name === 'Data cutover')!;
+    expect(cutover.dependsOn.map(String).sort()).toEqual(
+      [17, 18, 19, 22].map((n) => byOrder.get(n)).sort(),
+    );
   });
 });
