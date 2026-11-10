@@ -1,6 +1,6 @@
 # CR-22 — PM project scope, status without owners, Depends On fix, and project timeline
 
-**Status:** v0.3.14 **locked for build, all questions closed** (2026-11-11 ~2:58 AM SGT) · v0.3.13 locked · v0.3.12 locked · v0.3.11 locked · v0.3.10 locked · v0.3.8, v0.3.7 locked · v0.3.6 locked (2026-11-11 ~12:53 AM SGT) · v0.3.5 locked (2026-11-11 ~12:48 AM SGT) · v0.3.4 locked (2026-11-11 ~12:46 AM SGT) · v0.3.3 locked (2026-11-11 ~12:44 AM SGT) · v0.3.2 locked (2026-11-11 ~12:41 AM SGT) · v0.3.1 locked (2026-11-11 ~12:31 AM SGT) · v0.3 draft (2026-11-11 ~12:28 AM SGT) · v0.2 draft (2026-11-11 ~12:24 AM SGT) · v0.1 draft (2026-11-11, SGT) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Status:** v0.3.15 **locked for build, all questions closed** (2026-11-11 ~3:05 AM SGT) · v0.3.14 locked · v0.3.13 locked · v0.3.12 locked · v0.3.11 locked · v0.3.10 locked · v0.3.8, v0.3.7 locked · v0.3.6 locked (2026-11-11 ~12:53 AM SGT) · v0.3.5 locked (2026-11-11 ~12:48 AM SGT) · v0.3.4 locked (2026-11-11 ~12:46 AM SGT) · v0.3.3 locked (2026-11-11 ~12:44 AM SGT) · v0.3.2 locked (2026-11-11 ~12:41 AM SGT) · v0.3.1 locked (2026-11-11 ~12:31 AM SGT) · v0.3 draft (2026-11-11 ~12:28 AM SGT) · v0.2 draft (2026-11-11 ~12:24 AM SGT) · v0.1 draft (2026-11-11, SGT) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Requested by:** Jomerson (Lead Dev / owner) in the PM room, 2026-11-11. **Rules locked by:** Lean (PM room, 2026-11-11 ~12:15 to 12:17 AM SGT). Rules marked **Locked** are Lean's. Anything not locked is an assumption (§8) or an open question (§10).
 **Part of:** doc 17 (change requests). CR-22 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-21 and uses the next free IDs: **FR-PRJ-35 to FR-PRJ-41** (incl. FR-PRJ-40a), **FR-TSK-37**, **FR-TL-01 to FR-TL-33** (new prefix: project timeline), **US-69 to US-74**, **AC-69.1 to AC-74.14** (incl. AC-69.7 to 69.10, AC-73.8 to 73.14), **EC-183 to EC-205**, **NFR-50 to NFR-54**, **A-47 to A-54**, **Q-127 to Q-149**.
 **Checked against:** docs 01 to 17 and CR-21 v0.1.2 on `main` `22958d9` (PR #48 merged), and the build at `main` `22958d9`. No IDs clash with CR-21 (CR-21 ends at FR-USR-12, US-68, AC-68.8, EC-182, NFR-49, A-46, Q-126). Research notes: `pm-docs/research/pm-timeline-gantt-findings.md` (outside the repo).
@@ -9,6 +9,7 @@
 **QA reference:** Queen's Part A cases `qa-run/opstrack_cr22a_cases.md` (DRAFT v1.1, TC-22A-001 to TC-22A-04x; outside the repo, re-baseline against this CR).
 
 **Doc change log:**
+- v0.3.15 (2026-11-11 ~3:05 AM SGT): **Q24 copy (UIE).** Added the file-error copy (empty, unreadable, no Timeline sheet, over 2,000 rows, over 5 MB, each ending "Nothing was imported.") and the length-limit row errors to §B5; NFR-52 limits confirmed as 5 MB / 2,000 rows (CR-19 NFR-36). UIE's sample file re-saved with blank project id and Task IDs (`7dc7dc2`), so it imports as 19 new tasks (FR-TL-26, A-54).
 - v0.3.14 (2026-11-11 ~2:58 AM SGT): **Lean's slice 3 calls.** FR-TL-26 clarified: a made-up or unknown project id is refused like another project's; only a blank id imports as a template (UIE re-saves the sample with blank ids). New FR-TL-32: one assignment notification per import per new/changed owner listing their tasks. New FR-TL-33: phase target dates not importable, template unchanged. New AC-74.13, AC-74.14. Error wording for empty/unreadable file, no Timeline sheet, over 2,000 rows and length limits to come from UIE (Q24).
 - v0.3.13 (2026-11-11 ~2:26 AM SGT): **Lean's slice 2 calls.** Timeline baselines are stored in a new project field **`timelineBaselines`** (not `baselineHistory`, which keeps the project's own date changes); the baseline history dialog shows only those saves (§B1, FR-TL-08, AC-73.1, Q-133). No % complete field; bars aren't progress-filled, in-progress shown by status colour only (FR-TL-01). No IDs renumbered.
 - v0.3.12 (2026-11-11 ~1:55 AM SGT): **Lean's slice 1 calls.** Confirmed: Admins add phases any time (phase manager or import), PMs only in Planning. **Handover (Lean, 2026-11-11 ~1:57 AM SGT, raised by UIE):** while "Stay on the project team" is unticked, the outgoing manager is unchecked and disabled under Team members (FR-PRJ-40, AC-69.8). FR-TL-07 aligned with AC-72.4: a link is broken only when the successor's planned start is on or before the predecessor's finish; a Saturday start after a Friday finish isn't broken, the forecast treats it as Monday (AC-72.4 example added). Tasks link to the phase record **by id** (FR-TL-23; migration sets the id, FR-TL-24, AC-72.7); task-form phase field is a **strict pick** plus "No phase"; new phases only from the phase manager or an allowed import (FR-TL-23, AC-72.6). No IDs renumbered.
@@ -187,6 +188,19 @@ Not in the template (by Lean's column list): status, assignees, estimate, priori
 
 ## B5. Preview validation and messages (Locked rules; UIE final copy for wording)
 File-level (nothing previewed): not `.xlsx` / unreadable; no `Timeline` sheet; headers missing or out of order; metadata project id is another project (FR-TL-26); file over the size or row limit (NFR-52); empty sheet.
+
+**File and length error copy (UIE, 2026-11-11 ~3:05 AM SGT, Q24; Lean: UIE words these).** File errors use the same danger alert as the other file errors, and each ends with "Nothing was imported.". Exact wording is in UIE's `CR22_PROJECT_TIMELINE_UI.md` §5.1 and §5.2 (`docs/cr22-timeline-design` `29f21d8`):
+- Empty file: "This file has no tasks. Add at least one row under the headers on the Timeline sheet and try again. Nothing was imported."
+- Unreadable or damaged: "We couldn't open this file. It may be damaged or password-protected. Open it in Excel, save it again as Excel Workbook (.xlsx), then try again. Nothing was imported."
+- No Timeline sheet: "This file has no Timeline sheet. Use the OpsTrack template or a downloaded timeline, and keep the sheet name Timeline. Nothing was imported."
+- Over 2,000 rows: "This file has {n} rows. You can import up to 2,000 at a time. Split it into smaller files and import them one by one. Nothing was imported."
+- Over 5 MB: "This file is {size} MB. The limit is 5 MB. Remove extra sheets or images and try again. Nothing was imported."
+
+Length limits are **row errors** in the preview, in the same style as the other row errors:
+- "Task name can be up to {max} characters (this one has {n})."
+- "Phase can be up to {max} characters."
+- "Depends on is too long. Use task numbers only, e.g. 3, 5."
+
 Row-level (shown with the Excel row number and column):
 - Task name is required.
 - Task number must be a whole number of 1 or more.
@@ -275,7 +289,7 @@ UIE mocks the timeline and import preview before step 1 starts (done: mockup v0.
 ## B10. Non-functional
 - **NFR-50 (Must)** Schedule maths (successor early start, forecast forward pass from today, CPM backward pass, float, delayed, variance, phase dates; FR-TL-02, 11 to 13, 27 to 31) lives in one pure, unit-tested function in `@xc8/shared`, taking the calendar and "today" as inputs, so web and any later mobile agree. Chart render target for project size: Deven to state (not set here).
 - **NFR-51 (Must)** All timeline dates are calendar dates and never shift with the viewer's time zone (doc 07).
-- **NFR-52 (Must)** Import reuses `exceljs` and the CR-19 preview-then-commit shape; file size, row and rate limits follow CR-19's NFRs unless Lean sets others.
+- **NFR-52 (Must)** Import reuses `exceljs` and the CR-19 preview-then-commit shape; file size, row and rate limits follow CR-19's NFRs unless Lean sets others. Confirmed: **5 MB** per file and **2,000 rows** per import, matching CR-19 NFR-36 (UIE copy, Q24).
 - **NFR-53 (Must)** Gantt library: MIT or similarly permissive. **Recommendation (Deven, Lean, 2026-11-11 ~12:24 AM SGT):** an MIT library plus our own critical-path and baseline calculations (NFR-50) is enough; a paid licence is only needed if **drag-to-reschedule** is wanted right away. Lean recommends building it ourselves on a free library. **Decided (Jomerson, 2026-11-11 ~1:34 AM SGT): "for now use the free"** — MIT or similarly permissive library, our own baseline and critical-path calculations, no dragging (Q-144 closed).
 - **NFR-54 (Should)** The chart is readable at 1440 and usable at 390 (horizontal scroll, list collapsible), per UIE.
 
