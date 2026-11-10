@@ -49,7 +49,7 @@ describe('CR-22 B: Timeline tab (desktop)', () => {
     timelineApi();
     const tl = await open();
     expect(within(tl).getByTestId('card-target')).toHaveTextContent('Mon, Dec 14, 2026');
-    expect(within(tl).getByTestId('card-scheduled')).toHaveTextContent('5 of 6');
+    expect(within(tl).getByTestId('card-baseline')).toHaveTextContent('No baseline yet');
     const groups = within(tl)
       .getAllByTestId(/^group-/)
       .map((g) => g.getAttribute('data-testid'));
@@ -116,7 +116,9 @@ describe('CR-22 B: Timeline tab (desktop)', () => {
 
   it('Q-142: read-only users get the lock note and no planner buttons', async () => {
     timelineApi(
-      timelineDto({ can: { plan: false, editPhaseTargets: false, editPhaseNames: false } }),
+      timelineDto({
+        can: { plan: false, editPhaseTargets: false, editPhaseNames: false, saveBaseline: false },
+      }),
       'MEMBER',
     );
     const tl = await open();
@@ -185,7 +187,9 @@ describe('CR-22 B: phase manager (FR-TL-23, UIE §2.7)', () => {
 
   it('Planning PM: add, reorder and remove an empty phase; duplicate names are caught', async () => {
     const m = timelineApi(
-      timelineDto({ can: { plan: true, editPhaseTargets: true, editPhaseNames: true } }),
+      timelineDto({
+        can: { plan: true, editPhaseTargets: true, editPhaseNames: true, saveBaseline: true },
+      }),
     );
     const tl = await open();
     await userEvent.click(within(tl).getByRole('button', { name: /Phases/ }));

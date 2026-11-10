@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { SavePhaseListInput, TimelineDto, TimelinePhaseDto } from '@xc8/shared';
+import type {
+  SaveBaselineInput,
+  SavePhaseListInput,
+  TimelineBaselineDto,
+  TimelineDto,
+  TimelinePhaseDto,
+} from '@xc8/shared';
 import { api } from './client';
 
 /** CR-22 Part B: the Timeline tab's data (FR-TL-01 to 07). Refetched after any task change. */
@@ -25,6 +31,22 @@ export function useSavePhaseList(projectId: string) {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
       void qc.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
+/** FR-TL-08: Save baseline (Admin or a PM on the project; reason optional). */
+export function useSaveBaseline(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SaveBaselineInput) =>
+      api<{ baseline: TimelineBaselineDto }>(`/projects/${projectId}/baseline`, {
+        method: 'POST',
+        body,
+      }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 }

@@ -1,4 +1,5 @@
 import {
+  ACTUAL_FINISH_BEFORE_START,
   DUE_NOT_BEFORE_START,
   jobRoleLabel,
   type JobRole,
@@ -80,6 +81,9 @@ export function TaskFormModal({
   const [clientContactId, setClientContactId] = useState(task?.clientContact?.id ?? '');
   const [plannedStart, setPlannedStart] = useState(task?.plannedStart ?? '');
   const [dueDate, setDueDate] = useState(task?.dueDate ?? '');
+  // CR-22 FR-TL-10: set by status changes; the PM can correct them (editing only).
+  const [actualStart, setActualStart] = useState(task?.actualStart ?? '');
+  const [actualFinish, setActualFinish] = useState(task?.actualFinish ?? '');
   const [est, setEst] = useState(task?.estHours == null ? '' : String(task.estHours));
   const [dependsOn, setDependsOn] = useState<string[]>(task?.dependsOn ?? []);
   const [deliverable, setDeliverable] = useState(task?.deliverable ?? '');
@@ -143,6 +147,8 @@ export function TaskFormModal({
       next.estHours = 'Enter hours of 0 or more, or leave blank.';
     }
     if (plannedStart && dueDate && dueDate < plannedStart) next.dueDate = DUE_NOT_BEFORE_START;
+    if (actualStart && actualFinish && actualFinish < actualStart)
+      next.actualFinish = ACTUAL_FINISH_BEFORE_START;
     if (party === 'CLIENT' && !clientContactId) next.clientContactId = 'Choose the client contact.';
     setErrors(next);
     if (Object.keys(next).length) return;
@@ -163,6 +169,13 @@ export function TaskFormModal({
       requiresApproval,
       reviewerId: requiresApproval ? reviewerId || null : null,
       isMilestone,
+      // Only sent when changed, so a save never rewrites them by accident.
+      ...(task && (actualStart || null) !== (task.actualStart ?? null)
+        ? { actualStart: actualStart || null }
+        : {}),
+      ...(task && (actualFinish || null) !== (task.actualFinish ?? null)
+        ? { actualFinish: actualFinish || null }
+        : {}),
     };
     const roles = new Set([body.ownerId, body.reviewerId, ...assigneeIds].filter(Boolean));
     const joining = added.filter((p) => roles.has(p.id) && !memberIds.has(p.id));
@@ -417,6 +430,37 @@ export function TaskFormModal({
                 Leave blank for {NO_ESTIMATE_LABEL.toLowerCase()}.
               </Form.Text>
             </Form.Group>
+            {task && (
+              <>
+                <Form.Group className="col-md-4" controlId="task-actual-start">
+                  <Form.Label>Actual start</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={actualStart}
+                    onChange={(e) => setActualStart(e.target.value)}
+                    aria-describedby="task-actual-hint"
+                  />
+                </Form.Group>
+                <Form.Group className="col-md-4" controlId="task-actual-finish">
+                  <Form.Label>Actual finish</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={actualFinish}
+                    onChange={(e) => setActualFinish(e.target.value)}
+                    isInvalid={Boolean(err('actualFinish'))}
+                    aria-describedby="task-actual-hint"
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {err('actualFinish')}
+                  </Form.Control.Feedback>
+                </Form.Group>
+                <div className="col-md-4 d-flex align-items-end">
+                  <Form.Text id="task-actual-hint">
+                    Set when the task starts and is completed. Change them if they’re wrong.
+                  </Form.Text>
+                </div>
+              </>
+            )}
             <div className="col-md-6">
               <DependsOnPicker
                 id="task-deps"

@@ -1,6 +1,15 @@
 import {
   BROKEN_LINK_TITLE,
+  DELAYED_SUB,
+  DELAYED_SUB_NO_BASELINE,
+  NO_BASELINE_SUB,
+  NO_BASELINE_TITLE,
+  NO_FORECAST_LINE,
   TASK_STATUS_LABELS,
+  VARIANCE_HEADER_TIP,
+  doneFinish,
+  floatLabel,
+  forecastVarianceBadge,
   TIMELINE_EMPTY_HELP,
   TIMELINE_LARGER_SCREEN,
   TIMELINE_PHONE_NOTE,
@@ -13,16 +22,28 @@ import {
   type TimelineDto,
   type TimelineGroup,
   type TimelineLink,
+  type TaskForecast,
+  type TaskStatusFlags,
   type TimelineModel,
   type TimelineTaskInput,
 } from '@xc8/shared';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { Alert, Button, ButtonGroup, Form, Overlay, Popover, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useTimeline } from '../../../api/timelineHooks';
 import { EmptyState, ErrorAlert, LockNotice } from '../../../components/Feedback';
 import { shortDate } from '../../../lib/format';
 import { useIsCompact } from '../../../lib/useMediaQuery';
+import { BaselineHistoryModal, SaveBaselineModal } from './BaselineModals';
+import { savedOn } from './format';
 import { PhaseManagerModal } from './PhaseManagerModal';
 import {
   ROW_H,
@@ -36,11 +57,11 @@ import {
   type Zoom,
 } from './gantt';
 
-type Filter = 'all' | 'milestones';
+type Filter = 'all' | 'delayed' | 'critical' | 'milestones';
 type Row =
   { kind: 'group'; g: TimelineGroup } | { kind: 'task'; t: TimelineTaskInput; g: TimelineGroup };
 
-const LEFT_W = 520;
+const LEFT_W = 580;
 const LEFT_W_PHONE = 168;
 const HEAD_H = 76;
 
@@ -69,6 +90,29 @@ const groupCount = (g: TimelineGroup) => {
   const n = g.memberCount;
   return `${n} task${n === 1 ? '' : 's'}${g.allCancelled ? ', cancelled' : ''}`;
 };
+
+/** UIE §2.4 Var. column: `+2d`, `0`, `−1d`; `—` without a baseline. */
+const varText = (v: number | null) =>
+  v === null ? '—' : v === 0 ? '0' : v > 0 ? `+${v}d` : `\u2212${-v}d`;
+
+/** Where a task's bar is drawn (UIE §2.5): completed = actual; in progress = actual start on. */
+function barSpan(t: TimelineTaskInput): { start: string; finish: string } {
+  if (t.status === 'COMPLETED') {
+    const finish = doneFinish(t)!;
+    const start = t.actualStart && t.actualStart <= finish ? t.actualStart : t.plannedStart!;
+    return { start: start <= finish ? start : finish, finish };
+  }
+  const start = t.actualStart && t.actualStart <= t.dueDate! ? t.actualStart : t.plannedStart!;
+  return { start, finish: t.dueDate! };
+}
+
+/** Rows a filter keeps (UIE §2.2). */
+function keep(model: TimelineModel, filter: Filter, t: TimelineTaskInput) {
+  if (filter === 'milestones') return t.isMilestone;
+  if (filter === 'delayed') return Boolean(model.flags[t.id]?.delayed);
+  if (filter === 'critical') return Boolean(model.forecast[t.id]?.critical);
+  return true;
+}
 
 /** Per-task link facts for icons and copy (FR-TL-07, FR-TL-28). */
 function linkFacts(model: TimelineModel) {
@@ -105,6 +149,10 @@ export function TimelineTab({
   const [view, setView] = useState<'list' | 'gantt'>('list');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [phasesOpen, setPhasesOpen] = useState(false);
+  const [baselineOpen, setBaselineOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [showCritical, setShowCritical] = useState(true);
+  const [showBaseline, setShowBaseline] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pop, setPop] = useState<{ id: string; el: HTMLElement } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -156,7 +204,12 @@ export function TimelineTab({
     if (compact) setToast(TIMELINE_LARGER_SCREEN);
     else setPhasesOpen(true);
   };
+  const openBaseline = () => {
+    if (compact) setToast(TIMELINE_LARGER_SCREEN);
+    else setBaselineOpen(true);
+  };
   const showGantt = !compact || view === 'gantt';
+  const display = { critical: showCritical, baseline: showBaseline };
   const firstBroken = model.broken[0];
 
   return (
@@ -172,7 +225,7 @@ export function TimelineTab({
           {toast}
         </Alert>
       )}
-      <SummaryCards data={data} model={model} />
+      <SummaryCards data={data} model={model} onHistory={() => setHistoryOpen(true)} />
 
       <div
         className="tlx-toolbar d-flex flex-wrap align-items-center gap-2 mb-3"
@@ -207,6 +260,22 @@ export function TimelineTab({
               <i className="bx bx-target-lock me-1" aria-hidden="true" />
               Today
             </Button>
+            <Form.Check
+              type="switch"
+              id="tlx-critical-switch"
+              className="mb-0 tlx-switch"
+              label="Critical path"
+              checked={showCritical}
+              onChange={(e) => setShowCritical(e.target.checked)}
+            />
+            <Form.Check
+              type="switch"
+              id="tlx-baseline-switch"
+              className="mb-0 tlx-switch"
+              label="Baseline"
+              checked={showBaseline}
+              onChange={(e) => setShowBaseline(e.target.checked)}
+            />
           </>
         )}
         {compact ? (
@@ -218,6 +287,8 @@ export function TimelineTab({
             onChange={(e) => setFilter(e.target.value as Filter)}
           >
             <option value="all">All {model.taskCount}</option>
+            <option value="delayed">Delayed {model.delayedCount}</option>
+            <option value="critical">Critical path {model.criticalCount}</option>
             <option value="milestones">Milestones {model.milestoneCount}</option>
           </Form.Select>
         ) : (
@@ -227,6 +298,18 @@ export function TimelineTab({
               onClick={() => setFilter('all')}
               label="All"
               count={model.taskCount}
+            />
+            <FilterPill
+              on={filter === 'delayed'}
+              onClick={() => setFilter('delayed')}
+              label="Delayed"
+              count={model.delayedCount}
+            />
+            <FilterPill
+              on={filter === 'critical'}
+              onClick={() => setFilter('critical')}
+              label="Critical path"
+              count={model.criticalCount}
             />
             <FilterPill
               on={filter === 'milestones'}
@@ -250,12 +333,20 @@ export function TimelineTab({
             ))}
           </ButtonGroup>
         )}
-        {canPhases && (
-          <div className={compact ? '' : 'ms-auto'}>
-            <Button size="sm" variant="outline-secondary" onClick={openPhases}>
-              <i className="bx bx-layer me-1" aria-hidden="true" />
-              Phases
-            </Button>
+        {(canPhases || data.can.saveBaseline) && (
+          <div className={`d-flex gap-2${compact ? '' : ' ms-auto'}`}>
+            {canPhases && (
+              <Button size="sm" variant="outline-secondary" onClick={openPhases}>
+                <i className="bx bx-layer me-1" aria-hidden="true" />
+                Phases
+              </Button>
+            )}
+            {data.can.saveBaseline && (
+              <Button size="sm" variant="outline-primary" onClick={openBaseline}>
+                <i className="bx bx-save me-1" aria-hidden="true" />
+                Save baseline
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -273,6 +364,14 @@ export function TimelineTab({
               <>
                 #{s.order} {s.name} is planned to start {shortDate(s.plannedStart)}, but #{p.order}{' '}
                 {p.name} finishes {shortDate(p.dueDate)}. Dates weren’t moved.{' '}
+                {model.forecast[s.id] && model.forecast[p.id] && (
+                  <>
+                    The forecast assumes #{s.order} starts after #{p.order} finishes (
+                    {shortDate(model.forecast[s.id]!.start)} –{' '}
+                    {shortDate(model.forecast[s.id]!.finish)}
+                    ).{' '}
+                  </>
+                )}
                 <Button
                   variant="link"
                   size="sm"
@@ -318,6 +417,7 @@ export function TimelineTab({
               onToggle={toggle}
               onPick={(id, el) => setPop({ id, el })}
               scrollRef={scrollRef}
+              display={display}
             />
           </div>
         </div>
@@ -335,6 +435,7 @@ export function TimelineTab({
             onToggle={toggle}
             onPick={(id, el) => setPop({ id, el })}
             scrollRef={scrollRef}
+            display={display}
           />
           {!compact && <Legend />}
         </div>
@@ -342,6 +443,7 @@ export function TimelineTab({
         <TimelineList
           data={data}
           model={model}
+          display={display}
           filter={filter}
           collapsed={collapsed}
           onToggle={toggle}
@@ -353,6 +455,8 @@ export function TimelineTab({
       {pop && byId.get(pop.id) && (
         <TaskPopover
           task={byId.get(pop.id)!}
+          forecast={model.forecast[pop.id]}
+          flags={model.flags[pop.id]}
           target={pop.el}
           byId={byId}
           facts={facts}
@@ -364,6 +468,17 @@ export function TimelineTab({
             el.focus?.();
           }}
         />
+      )}
+      {baselineOpen && (
+        <SaveBaselineModal
+          timeline={data}
+          unscheduled={model.unscheduledCount}
+          onClose={() => setBaselineOpen(false)}
+          onSaved={setToast}
+        />
+      )}
+      {historyOpen && (
+        <BaselineHistoryModal baselines={data.baselines} onClose={() => setHistoryOpen(false)} />
       )}
       {phasesOpen && (
         <PhaseManagerModal
@@ -403,7 +518,7 @@ function FilterPill({
 function rowsOf(model: TimelineModel, collapsed: Set<string>, filter: Filter): Row[] {
   const rows: Row[] = [];
   for (const g of model.groups) {
-    const list = filter === 'milestones' ? g.tasks.filter((t) => t.isMilestone) : g.tasks;
+    const list = g.tasks.filter((t) => keep(model, filter, t));
     if (filter !== 'all' && !list.length) continue;
     rows.push({ kind: 'group', g });
     if (!collapsed.has(g.key)) for (const t of list) rows.push({ kind: 'task', t, g });
@@ -411,38 +526,100 @@ function rowsOf(model: TimelineModel, collapsed: Set<string>, filter: Filter): R
   return rows;
 }
 
-function SummaryCards({ data, model }: { data: TimelineDto; model: TimelineModel }) {
-  return (
-    <div className="row g-3 mb-3" data-testid="timeline-cards">
-      <div className="col-6 col-md-3">
-        <div className="card h-100">
-          <div className="card-body py-3">
-            <div className="small text-body-secondary">Target delivery</div>
-            <div className="h5 mb-1" data-testid="card-target">
-              {longDate(data.project.plannedEndDate)}
-            </div>
-            <div className="small text-body-secondary">Project planned end date</div>
-          </div>
-        </div>
-      </div>
-      <div className="col-6 col-md-3">
-        <div className="card h-100">
-          <div className="card-body py-3">
-            <div className="small text-body-secondary">Scheduled tasks</div>
-            <div className="h5 mb-1" data-testid="card-scheduled">
-              {model.scheduledCount} of {model.taskCount}
-            </div>
-            <div className="small text-body-secondary">
-              {model.unscheduledCount
-                ? noDatesLine(model.unscheduledCount)
-                : 'Every task has dates.'}
-            </div>
-          </div>
+function SummaryCards({
+  data,
+  model,
+  onHistory,
+}: {
+  data: TimelineDto;
+  model: TimelineModel;
+  onHistory: () => void;
+}) {
+  const badge =
+    model.forecastVariance !== null ? forecastVarianceBadge(model.forecastVariance) : null;
+  const current = data.baselines[0];
+  const card = (title: string, body: ReactNode) => (
+    <div className="col-6 col-md-3">
+      <div className="card h-100">
+        <div className="card-body py-3">
+          <div className="small text-body-secondary">{title}</div>
+          {body}
         </div>
       </div>
     </div>
   );
+  return (
+    <div className="row g-3 mb-3" data-testid="timeline-cards">
+      {card(
+        'Target delivery',
+        <>
+          <div className="h5 mb-1" data-testid="card-target">
+            {longDate(data.project.plannedEndDate)}
+          </div>
+          <div className="small text-body-secondary">Project planned end date</div>
+        </>,
+      )}
+      {card(
+        'Forecast end',
+        <>
+          <div className="h5 mb-1" data-testid="card-forecast">
+            {model.forecastEnd ? longDate(model.forecastEnd) : '—'}
+          </div>
+          <div className="small">
+            {!model.forecastEnd ? (
+              <span className="text-body-secondary">{NO_FORECAST_LINE}</span>
+            ) : badge ? (
+              <span className={`badge bg-label-${badge.tone}`} data-testid="forecast-variance">
+                {badge.text}
+              </span>
+            ) : (
+              <span className="text-body-secondary">No target delivery date</span>
+            )}
+          </div>
+        </>,
+      )}
+      {card(
+        'Delayed tasks',
+        <>
+          <div
+            className={`h5 mb-1${model.delayedCount ? ' text-danger' : ''}`}
+            data-testid="card-delayed"
+          >
+            {model.delayedCount}
+          </div>
+          <div className="small text-body-secondary">
+            {model.hasBaseline ? DELAYED_SUB : DELAYED_SUB_NO_BASELINE}
+          </div>
+        </>,
+      )}
+      {card(
+        'Baseline',
+        current ? (
+          <>
+            <div className="h5 mb-1" data-testid="card-baseline">
+              Saved {savedOn(current.savedAt)}
+            </div>
+            <div className="small text-body-secondary">
+              by {current.savedBy?.name ?? 'Unknown user'} ·{' '}
+              <Button variant="link" size="sm" className="p-0 align-baseline" onClick={onHistory}>
+                Baseline history ({data.baselines.length})
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="h5 mb-1" data-testid="card-baseline">
+              {NO_BASELINE_TITLE}
+            </div>
+            <div className="small text-body-secondary">{NO_BASELINE_SUB}</div>
+          </>
+        ),
+      )}
+    </div>
+  );
 }
+
+type Display = { critical: boolean; baseline: boolean };
 
 interface GanttProps {
   data: TimelineDto;
@@ -456,6 +633,7 @@ interface GanttProps {
   onToggle: (key: string) => void;
   onPick: (id: string, el: HTMLElement) => void;
   scrollRef: RefObject<HTMLDivElement>;
+  display: Display;
 }
 
 function Gantt({
@@ -470,6 +648,7 @@ function Gantt({
   onToggle,
   onPick,
   scrollRef,
+  display,
 }: GanttProps) {
   const ppd = ZOOMS[zoom];
   const days = useMemo(() => daysInRange(model.range), [model.range]);
@@ -481,6 +660,11 @@ function Gantt({
   rows.forEach((r, i) => r.kind === 'task' && rowOf.set(r.t.id, i));
   const byId = new Map(data.tasks.map((t) => [t.id, t]));
   const target = data.project.plannedEndDate;
+  const forecastEnd = model.forecastEnd;
+  const forecastLate = Boolean(forecastEnd && target && forecastEnd > target);
+  const criticalLink = new Set(
+    display.critical ? model.criticalLinks.map((l) => `${l.from}-${l.to}`) : [],
+  );
 
   // Opens with today near the left edge (UIE §1), and again when the zoom changes.
   useLayoutEffect(() => {
@@ -502,6 +686,11 @@ function Gantt({
             <span className="tlx-c-name">Task</span>
             {!compact && <span className="tlx-c-owner">Owner</span>}
             {!compact && <span className="tlx-c-dates">Dates</span>}
+            {!compact && (
+              <span className="tlx-c-var" title={VARIANCE_HEADER_TIP}>
+                Var.
+              </span>
+            )}
           </div>
           <div className="tlx-chart-head" style={{ width }} aria-hidden="true">
             <div className="tlx-months">
@@ -530,6 +719,14 @@ function Gantt({
                   Target {shortDate(target)}
                 </span>
               )}
+              {forecastLate && (
+                <span
+                  className="tlx-flag tlx-flag-forecast"
+                  style={{ left: x(forecastEnd!) + ppd / 2 }}
+                >
+                  Forecast {shortDate(forecastEnd)}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -550,6 +747,14 @@ function Gantt({
                 data-testid="target-line"
                 data-date={target}
                 style={{ left: x(target) + ppd / 2 }}
+              />
+            )}
+            {forecastLate && (
+              <span
+                className="tlx-line tlx-line-forecast"
+                data-testid="forecast-line"
+                data-date={forecastEnd!}
+                style={{ left: x(forecastEnd!) + ppd / 2 }}
               />
             )}
           </div>
@@ -579,6 +784,16 @@ function Gantt({
               >
                 <path d="M0,0 L6,3 L0,6 z" fill="#b8240a" />
               </marker>
+              <marker
+                id="tlx-arrow-dark"
+                markerWidth="6"
+                markerHeight="6"
+                refX="5"
+                refY="3"
+                orient="auto"
+              >
+                <path d="M0,0 L6,3 L0,6 z" fill="#22303e" />
+              </marker>
             </defs>
             {drawn.map((l) => {
               const p = byId.get(l.from)!;
@@ -586,14 +801,22 @@ function Gantt({
               const y1 = rowOf.get(l.from)! * ROW_H + ROW_H / 2;
               const y2 = rowOf.get(l.to)! * ROW_H + ROW_H / 2;
               const broken = l.state === 'BROKEN';
+              const crit = criticalLink.has(`${l.from}-${l.to}`);
               return (
                 <path
                   key={`${l.from}-${l.to}`}
                   data-testid={`link-${l.from}-${l.to}`}
                   data-state={l.state}
-                  d={elbowPath(x(p.dueDate!) + ppd, y1, x(s.plannedStart!), y2)}
-                  className={broken ? 'tlx-link tlx-link-broken' : 'tlx-link'}
-                  markerEnd={broken ? 'url(#tlx-arrow-red)' : 'url(#tlx-arrow)'}
+                  data-critical={crit || undefined}
+                  d={elbowPath(x(barSpan(p).finish) + ppd, y1, x(barSpan(s).start), y2)}
+                  className={`tlx-link${broken ? ' tlx-link-broken' : ''}${crit ? ' tlx-link-critical' : ''}`}
+                  markerEnd={
+                    broken
+                      ? 'url(#tlx-arrow-red)'
+                      : crit
+                        ? 'url(#tlx-arrow-dark)'
+                        : 'url(#tlx-arrow)'
+                  }
                 />
               );
             })}
@@ -623,6 +846,9 @@ function Gantt({
                 facts={facts}
                 byId={byId}
                 onPick={onPick}
+                forecast={model.forecast[r.t.id]}
+                flags={model.flags[r.t.id]}
+                display={display}
               />
             ),
           )}
@@ -656,8 +882,8 @@ function GroupRow({
     ? 'Completion —'
     : g.complete
       ? `Completed ${shortDate(g.completedOn)}`
-      : g.finish
-        ? `Planned finish ${shortDate(g.finish)}`
+      : g.forecastFinish
+        ? `Forecast ${shortDate(g.forecastFinish)}`
         : null;
   return (
     <div className="tlx-row tlx-row-group" data-testid={`group-${g.name}`}>
@@ -725,8 +951,14 @@ function TaskRow({
   facts,
   byId,
   onPick,
+  forecast,
+  flags,
+  display,
 }: {
   t: TimelineTaskInput;
+  forecast: TaskForecast | undefined;
+  flags: TaskStatusFlags | undefined;
+  display: Display;
   leftW: number;
   width: number;
   ppd: number;
@@ -742,15 +974,31 @@ function TaskRow({
   const broken = facts.brokenTo.has(t.id);
   const noDatesLink = facts.unscheduledTo.has(t.id);
   const dependents = (facts.dependsOnUnscheduled.get(t.id) ?? []).map((id) => byId.get(id)!);
+  const delayed = Boolean(flags?.delayed);
+  const finishedLate = Boolean(flags?.finishedLate);
+  const critical = display.critical && Boolean(forecast?.critical);
+  const span = scheduled ? barSpan(t) : null;
+  const showBase = display.baseline && t.baselineStart && t.baselineFinish && !t.isMilestone;
+  const forecastTail =
+    span && forecast && !done && !cancelled && forecast.finish > span.finish
+      ? forecast.finish
+      : null;
+  const variance = flags?.variance ?? null;
   const label = `${t.isMilestone ? 'Milestone ' : ''}#${t.order} ${t.name}, ${
     scheduled
       ? t.plannedStart === t.dueDate
         ? shortDate(t.dueDate)
         : `${shortDate(t.plannedStart)} to ${shortDate(t.dueDate)}`
       : 'no dates'
-  }${cancelled ? ', cancelled' : done ? ', completed' : ''}${broken ? ', broken dependency' : ''}`;
+  }${cancelled ? ', cancelled' : done ? ', completed' : ''}${delayed ? ', delayed' : ''}${
+    finishedLate ? ', finished late' : ''
+  }${critical ? ', critical' : ''}${broken ? ', broken dependency' : ''}`;
   return (
-    <div className="tlx-row" data-testid={`row-${t.id}`}>
+    <div
+      className={`tlx-row${critical ? ' tlx-row-critical' : ''}`}
+      data-testid={`row-${t.id}`}
+      data-critical={critical || undefined}
+    >
       <div className="tlx-left" style={{ width: leftW }}>
         <span className="tlx-c-num text-body-secondary">{t.order}</span>
         <span className="tlx-c-name text-truncate">
@@ -779,6 +1027,8 @@ function TaskRow({
             {t.name}
           </button>
           {cancelled && <span className="badge bg-label-secondary ms-1">Cancelled</span>}
+          {delayed && <span className="badge bg-label-danger ms-1">Delayed</span>}
+          {finishedLate && <span className="badge bg-label-secondary ms-1">Finished late</span>}
         </span>
         {!compact && (
           <span className="tlx-c-owner text-truncate">
@@ -786,8 +1036,41 @@ function TaskRow({
           </span>
         )}
         {!compact && <span className="tlx-c-dates">{dates(t)}</span>}
+        {!compact && (
+          <span
+            className={`tlx-c-var small${
+              cancelled || variance === null || variance <= 0
+                ? ' text-body-secondary'
+                : done
+                  ? ''
+                  : ' text-danger fw-semibold'
+            }`}
+            data-testid={`var-${t.id}`}
+          >
+            {cancelled ? '—' : varText(variance)}
+          </span>
+        )}
       </div>
       <div className="tlx-cell" style={{ width }}>
+        {showBase && (
+          <span
+            className="tlx-baseline"
+            data-testid={`baseline-${t.id}`}
+            style={{
+              left: x(t.baselineStart!),
+              width: Math.max(x(t.baselineFinish!) - x(t.baselineStart!) + ppd, 4),
+            }}
+            aria-hidden="true"
+          />
+        )}
+        {forecastTail && span && (
+          <span
+            className="tlx-forecast-tail"
+            data-testid={`forecast-${t.id}`}
+            style={{ left: x(span.finish) + ppd, width: x(forecastTail) - x(span.finish) }}
+            aria-hidden="true"
+          />
+        )}
         {!scheduled ? (
           <span className="tlx-nodates small text-body-secondary">
             {dependents.length > 0 && (
@@ -815,10 +1098,12 @@ function TaskRow({
         ) : (
           <button
             type="button"
-            className={`tlx-bar${done ? ' tlx-bar-done' : ''}${cancelled ? ' tlx-bar-cancelled' : ''}`}
+            className={`tlx-bar${done ? ' tlx-bar-done' : ''}${cancelled ? ' tlx-bar-cancelled' : ''}${
+              delayed ? ' tlx-bar-delayed' : ''
+            }${critical ? ' tlx-bar-critical' : ''}`}
             style={{
-              left: x(t.plannedStart!),
-              width: Math.max(x(t.dueDate!) - x(t.plannedStart!) + ppd, 6),
+              left: x(span!.start),
+              width: Math.max(x(span!.finish) - x(span!.start) + ppd, 6),
             }}
             aria-label={label}
             onClick={(e) => onPick(t.id, e.currentTarget)}
@@ -833,6 +1118,10 @@ function Legend() {
   const items: [string, string][] = [
     ['tlx-lg-planned', 'Planned / in progress'],
     ['tlx-lg-done', 'Completed'],
+    ['tlx-lg-delayed', 'Delayed'],
+    ['tlx-lg-baseline', 'Baseline'],
+    ['tlx-lg-forecast', 'Forecast'],
+    ['tlx-lg-critical', 'Critical path'],
     ['tlx-lg-cancelled', 'Cancelled (left out of phase)'],
     ['tlx-lg-milestone', 'Milestone'],
     ['tlx-lg-phase', 'Phase'],
@@ -854,6 +1143,8 @@ function Legend() {
 
 function TaskPopover({
   task,
+  forecast,
+  flags,
   target,
   byId,
   facts,
@@ -862,6 +1153,8 @@ function TaskPopover({
   onClose,
 }: {
   task: TimelineTaskInput;
+  forecast: TaskForecast | undefined;
+  flags: TaskStatusFlags | undefined;
   target: HTMLElement;
   byId: Map<string, TimelineTaskInput>;
   facts: ReturnType<typeof linkFacts>;
@@ -892,6 +1185,42 @@ function TaskPopover({
           <dl className="row small mb-2">
             <dt className="col-5">Planned</dt>
             <dd className="col-7 mb-1">{dates(task)}</dd>
+            <dt className="col-5">Actual</dt>
+            <dd className="col-7 mb-1" data-testid="pop-actual">
+              {!task.actualStart
+                ? task.status === 'COMPLETED'
+                  ? `Done ${shortDate(doneFinish(task))}`
+                  : 'Not started'
+                : task.actualFinish
+                  ? `${shortDate(task.actualStart)} – ${shortDate(task.actualFinish)}`
+                  : `${shortDate(task.actualStart)} – not finished`}
+            </dd>
+            <dt className="col-5">Baseline</dt>
+            <dd className="col-7 mb-1">
+              {task.baselineStart && task.baselineFinish
+                ? task.baselineStart === task.baselineFinish
+                  ? shortDate(task.baselineFinish)
+                  : `${shortDate(task.baselineStart)} – ${shortDate(task.baselineFinish)}`
+                : '—'}
+            </dd>
+            <dt className="col-5">Variance</dt>
+            <dd className="col-7 mb-1" data-testid="pop-variance">
+              {flags?.variance == null ? '—' : `${varText(flags.variance)} (working days)`}
+            </dd>
+            {forecast && !forecast.done && (
+              <>
+                <dt className="col-5">Forecast</dt>
+                <dd className="col-7 mb-1">
+                  {forecast.start === forecast.finish
+                    ? shortDate(forecast.finish)
+                    : `${shortDate(forecast.start)} – ${shortDate(forecast.finish)}`}
+                </dd>
+                <dt className="col-5">Float</dt>
+                <dd className="col-7 mb-1" data-testid="pop-float">
+                  {forecast.float === null ? '—' : floatLabel(forecast.float)}
+                </dd>
+              </>
+            )}
             <dt className="col-5">Depends on</dt>
             <dd className="col-7 mb-1">
               {preds.length === 0
@@ -910,6 +1239,20 @@ function TaskPopover({
                   ))}
             </dd>
           </dl>
+          {flags?.delayed && (
+            <p className="small text-danger mb-2" data-testid="pop-delayed">
+              <strong>Delayed:</strong>{' '}
+              {flags.delayReason === 'PAST_DUE'
+                ? `not completed, and its planned finish (${shortDate(task.dueDate)}) has passed.`
+                : `not completed, and its forecast finish (${shortDate(forecast?.finish ?? null)}) is after its baseline finish (${shortDate(task.baselineFinish ?? null)}).`}
+            </p>
+          )}
+          {flags?.finishedLate && (
+            <p className="small mb-2" data-testid="pop-finished-late">
+              <strong>Finished late:</strong> done {shortDate(doneFinish(task))}, after its baseline
+              finish ({shortDate(task.baselineFinish ?? null)}).
+            </p>
+          )}
           {broken.map((l) => {
             const p = byId.get(l.from)!;
             return (
@@ -937,6 +1280,7 @@ function TaskPopover({
 function TimelineList({
   data,
   model,
+  display,
   filter,
   collapsed,
   onToggle,
@@ -945,6 +1289,7 @@ function TimelineList({
 }: {
   data: TimelineDto;
   model: TimelineModel;
+  display: Display;
   filter: Filter;
   collapsed: Set<string>;
   onToggle: (key: string) => void;
@@ -957,7 +1302,7 @@ function TimelineList({
   return (
     <div data-testid="timeline-list">
       {model.groups.map((g) => {
-        const list = filter === 'milestones' ? g.tasks.filter((t) => t.isMilestone) : g.tasks;
+        const list = g.tasks.filter((t) => keep(model, filter, t));
         if (filter !== 'all' && !list.length) return null;
         const open = !collapsed.has(g.key);
         return (
@@ -976,7 +1321,11 @@ function TimelineList({
                 <strong>{g.name}</strong>
                 <span className="d-block small text-body-secondary">
                   {g.kind === 'PHASE' && g.targetDate ? `Target ${shortDate(g.targetDate)} · ` : ''}
-                  {g.complete ? `Completed ${shortDate(g.completedOn)}` : groupCount(g)}
+                  {g.complete
+                    ? `Completed ${shortDate(g.completedOn)}`
+                    : g.forecastFinish
+                      ? `Forecast ${shortDate(g.forecastFinish)}`
+                      : groupCount(g)}
                 </span>
               </span>
               {g.kind === 'PHASE' && g.variance !== null && !g.allCancelled && (
@@ -1004,21 +1353,35 @@ function TimelineList({
                       {facts.brokenTo.has(t.id) && (
                         <span className="badge bg-label-danger ms-1">Broken link</span>
                       )}
+                      {model.flags[t.id]?.delayed && (
+                        <span className="badge bg-label-danger ms-1">Delayed</span>
+                      )}
+                      {model.flags[t.id]?.finishedLate && (
+                        <span className="badge bg-label-secondary ms-1">Finished late</span>
+                      )}
                       {t.status === 'CANCELLED' && (
                         <span className="badge bg-label-secondary ms-1">Cancelled</span>
                       )}
                       <div className="small text-body-secondary">
-                        {[dates(t), t.owner?.name ?? 'No owner', TASK_STATUS_LABELS[t.status]].join(
-                          ' · ',
-                        )}
+                        {[
+                          dates(t),
+                          t.owner?.name ?? 'No owner',
+                          TASK_STATUS_LABELS[t.status],
+                          ...(display.critical && model.forecast[t.id]?.critical
+                            ? ['Critical']
+                            : []),
+                          `Var. ${t.status === 'CANCELLED' ? '—' : varText(model.flags[t.id]?.variance ?? null)}`,
+                        ].join(' · ')}
                       </div>
                       {scheduled && (
                         <div className="tlx-mini" aria-hidden="true">
                           <span
-                            className={`tlx-mini-bar${t.status === 'COMPLETED' ? ' tlx-bar-done' : ''}`}
+                            className={`tlx-mini-bar${t.status === 'COMPLETED' ? ' tlx-bar-done' : ''}${
+                              model.flags[t.id]?.delayed ? ' tlx-mini-delayed' : ''
+                            }`}
                             style={{
-                              left: `${pct(t.plannedStart!)}%`,
-                              width: `${Math.max(pct(t.dueDate!) - pct(t.plannedStart!), 1)}%`,
+                              left: `${pct(barSpan(t).start)}%`,
+                              width: `${Math.max(pct(barSpan(t).finish) - pct(barSpan(t).start), 1)}%`,
                             }}
                           />
                           <span

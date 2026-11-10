@@ -59,6 +59,8 @@ export const task = (over: Partial<TaskDto> = {}): TaskDto => ({
   order: 1,
   name: 'Kickoff',
   phaseId: null,
+  actualStart: null,
+  actualFinish: null,
   phase: 'Phase 1',
   taskType: null,
   priority: 'MEDIUM',

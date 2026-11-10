@@ -1460,6 +1460,76 @@ $board-gap: 0.75rem;
   border-radius: 3px;
   background: var(--tlx-primary, #5355e0);
 }
+// CR-22 B slice 2: delays, baseline, forecast, critical path (UIE §2.4, 2.5).
+.tlx-c-var {
+  flex: 0 0 48px;
+  text-align: right;
+  white-space: nowrap;
+}
+.tlx-switch {
+  font-size: 13px;
+  min-height: 0;
+}
+.tlx-flag-forecast {
+  background: var(--tlx-danger);
+  transform: none;
+}
+.tlx-line-forecast {
+  border-left: 2px dashed var(--tlx-danger);
+}
+.tlx-link-critical {
+  stroke: var(--tlx-dark);
+  stroke-width: 2;
+}
+.tlx-row-critical > .tlx-left::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: var(--tlx-dark);
+}
+.tlx-bar-delayed {
+  background: #ffe0db;
+  border-color: var(--tlx-danger);
+}
+.tlx-bar-critical {
+  box-shadow: 0 0 0 2px var(--tlx-dark);
+}
+.tlx-baseline {
+  position: absolute;
+  top: 27px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(93, 104, 120, 0.6);
+}
+.tlx-forecast-tail {
+  position: absolute;
+  top: 9px;
+  height: 16px;
+  border: 1px dashed var(--tlx-danger);
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+}
+.tlx-lg-delayed {
+  background: #ffe0db;
+  border: 1px solid var(--tlx-danger);
+}
+.tlx-lg-baseline {
+  height: 4px;
+  background: rgba(93, 104, 120, 0.6);
+}
+.tlx-lg-forecast {
+  border: 1px dashed var(--tlx-danger);
+}
+.tlx-lg-critical {
+  background: #e7e7ff;
+  box-shadow: 0 0 0 2px var(--tlx-dark);
+}
+.tlx-mini-bar.tlx-mini-delayed {
+  background: var(--tlx-danger);
+}
 .tlx-mini-bar.tlx-bar-done {
   background: #2e7d17;
 }
