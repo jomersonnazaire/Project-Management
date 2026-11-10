@@ -500,13 +500,15 @@ export function buildTimeline(input: {
   const unscheduled = mk('UNSCHEDULED', '\u0000unscheduled', 'Unscheduled');
   for (const [key, list] of members) {
     const g = groups.get(key)!;
-    g.memberCount = list.length;
     for (const t of list) (isScheduled(t) ? g : unscheduled).tasks.push(t);
     const active = list.filter((t) => t.status !== 'CANCELLED');
     const activeScheduled = active.filter(isScheduled);
     g.start = minDate(activeScheduled.map((t) => t.plannedStart));
     g.finish = maxDate(activeScheduled.map((t) => t.dueDate));
     g.allCancelled = list.length > 0 && active.length === 0;
+    // FR-TL-03 (UIE e5f6d92): count non-cancelled tasks, unscheduled included; an all-cancelled
+    // phase still shows its size ("1 task, cancelled").
+    g.memberCount = g.allCancelled ? list.length : active.length;
     g.complete = active.length > 0 && active.every((t) => t.status === 'COMPLETED');
     if (g.complete) g.completedOn = maxDate(active.map(doneFinish));
     else g.forecastFinish = maxDate(activeScheduled.map((t) => fc.byId[t.id]?.finish));

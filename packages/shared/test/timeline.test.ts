@@ -194,6 +194,42 @@ describe('CR-22 B slice 1: buildTimeline (FR-TL-01 to 05, 23; AC-72.1, 72.5, 73.
     expect(m.milestoneCount).toBe(1);
   });
 
+  it('phase count leaves out cancelled tasks, keeps unscheduled ones; all-cancelled keeps its size (FR-TL-03)', () => {
+    const mm = buildTimeline({
+      tasks: [
+        task({ id: 'a', phase: 'Initiation', plannedStart: '2026-10-05', dueDate: '2026-10-06' }),
+        task({ id: 'b', phase: 'Initiation', plannedStart: '2026-10-07', dueDate: '2026-10-08' }),
+        task({ id: 'c', phase: 'Initiation', plannedStart: '2026-10-09', dueDate: '2026-10-12' }),
+        task({ id: 'd', phase: 'Initiation', plannedStart: null, dueDate: null }),
+        task({
+          id: 'e',
+          phase: 'Initiation',
+          status: 'CANCELLED',
+          plannedStart: '2026-10-05',
+          dueDate: '2026-10-06',
+        }),
+        task({
+          id: 'f',
+          phase: 'Add-ons',
+          status: 'CANCELLED',
+          plannedStart: '2026-11-23',
+          dueDate: '2026-12-04',
+        }),
+      ],
+      phases: [
+        { id: 'p1', name: 'Initiation', targetDate: null },
+        { id: 'p2', name: 'Add-ons', targetDate: null },
+      ],
+      plannedEndDate: '2026-12-14',
+      today: '2026-11-11',
+    });
+    const gg = (name: string) => mm.groups.find((x) => x.name === name)!;
+    expect(gg('Initiation').memberCount).toBe(4);
+    expect(gg('Initiation').allCancelled).toBe(false);
+    expect(gg('Add-ons').memberCount).toBe(1);
+    expect(gg('Add-ons').allCancelled).toBe(true);
+  });
+
   it('phase summary, completion and variance vs its target date', () => {
     expect(g('Initiation')).toMatchObject({
       start: '2026-10-05',
