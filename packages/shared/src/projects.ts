@@ -982,8 +982,9 @@ export interface ProjectDto extends ProjectListItemDto {
 }
 
 /**
- * CR-22 A2: a non-blocking note on a project save. A status change goes through even when some
- * tasks have no owner; the save answers with this note (and the edit form shows it before saving).
+ * CR-22 A2: a non-blocking note on a project save. Planning → Active goes through even when some
+ * tasks have no owner; that save answers with this note (and the edit form shows it before saving).
+ * Other status changes carry no note (Q-127).
  */
 export interface ProjectSaveNoteDto {
   code: 'TASKS_WITHOUT_OWNER';

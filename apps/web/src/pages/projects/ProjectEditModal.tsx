@@ -238,13 +238,15 @@ export function ProjectEditModal({
                   ))}
                 </Form.Select>
               </Form.Group>
-              {status !== project.status && project.unownedTaskCount > 0 && (
-                <div className="col-12">
-                  <Alert variant="info" className="mb-0 py-2" data-testid="unowned-tasks-note">
-                    {unownedTasksNote(project.unownedTaskCount)}
-                  </Alert>
-                </div>
-              )}
+              {project.status === 'PLANNING' &&
+                status === 'ACTIVE' &&
+                project.unownedTaskCount > 0 && (
+                  <div className="col-12">
+                    <Alert variant="info" className="mb-0 py-2" data-testid="unowned-tasks-note">
+                      {unownedTasksNote(project.unownedTaskCount)}
+                    </Alert>
+                  </div>
+                )}
               <Form.Group className="col-md-6" controlId="edit-prj-client">
                 <Form.Label>Client</Form.Label>
                 <Form.Select value={clientId} onChange={(e) => setClientId(e.target.value)}>

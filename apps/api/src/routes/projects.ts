@@ -745,13 +745,16 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
           'INVALID_TRANSITION',
         );
       }
-      // CR-22 A2 (was AC-10.3): tasks without an owner no longer block a status change, e.g.
-      // Planning → Active. The save answers with a note counting them (cancelled ones excluded).
-      const unowned = await TaskModel.countDocuments({
-        projectId: project._id,
-        ownerId: null,
-        status: { $ne: 'CANCELLED' },
-      });
+      // CR-22 A2 (was AC-10.3): tasks without an owner no longer block Planning → Active. That
+      // move answers with a note counting them (cancelled ones excluded); others carry none (Q-127).
+      const unowned =
+        from === 'PLANNING' && input.status === 'ACTIVE'
+          ? await TaskModel.countDocuments({
+              projectId: project._id,
+              ownerId: null,
+              status: { $ne: 'CANCELLED' },
+            })
+          : 0;
       if (unowned) {
         notes.push({
           code: 'TASKS_WITHOUT_OWNER',

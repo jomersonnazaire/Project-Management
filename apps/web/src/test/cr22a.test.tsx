@@ -82,21 +82,52 @@ describe('CR-22 A3: Depends On picker', () => {
   });
 });
 
+describe('CR-22 A3: Depends On search', () => {
+  it('a long list gets a search box that filters the options', async () => {
+    const many = [
+      ...tasks,
+      ...['Data load', 'Training', 'Cutover', 'Go-live'].map((name, i) =>
+        task({ id: `m${i}`, order: 5 + i, name, phase: 'Build' }),
+      ),
+    ];
+    api('PROJECT_MANAGER', (url) => {
+      if (url.includes(`/projects/${PID}/tasks`)) return { status: 200, body: { items: many } };
+      if (url.endsWith(`/projects/${PID}`)) return { status: 200, body: { project: project() } };
+      return undefined;
+    });
+    const dialog = await editWorkshops();
+    await userEvent.type(within(dialog).getByRole('searchbox', { name: /Search tasks/ }), 'cut');
+    const group = within(dialog).getByRole('group', { name: 'Tasks this one depends on' });
+    expect(
+      within(group)
+        .getAllByRole('checkbox')
+        .map((c) => c.getAttribute('id')),
+    ).toEqual(['task-deps-m2']);
+    // The chip for a selected task stays even when the search hides it.
+    expect(within(dialog).getByTestId('task-deps-chips')).toHaveTextContent('#1 Kickoff');
+  });
+});
+
 describe('CR-22 A2: status change with tasks lacking an owner', () => {
-  it('the edit form shows a note (not a block) and the saved note shows on the project', async () => {
+  it('Planning → Active shows a note (not a block) in the form and, after saving, on the project', async () => {
     const message =
       '2 tasks have no owner yet. The status still changes; assign owners on the Checklist when you can.';
-    const fetchMock = checklistApi(project({ unownedTaskCount: 2 }), {
+    const fetchMock = checklistApi(project({ status: 'PLANNING', unownedTaskCount: 2 }), {
       notes: [{ code: 'TASKS_WITHOUT_OWNER', count: 2, message }],
     });
     renderAt(`/projects/${PID}`, <App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).queryByTestId('unowned-tasks-note')).not.toBeInTheDocument();
+    // Q-127: only Planning → Active shows it.
     await userEvent.selectOptions(within(dialog).getByLabelText('Status'), 'ON_HOLD');
+    expect(within(dialog).queryByTestId('unowned-tasks-note')).not.toBeInTheDocument();
+    await userEvent.selectOptions(within(dialog).getByLabelText('Status'), 'ACTIVE');
     expect(within(dialog).getByTestId('unowned-tasks-note')).toHaveTextContent(message);
     await userEvent.click(within(dialog).getByRole('button', { name: /^Save/ }));
-    await waitFor(() => expect(patchBody(fetchMock, `/projects/${PID}`).status).toBe('ON_HOLD'));
+    // Q-69: the fixture has no phases, so leaving Planning asks first.
+    await userEvent.click(await screen.findByRole('button', { name: 'Move on anyway' }));
+    await waitFor(() => expect(patchBody(fetchMock, `/projects/${PID}`).status).toBe('ACTIVE'));
     expect(await screen.findByTestId('project-save-note')).toHaveTextContent(message);
   });
 });

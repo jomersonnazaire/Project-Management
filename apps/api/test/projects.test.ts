@@ -304,7 +304,7 @@ describe('Project scope (FR-ACL-07, Q-12, Q-26)', () => {
 });
 
 describe('Project lifecycle and edits (FR-PRJ-05/12, CR-22 A2, EC-24)', () => {
-  it('CR-22 A2 status changes go through with tasks lacking an owner, with a note counting them (cancelled excluded)', async () => {
+  it('CR-22 A2 Planning → Active goes through with tasks lacking an owner, with a note counting them (cancelled excluded)', async () => {
     const { pm, project } = await world(app);
     const before = await pm.agent.get(`/api/v1/projects/${project.id}`);
     expect(before.body.project.unownedTaskCount).toBe(3);
@@ -325,6 +325,13 @@ describe('Project lifecycle and edits (FR-PRJ-05/12, CR-22 A2, EC-24)', () => {
           '2 tasks have no owner yet. The status still changes; assign owners on the Checklist when you can.',
       },
     ]);
+    // Q-127: only Planning → Active carries the note; other status changes don't.
+    const hold = await pm.agent
+      .patch(`/api/v1/projects/${project.id}`)
+      .set(CSRF)
+      .send({ status: 'ON_HOLD' });
+    expect(hold.status).toBe(200);
+    expect(hold.body.notes).toBeUndefined();
     // Edits that don't change the status carry no note.
     const rename = await pm.agent
       .patch(`/api/v1/projects/${project.id}`)
