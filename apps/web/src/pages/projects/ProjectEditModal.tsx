@@ -102,6 +102,9 @@ export function ProjectEditModal({
   // Q-69: the leave-Planning confirm depends on phases (not tasks); falls back to the task count.
   const phaseList = useProjectPhases(project.id, project.status === 'PLANNING');
   const phaseCount = phaseList.data ? phaseList.data.length : project.taskCount;
+  const managerChanging = Boolean(project.managerId) && managerId !== project.managerId;
+  const handingOverMine = managerChanging && project.managerId === user?.id;
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next: Record<string, string> = {};
@@ -128,7 +131,13 @@ export function ProjectEditModal({
       body.managerId = managerId;
       if (project.managerId) body.keepPreviousManagerOnTeam = keepOnTeam;
     }
-    const members = memberIds.filter((m) => m !== managerId);
+    const members = memberIds.filter((m) => {
+      if (m === managerId) return false;
+      // Stay off: the outgoing PM is not in the team in the payload either.
+      if (handingOverMine && user?.systemRole !== 'ADMIN' && !keepOnTeam && m === project.managerId)
+        return false;
+      return true;
+    });
     if (members.join() !== project.members.map((m) => m.id).join()) body.memberIds = members;
     if (clientChanged) {
       body.clientId = clientId;
@@ -170,8 +179,6 @@ export function ProjectEditModal({
     update.mutate(body, { onSuccess: saved });
   };
 
-  const managerChanging = Boolean(project.managerId) && managerId !== project.managerId;
-  const handingOverMine = managerChanging && project.managerId === user?.id;
   const outgoingName = project.manager?.name ?? 'The current manager';
   const managers = (people.data ?? []).filter(
     (p) => p.systemRole === 'ADMIN' || p.systemRole === 'PROJECT_MANAGER',
@@ -358,21 +365,30 @@ export function ProjectEditModal({
                 >
                   {(people.data ?? [])
                     .filter((p) => p.id !== managerId)
-                    .map((p) => (
-                      <Form.Check
-                        key={p.id}
-                        id={`edit-prj-member-${p.id}`}
-                        label={p.name}
-                        checked={memberIds.includes(p.id)}
-                        onChange={(e) =>
-                          setMemberIds(
-                            e.target.checked
-                              ? [...memberIds, p.id]
-                              : memberIds.filter((x) => x !== p.id),
-                          )
-                        }
-                      />
-                    ))}
+                    .map((p) => {
+                      // A PM unticking Stay must not still appear ticked under Team members.
+                      const stayOff =
+                        handingOverMine &&
+                        user?.systemRole !== 'ADMIN' &&
+                        !keepOnTeam &&
+                        p.id === project.managerId;
+                      return (
+                        <Form.Check
+                          key={p.id}
+                          id={`edit-prj-member-${p.id}`}
+                          label={p.name}
+                          checked={stayOff ? false : memberIds.includes(p.id)}
+                          disabled={stayOff}
+                          onChange={(e) =>
+                            setMemberIds(
+                              e.target.checked
+                                ? [...memberIds, p.id]
+                                : memberIds.filter((x) => x !== p.id),
+                            )
+                          }
+                        />
+                      );
+                    })}
                 </div>
                 <div className="mt-2">
                   <EmailCheckbox
