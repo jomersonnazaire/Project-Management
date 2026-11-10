@@ -202,7 +202,12 @@ Import is allowed in Planning, Active and On hold (Q-141).
 - Wrong type: "This file isn't an .xlsx workbook. Save it as Excel Workbook (.xlsx) and try again. Nothing was imported."
 - Columns: "Some columns are missing or out of order: Phase, Finish. Keep row 1 of the template as it is, then try again. Nothing was imported."
 - Other project (FR-TL-26): "This file was exported from a different project. Export the timeline from Acme Test Co Rollout, or start from the blank template. Nothing was imported."
-- Size and row limits and formula safety follow CR-19 (`CLIENTS_EXCEL_IMPORT_UI.md`).
+- Empty file (Q24): "This file has no tasks. Add at least one row under the headers on the Timeline sheet and try again. Nothing was imported."
+- Unreadable or damaged (Q24): "We couldn't open this file. It may be damaged or password-protected. Open it in Excel, save it again as Excel Workbook (.xlsx), then try again. Nothing was imported."
+- No Timeline sheet (Q24): "This file has no Timeline sheet. Use the OpsTrack template or a downloaded timeline, and keep the sheet name Timeline. Nothing was imported."
+- Over 2,000 rows (Q24): "This file has {n} rows. You can import up to 2,000 at a time. Split it into smaller files and import them one by one. Nothing was imported."
+- Over 5 MB (Q24): "This file is {size} MB. The limit is 5 MB. Remove extra sheets or images and try again. Nothing was imported."
+- Formula safety follows CR-19 (`CLIENTS_EXCEL_IMPORT_UI.md`).
 
 **Check rows (preview)**
 - **File chip:** "acme-test-co-rollout-timeline-2026-11-09.xlsx", "Exported from this project Nov 9, 2026, 9:42 AM · 26 rows", and **Choose another file**.
@@ -251,6 +256,9 @@ Import is allowed in Planning, Active and On hold (Q-141).
 | Too many | More than 50 dependencies. |
 | Unknown owner | Owner {email} isn't an active internal user. |
 | Not a member (Q-140) | {email} isn't a member of this project. Add them to the project first. |
+| Name too long (Q24) | Task name can be up to {max} characters (this one has {n}). |
+| Phase too long (Q24) | Phase can be up to {max} characters. |
+| Depends on too long (Q24) | Depends on is too long. Use task numbers only, e.g. 3, 5. |
 | Phase not allowed (Q-141) | You can't add phase {name} while the project is {status}. |
 | Bad Task ID | Task ID {id} isn't a task in this project. / Task ID {id} appears more than once in the file. |
 | Changed since export (flag, not an error) | This task was changed in OpsTrack after the file was exported. Confirm to overwrite it. |
