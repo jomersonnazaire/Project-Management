@@ -575,7 +575,7 @@ body:has(#timeline.on) .rolesw,body:has(#timeline-import.on) .rolesw,body:has(#p
 .tlx .tl-legend .bdg{font-size:.6875rem;padding:2px 6px;border-radius:4px}
 .tlx .tl-legend .lgs.canc{background:repeating-linear-gradient(135deg,#ebeef0 0 3px,#fff 3px 6px);border:1px dashed #8592a3}
 .ti-phone{display:none}
-@media (max-width:767.98px){.tlx .acts .pmb{display:none!important}.tlx .ro-phone{display:inline}#timeline-import .ti-modal,#timeline-import .c20demo{display:none}.ti-phone{display:block}}
+@media (max-width:767.98px){.tlx .ro-phone{display:inline}#timeline-import .ti-modal,#timeline-import .c20demo{display:none}.ti-phone{display:block}}
 </style><style>
 .tlx.mlist .tl-legend{display:none}
 .tl-mini .a.done i{background:#2e7d17}
@@ -2003,8 +2003,8 @@ body:has(#timeline.on) .rolesw,body:has(#timeline-import.on) .rolesw,body:has(#p
 <button type="button" data-ti="stale" onclick="tiState('stale')">Preview out of date</button><button type="button" data-ti="other" onclick="tiState('other')">Other project's file</button>
 <button type="button" data-ti="importing" onclick="tiState('importing')">Importing</button>
 <button type="button" data-ti="done" onclick="tiState('done')">3 · Done</button>
-<span class="note">The app shows this as a large modal over the Timeline tab (<code>modal-xl</code>; phones get a “needs a larger screen” message instead). Drawn inline here so it can be reviewed.</span></div>
-<div class="card ti-phone"><div class="card-body"><h2 class="h5 mb-2">Import needs a larger screen</h2><p class="mb-0">The timeline is view-only on phones. Open OpsTrack on a computer to import from Excel.</p></div></div>
+<span class="note">The app shows this as a large modal over the Timeline tab (<code>modal-xl</code>; phones get the “Open this on a larger screen to make changes.” message instead). Drawn inline here so it can be reviewed.</span></div>
+<div class="card ti-phone"><div class="card-body"><h2 class="h5 mb-2">Import timeline from Excel</h2><p class="mb-0">Open this on a larger screen to make changes.</p></div></div>
 <div class="c20modal ti-modal" role="dialog" aria-modal="true" aria-labelledby="tiT">
 <div class="m-h"><h2 class="h5" id="tiT">Import timeline from Excel</h2><button type="button" class="btn-close" style="margin-left:auto;border:0;background:none;font-size:22px;color:#5d6878;cursor:pointer" aria-label="Close" onclick="location.hash='timeline'">×</button></div>
 <div class="m-b" id="tiBody"></div>
@@ -2647,11 +2647,11 @@ function toolbar(){
   +'<select class="form-select form-select-sm" aria-label="Show" onchange="tlFilter(this.value)">'+fl.map(function(f){return '<option value="'+f[0]+'"'+(S.f===f[0]?' selected':'')+'>'+f[1]+' ('+cnt[f[0]]+')</option>'}).join('')+'</select></span></div>';
  h+='<div class="grp acts ms-auto">';
  if(pmode()){
-  h+='<span class="ro-phone small text-body-secondary"><i class="bx bx-lock-alt"></i> View only on a phone. Edit on a computer.</span>';
-  h+='<button type="button" class="btn btn-outline-secondary btn-sm pmb" onclick="tlPhases()"><i class="bx bx-list-ol"></i> Phases</button>';
-  h+='<button type="button" class="btn btn-'+(S.st==='nobl'?'primary':'outline-primary')+' btn-sm pmb" onclick="tlSaveBl()"><i class="bx bx-save"></i> Save baseline</button>';
+  h+='<span class="ro-phone small text-body-secondary"><i class="bx bx-mobile"></i> On a phone you can view the timeline and open task details.</span>';
+  h+='<button type="button" class="btn btn-outline-secondary btn-sm pmb" onclick="tlBig(tlPhases)"><i class="bx bx-list-ol"></i> Phases</button>';
+  h+='<button type="button" class="btn btn-'+(S.st==='nobl'?'primary':'outline-primary')+' btn-sm pmb" onclick="tlBig(tlSaveBl)"><i class="bx bx-save"></i> Save baseline</button>';
   h+='<span class="tl-dd pmb"><button type="button" class="btn btn-outline-secondary btn-sm" aria-haspopup="menu" aria-expanded="false" id="tlXb" onclick="tlMenu(event)"><i class="bx bx-spreadsheet"></i> Excel <i class="bx bx-chevron-down"></i></button>'
-  +'<div class="tl-menu" id="tlXm" role="menu"><button role="menuitem" onclick="location.hash=\'timeline-import\'"><i class="bx bx-upload"></i>Import from Excel…</button><button role="menuitem" onclick="tlToast(\'Exported acme-test-co-rollout-timeline-2026-11-11.xlsx (20 tasks, cancelled included).\')"><i class="bx bx-download"></i>Download timeline (.xlsx)</button><hr><button role="menuitem" onclick="tlToast(\'Template downloaded: OpsTrack-timeline-template.xlsx\')"><i class="bx bx-file-blank"></i>Download template</button></div></span>';
+  +'<div class="tl-menu" id="tlXm" role="menu"><button role="menuitem" onclick="tlBig(function(){location.hash=\'timeline-import\'})"><i class="bx bx-upload"></i>Import from Excel…</button><button role="menuitem" onclick="tlToast(\'Exported acme-test-co-rollout-timeline-2026-11-11.xlsx (20 tasks, cancelled included).\')"><i class="bx bx-download"></i>Download timeline (.xlsx)</button><hr><button role="menuitem" onclick="tlToast(\'Template downloaded: OpsTrack-timeline-template.xlsx\')"><i class="bx bx-file-blank"></i>Download template</button></div></span>';
  } else h+='<span class="small text-body-secondary"><i class="bx bx-lock-alt"></i> View only. The project PM or an Admin changes dates, phases and the baseline.</span>';
  return h+'</div></div>';
 }
@@ -2777,7 +2777,8 @@ window.tlCol=function(k){S.col[k]=!S.col[k];render()};
 window.tlState=function(s){S.st=s;document.querySelectorAll('#timeline .c20demo button').forEach(function(x){x.classList.toggle('on',x.dataset.st===s)});tlPopClose();render()};
 window.tlMenu=function(e){e.stopPropagation();var m=document.getElementById('tlXm'),b=document.getElementById('tlXb'),on=!m.classList.contains('on');m.classList.toggle('on',on);b.setAttribute('aria-expanded',on)};
 document.addEventListener('click',function(e){var m=document.getElementById('tlXm');if(m&&!e.target.closest('.tl-dd'))m.classList.remove('on');var p=document.getElementById('tlPop');if(p&&p.classList.contains('on')&&!e.target.closest('.tl-pop')&&!e.target.closest('.tl-b,.tl-ms,.tl-li,.tl-c-t a'))tlPopClose()});
-window.tlToast=function(t){var e=document.getElementById('tlToast');e.innerHTML='✓ <span>'+esc(t)+'</span>';e.style.display='flex';var m=document.getElementById('tlXm');if(m)m.classList.remove('on');clearTimeout(window._tlt);window._tlt=setTimeout(function(){e.style.display='none'},3500)};
+window.tlBig=function(f){if(phone()){tlToast('Open this on a larger screen to make changes.','i');return}f()};
+window.tlToast=function(t,k){var e=document.getElementById('tlToast');e.innerHTML=(k==='i'?'<i class="bx bx-desktop" aria-hidden="true"></i>':'✓')+' <span role="status">'+esc(t)+'</span>';e.style.display='flex';var m=document.getElementById('tlXm');if(m)m.classList.remove('on');clearTimeout(window._tlt);window._tlt=setTimeout(function(){e.style.display='none'},3500)};
 window.tlPopClose=function(){var p=document.getElementById('tlPop');if(p)p.classList.remove('on')};
 window.tlOpen=function(n,ev){ev&&ev.stopPropagation&&ev.stopPropagation();var t=byN[n],p=document.getElementById('tlPop'),bd=barDates(t);
  var deps=(t.dep||[]).map(function(d){var x=byN[d];return '#'+d+' '+esc(x.name)+' ('+fmt(x.f)+')'}).concat(uLinks(t).map(function(u){return UICO+' #'+u.n+' '+esc(u.name)+' <span style="color:#9a5b00">(no dates, link ignored for the forecast and critical path)</span>'})).join('<br>')||'None';

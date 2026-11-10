@@ -28,9 +28,21 @@ Build spec for Deven. Jomerson reviews it before slice 1. It follows **CR-22 v0.
 | Card | Value | Sub-line |
 |---|---|---|
 | Target delivery | `Mon, Dec 14, 2026` (project `plannedEndDate`, Q-129) | "Project planned end date" |
-| Forecast end | `Wed, Dec 16, 2026` (latest forecast finish, FR-TL-29) | Badge: late is red `+2 working days late`; early is green `−2 working days early`; equal is green `On track`. If nothing is scheduled the value is `—` with "No forecast without scheduled tasks". |
+| Forecast end | `Wed, Dec 16, 2026` (latest forecast finish, FR-TL-29) | Variance badge (forecast end vs target, working days, FR-TL-13/30); copy in §2.1.1. If nothing is scheduled the value is `—` with "No forecast without scheduled tasks". |
 | Delayed tasks | count in danger red | "Open, and past due or forecast after baseline". With no baseline: "Open and past their planned finish". |
 | Baseline | `Saved Oct 12, 2026` | "by Test PM · Baseline history (2)". The link opens the history. With no baseline: "No baseline yet" and "Save one to compare plan with actual." |
+
+#### 2.1.1 Variance copy (exact, Lean)
+Always pluralise by count. Late takes a plus sign and early takes a minus sign (U+2212 "−", not a hyphen).
+| Forecast end vs target | Badge | Colour |
+|---|---|---|
+| 1 working day after | `+1 working day late` | danger (`bg-label-danger`) |
+| N working days after (N ≥ 2) | `+N working days late`, e.g. `+2 working days late` | danger |
+| Same day | `On track` | success (`bg-label-success`) |
+| 1 working day before | `−1 working day early` | success |
+| N working days before (N ≥ 2) | `−N working days early`, e.g. `−3 working days early` | success |
+
+Examples: target Mon Dec 14, forecast Tue Dec 15 → `+1 working day late`. Forecast Wed Dec 16 (the mockup) → `+2 working days late`. Forecast Fri Dec 11 → `−1 working day early`, since the weekend doesn't count. Forecast Dec 14 → `On track`.
 
 The forecast is shown **on the timeline only** (Q-136). The lists keep FR-PRJ-09.
 
@@ -164,11 +176,13 @@ Links are elbow connectors from the predecessor's finish to the successor's star
 
 ## 4. Responsive (Q-143: web only, no drag)
 - **≥ 768 px:** the layout above. The chart scrolls sideways inside its card, the left column stays sticky, and the page itself never scrolls sideways.
-- **390 px (phone): read-only.** All planner buttons are hidden and a lock note shows: "View only on a phone. Edit on a computer."
+- **390 px (phone): view only.** On a phone you can view the timeline and open task details. **Save baseline**, the **phase manager** (Phases) and **import** (Excel › Import from Excel…, and the empty-state Import button) show the message **"Open this on a larger screen to make changes."** as a status toast. No dialog opens.
+  - The toolbar note reads "On a phone you can view the timeline and open task details."
+  - Excel › Download timeline and Download template still work.
   - A **List / Gantt** toggle defaults to **List**.
   - **List:** collapsible phase cards with Target / Completed or Forecast and a variance badge. Each task shows `#n Name`, badges, `dates · owner · status · Critical · Var.`, and a 6 px mini-bar on a shared Oct–Dec track with today and target ticks. Unscheduled tasks come last. There is no legend in List view.
   - **Gantt:** the same grid with a 168 px left column, scrolled to today. The zoom control stays.
-  - Import isn't available on a phone. The import page shows a card instead: **Import needs a larger screen**, with "The timeline is view-only on phones. Open OpsTrack on a computer to import from Excel."
+  - If the import page is opened directly on a phone, it shows a card titled **Import timeline from Excel** with "Open this on a larger screen to make changes." in place of the modal.
 - Tap targets are at least 44 px (pills, toggles, popover buttons).
 
 ## 5. Import from Excel (`#timeline-import`, `modal-xl`, max width 1180 px)
