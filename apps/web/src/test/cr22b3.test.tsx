@@ -322,3 +322,45 @@ describe("CR-22 B Lead's slice-2 call: no % complete", () => {
     expect(tl).not.toHaveTextContent(/% (done|complete)/i);
   });
 });
+
+describe('CR-22 B3 Q20: one assignment notice per import', () => {
+  it('the bell shows the usual "assigned you to" notice listing the tasks; it opens the timeline', async () => {
+    api('MEMBER', (url) => {
+      if (url.endsWith('/notifications/unread-count')) return { status: 200, body: { unread: 1 } };
+      if (url.endsWith('/notifications'))
+        return {
+          status: 200,
+          body: {
+            unread: 1,
+            items: [
+              {
+                id: 'n1',
+                type: 'ASSIGNED',
+                actor: { id: 'u2', name: 'Maria Perez' },
+                message: null,
+                link: `/projects/${PID}/timeline`,
+                task: null,
+                tasks: [
+                  { id: 'k1', name: 'Kickoff' },
+                  { id: 'k2', name: 'Go-live' },
+                ],
+                project: { id: PID, name: 'SAP B1 Rollout' },
+                issue: null,
+                read: true,
+                at: new Date().toISOString(),
+              },
+            ],
+          },
+        };
+      if (url.endsWith(`/projects/${PID}/timeline`)) return { status: 200, body: timelineDto() };
+      return undefined;
+    });
+    const { router } = renderAt('/my-tasks', <App />);
+    await userEvent.click(await screen.findByRole('button', { name: /^Notifications/ }));
+    const item = await screen.findByRole('button', {
+      name: /Maria P\. assigned you to Kickoff, Go-live · SAP B1 Rollout/,
+    });
+    await userEvent.click(item);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/projects/${PID}/timeline`));
+  });
+});

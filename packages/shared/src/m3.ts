@@ -712,6 +712,8 @@ export interface NotificationDto {
   type: NotificationType;
   actor: Ref | null;
   task: Ref | null;
+  /** CR-22 timeline import: an ASSIGNED notice that lists several tasks (Q20). */
+  tasks?: Ref[];
   /** Issue notifications: the issue's key and title. */
   issue: { id: string; key: string; title: string } | null;
   /** Null on personal notices (tracker, leave). */

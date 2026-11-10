@@ -48,6 +48,7 @@ import {
   sameHash,
   verifyPreviewToken,
 } from '../services/clientImport/previewToken.js';
+import { notify } from '../services/notify.js';
 import { phaseKey, syncProjectPhases } from '../services/phases.js';
 import { recomputeProject, userRefs } from '../services/projectService.js';
 import type { ScopeUser } from '../services/scope.js';
@@ -553,10 +554,18 @@ export function timelineImportRouter(config: AppConfig, registry: RouteRegistry)
     const sha256 = sha256Of(buf);
     const meta = { via: 'timeline_import', importId: importId.toString() };
     let result: TimelineImportCommitDto | null = null;
+    // Q20: who this import made the owner of which tasks (new tasks, and owner changes).
+    let assigned = new Map<string, Types.ObjectId[]>();
 
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
+        assigned = new Map(); // the callback may be retried
+        const gave = (owner: unknown, taskId: Types.ObjectId) => {
+          if (!(owner instanceof Types.ObjectId)) return;
+          const k = owner.toString();
+          assigned.set(k, [...(assigned.get(k) ?? []), taskId]);
+        };
         // Overlapping imports on one project always conflict (the loser re-runs and differs).
         await ProjectModel.updateOne(
           { _id: project._id },
@@ -694,6 +703,7 @@ export function timelineImportRouter(config: AppConfig, registry: RouteRegistry)
           for (const [i, r] of newRows.entries()) {
             created.push(r.dto.willBe!);
             const doc = docs[i]!;
+            gave(doc.ownerId, doc._id as Types.ObjectId);
             entries.push({
               actorId: user._id,
               entityType: 'task',
@@ -736,6 +746,8 @@ export function timelineImportRouter(config: AppConfig, registry: RouteRegistry)
           );
           if (!done.modifiedCount) throw stale();
           const old = before.get(r.taskId!) ?? {};
+          if ('ownerId' in set && String(set.ownerId) !== String(old.ownerId ?? null))
+            gave(set.ownerId, new Types.ObjectId(r.taskId!));
           entries.push({
             actorId: user._id,
             entityType: 'task',
@@ -807,8 +819,38 @@ export function timelineImportRouter(config: AppConfig, registry: RouteRegistry)
     }
     // FR-TL-22: dates, health and forecast follow the new plan.
     await recomputeProject(project._id);
+    // The import is saved; a notice that fails to write mustn't turn it into an error.
+    await notifyImportOwners(project._id, user._id, assigned).catch((err: unknown) =>
+      req.log?.error({ err }, 'timeline import notifications failed'),
+    );
     res.json(result);
   }
 
   return p.router;
+}
+
+/**
+ * CR-22 Q20 (Lead): an import tells each new owner ONCE, with the usual ASSIGNED notice, listing
+ * their tasks; never one per task. Same recipient rule as a task save (notify(): active project
+ * members only, never the importer themself). One task reads exactly like a normal assignment.
+ */
+async function notifyImportOwners(
+  projectId: Types.ObjectId,
+  actorId: Types.ObjectId,
+  assigned: Map<string, Types.ObjectId[]>,
+) {
+  if (!assigned.size) return;
+  const project = await ProjectModel.findById(projectId).select('managerId memberIds').lean();
+  if (!project) return;
+  for (const [owner, taskIds] of assigned) {
+    const one = taskIds.length === 1;
+    await notify({
+      type: 'ASSIGNED',
+      project,
+      taskId: one ? taskIds[0] : null,
+      ...(one ? {} : { taskIds, link: `/projects/${projectId.toString()}/timeline` }),
+      actorId,
+      recipients: [new Types.ObjectId(owner)],
+    });
+  }
 }

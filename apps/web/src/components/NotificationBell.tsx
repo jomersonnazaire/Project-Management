@@ -115,7 +115,12 @@ export function NotificationBell() {
                         <strong>{n.actor ? shortName(n.actor.name) : 'Someone'}</strong>{' '}
                         {NOTIFICATION_VERBS[n.type]}{' '}
                         <strong>
-                          {n.issue ? `${n.issue.key} ${n.issue.title}` : (n.task?.name ?? 'a task')}
+                          {n.issue
+                            ? `${n.issue.key} ${n.issue.title}`
+                            : n.tasks?.length
+                              ? // CR-22 Q20: one notice per timeline import, listing the tasks.
+                                n.tasks.map((t) => t.name).join(', ')
+                              : (n.task?.name ?? 'a task')}
                         </strong>
                       </>
                     )}

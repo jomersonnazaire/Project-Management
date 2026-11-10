@@ -9,7 +9,13 @@ import {
   type TimelineImportCommitDto,
   type TimelineImportPreviewDto,
 } from '@xc8/shared';
-import { ActivityLogModel, FolderModel, ProjectModel, TaskModel } from '../src/models/index.js';
+import {
+  ActivityLogModel,
+  FolderModel,
+  NotificationModel,
+  ProjectModel,
+  TaskModel,
+} from '../src/models/index.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { resetRules, world } from './m2helpers.js';
 
@@ -113,6 +119,8 @@ describe('CR-22 B3: template and export (FR-TL-15, 16; AC-74.1, 74.2, 74.5)', ()
     expect(ws.getRow(3).getCell(col('dependsOn')).value).toBe(String(before.tasks[0]!.order));
     expect(ws.getRow(2).getCell(col('start')).value).toBeInstanceOf(Date);
     expect(wb.getWorksheet('_meta')!.getCell('B4').value).toBe(pid);
+    // Milliseconds kept, so a save in the same second just before the export isn't "changed after".
+    expect(String(wb.getWorksheet('_meta')!.getCell('B6').value)).toMatch(/\.\d{3}Z$/);
     expect(
       await ActivityLogModel.countDocuments({ projectId: pid, action: 'timeline_exported' }),
     ).toBe(1);
@@ -446,5 +454,104 @@ describe('CR-22 B3: changed since export, phases, status (FR-TL-20, 25; Q-141)',
     await ProjectModel.updateOne({ _id: pid }, { $set: { status: 'ACTIVE', archived: true } });
     res = await send(w.pm.agent, pid, 'preview', file);
     expect([res.status, res.body.error.code]).toEqual([409, 'PROJECT_ARCHIVED']);
+  });
+});
+
+describe("CR-22 B3: Lead's slice-3 rulings (Q20 notices, phase targets)", () => {
+  const assignedTo = (userId: unknown, pid: string) =>
+    NotificationModel.find({ userId, projectId: pid, type: 'ASSIGNED' }).lean();
+
+  it('Q20: each new owner gets ONE assignment notice per import listing their tasks; never the importer', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const member = w.member.user.email;
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('owner')).value = member; // owner change
+      ws.getRow(3).getCell(col('owner')).value = member; // owner change
+      ws.getRow(5).values = [4, 'Go-live', 'Phase B', 'Y', '2026-12-04', '2026-12-04', '', member];
+      ws.getRow(6).values = [
+        5,
+        'Own task',
+        'Phase B',
+        'N',
+        '2026-12-07',
+        '2026-12-08',
+        '',
+        w.pm.user.email,
+      ];
+    });
+    const { done } = await commit(w.pm.agent, pid, file);
+    expect(done.created).toEqual([4, 5]);
+
+    const notes = await assignedTo(w.member.user._id, pid);
+    expect(notes).toHaveLength(1);
+    const ids = (await TaskModel.find({ projectId: pid, order: { $in: [1, 2, 4] } }).lean())
+      .map((t) => t._id.toString())
+      .sort();
+    expect(notes[0]!.taskIds!.map(String).sort()).toEqual(ids);
+    expect(notes[0]).toMatchObject({ taskId: null, link: `/projects/${pid}/timeline` });
+    expect(String(notes[0]!.actorId)).toBe(w.pm.user._id.toString());
+    // The importer made themself owner of task 5: no notice (notify() never tells the actor).
+    expect(await assignedTo(w.pm.user._id, pid)).toHaveLength(0);
+
+    // The member's bell lists the tasks in the usual "assigned you to" notice.
+    const bell = await w.member.agent.get('/api/v1/notifications');
+    const item = bell.body.items.find((n: { type: string }) => n.type === 'ASSIGNED');
+    expect(item.task).toBeNull();
+    expect(item.tasks.map((t: { name: string }) => t.name)).toEqual(
+      expect.arrayContaining(['Go-live']),
+    );
+    expect(item.tasks).toHaveLength(3);
+
+    // Re-importing with the same owners (other edits only) tells nobody again.
+    const again = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('finish')).value = new Date('2026-12-02T00:00:00Z');
+    });
+    expect((await commit(w.pm.agent, pid, again)).done.updated).toBe(1);
+    expect(await assignedTo(w.member.user._id, pid)).toHaveLength(1);
+  });
+
+  it('Q20: one task reads exactly like a normal assignment notice (task set, no list)', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(3).getCell(col('owner')).value = w.member.user.email;
+    });
+    await commit(w.admin.agent, pid, file);
+    const notes = await assignedTo(w.member.user._id, pid);
+    expect(notes).toHaveLength(1);
+    const t2 = await TaskModel.findOne({ projectId: pid, order: 2 }).lean();
+    expect(String(notes[0]!.taskId)).toBe(t2!._id.toString());
+    expect(notes[0]!.taskIds ?? []).toHaveLength(0);
+    expect(notes[0]!.link).toBeNull();
+    expect(String(notes[0]!.actorId)).toBe(w.admin.user._id.toString());
+  });
+
+  it('phase target dates are not importable: an import leaves every phase target as it was', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const before = await tl(w.pm.agent, pid);
+    const saved = await w.pm.agent
+      .put(`/api/v1/projects/${pid}/phase-list`)
+      .set(CSRF)
+      .send({
+        phases: before.phases.map((ph, i) => ({
+          id: ph.id,
+          originalName: ph.id ? null : ph.name,
+          name: ph.name,
+          targetDate: `2026-11-2${i}`,
+        })),
+      });
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    const targets = (await tl(w.pm.agent, pid)).phases.map((ph) => [ph.name, ph.targetDate]);
+    expect(targets.every(([, d]) => d)).toBe(true);
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('phase')).value = 'Phase B'; // move a task between phases
+      ws.getRow(3).getCell(col('finish')).value = new Date('2026-12-30T00:00:00Z');
+      ws.getRow(5).values = [4, 'Hypercare', 'Support', 'N', '2026-12-10', '2026-12-17'];
+    });
+    await commit(w.admin.agent, pid, file);
+    const after = (await tl(w.pm.agent, pid)).phases.map((ph) => [ph.name, ph.targetDate]);
+    expect(after).toEqual([...targets, ['Support', null]]);
   });
 });

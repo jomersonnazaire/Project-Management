@@ -252,6 +252,8 @@ const notificationSchema = new Schema(
     /** Null for personal notices (tracker, leave) that aren't about a project. */
     projectId: { type: ObjectId, ref: 'Project', default: null },
     taskId: { type: ObjectId, ref: 'Task', default: null },
+    /** CR-22 FR-TL-19 (Q20): one ASSIGNED notice listing several tasks (a timeline import). */
+    taskIds: { type: [ObjectId], ref: 'Task', default: undefined },
     /** Personal notices carry their own text and in-app link. */
     message: { type: String, default: null },
     link: { type: String, default: null },

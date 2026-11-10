@@ -36,7 +36,9 @@ export function notificationsRouter(registry: RouteRegistry) {
     ]);
     const [users, tasks, projects, issues] = await Promise.all([
       userRefs(docs.map((d) => d.actorId)),
-      TaskModel.find({ _id: { $in: docs.map((d) => d.taskId).filter(Boolean) } })
+      TaskModel.find({
+        _id: { $in: docs.flatMap((d) => [d.taskId, ...(d.taskIds ?? [])]).filter(Boolean) },
+      })
         .select('name')
         .lean(),
       ProjectModel.find({ _id: { $in: docs.map((d) => d.projectId).filter(Boolean) } })
@@ -59,6 +61,13 @@ export function notificationsRouter(registry: RouteRegistry) {
           d.taskId && tn.has(d.taskId.toString())
             ? { id: d.taskId.toString(), name: tn.get(d.taskId.toString())! }
             : null,
+        ...(d.taskIds?.length
+          ? {
+              tasks: d.taskIds
+                .filter((id) => tn.has(id.toString()))
+                .map((id) => ({ id: id.toString(), name: tn.get(id.toString())! })),
+            }
+          : {}),
         issue: (() => {
           const i = d.issueId ? iss.get(d.issueId.toString()) : null;
           return i ? { id: i._id.toString(), key: i.key, title: i.title } : null;
