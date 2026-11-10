@@ -340,7 +340,9 @@ export async function buildTimelineWorkbook(input: TimelineWorkbookInput): Promi
     ['templateVersion', String(TIMELINE_TEMPLATE_VERSION)],
     ['projectId', input.project?.id ?? ''],
     ['projectName', input.project?.name ?? ''],
-    ['exportedAt', input.exportedAt.toISOString().replace(/\.\d{3}Z$/, 'Z')],
+    // Full ISO with milliseconds: a task saved in the same second just before the export
+    // mustn't read as changed after it (FR-TL-25).
+    ['exportedAt', input.exportedAt.toISOString()],
     ['exportedBy', input.exportedBy],
     ['rows', String(input.rows.length)],
   ];
