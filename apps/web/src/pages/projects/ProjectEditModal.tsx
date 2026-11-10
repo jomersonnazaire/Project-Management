@@ -8,8 +8,10 @@ import {
   END_AFTER_START,
   type ActionEmailStartDto,
   type ProjectDto,
+  type ProjectSaveNoteDto,
   type ProjectStatus,
   type UpdateProjectInput,
+  unownedTasksNote,
 } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
@@ -32,9 +34,12 @@ import { EmailCheckbox } from '../../components/EmailCheckbox';
 export function ProjectEditModal({
   project,
   onClose,
+  onNotes,
 }: {
   project: ProjectDto;
   onClose: () => void;
+  /** CR-22 A2: non-blocking notes from the save (e.g. tasks without an owner). */
+  onNotes?: (notes: ProjectSaveNoteDto[]) => void;
 }) {
   const update = useUpdateProject(project.id);
   const { user } = useAuth();
@@ -64,7 +69,14 @@ export function ProjectEditModal({
   const [emailAdded, setEmailAdded] = useState(true);
   const wantsEmail = useWantsEmail(emailAdded) && added.length > 0;
   const [, setParams] = useSearchParams();
-  const saved = ({ email }: { email?: ActionEmailStartDto }) => {
+  const saved = ({
+    email,
+    notes,
+  }: {
+    email?: ActionEmailStartDto;
+    notes?: ProjectSaveNoteDto[];
+  }) => {
+    if (notes?.length) onNotes?.(notes);
     const next = continueSaveEmail(email);
     if (next && 'redirected' in next) return;
     if (next) setParams((p) => ({ ...Object.fromEntries(p), email_error: next.error }));
@@ -226,6 +238,13 @@ export function ProjectEditModal({
                   ))}
                 </Form.Select>
               </Form.Group>
+              {status !== project.status && project.unownedTaskCount > 0 && (
+                <div className="col-12">
+                  <Alert variant="info" className="mb-0 py-2" data-testid="unowned-tasks-note">
+                    {unownedTasksNote(project.unownedTaskCount)}
+                  </Alert>
+                </div>
+              )}
               <Form.Group className="col-md-6" controlId="edit-prj-client">
                 <Form.Label>Client</Form.Label>
                 <Form.Select value={clientId} onChange={(e) => setClientId(e.target.value)}>

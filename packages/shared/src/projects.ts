@@ -953,6 +953,8 @@ export interface ActiveContactDto {
 export interface ProjectDto extends ProjectListItemDto {
   /** DR-23: true once the project has issues; the code is then read-only. */
   codeLocked: boolean;
+  /** CR-22 A2: tasks with no accountable owner (cancelled ones don't count). */
+  unownedTaskCount: number;
   description: string | null;
   type: TemplateType | null;
   manager: UserRefDto | null;
@@ -977,6 +979,21 @@ export interface ProjectDto extends ProjectListItemDto {
     /** Read the project Activity log (doc 11 §12). */
     activity: boolean;
   };
+}
+
+/**
+ * CR-22 A2: a non-blocking note on a project save. A status change goes through even when some
+ * tasks have no owner; the save answers with this note (and the edit form shows it before saving).
+ */
+export interface ProjectSaveNoteDto {
+  code: 'TASKS_WITHOUT_OWNER';
+  count: number;
+  message: string;
+}
+
+/** CR-22 A2: the note's wording, shared by the API response and the edit form. */
+export function unownedTasksNote(count: number): string {
+  return `${count} task${count === 1 ? ' has' : 's have'} no owner yet. The status still changes; assign owners on the Checklist when you can.`;
 }
 
 /**

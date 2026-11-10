@@ -58,6 +58,7 @@ export function ProjectDetailPage() {
   const tasks = useProjectTasks(id);
   const action = useProjectAction(id);
   const [editing, setEditing] = useState(false);
+  const [saveNotes, setSaveNotes] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const warnings = (location.state as { warnings?: string[] } | null)?.warnings ?? [];
   const openTask = params.get('task');
@@ -154,6 +155,18 @@ export function ProjectDetailPage() {
         {warnings.map((w) => (
           <Alert key={w} variant="warning">
             {w}
+          </Alert>
+        ))}
+        {saveNotes.map((n) => (
+          <Alert
+            key={n}
+            variant="info"
+            dismissible
+            onClose={() => setSaveNotes([])}
+            role="status"
+            data-testid="project-save-note"
+          >
+            {n}
           </Alert>
         ))}
         <ErrorAlert error={archiveError} action />
@@ -344,7 +357,13 @@ export function ProjectDetailPage() {
             </Modal.Footer>
           </Modal>
         )}
-        {editing && <ProjectEditModal project={p} onClose={() => setEditing(false)} />}
+        {editing && (
+          <ProjectEditModal
+            project={p}
+            onClose={() => setEditing(false)}
+            onNotes={(notes) => setSaveNotes(notes.map((n) => n.message))}
+          />
+        )}
         {adding && (
           <TaskFormModal project={p} task={null} tasks={list} onClose={() => setAdding(false)} />
         )}

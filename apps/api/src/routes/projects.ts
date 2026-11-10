@@ -16,6 +16,8 @@ import {
   type ProjectStatus,
   PROJECT_TYPE_INACTIVE_PICK,
   PROJECT_TYPE_REQUIRED,
+  type ProjectSaveNoteDto,
+  unownedTasksNote,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
@@ -733,6 +735,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
     }
 
     let closedNow = false;
+    const notes: ProjectSaveNoteDto[] = [];
     if (input.status !== undefined && input.status !== project.status) {
       const from = project.status as ProjectStatus;
       closedNow = input.status !== 'ACTIVE';
@@ -742,23 +745,19 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
           'INVALID_TRANSITION',
         );
       }
-      if (input.status === 'ACTIVE' && from === 'PLANNING') {
-        // AC-10.3: every task needs an accountable owner before the project goes Active.
-        const missing = await TaskModel.find({
-          projectId: project._id,
-          ownerId: null,
-          status: { $ne: 'CANCELLED' },
-        })
-          .select('name order')
-          .sort({ order: 1 })
-          .lean();
-        if (missing.length) {
-          throw unprocessable(
-            `Give these tasks an accountable owner first: ${missing.map((t) => t.name).join(', ')}.`,
-            'TASKS_WITHOUT_OWNER',
-            { tasks: missing.map((t) => ({ id: t._id.toString(), name: t.name })) },
-          );
-        }
+      // CR-22 A2 (was AC-10.3): tasks without an owner no longer block a status change, e.g.
+      // Planning → Active. The save answers with a note counting them (cancelled ones excluded).
+      const unowned = await TaskModel.countDocuments({
+        projectId: project._id,
+        ownerId: null,
+        status: { $ne: 'CANCELLED' },
+      });
+      if (unowned) {
+        notes.push({
+          code: 'TASKS_WITHOUT_OWNER',
+          count: unowned,
+          message: unownedTasksNote(unowned),
+        });
       }
       if (input.status === 'COMPLETED') {
         const open = await TaskModel.countDocuments({
@@ -832,6 +831,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
     );
     res.json({
       project: await toProjectDto(fresh as ProjectDoc, user, currentPermissions(req)),
+      ...(notes.length ? { notes } : {}),
       ...(email ? { email } : {}),
     });
   });
