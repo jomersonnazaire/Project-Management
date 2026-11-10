@@ -5,7 +5,10 @@
  * Safe to re-run: a second --apply changes nothing. Run on staging first; on live only with
  * Jomerson's OK (as CR-20's renumber).
  *
- * Usage: `npm run migrate:phases --workspace @xc8/api [-- --apply]` with MONGODB_URI set.
+ * Usage (built, e.g. App Service / Kudu, from the app folder): `node dist/scripts/migrate-phases.js
+ * [--apply]`, or `npm run migrate:phases [-- --apply]`. From a checkout without building:
+ * `npm run migrate:phases:dev --workspace @xc8/api [-- --apply]`. Needs MONGODB_URI (and
+ * MONGODB_DB_NAME when the URI has no database).
  */
 import mongoose from 'mongoose';
 import { migrateAllPhases } from './lib/migratePhases.js';
@@ -21,10 +24,12 @@ async function main() {
   const apply = args.includes('--apply');
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('Set MONGODB_URI first.');
-  // Plain connect (no index sync), so a dry run never writes to the database.
+  // No index builds and no collection creation, so a dry run never writes to the database.
   await mongoose.connect(uri, {
     dbName: process.env.MONGODB_DB_NAME,
     serverSelectionTimeoutMS: 10_000,
+    autoIndex: false,
+    autoCreate: false,
   });
   console.log(`Database: ${mongoose.connection.db?.databaseName ?? '(unknown)'}`);
   const r = await migrateAllPhases({ apply });
