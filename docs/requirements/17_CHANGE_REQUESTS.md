@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.27 (2026-11-11 ~2:58 AM SGT): **CR-22 spec v0.3.14.** Lean: unknown/made-up project id refused, blank imports as template (FR-TL-26); one notification per import per new/changed owner (FR-TL-32, AC-74.13); phase target dates not importable (FR-TL-33, AC-74.14).
 - v0.6.26 (2026-11-11 ~2:26 AM SGT): **CR-22 spec v0.3.13.** Lean: timeline baselines stored in `timelineBaselines` (baseline history dialog shows only those; `baselineHistory` unchanged); no % complete, in-progress bars shown by status colour only.
 - v0.6.25 (2026-11-11 ~1:55 AM SGT): **CR-22 spec v0.3.12.** Lean's slice 1 calls: broken link = successor start on or before predecessor finish (FR-TL-07 aligned with AC-72.4); tasks link to phases by id; task-form phase is a strict pick plus "No phase" (FR-TL-23, 24, AC-72.6, 72.7). Handover: outgoing manager unchecked and disabled under Team members while Stay is unticked (FR-PRJ-40, AC-69.8).
 - v0.6.24 (2026-11-11 ~1:34 AM SGT): **CR-22 spec v0.3.11.** Q-144 closed by Jomerson ("for now use the free"): free Gantt library, our own baseline and critical-path calculations, no dragging. All CR-22 questions closed; Part B builds now in three slices.
