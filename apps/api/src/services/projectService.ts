@@ -70,12 +70,18 @@ export async function userRefs(ids: (Id | null | undefined)[]): Promise<Map<stri
   const unique = [...new Set(ids.filter(Boolean).map(String))];
   if (!unique.length) return new Map();
   const users = await UserModel.find({ _id: { $in: unique } })
-    .select('name email active')
+    .select('name email active avatarUpdatedAt')
     .lean();
   return new Map(
     users.map((u) => [
       u._id.toString(),
-      { id: u._id.toString(), name: u.name, email: u.email, active: Boolean(u.active) },
+      {
+        id: u._id.toString(),
+        name: u.name,
+        email: u.email,
+        active: Boolean(u.active),
+        avatarUpdatedAt: u.avatarUpdatedAt ? u.avatarUpdatedAt.toISOString() : null,
+      },
     ]),
   );
 }

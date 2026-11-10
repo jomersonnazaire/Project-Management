@@ -42,6 +42,7 @@ import {
   s256,
 } from '../services/microsoftMobile.js';
 import { msSignInErrorCode, resolveMicrosoftSignIn } from '../services/microsoftSignIn.js';
+import { refreshUserAvatar } from '../services/userAvatar.js';
 import {
   confirmMobileMailResult,
   mobileMailConfirmSchema,
@@ -75,6 +76,28 @@ const MOBILE_ONLY = new HttpError(
  * Auth routes. Every lookup is against the `users` collection only, so a client contact's
  * email behaves exactly like an unknown email (FR-AUTH-08, AC-01.6).
  */
+
+/** CR-21: refresh the stored profile photo; never fails the sign-in (FR-USR-12, NFR-48). */
+async function applyMicrosoftAvatar(
+  req: {
+    log?: { warn: (obj: object, msg: string) => void };
+    app: { locals: Record<string, unknown> };
+  },
+  userId: string,
+  accessToken: string | undefined,
+) {
+  try {
+    await refreshUserAvatar(
+      userId,
+      accessToken ?? '',
+      (req.app.locals.blobStore as Parameters<typeof refreshUserAvatar>[2]) ?? null,
+      req.log,
+    );
+  } catch (err) {
+    req.log?.warn({ err, userId }, 'avatar photo refresh failed');
+  }
+}
+
 export function authRouter(
   config: AppConfig,
   registry: RouteRegistry,
@@ -242,6 +265,11 @@ export function authRouter(
           { _id: result.user._id },
           { $set: { lastLoginAt: now, failedLogins: 0, lockedUntil: null } },
         );
+        await applyMicrosoftAvatar(
+          req,
+          result.user._id.toString(),
+          'accessToken' in claims ? claims.accessToken : undefined,
+        );
         await createSession(config, result.user._id, req, res, ipOf(req));
         res.redirect(config.WEB_APP_URL);
       } catch (err) {
@@ -350,6 +378,11 @@ export function authRouter(
             res.redirect(appRedirect({ error: msSignInErrorCode(result.reason) }));
             return;
           }
+          await applyMicrosoftAvatar(
+            req,
+            result.user._id.toString(),
+            'accessToken' in claims ? claims.accessToken : undefined,
+          );
           const oneTime = newToken();
           await MobileAuthCodeModel.create({
             phase: 'code',

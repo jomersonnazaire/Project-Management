@@ -30,6 +30,7 @@ import {
 } from '../../api/hooks';
 import { useAuth } from '../../auth/AuthContext';
 import { UserStatusBadge } from '../../components/Badges';
+import { Avatar } from '../../components/Avatar';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
 import { CopyLinkField } from '../../components/CopyLinkField';
 import { hoursUntil } from '../../components/linkExpiry';
@@ -577,11 +578,18 @@ export function UsersPanel() {
                   {users.data?.items.map((u) => (
                     <tr key={u.id}>
                       <td className="cell-primary">
-                        <div className="text-heading">
-                          {u.name}
-                          {u.id === me?.id && <span className="text-body-secondary"> (you)</span>}
+                        <div className="d-flex align-items-center gap-2">
+                          <Avatar userId={u.id} name={u.name} photo={u.avatarUpdatedAt} size={32} />
+                          <div>
+                            <div className="text-heading">
+                              {u.name}
+                              {u.id === me?.id && (
+                                <span className="text-body-secondary"> (you)</span>
+                              )}
+                            </div>
+                            <small className="text-body-secondary text-break">{u.email}</small>
+                          </div>
                         </div>
-                        <small className="text-body-secondary text-break">{u.email}</small>
                       </td>
                       <td data-label="Access">{SYSTEM_ROLE_LABELS[u.systemRole]}</td>
                       <td data-label="Job role">{jobRoleLabel(u.jobRole)}</td>

@@ -227,7 +227,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
   const ref = (id?: Id | null) => (id ? (users.get(id.toString()) ?? null) : null);
   const nameRef = (id?: Id | null) => {
     const u = ref(id);
-    return u ? { id: u.id, name: u.name } : null;
+    return u ? { id: u.id, name: u.name, avatarUpdatedAt: u.avatarUpdatedAt ?? null } : null;
   };
   // DEF-017: overdue is judged on the Philippine calendar date, not the UTC instant.
   const today = todayPH(clockNow());

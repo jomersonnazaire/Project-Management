@@ -150,7 +150,7 @@ export async function refMaps(ids: {
       .select('name')
       .lean(),
     UserModel.find({ _id: { $in: uniq(ids.users) } })
-      .select('name email active')
+      .select('name email active avatarUpdatedAt')
       .lean(),
     ClientContactModel.find({ _id: { $in: uniq(ids.contacts) } })
       .select('name active')
@@ -162,7 +162,13 @@ export async function refMaps(ids: {
   const user = new Map(
     users.map((u) => [
       u._id.toString(),
-      { id: u._id.toString(), name: u.name, email: u.email, active: Boolean(u.active) },
+      {
+        id: u._id.toString(),
+        name: u.name,
+        email: u.email,
+        active: Boolean(u.active),
+        avatarUpdatedAt: u.avatarUpdatedAt ? u.avatarUpdatedAt.toISOString() : null,
+      },
     ]),
   );
   const contact = new Map(
@@ -510,6 +516,7 @@ export async function myProjects(user: ScopeUser): Promise<MyProjectRowDto[]> {
     // FR-PMV-02: internal people with overdue or aging tasks; contacts with overdue items.
     const people = new Map<string, FollowUpPersonDto>();
     const contacts = new Map<string, FollowUpContactDto>();
+
     if (p.status !== 'ON_HOLD') {
       for (const t of open) {
         const isLate = isOverdue(t, today);

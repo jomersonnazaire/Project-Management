@@ -2,7 +2,7 @@ import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node'
 import type { AppConfig } from '../config.js';
 import { verifyMicrosoftIdToken } from './msIdToken.js';
 
-const DEFAULT_SCOPES = ['openid', 'profile', 'email'];
+export const DEFAULT_SCOPES = ['openid', 'profile', 'email', 'User.Read'];
 const MAIL_SCOPES = ['Mail.Send'];
 
 export interface MicrosoftIdClaims {
@@ -117,12 +117,15 @@ function parseIdTokenBase(
   };
 }
 
+/** ID-token claims plus the one-time access token from this code exchange (CR-21). Never persist it. */
+export type MicrosoftCodeExchange = MicrosoftIdClaims & { accessToken: string };
+
 export async function exchangeMicrosoftCode(
   config: AppConfig,
   code: string,
   codeVerifier: string,
   expectedNonce: string,
-): Promise<MicrosoftIdClaims> {
+): Promise<MicrosoftCodeExchange> {
   const client = createMsalClient(config);
   const result = await client.acquireTokenByCode({
     code,
@@ -148,6 +151,7 @@ export async function exchangeMicrosoftCode(
     // Three states: true, present but not true (false), or missing (undefined).
     xms_edov: 'xms_edov' in claims ? claims.xms_edov === true : undefined,
     nonce: typeof claims.nonce === 'string' ? claims.nonce : undefined,
+    accessToken: result.accessToken ?? '',
   };
 }
 

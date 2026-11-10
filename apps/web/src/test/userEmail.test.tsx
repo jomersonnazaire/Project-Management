@@ -20,6 +20,7 @@ const user = (over: Partial<UserDto> = {}): UserDto => ({
   mustChangePassword: false,
   lastLoginAt: null,
   createdAt: new Date().toISOString(),
+  avatarUpdatedAt: null,
   ...over,
 });
 

@@ -93,6 +93,7 @@ describe('Route policy table', () => {
       'POST /auth/setup-password public',
       'POST /auth/change-password authenticated',
       'GET /users users.view',
+      'GET /users/:id/avatar authenticated',
       'GET /users/:id users.view',
       'POST /users users.create',
       'PATCH /users/:id users.edit',

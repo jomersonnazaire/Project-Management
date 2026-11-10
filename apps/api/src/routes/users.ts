@@ -7,7 +7,7 @@ import {
   type SystemRole,
 } from '@xc8/shared';
 import type { FilterQuery, Types } from 'mongoose';
-import { perm, type RouteRegistry } from '../access/registry.js';
+import { AUTHENTICATED, perm, type RouteRegistry } from '../access/registry.js';
 import type { AppConfig } from '../config.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { conflictWith } from '../lib/http422.js';
@@ -19,6 +19,8 @@ import { TeamModel, UserModel, type User, type UserDoc } from '../models/index.j
 import { audit } from '../services/audit.js';
 import { notifyOwnerNeeded } from '../services/issues.js';
 import { toUserDto } from '../services/dto.js';
+import { avatarBlobKey } from '../services/userAvatar.js';
+import type { BlobStore } from '../storage/blobStore.js';
 import { revokeUserSessions } from '../services/sessions.js';
 import { newToken, sha256 } from '../services/tokens.js';
 
@@ -75,6 +77,27 @@ export function usersRouter(config: AppConfig, registry: RouteRegistry) {
       UserModel.countDocuments(filter),
     ]);
     res.json({ items: items.map(toUserDto), page: q.page, pageSize: q.pageSize, total });
+  });
+
+  router.get('/:id/avatar', AUTHENTICATED, async (req, res) => {
+    const id = idParam(req);
+    const user = await UserModel.findById(id).select('avatarUpdatedAt');
+    if (!user?.avatarUpdatedAt) throw notFound();
+    const store = req.app.locals.blobStore as BlobStore | null | undefined;
+    if (!store) throw notFound();
+    const key = avatarBlobKey(id);
+    const info = await store.info(key);
+    if (!info || info.size === 0) throw notFound();
+    const etag = `"${user.avatarUpdatedAt.getTime()}"`;
+    if (req.headers['if-none-match'] === etag) {
+      res.status(304).end();
+      return;
+    }
+    const data = await store.read(key, 200_000);
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('ETag', etag);
+    res.send(data);
   });
 
   router.get('/:id', perm('users', 'view'), async (req, res) => {
