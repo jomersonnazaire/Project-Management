@@ -229,6 +229,10 @@ describe('CR-22 B3 import preview and commit (FR-TL-17 to 25, UIE §5)', () => {
     // 1 update + 1 new; the changed row isn't counted until it's confirmed.
     expect(within(dialog).getByRole('button', { name: 'Import 2 rows' })).toBeEnabled();
     expect(dialog).toHaveTextContent('1 changed row not confirmed will be left as it is.');
+    // UIE retest: headers wrap at the last space; the lock stays with the last word.
+    const head = within(dialog).getByRole('columnheader', { name: /Baseline start/ });
+    expect(head.querySelector('.text-nowrap')).toHaveTextContent(/^start$/);
+    expect(head.querySelector('.text-nowrap .bx-lock-alt')).toBeInTheDocument();
   });
 
   it('confirm overwrite adds the row and sends its Excel row number with the token', async () => {
@@ -435,20 +439,36 @@ describe('CR-22 B UIE review of 6cc0f3e (Gantt)', () => {
     expect(within(tl).getByTestId('row-a1')).toHaveTextContent('Oct 5 – Oct 5');
   });
 
-  it("the Unscheduled note sticks at the left column's edge; the legend has the review's items", async () => {
+  it("the Unscheduled note sits in the left column under the name; the legend has the review's items", async () => {
     mount();
     const tl = await open();
-    const note = within(tl).getByTestId('row-u1').querySelector('.tlx-nodates') as HTMLElement;
-    expect(note.style.left).toBe('588px'); // LEFT_W 580 + 8
-    const legend = within(tl).getByTestId('timeline-legend');
-    for (const text of [
-      'Finished late',
-      'Today',
-      'Target delivery',
-      'Forecast end',
-      'Linked task has no dates',
-    ])
-      expect(legend).toHaveTextContent(text);
+    const row = within(tl).getByTestId('row-u1');
+    expect(row).toHaveClass('tlx-row-nodates');
+    expect(row.querySelector('.tlx-left')).toContainElement(within(tl).getByTestId('nodates-u1'));
+    // Spec §2.5 order.
+    const order = [
+      ...within(tl).getByTestId('timeline-legend').querySelectorAll('[data-legend]'),
+    ].map((e) => e.getAttribute('data-legend'));
+    expect(order).toEqual([
+      'planned',
+      'done',
+      'delayed',
+      'late',
+      'cancelled',
+      'baseline',
+      'forecast',
+      'critical',
+      'milestone',
+      'phase',
+      'flag',
+      'today',
+      'target',
+      'fend',
+      'broken',
+      'nodates',
+      'weekend',
+      'holiday',
+    ]);
   });
 
   it('at 390 the Delayed and Finished late badges are hidden in the Gantt', async () => {

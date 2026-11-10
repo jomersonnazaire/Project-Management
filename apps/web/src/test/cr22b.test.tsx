@@ -165,6 +165,12 @@ describe('CR-22 B: phase manager (FR-TL-23, UIE §2.7)', () => {
     expect(names[0]).toBeDisabled();
     expect(within(dialog).getByRole('button', { name: '+ Add phase' })).toBeDisabled();
     expect(within(dialog).getAllByRole('button', { name: 'Remove' })[2]).toBeDisabled();
+    // UIE retest: every Remove in Active shows the Planning lock, even on a phase with tasks.
+    for (const b of within(dialog).getAllByRole('button', { name: 'Remove' }))
+      expect(b.closest('.tlx-locked')).toHaveAttribute(
+        'title',
+        'Phases can be added, renamed or removed only while the project is in Planning',
+      );
     expect(names[0]!.closest('.tlx-locked')).toHaveAttribute(
       'title',
       'Phases can be added, renamed or removed only while the project is in Planning',

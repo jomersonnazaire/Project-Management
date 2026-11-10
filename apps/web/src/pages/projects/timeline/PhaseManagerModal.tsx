@@ -149,11 +149,14 @@ export function PhaseManagerModal({
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                const removeTip = r.taskCount
-                  ? PHASE_HAS_TASKS_TIP
-                  : r.documentCount
-                    ? 'Move or remove the documents in its folder first'
-                    : PHASE_NAMES_LOCKED_TIP;
+                // UIE retest: outside Planning the Planning lock is the reason that applies.
+                const removeTip = !namesOk
+                  ? PHASE_NAMES_LOCKED_TIP
+                  : r.taskCount
+                    ? PHASE_HAS_TASKS_TIP
+                    : r.documentCount
+                      ? 'Move or remove the documents in its folder first'
+                      : PHASE_NAMES_LOCKED_TIP;
                 const removeLocked = !namesOk || r.taskCount > 0 || r.documentCount > 0;
                 const describedBy = namesOk ? undefined : lockId;
                 return (

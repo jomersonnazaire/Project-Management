@@ -229,6 +229,14 @@ const DATE_FIELDS: readonly TimelineImportField[] = [
   'baselineFinish',
 ];
 /** UIE review 5: an email may wrap before its "@" (no sideways scroll at 1440). */
+/** Splits a header label so its last word can carry the lock icon without wrapping alone. */
+function headWords(label: string) {
+  const at = label.lastIndexOf(' ');
+  return at < 0
+    ? { head: '', last: label }
+    : { head: label.slice(0, at + 1), last: label.slice(at + 1) };
+}
+
 const breakable = (f: TimelineImportField, v: string): ReactNode =>
   f === 'owner' && v.includes('@') ? (
     <>
@@ -572,10 +580,15 @@ export function TimelineImportModal({
                       BASELINE.includes(f) ? 'Ignored on import. Use Save baseline.' : undefined
                     }
                   >
-                    {TIMELINE_COLUMN_LABEL[f]}
-                    {BASELINE.includes(f) && (
-                      <i className="bx bx-lock-alt ms-1" aria-label="ignored on import" />
-                    )}
+                    {/* UIE retest: headers wrap onto two lines ("Baseline / start 🔒"); the lock
+                        stays with the last word. */}
+                    {headWords(TIMELINE_COLUMN_LABEL[f]).head}
+                    <span className="text-nowrap">
+                      {headWords(TIMELINE_COLUMN_LABEL[f]).last}
+                      {BASELINE.includes(f) && (
+                        <i className="bx bx-lock-alt ms-1" aria-label="ignored on import" />
+                      )}
+                    </span>
                   </th>
                 ))}
               </tr>

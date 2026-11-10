@@ -1244,6 +1244,7 @@ $board-gap: 0.75rem;
 .tlx-bg {
   position: absolute;
   top: 0;
+  bottom: 0;
   z-index: 0;
   span {
     position: absolute;
@@ -1398,12 +1399,23 @@ $board-gap: 0.75rem;
   color: #646e78;
   white-space: nowrap;
 }
+// UIE retest: the Unscheduled note wraps in the left column under the task name.
+.tlx-row-nodates {
+  height: auto;
+  min-height: var(--tlx-row);
+  > .tlx-left {
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 2px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
 .tlx-nodates {
-  // `left` is set inline to the left column's width, so the note sticks at its edge.
-  position: sticky;
-  display: inline-block;
-  padding-top: 8px;
-  white-space: nowrap;
+  flex: 0 0 100%;
+  padding-left: 32px; // under the name, past the number column
+  white-space: normal;
+  line-height: 1.35;
 }
 .tlx-warn {
   color: #9a5b00;
@@ -1588,6 +1600,11 @@ $board-gap: 0.75rem;
     min-width: 44px;
     justify-content: center;
   }
+  // UIE retest: Show task in the banner gets its own line, so the 44 px target leaves no gap in the text.
+  .tlx-tap-line {
+    display: flex;
+    width: fit-content;
+  }
 }
 
 // CR-22 Part B slice 3: Import timeline from Excel (UIE §5, modal-xl max 1180 px).
@@ -1708,7 +1725,10 @@ $board-gap: 0.75rem;
     z-index: 2;
     background: #f5f5f9;
     font-weight: 600;
-    white-space: nowrap;
+    // UIE retest: headers wrap at spaces ("Task / number", "Depends / on") so the table fits.
+    white-space: normal;
+    vertical-align: bottom;
+    line-height: 1.25;
   }
   .tli-rowno {
     position: sticky;

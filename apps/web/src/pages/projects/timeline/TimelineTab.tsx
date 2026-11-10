@@ -269,6 +269,8 @@ export function TimelineTab({
       )}
       <SummaryCards data={data} model={model} onHistory={() => setHistoryOpen(true)} />
 
+      {/* UIE retest: on a phone the note comes before the buttons. */}
+      {compact && <p className="small text-body-secondary mb-2">{TIMELINE_PHONE_NOTE}</p>}
       {/* UIE review: the empty state has no toolbar (its own Excel buttons stand in). */}
       {model.scheduledCount > 0 && (
         <div
@@ -420,7 +422,6 @@ export function TimelineTab({
           )}
         </div>
       )}
-      {compact && <p className="small text-body-secondary mb-2">{TIMELINE_PHONE_NOTE}</p>}
       {readOnly && <LockNotice>{TIMELINE_READ_ONLY_NOTE}</LockNotice>}
 
       {firstBroken && (
@@ -445,7 +446,7 @@ export function TimelineTab({
                 <Button
                   variant="link"
                   size="sm"
-                  className="p-0 align-baseline tlx-tap"
+                  className="p-0 align-baseline tlx-tap tlx-tap-line"
                   onClick={(e) => setPop({ id: s.id, el: e.currentTarget })}
                 >
                   Show task
@@ -816,8 +817,8 @@ function Gantt({
             </div>
           </div>
         </div>
-        <div className="tlx-body" style={{ height: bodyH }}>
-          <div className="tlx-bg" style={{ left: leftW, width, height: bodyH }} aria-hidden="true">
+        <div className="tlx-body" style={{ minHeight: bodyH }}>
+          <div className="tlx-bg" style={{ left: leftW, width }} aria-hidden="true">
             {off.map((d) => (
               <span
                 key={d.i}
@@ -1083,7 +1084,7 @@ function TaskRow({
   }${critical ? ', critical' : ''}${broken ? ', broken dependency' : ''}`;
   return (
     <div
-      className={`tlx-row${critical ? ' tlx-row-critical' : ''}`}
+      className={`tlx-row${critical ? ' tlx-row-critical' : ''}${scheduled ? '' : ' tlx-row-nodates'}`}
       data-testid={`row-${t.id}`}
       data-critical={critical || undefined}
     >
@@ -1145,6 +1146,21 @@ function TaskRow({
             {cancelled ? '—' : varText(variance)}
           </span>
         )}
+        {!scheduled && (
+          // UIE retest: the note sits in the left column under the task name and wraps, so it is
+          // fully readable at any scroll position and width. Unscheduled rows are always last,
+          // so a taller row doesn't move any bar or link above it.
+          <span className="tlx-nodates small text-body-secondary" data-testid={`nodates-${t.id}`}>
+            {dependents.length > 0 && (
+              <>
+                <i className="bx bx-error tlx-warn me-1" aria-hidden="true" />
+                {dependents.map((d) => `#${d.order}`).join(', ')} depend
+                {dependents.length === 1 ? 's' : ''} on it; that link is ignored.{' '}
+              </>
+            )}
+            No dates, so it is left out of the critical path and forecast.
+          </span>
+        )}
       </div>
       <div className="tlx-cell" style={{ width }}>
         {showBase && (
@@ -1166,19 +1182,7 @@ function TaskRow({
             aria-hidden="true"
           />
         )}
-        {!scheduled ? (
-          // Sticky at the left column's edge, so it reads after the scroll to today.
-          <span className="tlx-nodates small text-body-secondary" style={{ left: leftW + 8 }}>
-            {dependents.length > 0 && (
-              <>
-                <i className="bx bx-error tlx-warn me-1" aria-hidden="true" />
-                {dependents.map((d) => `#${d.order}`).join(', ')} depend
-                {dependents.length === 1 ? 's' : ''} on it; that link is ignored.{' '}
-              </>
-            )}
-            No dates, so it is left out of the critical path and forecast.
-          </span>
-        ) : t.isMilestone ? (
+        {!scheduled ? null : t.isMilestone ? (
           <button
             type="button"
             className="tlx-milestone"
@@ -1211,38 +1215,43 @@ function TaskRow({
 }
 
 function Legend() {
-  const items: [string, string][] = [
-    ['tlx-lg-planned', 'Planned / in progress'],
-    ['tlx-lg-done', 'Completed'],
-    ['tlx-lg-delayed', 'Delayed'],
-    ['tlx-lg-baseline', 'Baseline'],
-    ['tlx-lg-forecast', 'Forecast, when later than planned'],
-    ['tlx-lg-critical', 'Critical path'],
-    ['tlx-lg-cancelled', 'Cancelled (left out of phase)'],
-    ['tlx-lg-milestone', 'Milestone'],
-    ['tlx-lg-phase', 'Phase'],
-    ['tlx-lg-flag', 'Phase target'],
-    ['tlx-lg-line tlx-line-today', 'Today'],
-    ['tlx-lg-line tlx-line-target', 'Target delivery'],
-    ['tlx-lg-line tlx-line-forecast', 'Forecast end'],
-    ['tlx-lg-broken', 'Broken dependency'],
-    ['tlx-lg-weekend', 'Weekend'],
-    ['tlx-lg-holiday', 'Holiday'],
+  // Spec §2.5 order (UIE retest).
+  const sw = (cls: string): ReactNode => <span className={`tlx-lg ${cls}`} aria-hidden="true" />;
+  const items: [string, ReactNode, string][] = [
+    ['planned', sw('tlx-lg-planned'), 'Planned / in progress'],
+    ['done', sw('tlx-lg-done'), 'Completed'],
+    ['delayed', sw('tlx-lg-delayed'), 'Delayed'],
+    [
+      'late',
+      <span className="badge bg-label-secondary">Finished late</span>,
+      'Completed after baseline finish',
+    ],
+    ['cancelled', sw('tlx-lg-cancelled'), 'Cancelled (left out of phase)'],
+    ['baseline', sw('tlx-lg-baseline'), 'Baseline'],
+    ['forecast', sw('tlx-lg-forecast'), 'Forecast, when later than planned'],
+    ['critical', sw('tlx-lg-critical'), 'Critical path'],
+    ['milestone', sw('tlx-lg-milestone'), 'Milestone'],
+    ['phase', sw('tlx-lg-phase'), 'Phase'],
+    ['flag', sw('tlx-lg-flag'), 'Phase target'],
+    ['today', sw('tlx-lg-line tlx-line-today'), 'Today'],
+    ['target', sw('tlx-lg-line tlx-line-target'), 'Target delivery'],
+    ['fend', sw('tlx-lg-line tlx-line-forecast'), 'Forecast end'],
+    ['broken', sw('tlx-lg-broken'), 'Broken dependency'],
+    [
+      'nodates',
+      <i className="bx bx-error tlx-warn" aria-hidden="true" />,
+      'Linked task has no dates',
+    ],
+    ['weekend', sw('tlx-lg-weekend'), 'Weekend'],
+    ['holiday', sw('tlx-lg-holiday'), 'Holiday'],
   ];
   return (
     <div className="tlx-legend small text-body-secondary px-3 py-2" data-testid="timeline-legend">
-      {items.map(([cls, text]) => (
-        <span key={cls} className="me-3 text-nowrap">
-          <span className={`tlx-lg ${cls}`} aria-hidden="true" /> {text}
+      {items.map(([key, swatch, text]) => (
+        <span key={key} className="me-3 text-nowrap" data-legend={key}>
+          {swatch} {text}
         </span>
       ))}
-      <span className="me-3 text-nowrap">
-        <span className="badge bg-label-secondary">Finished late</span> Completed after baseline
-        finish
-      </span>
-      <span className="me-3 text-nowrap">
-        <i className="bx bx-error tlx-warn" aria-hidden="true" /> Linked task has no dates
-      </span>
     </div>
   );
 }
@@ -1348,7 +1357,7 @@ function TaskPopover({
           {broken.map((l) => {
             const p = byId.get(l.from)!;
             return (
-              <Alert key={l.from} variant="warning" className="py-2 small mb-2">
+              <Alert key={l.from} variant="danger" className="py-2 small mb-2">
                 <i className="bx bx-error me-1" aria-hidden="true" />
                 <strong>{BROKEN_LINK_TITLE}</strong> #{p.order} {p.name} finishes{' '}
                 {shortDate(p.dueDate)}. You can still save. Dates aren't moved.
