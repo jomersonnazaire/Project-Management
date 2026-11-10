@@ -80,7 +80,7 @@ export function DependsOnPicker({
               {labelOf.get(v)}
               <button
                 type="button"
-                className="btn btn-link btn-sm p-0 lh-1 text-reset text-decoration-none"
+                className="btn btn-link btn-sm px-1 py-0 lh-1 text-reset text-decoration-none"
                 aria-label={`Remove dependency ${labelOf.get(v)}`}
                 onClick={() => toggle(v, false)}
               >
