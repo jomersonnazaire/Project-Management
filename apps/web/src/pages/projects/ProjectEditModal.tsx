@@ -44,6 +44,8 @@ export function ProjectEditModal({
   const update = useUpdateProject(project.id);
   const { user } = useAuth();
   const [handover, setHandover] = useState<UpdateProjectInput | null>(null);
+  // CR-22 handover: the outgoing manager stays on the team unless unticked.
+  const [keepOnTeam, setKeepOnTeam] = useState(true);
   const people = usePeople();
   const clients = useClients();
   const [name, setName] = useState(project.name);
@@ -122,7 +124,10 @@ export function ProjectEditModal({
       body.description = description.trim() || null;
     if (status !== project.status) body.status = status;
     if (projectTypeId !== (project.projectType?.id ?? '')) body.projectTypeId = projectTypeId;
-    if (managerId !== project.managerId) body.managerId = managerId;
+    if (managerId !== project.managerId) {
+      body.managerId = managerId;
+      if (project.managerId) body.keepPreviousManagerOnTeam = keepOnTeam;
+    }
     const members = memberIds.filter((m) => m !== managerId);
     if (members.join() !== project.members.map((m) => m.id).join()) body.memberIds = members;
     if (clientChanged) {
@@ -165,6 +170,9 @@ export function ProjectEditModal({
     update.mutate(body, { onSuccess: saved });
   };
 
+  const managerChanging = Boolean(project.managerId) && managerId !== project.managerId;
+  const handingOverMine = managerChanging && project.managerId === user?.id;
+  const outgoingName = project.manager?.name ?? 'The current manager';
   const managers = (people.data ?? []).filter(
     (p) => p.systemRole === 'ADMIN' || p.systemRole === 'PROJECT_MANAGER',
   );
@@ -282,6 +290,28 @@ export function ProjectEditModal({
                     <option value={project.manager.id}>{project.manager.name}</option>
                   )}
                 </Form.Select>
+                {managerChanging && (
+                  <>
+                    <Form.Check
+                      className="mt-2"
+                      id="edit-prj-keep-on-team"
+                      label={
+                        handingOverMine
+                          ? 'Stay on the project team'
+                          : `Keep ${outgoingName} on the project team`
+                      }
+                      checked={keepOnTeam}
+                      onChange={(e) => setKeepOnTeam(e.target.checked)}
+                    />
+                    {!keepOnTeam && (
+                      <Form.Text className="d-block" data-testid="lose-access-note">
+                        {handingOverMine
+                          ? "You'll lose access to this project after the handover."
+                          : `${outgoingName} will be taken off the team and may lose access to this project.`}
+                      </Form.Text>
+                    )}
+                  </>
+                )}
               </Form.Group>
               <ProjectTypeSelect
                 id="edit-prj-type"
@@ -381,6 +411,7 @@ export function ProjectEditModal({
         {handover && (
           <HandoverModal
             name={managers.find((m) => m.id === handover.managerId)?.name ?? 'the new manager'}
+            staysOnTeam={handover.keepPreviousManagerOnTeam !== false}
             pending={update.isPending}
             onCancel={() => setHandover(null)}
             onConfirm={() =>

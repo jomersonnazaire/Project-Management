@@ -149,7 +149,7 @@ describe('PM handover confirmation (doc 11 §12)', () => {
       name: 'Hand over this project to Pat Manager?',
     });
     expect(dialog).toHaveTextContent(
-      "After this, only Pat Manager and Admins can edit or archive it. You'll still be able to view it.",
+      "After this, only Pat Manager and Admins can edit or archive it. You'll stay on the project team, so you can still view it and plan its tasks.",
     );
     const handOver = within(dialog).getByRole('button', { name: 'Hand over' });
     expect(handOver).toHaveClass('btn-primary');
@@ -163,7 +163,40 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     await userEvent.click(within(again).getByRole('button', { name: 'Hand over' }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
-      expect(JSON.parse(String(call?.[1]?.body))).toEqual({ managerId: 'pm2' });
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: true,
+      });
+    });
+  });
+
+  it('CR-22: "Stay on the project team" is ticked by default; unticked shows a note and sends false', async () => {
+    const fetchMock = projectApi(pmProject, 'PROJECT_MANAGER');
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    expect(screen.queryByLabelText('Stay on the project team')).not.toBeInTheDocument();
+    const manager = await screen.findByLabelText('Project manager');
+    await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
+    await userEvent.selectOptions(manager, 'pm2');
+    const stay = screen.getByLabelText('Stay on the project team');
+    expect(stay).toBeChecked();
+    expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
+    await userEvent.click(stay);
+    expect(screen.getByTestId('lose-access-note')).toHaveTextContent(
+      "You'll lose access to this project after the handover.",
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Hand over this project to Pat Manager?',
+    });
+    expect(dialog).toHaveTextContent("You'll be taken off the project team and lose access to it.");
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: false,
+      });
     });
   });
 
@@ -174,10 +207,16 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     const manager = await screen.findByLabelText('Project manager');
     await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
     await userEvent.selectOptions(manager, 'pm2');
+    // CR-22: Admins get the same choice for the outgoing manager, ticked by default.
+    expect(screen.getByLabelText(/^Keep .+ on the project team$/)).toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PATCH')).toBe(true),
-    );
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
+      expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: true,
+      });
+    });
     expect(screen.queryByText(/Hand over this project/)).not.toBeInTheDocument();
   });
 
@@ -225,6 +264,8 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     const dialog = await screen.findByRole('dialog', {
       name: 'Hand over this project to Pat Manager?',
     });
+    // CR-22 A1: the creator isn't on the new project's team unless they add themselves.
+    expect(dialog).toHaveTextContent("You'll only keep access if you're on its team.");
     await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'POST')).toBe(true),

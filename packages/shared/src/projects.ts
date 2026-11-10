@@ -702,6 +702,13 @@ export const updateProjectSchema = z
      * server diffs the member list before and after the save; the client never names them.
      */
     emailAddedMembers: z.boolean().optional(),
+    /**
+     * CR-22 handover: when this save changes the manager, keep the outgoing manager on the team
+     * (members) or take them off it. Omitted = keep (true), for PMs and Admins alike, so nobody
+     * silently loses access; false removes them (a PM then loses access, CR-22 A1). Ignored when
+     * the manager doesn't change. It wins over `memberIds` for the outgoing manager.
+     */
+    keepPreviousManagerOnTeam: z.boolean().optional(),
     ...emailReturnFields,
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.')

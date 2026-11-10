@@ -639,6 +639,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
       project.managerId = new Types.ObjectId(input.managerId);
     }
     let removedMembers: string[] = [];
+    const membersAtStart = project.memberIds.map(String).sort();
     if (input.memberIds !== undefined) {
       const current = project.memberIds.map(String);
       const added = input.memberIds.filter((id) => !current.includes(id));
@@ -654,6 +655,24 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
       !project.memberIds.some((id) => id.equals(project.managerId!))
     ) {
       project.memberIds.push(project.managerId);
+    }
+    // CR-22 handover: the outgoing manager stays on the team unless the save says otherwise
+    // (keepPreviousManagerOnTeam: false). Idempotent: never a duplicate member.
+    const outgoing = previousManager;
+    if (outgoing && outgoing !== project.managerId?.toString()) {
+      const keep = input.keepPreviousManagerOnTeam ?? true;
+      const onTeam = project.memberIds.some((id) => id.toString() === outgoing);
+      if (keep && !onTeam) project.memberIds.push(new Types.ObjectId(outgoing));
+      if (!keep && onTeam) {
+        project.memberIds = project.memberIds.filter((id) => id.toString() !== outgoing);
+        if (!removedMembers.includes(outgoing)) removedMembers.push(outgoing);
+      }
+      if (!keep || !onTeam) {
+        const next = project.memberIds.map(String).sort();
+        const entry = changes.find((c) => c.field === 'memberIds');
+        if (entry) entry.new = next;
+        else track('memberIds', membersAtStart, next);
+      }
     }
 
     // Changing the client: blocked while tasks tag the old client's contacts (EC-24); clears the

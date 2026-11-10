@@ -159,3 +159,87 @@ describe('CR-22 A1: a PM sees only projects they manage or are on', () => {
     expect((await w.outsider.agent.get(`/api/v1/projects/${w.project.id}`)).status).toBe(404);
   });
 });
+
+describe('CR-22 handover: keepPreviousManagerOnTeam', () => {
+  const membersOf = async (id: string) =>
+    ((await ProjectModel.findById(id).lean())!.memberIds ?? []).map(String);
+  const handOver = (agent: Agent, id: string, body: Record<string, unknown>) =>
+    agent.patch(`/api/v1/projects/${id}`).set(CSRF).send(body);
+
+  it('a PM handing over stays on the team by default, once, and keeps Project PM rights only', async () => {
+    const w = await world(app);
+    const pm = w.pm.user._id.toString();
+    // Even if the outgoing manager wasn't listed as a member, the save adds them (no duplicates).
+    await ProjectModel.updateOne({ _id: w.project.id }, { $pull: { memberIds: w.pm.user._id } });
+    const res = await handOver(w.pm.agent, w.project.id, { managerId: w.pm2.user._id.toString() });
+    expect(res.status).toBe(200);
+    const members = await membersOf(w.project.id);
+    expect(members.filter((m) => m === pm)).toHaveLength(1);
+    expect(members).toContain(w.pm2.user._id.toString());
+    // Same behaviour as any PM on the team who isn't the manager: views and plans, can't edit.
+    const view = await w.pm.agent.get(`/api/v1/projects/${w.project.id}`);
+    expect(view.status).toBe(200);
+    expect(view.body.project.can).toMatchObject({ edit: false, archive: false, planTasks: true });
+    expect((await handOver(w.pm.agent, w.project.id, { name: 'Mine again' })).status).toBe(403);
+    const task = await w.pm.agent
+      .post(`/api/v1/projects/${w.project.id}/tasks`)
+      .set(CSRF)
+      .send({ name: 'Still planning' });
+    expect(task.status).toBe(201);
+    // Explicit true on a manager who's already on the team: still a single entry.
+    const back = await handOver(w.pm2.agent, w.project.id, {
+      managerId: pm,
+      keepPreviousManagerOnTeam: true,
+    });
+    expect(back.status).toBe(200);
+    const after = await membersOf(w.project.id);
+    expect(new Set(after).size).toBe(after.length);
+    expect(after).toEqual(expect.arrayContaining([pm, w.pm2.user._id.toString()]));
+  });
+
+  it('false takes the outgoing PM off the team (they lose access), audited, and wins over memberIds', async () => {
+    const w = await world(app);
+    const pm = w.pm.user._id.toString();
+    const res = await handOver(w.pm.agent, w.project.id, {
+      managerId: w.pm2.user._id.toString(),
+      memberIds: [w.member.user._id.toString(), pm],
+      keepPreviousManagerOnTeam: false,
+    });
+    expect(res.status).toBe(200);
+    expect(await membersOf(w.project.id)).not.toContain(pm);
+    expect((await w.pm.agent.get(`/api/v1/projects/${w.project.id}`)).status).toBe(404);
+    const log = (await w.pm2.agent.get(`/api/v1/projects/${w.project.id}/activity`)).body.items as {
+      action: string;
+      changes: { field: string; old: string[]; new: string[] }[];
+    }[];
+    const update = log.find((e) => e.action === 'project_updated')!;
+    const members = update.changes.find((c) => c.field === 'memberIds')!;
+    expect(members.old).toContain(pm);
+    expect(members.new).not.toContain(pm);
+  });
+
+  it('Admins: omitted keeps the outgoing manager too; false removes them; no manager change ignores the flag', async () => {
+    const w = await world(app);
+    const pm = w.pm.user._id.toString();
+    expect(
+      (await handOver(w.admin.agent, w.project.id, { managerId: w.pm2.user._id.toString() }))
+        .status,
+    ).toBe(200);
+    expect(await membersOf(w.project.id)).toContain(pm);
+    expect(
+      (
+        await handOver(w.admin.agent, w.project.id, {
+          managerId: pm,
+          keepPreviousManagerOnTeam: false,
+        })
+      ).status,
+    ).toBe(200);
+    expect(await membersOf(w.project.id)).not.toContain(w.pm2.user._id.toString());
+    // Not a manager change: the flag does nothing.
+    expect(
+      (await handOver(w.admin.agent, w.project.id, { name: 'X', keepPreviousManagerOnTeam: false }))
+        .status,
+    ).toBe(200);
+    expect(await membersOf(w.project.id)).toContain(pm);
+  });
+});
