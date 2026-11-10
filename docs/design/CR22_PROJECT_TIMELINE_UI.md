@@ -249,7 +249,7 @@ Import is allowed in Planning, Active and On hold (Q-141).
 | Bad date | {Column} isn't a valid date. Use a date cell or YYYY-MM-DD. |
 | Finish before start | Finish can't be before Start. |
 | Milestone | Milestone must be Y or N. |
-| Missing dependency | Depends on: {n} isn't a task in this project or this file. |
+| Missing dependency (Lean, Nov 11) | Depends on: {n} isn't a task number in this file. To link an existing task, include its row from a downloaded timeline. |
 | Self dependency | Depends on: a task can't depend on itself. |
 | Cycle | Depends on: circular dependency {a} → {b} → {a}. |
 | Dependency format | Depends on: use task numbers only, e.g. 3, 5. |
