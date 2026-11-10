@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.23 (2026-11-11 ~1:27 AM SGT): **CR-22 spec v0.3.10.** Jomerson approved UIE's sample Excel template for now and the timeline mockup v0.9.20. Still locked except Q-144.
 - v0.6.22 (2026-11-11 ~1:03 AM SGT): **CR-22 spec v0.3.9.** Lean: phase reorder Planning-only for PMs; timeline read-only on phones; singular variance label for one day. Still locked except Q-144.
 - v0.6.21 (2026-11-11 ~12:59 AM SGT): **CR-22 spec v0.3.8.** Lean: PMs may change phase target dates in Planning, Active or On Hold (audited, baseline unchanged); phase add/rename/remove stays Planning-only for PMs (FR-TL-23, AC-73.14). Still locked except Q-144.
 - v0.6.20 (2026-11-11 ~12:59 AM SGT): **CR-22 spec v0.3.7.** UI reference set to UIE's design (mockup v0.9.20, `CR22_PROJECT_TIMELINE_UI.md`, sample/blank templates) on `docs/cr22-timeline-design`. Still locked except Q-144.

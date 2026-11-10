@@ -1,6 +1,6 @@
 # CR-22 — PM project scope, status without owners, Depends On fix, and project timeline
 
-**Status:** v0.3.9 **locked for build** except Q-144 (2026-11-11 ~1:03 AM SGT) · v0.3.8, v0.3.7 locked · v0.3.6 locked (2026-11-11 ~12:53 AM SGT) · v0.3.5 locked (2026-11-11 ~12:48 AM SGT) · v0.3.4 locked (2026-11-11 ~12:46 AM SGT) · v0.3.3 locked (2026-11-11 ~12:44 AM SGT) · v0.3.2 locked (2026-11-11 ~12:41 AM SGT) · v0.3.1 locked (2026-11-11 ~12:31 AM SGT) · v0.3 draft (2026-11-11 ~12:28 AM SGT) · v0.2 draft (2026-11-11 ~12:24 AM SGT) · v0.1 draft (2026-11-11, SGT) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
+**Status:** v0.3.10 **locked for build** except Q-144 (2026-11-11 ~1:03 AM SGT) · v0.3.8, v0.3.7 locked · v0.3.6 locked (2026-11-11 ~12:53 AM SGT) · v0.3.5 locked (2026-11-11 ~12:48 AM SGT) · v0.3.4 locked (2026-11-11 ~12:46 AM SGT) · v0.3.3 locked (2026-11-11 ~12:44 AM SGT) · v0.3.2 locked (2026-11-11 ~12:41 AM SGT) · v0.3.1 locked (2026-11-11 ~12:31 AM SGT) · v0.3 draft (2026-11-11 ~12:28 AM SGT) · v0.2 draft (2026-11-11 ~12:24 AM SGT) · v0.1 draft (2026-11-11, SGT) · **Author:** Business Analyst (Rich) · **For:** Jomerson (approval), Lean, Deven, Queen, UIE
 **Requested by:** Jomerson (Lead Dev / owner) in the PM room, 2026-11-11. **Rules locked by:** Lean (PM room, 2026-11-11 ~12:15 to 12:17 AM SGT). Rules marked **Locked** are Lean's. Anything not locked is an assumption (§8) or an open question (§10).
 **Part of:** doc 17 (change requests). CR-22 is summarised in `17_CHANGE_REQUESTS.md` and specified in full here. It follows CR-21 and uses the next free IDs: **FR-PRJ-35 to FR-PRJ-41** (incl. FR-PRJ-40a), **FR-TSK-37**, **FR-TL-01 to FR-TL-31** (new prefix: project timeline), **US-69 to US-74**, **AC-69.1 to AC-74.12** (incl. AC-69.7 to 69.10, AC-73.8 to 73.14), **EC-183 to EC-205**, **NFR-50 to NFR-54**, **A-47 to A-54**, **Q-127 to Q-149**.
 **Checked against:** docs 01 to 17 and CR-21 v0.1.2 on `main` `22958d9` (PR #48 merged), and the build at `main` `22958d9`. No IDs clash with CR-21 (CR-21 ends at FR-USR-12, US-68, AC-68.8, EC-182, NFR-49, A-46, Q-126). Research notes: `pm-docs/research/pm-timeline-gantt-findings.md` (outside the repo).
@@ -9,6 +9,7 @@
 **QA reference:** Queen's Part A cases `qa-run/opstrack_cr22a_cases.md` (DRAFT v1.1, TC-22A-001 to TC-22A-04x; outside the repo, re-baseline against this CR).
 
 **Doc change log:**
+- v0.3.10 (2026-11-11 ~1:27 AM SGT): **Jomerson approved UIE's sample Excel template** (`docs/design/cr22-timeline-template-sample.xlsx`, 11 columns per §B4) as the import/export template for now. **Jomerson approved UIE's timeline mockup v0.9.20** (2026-11-11 ~1:29 AM SGT, after reviewing screenshots).
 - v0.3.9 (2026-11-11 ~1:03 AM SGT): **Lean (Queen's gaps):** reordering phases is Planning-only for PMs like add/rename/remove (FR-TL-23); timeline read-only on phones by design (Q-143); variance label singular for one day, "+1 working day late" / "−1 working day early" (FR-TL-09).
 - v0.3.8 (2026-11-11 ~12:59 AM SGT): **Lean:** PMs may change phase target dates in Planning, Active or On Hold (audited; baseline unchanged); adding/renaming/removing phases stays Planning-only for PMs, Admins any time (FR-TL-23, new AC-73.14). Raised by UIE.
 - v0.3.7 (2026-11-11 ~12:59 AM SGT): UI reference now points to UIE's CR-22 design (mockup v0.9.20, UI spec, sample/blank xlsx) on `docs/cr22-timeline-design`.
@@ -261,7 +262,7 @@ Each row shows its result (New / Update with the changed fields / Unchanged / Ch
 1. Gantt, dependencies, milestones, target date and the phase list with its one-time migration (FR-TL-01 to 07, 14, 23, 24).
 2. Baseline vs actual, delayed, forecast and critical path (FR-TL-08 to 13, 27 to 31).
 3. Excel import and export (FR-TL-15 to 22, 25, 26).
-UIE mocks the timeline and import preview before step 1 starts (done: mockup v0.9.20, see UI reference; Jomerson still to review).
+UIE mocks the timeline and import preview before step 1 starts (done: mockup v0.9.20, approved by Jomerson 2026-11-11 ~1:29 AM SGT).
 
 ## B10. Non-functional
 - **NFR-50 (Must)** Schedule maths (successor early start, forecast forward pass from today, CPM backward pass, float, delayed, variance, phase dates; FR-TL-02, 11 to 13, 27 to 31) lives in one pure, unit-tested function in `@xc8/shared`, taking the calendar and "today" as inputs, so web and any later mobile agree. Chart render target for project size: Deven to state (not set here).
