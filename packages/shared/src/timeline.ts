@@ -723,5 +723,9 @@ export interface TimelineDto {
     editPhaseNames: boolean;
     /** Save baseline: Admin or a PM on the project, project open (FR-TL-08, Q-133). */
     saveBaseline: boolean;
+    /** Excel › Download timeline and Download template: planners (FR-TL-14, AC-74.5). */
+    excel: boolean;
+    /** Excel › Import: planners while Planning, Active or On hold, not archived (Q-141). */
+    importExcel: boolean;
   };
 }

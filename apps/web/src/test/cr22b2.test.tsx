@@ -208,7 +208,7 @@ describe('CR-22 B2: baseline (FR-TL-08, 09; UIE §2.7)', () => {
   it('read-only users get no Save baseline; on a phone it shows the larger-screen message', async () => {
     mount(
       timelineDto({
-        can: { plan: false, editPhaseTargets: false, editPhaseNames: false, saveBaseline: false },
+        can: { plan: false, editPhaseTargets: false, editPhaseNames: false, saveBaseline: false, excel: false, importExcel: false },
       }),
       'MEMBER',
     );
