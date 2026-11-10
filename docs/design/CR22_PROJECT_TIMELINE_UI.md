@@ -111,11 +111,28 @@ Links are elbow connectors from the predecessor's finish to the successor's star
   - Toast: "Baseline saved for 20 tasks. It's now the current entry in Baseline history."
   - Admin or a PM on the project can save (Q-133).
 - **Baseline history:** a table with Saved (date and time, "Current" badge on the newest), By, Tasks and Reason (`—` if none). Footer: "Times in Philippine time. The timeline compares with the current baseline only."
-- **Phases** (Q-130, FR-TL-23):
-  - Rows: order ↑/↓, name input, target completion date, task count, Delete. Delete is disabled while the phase has tasks.
-  - `+ Add phase`, then Cancel / **Save phases**.
+- **Phases** (Q-130, FR-TL-23; phase-editing rule from Lean, Nov 11, 2026):
+  - Rows: order ↑/↓, name input, target completion date, task count, **Remove**. Below the table: `+ Add phase` on the left and the history note on the right. Then Cancel / **Save phases**.
   - Intro: "Tasks pick their phase from this list, and the timeline shows phases in this order. A phase is complete when all its tasks are done; cancelled tasks are left out, and a phase whose tasks are all cancelled has no completion date."
-  - The existing phase rule applies: a PM edits phases in Planning only, an Admin any time. A PM on an Active project sees read-only inputs and the alert: "This project is **Active**, so only an Admin can change its phases. A PM can change them while the project is in Planning."
+  - **Who can change what:**
+    | Change | PM, project Planning | PM, project Active or On hold | Admin |
+    |---|---|---|---|
+    | Target completion date | yes | **yes** | any time |
+    | Add, rename, remove, reorder | yes | no (disabled) | any time |
+  - **Active or On hold (PM):**
+    - Target date inputs stay editable.
+    - Name inputs, the ↑/↓ buttons, Remove and `+ Add phase` are disabled: grey `#f1f3f5` background, muted text, `cursor: not-allowed`.
+    - Each disabled control sits in a wrapper with the tooltip "Phases can be added, renamed or removed only while the project is in Planning". Disabled controls don't fire hover events, so the wrapper carries the `title`. Each control also has `aria-describedby` pointing at the alert.
+    - Info alert at the top: "This project is **Active**. You can change target completion dates. Phases can be added, renamed or removed only while the project is in Planning." Use **On hold** in the copy when that's the status.
+    - **Save phases** stays enabled.
+  - **History note** (all states, 13 px muted, history icon): "Changes are recorded in the project history. A saved baseline keeps its original dates, so variance still compares with them."
+  - **Audit:** every change is written to the audit log. That includes each target-date change, with old and new values, who and when.
+  - **Baseline:** changing a target date never changes a saved baseline. Variance keeps comparing with the baseline's original dates.
+  - Remove is also disabled while a phase has tasks, with the tooltip "Move its tasks to another phase first".
+  - Save validation: "Enter a phase name." and "There's already a phase with this name." (names compared ignoring case and spaces).
+  - Toast: "Phase target dates saved. The change is recorded in the project history." (Active or On hold), or "Phases saved. The change is recorded in the project history." (Planning).
+  - Reorder is treated like add, rename and remove (Planning-only for PMs) because it changes the phase list.
+  - Mockup demo link: "Demo: show as PM while Active" / "Demo: show as PM in Planning (same as Admin)". The modal opens in the Active state, which is the mock project's status.
 - **Excel menu:** Import from Excel…, Download timeline (.xlsx), a divider, Download template.
 
 ### 2.8 States
@@ -275,7 +292,8 @@ The mockup preview has 26 rows: Error 9, Unchanged 8, Update 5, Changed since ex
   - `-member-1440` (read-only)
   - `-savebaseline-1440`
   - `-history-1440`
-  - `-phases-1440`
+  - `cr22-timeline-phases.png` (Planning, or Admin)
+  - `cr22-timeline-phases-active.png` (PM while Active)
   - `-menu-1440`
 - Import at 1440:
   - `cr22-import-upload-1440.png`
