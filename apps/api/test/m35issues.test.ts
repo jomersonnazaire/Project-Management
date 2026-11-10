@@ -415,9 +415,9 @@ describe('AC-45.x: notifications, access and attachments', () => {
     );
     // PMs can't delete by default (Admin only, FR-ISS-15).
     expect((await w.pm.agent.delete(`/api/v1/issues/${i.id}`).set(CSRF)).status).toBe(403);
-    // Another PM can read but not raise on a project they don't manage.
-    expect((await w.pm2.agent.get(`/api/v1/issues/${i.id}`)).status).toBe(200);
-    expect((await raise(w.pm2.agent, w)).status).toBe(403);
+    // CR-22 A1: another PM not on the project doesn't see its issues at all.
+    expect((await w.pm2.agent.get(`/api/v1/issues/${i.id}`)).status).toBe(404);
+    expect((await raise(w.pm2.agent, w)).status).toBe(404);
   });
 
   it('AC-45.3: attachments follow the M3 rules and land in the project’s Issues folder', async () => {

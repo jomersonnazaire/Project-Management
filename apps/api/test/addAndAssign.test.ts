@@ -88,12 +88,17 @@ describe('FR-PRJ-19 / DEF-003: add someone to the project and assign them in one
     const w = await world(app);
     const t = await firstTask(w);
     const id = w.outsider.user._id.toString();
-    for (const who of [w.pm2, w.member, w.viewer]) {
+    for (const [who, code] of [
+      // CR-22 A1: a PM not on the project doesn't see it at all.
+      [w.pm2, 404],
+      [w.member, 403],
+      [w.viewer, 403],
+    ] as const) {
       const res = await who.agent
         .patch(`/api/v1/tasks/${t.id}`)
         .set(CSRF)
         .send({ version: t.version, ownerId: id, addMemberIds: [id] });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(code);
     }
     expect(await membersOf(w.project.id)).not.toContain(id);
   });
@@ -145,7 +150,8 @@ describe('FR-PRJ-19 / DEF-003: add someone to the project and assign them in one
       (await who.agent.get(`/api/v1/projects/${w.project.id}`)).body.project.can.addMembers;
     expect(await can(w.admin)).toBe(true);
     expect(await can(w.pm)).toBe(true);
-    expect(await can(w.pm2)).toBe(false);
+    // CR-22 A1: pm2 isn't on the project, so it's a 404 for them.
+    expect((await w.pm2.agent.get(`/api/v1/projects/${w.project.id}`)).status).toBe(404);
     expect(await can(w.member)).toBe(false);
     expect(await can(w.viewer)).toBe(false);
   });

@@ -7,8 +7,9 @@ import { ProjectModel, type Project } from '../models/index.js';
  * Fixed scope limits (FR-ACL-07, A-12). They apply on top of the access rules and no grant in the
  * grid can widen them:
  *   - Members only ever see or act within projects they belong to (and the clients of those projects).
- *   - PMs view all projects but edit and archive only projects they manage (Q-12, resolved;
- *     switch with PM_PROJECT_EDIT_SCOPE in @xc8/shared).
+ *   - PMs only see projects they manage or are on the team of (CR-22 A1); within those they edit
+ *     and archive only projects they manage (Q-12, resolved; switch with PM_PROJECT_EDIT_SCOPE in
+ *     @xc8/shared). Admins and Viewers see every project.
  *   - Only Admins delete projects (Q-26), whatever the grid says.
  *   - Only the project's planners (Admin, or a PM who may edit the project) change the plan:
  *     tasks, dates, estimates, owners and dependencies (FR-TSK-14, AC-10.4).
@@ -21,14 +22,32 @@ export interface ScopeUser {
 
 const role = (u: ScopeUser) => u.systemRole as SystemRole;
 
+/**
+ * CR-22 A1: roles that only ever see projects they belong to. Members see projects whose team they
+ * are on; PMs see projects they manage or are on the team of. Admins and Viewers see all.
+ */
+export function seesOwnProjectsOnly(user: ScopeUser): boolean {
+  const r = role(user);
+  return r === 'MEMBER' || r === 'PROJECT_MANAGER';
+}
+
 /** Mongo filter limiting a projects query to what the user may see. */
 export function projectScopeFilter(user: ScopeUser): FilterQuery<Project> {
-  return role(user) === 'MEMBER' ? { memberIds: user._id } : {};
+  const r = role(user);
+  if (r === 'MEMBER') return { memberIds: user._id };
+  if (r === 'PROJECT_MANAGER') return { $or: [{ managerId: user._id }, { memberIds: user._id }] };
+  return {};
+}
+
+/** True when the fixed scope lets the user see this project at all (else it answers 404). */
+export function projectInScope(user: ScopeUser, project: ProjectLike): boolean {
+  return !seesOwnProjectsOnly(user) || isProjectMember(user, project);
 }
 
 /**
  * Client ids visible to the user, or `null` for "all clients". Members only see clients of the
- * projects they belong to (07 §4, FR-ACL-07).
+ * projects they belong to (07 §4, FR-ACL-07). The clients list isn't project-based, so PMs still
+ * see every client (CR-22 A1 ruling); only the projects under a client are scoped for them.
  */
 export async function visibleClientIds(user: ScopeUser): Promise<Types.ObjectId[] | null> {
   if (role(user) !== 'MEMBER') return null;
@@ -73,7 +92,7 @@ export function assertProjectScope(
   action: AccessAction | 'archive',
 ): void {
   const r = role(user);
-  if (r === 'MEMBER' && !isProjectMember(user, project)) throw notFound();
+  if (!projectInScope(user, project)) throw notFound();
   if (action === 'delete' && r !== 'ADMIN') throw forbidden();
   if ((action === 'edit' || action === 'archive') && !canEditProjectScope(user, project)) {
     throw forbidden();

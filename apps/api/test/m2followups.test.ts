@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { ProjectModel } from '../src/models/index.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
 import { SMALL_TEMPLATE, grant, resetRules, world, ptypeId } from './m2helpers.js';
 
@@ -15,7 +16,9 @@ describe('Project Activity log (doc 11 §12, FR-AUD-02)', () => {
     const own = await pm.agent.get(path);
     expect(own.status).toBe(200);
     expect(own.body.items.map((e: { action: string }) => e.action)).toContain('project_created');
-    // Another PM's project: viewable, so the log is readable too.
+    // CR-22 A1: another PM's project is out of scope (404); once on its team, the log is readable.
+    expect((await pm2.agent.get(path)).status).toBe(404);
+    await ProjectModel.updateOne({ _id: project.id }, { $addToSet: { memberIds: pm2.user._id } });
     expect((await pm2.agent.get(path)).status).toBe(200);
     expect((await admin.agent.get(path)).status).toBe(200);
     // The global Audit log stays Admin-only (Audit permission).
@@ -158,8 +161,14 @@ describe('PM handover (doc 11 §12)', () => {
       });
     expect(res.status).toBe(201);
     expect(res.body.project.can.edit).toBe(false);
-    const log = (await pm.agent.get(`/api/v1/projects/${res.body.project.id}/activity`)).body
-      .items as { action: string; changes: { field: string; new: string }[] }[];
+    // CR-22 A1: the creator isn't on the handed-over project, so it's out of their scope now;
+    // the new manager reads the handover in its Activity log.
+    const path = `/api/v1/projects/${res.body.project.id}/activity`;
+    expect((await pm.agent.get(path)).status).toBe(404);
+    const log = (await pm2.agent.get(path)).body.items as {
+      action: string;
+      changes: { field: string; new: string }[];
+    }[];
     expect(log.find((e) => e.action === 'project_handover')?.changes[0]).toMatchObject({
       field: 'managerId',
       new: pm2.user._id.toString(),
@@ -213,7 +222,7 @@ describe('Reordering tasks and template activities', () => {
     const ts = await tasksOf(pm.agent, project.id);
     const body = { phase: 'Phase A', taskIds: [ts[1]!.id, ts[0]!.id] };
     const path = `/api/v1/projects/${project.id}/tasks/reorder`;
-    expect((await pm2.agent.post(path).set(CSRF).send(body)).status).toBe(403);
+    expect((await pm2.agent.post(path).set(CSRF).send(body)).status).toBe(404);
     expect((await member.agent.post(path).set(CSRF).send(body)).status).toBe(403);
     expect((await viewer.agent.post(path).set(CSRF).send(body)).status).toBe(403);
     expect((await outsider.agent.post(path).set(CSRF).send(body)).status).toBe(404);

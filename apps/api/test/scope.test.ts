@@ -44,12 +44,20 @@ describe('Fixed project scope (FR-ACL-07, A-12)', () => {
     const others = { managerId: pm2._id, memberIds: [] };
     expect(() => assertProjectScope(pm, own, 'edit')).not.toThrow();
     expect(() => assertProjectScope(pm, own, 'archive')).not.toThrow();
-    expect(() => assertProjectScope(pm, others, 'view')).not.toThrow();
-    expect(() => assertProjectScope(pm, others, 'edit')).toThrow(
+    // CR-22 A1: a PM not on the project doesn't see it (404); on its team they view only.
+    expect(() => assertProjectScope(pm, others, 'view')).toThrow(
+      expect.objectContaining({ status: 404 }),
+    );
+    const onTeam = { managerId: pm2._id, memberIds: [pm._id] };
+    expect(() => assertProjectScope(pm, onTeam, 'view')).not.toThrow();
+    expect(() => assertProjectScope(pm, onTeam, 'edit')).toThrow(
       expect.objectContaining({ status: 403 }),
     );
+    expect(() => assertProjectScope(pm, others, 'edit')).toThrow(
+      expect.objectContaining({ status: 404 }),
+    );
     expect(() => assertProjectScope(pm, others, 'archive')).toThrow(
-      expect.objectContaining({ status: 403 }),
+      expect.objectContaining({ status: 404 }),
     );
     expect(() => assertProjectScope(pm, own, 'delete')).toThrow(
       expect.objectContaining({ status: 403 }),

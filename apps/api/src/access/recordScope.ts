@@ -10,7 +10,7 @@ import {
   TimeEntryModel,
   UploadModel,
 } from '../models/index.js';
-import { clientInScope, isProjectMember, type ScopeUser } from '../services/scope.js';
+import { clientInScope, projectInScope, type ScopeUser } from '../services/scope.js';
 
 /**
  * NFR-25 (DEF-005, DEF-006): the shared scope check of the central gate. For every route that
@@ -24,13 +24,11 @@ import { clientInScope, isProjectMember, type ScopeUser } from '../services/scop
  */
 type Resolver = (user: ScopeUser, id: Types.ObjectId) => Promise<boolean>;
 
-const isMember = (user: ScopeUser) => user.systemRole === 'MEMBER';
-
 async function projectVisible(user: ScopeUser, projectId: Types.ObjectId | null | undefined) {
   if (!projectId) return false;
   const project = await ProjectModel.findById(projectId, { managerId: 1, memberIds: 1 }).lean();
   if (!project) return false;
-  return !isMember(user) || isProjectMember(user, project);
+  return projectInScope(user, project);
 }
 
 const owned = (doc: { userId?: Types.ObjectId | null } | null, user: ScopeUser) =>
