@@ -208,7 +208,12 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
     await userEvent.selectOptions(manager, 'pm2');
     // CR-22: Admins get the same choice for the outgoing manager, ticked by default.
-    expect(screen.getByLabelText(/^Keep .+ on the project team$/)).toBeChecked();
+    const keep = screen.getByLabelText(/^Keep .+ on the project team$/);
+    expect(keep).toBeChecked();
+    // Admins get no lose-access note when unticking (they keep access either way).
+    await userEvent.click(keep);
+    expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
+    await userEvent.click(keep);
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
@@ -220,8 +225,8 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     expect(screen.queryByText(/Hand over this project/)).not.toBeInTheDocument();
   });
 
-  it('a PM creating a project for another PM confirms the handover too', async () => {
-    const fetchMock = api('PROJECT_MANAGER', (url, init) => {
+  function createApi(role: 'PROJECT_MANAGER' | 'ADMIN') {
+    return api(role, (url, init) => {
       if (url.includes('/templates'))
         return {
           status: 200,
@@ -247,29 +252,78 @@ describe('PM handover confirmation (doc 11 §12)', () => {
         return { status: 201, body: { project: project(), warnings: [] } };
       return undefined;
     });
+  }
+
+  async function fillNewProject(manager = 'pm2') {
     renderAt(`/projects/new?clientId=${ACME.id}`, <App />);
     await userEvent.selectOptions(await screen.findByLabelText('Template (optional)'), 't1');
     await screen.findByRole('option', { name: 'Implementation' });
     await userEvent.selectOptions(screen.getByLabelText('Project type *'), 'pt1');
-    // DR-10 in the template preview.
-    expect(screen.getByTestId('template-preview')).toHaveTextContent(
-      'Generates 1 activity, 1 dependency and 1 deliverable.',
-    );
     await userEvent.type(screen.getByLabelText('Project name'), 'For Pat');
     await userEvent.clear(screen.getByLabelText('Baseline start'));
     await userEvent.type(screen.getByLabelText('Baseline start'), '2026-10-12');
     await userEvent.type(screen.getByLabelText('Baseline end'), '2026-12-18');
-    await userEvent.selectOptions(screen.getByLabelText('Project manager'), 'pm2');
+    await userEvent.selectOptions(screen.getByLabelText('Project manager'), manager);
+  }
+
+  const posted = (fetchMock: ReturnType<typeof createApi>) => {
+    const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'POST');
+    return call ? JSON.parse(String(call[1]!.body)) : undefined;
+  };
+
+  it('a PM creating a project for another PM confirms the handover and stays on the team by default', async () => {
+    const fetchMock = createApi('PROJECT_MANAGER');
+    await fillNewProject();
+    // DR-10 in the template preview.
+    expect(screen.getByTestId('template-preview')).toHaveTextContent(
+      'Generates 1 activity, 1 dependency and 1 deliverable.',
+    );
+    const stay = screen.getByLabelText('Stay on the project team');
+    expect(stay).toBeChecked();
+    expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
     const dialog = await screen.findByRole('dialog', {
       name: 'Hand over this project to Pat Manager?',
     });
-    // CR-22 A1: the creator isn't on the new project's team unless they add themselves.
-    expect(dialog).toHaveTextContent("You'll only keep access if you're on its team.");
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'POST')).toBe(true),
+    expect(dialog).toHaveTextContent(
+      "You'll stay on the project team, so you can still view it and plan its tasks.",
     );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
+    await waitFor(() => expect(posted(fetchMock)).toMatchObject({ keepCreatorOnTeam: true }));
+  });
+
+  it('CR-22: unticking "Stay on the project team" on create shows the note and sends false', async () => {
+    const fetchMock = createApi('PROJECT_MANAGER');
+    await fillNewProject();
+    await userEvent.click(screen.getByLabelText('Stay on the project team'));
+    expect(screen.getByTestId('lose-access-note')).toHaveTextContent(
+      "You won't have access to this project after you create it.",
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Hand over this project to Pat Manager?',
+    });
+    expect(dialog).toHaveTextContent("You won't have access to this project after you create it.");
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
+    await waitFor(() => expect(posted(fetchMock)).toMatchObject({ keepCreatorOnTeam: false }));
+  });
+
+  it('CR-22: no checkbox when the PM manages it themselves', async () => {
+    const pmApi = createApi('PROJECT_MANAGER');
+    await fillNewProject(ME_PM);
+    expect(screen.queryByLabelText('Stay on the project team')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(posted(pmApi)).toBeDefined());
+    expect(posted(pmApi)).not.toHaveProperty('keepCreatorOnTeam');
+  });
+
+  it('CR-22: Admins never see "Stay on the project team" on create', async () => {
+    const adminApi = createApi('ADMIN');
+    await fillNewProject();
+    expect(screen.queryByLabelText('Stay on the project team')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(posted(adminApi)).toBeDefined());
+    expect(posted(adminApi)).not.toHaveProperty('keepCreatorOnTeam');
   });
 });
 

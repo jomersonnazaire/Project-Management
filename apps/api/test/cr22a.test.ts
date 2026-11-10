@@ -243,3 +243,74 @@ describe('CR-22 handover: keepPreviousManagerOnTeam', () => {
     expect(await membersOf(w.project.id)).toContain(pm);
   });
 });
+
+describe('CR-22 create: keepCreatorOnTeam', () => {
+  const create = (w: W, who: W['pm'], body: Record<string, unknown>) =>
+    ptypeId().then((projectTypeId) =>
+      who.agent
+        .post('/api/v1/projects')
+        .set(CSRF)
+        .send({
+          name: `Created ${Math.random()}`,
+          projectTypeId,
+          clientId: w.acme.client.id,
+          startDate: '2026-10-12',
+          plannedEndDate: '2026-12-18',
+          templateId: w.template.id,
+          ...body,
+        }),
+    );
+  const membersOf = async (id: string) =>
+    ((await ProjectModel.findById(id).lean())!.memberIds ?? []).map(String);
+
+  it('a PM creating for another PM stays on the team by default, once, with Project PM rights only', async () => {
+    const w = await world(app);
+    const me = w.pm.user._id.toString();
+    const res = await create(w, w.pm, {
+      managerId: w.pm2.user._id.toString(),
+      memberIds: [me],
+    });
+    expect(res.status).toBe(201);
+    const id = res.body.project.id as string;
+    const members = await membersOf(id);
+    expect(members.filter((m) => m === me)).toHaveLength(1);
+    const view = await w.pm.agent.get(`/api/v1/projects/${id}`);
+    expect(view.status).toBe(200);
+    expect(view.body.project.can).toMatchObject({ edit: false, archive: false, planTasks: true });
+    // Not listed and the flag left out: still added.
+    const again = await create(w, w.pm, { managerId: w.pm2.user._id.toString() });
+    expect(await membersOf(again.body.project.id)).toContain(me);
+  });
+
+  it('false leaves the PM off the team (even if listed): they lose access', async () => {
+    const w = await world(app);
+    const me = w.pm.user._id.toString();
+    const res = await create(w, w.pm, {
+      managerId: w.pm2.user._id.toString(),
+      memberIds: [me, w.member.user._id.toString()],
+      keepCreatorOnTeam: false,
+    });
+    expect(res.status).toBe(201);
+    const id = res.body.project.id as string;
+    const members = await membersOf(id);
+    expect(members).not.toContain(me);
+    expect(members).toContain(w.member.user._id.toString());
+    expect((await w.pm.agent.get(`/api/v1/projects/${id}`)).status).toBe(404);
+  });
+
+  it('ignored for Admins and when the creator is the manager', async () => {
+    const w = await world(app);
+    const byAdmin = await create(w, w.admin, {
+      managerId: w.pm.user._id.toString(),
+      keepCreatorOnTeam: true,
+    });
+    expect(byAdmin.status).toBe(201);
+    expect(await membersOf(byAdmin.body.project.id)).not.toContain(w.admin.user._id.toString());
+    const own = await create(w, w.pm, {
+      managerId: w.pm.user._id.toString(),
+      keepCreatorOnTeam: false,
+    });
+    expect(own.status).toBe(201);
+    expect(await membersOf(own.body.project.id)).toEqual([w.pm.user._id.toString()]);
+  });
+});

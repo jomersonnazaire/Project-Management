@@ -11,7 +11,7 @@ export interface DependencyOption {
 const SEARCH_FROM = 6;
 
 /** Ids of options that depend on `selfId`, directly or through others (picking one is a cycle). */
-export function dependentsOf(selfId: string | null, options: readonly DependencyOption[]) {
+function dependentsOf(selfId: string | null, options: readonly DependencyOption[]) {
   const out = new Set<string>();
   if (!selfId) return out;
   const byDep = new Map<string, string[]>();
@@ -80,7 +80,7 @@ export function DependsOnPicker({
               {labelOf.get(v)}
               <button
                 type="button"
-                className="btn btn-link btn-sm px-1 py-0 lh-1 text-reset text-decoration-none"
+                className="btn btn-link btn-sm px-1 py-0 lh-1 text-reset text-decoration-none dep-chip-remove"
                 aria-label={`Remove dependency ${labelOf.get(v)}`}
                 onClick={() => toggle(v, false)}
               >

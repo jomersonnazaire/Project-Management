@@ -303,11 +303,10 @@ export function ProjectEditModal({
                       checked={keepOnTeam}
                       onChange={(e) => setKeepOnTeam(e.target.checked)}
                     />
-                    {!keepOnTeam && (
+                    {/* Admins keep access whatever they pick, so they get no note. */}
+                    {!keepOnTeam && handingOverMine && user?.systemRole !== 'ADMIN' && (
                       <Form.Text className="d-block" data-testid="lose-access-note">
-                        {handingOverMine
-                          ? "You'll lose access to this project after the handover."
-                          : `${outgoingName} will be taken off the team and may lose access to this project.`}
+                        You&apos;ll lose access to this project after the handover.
                       </Form.Text>
                     )}
                   </>

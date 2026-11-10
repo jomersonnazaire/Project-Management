@@ -331,9 +331,17 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
     const end = parseDateOnly(input.plannedEndDate);
     const projectId = new Types.ObjectId();
     const managerId = new Types.ObjectId(input.managerId);
-    const memberIds = [...new Set([input.managerId, ...input.memberIds])].map(
-      (id) => new Types.ObjectId(id),
-    );
+    // CR-22: a PM creating for another manager stays on the team unless keepCreatorOnTeam: false.
+    const creator = user._id.toString();
+    const pmHandingOver = user.systemRole === 'PROJECT_MANAGER' && input.managerId !== creator;
+    const keepCreator = input.keepCreatorOnTeam ?? true;
+    const memberIds = [
+      ...new Set([
+        input.managerId,
+        ...input.memberIds.filter((id) => !pmHandingOver || keepCreator || id !== creator),
+        ...(pmHandingOver && keepCreator ? [creator] : []),
+      ]),
+    ].map((id) => new Types.ObjectId(id));
     // FR-CAL-02/03: dates use the calendar as it is now (working days + holidays).
     const tasks = template ? buildPlanTasks(template, projectId, start, await loadCalendar()) : [];
 

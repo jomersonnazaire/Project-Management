@@ -161,10 +161,9 @@ describe('PM handover (doc 11 §12)', () => {
       });
     expect(res.status).toBe(201);
     expect(res.body.project.can.edit).toBe(false);
-    // CR-22 A1: the creator isn't on the handed-over project, so it's out of their scope now;
-    // the new manager reads the handover in its Activity log.
+    // CR-22: the creator stays on the team by default (keepCreatorOnTeam), so both read the log.
     const path = `/api/v1/projects/${res.body.project.id}/activity`;
-    expect((await pm.agent.get(path)).status).toBe(404);
+    expect((await pm.agent.get(path)).status).toBe(200);
     const log = (await pm2.agent.get(path)).body.items as {
       action: string;
       changes: { field: string; new: string }[];

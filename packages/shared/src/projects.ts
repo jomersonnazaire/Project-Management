@@ -668,6 +668,13 @@ export const createProjectSchema = z
      * The server works out who they are; the response carries the Microsoft URL to continue.
      */
     emailAddedMembers: z.boolean().optional(),
+    /**
+     * CR-22: a non-admin PM creating a project for another manager stays on its team (members)
+     * unless this is false; omitted = true. false also overrides the creator being listed in
+     * `memberIds` (they then can't see the project, CR-22 A1). Ignored for Admins and when the
+     * creator is the manager.
+     */
+    keepCreatorOnTeam: z.boolean().optional(),
     ...emailReturnFields,
   })
   .refine((v) => v.plannedEndDate > v.startDate, {
