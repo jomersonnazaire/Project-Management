@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.29 (2026-11-11 ~3:46 AM SGT): **CR-22 spec v0.3.16.** Lean: `Depends on` numbers refer only to rows in the same file; FR-TL-20 example and reworded row error.
 - v0.6.28 (2026-11-11 ~3:05 AM SGT): **CR-22 spec v0.3.15.** UIE's Q24 file-error and length-limit copy added (§B5); limits 5 MB / 2,000 rows (NFR-52); sample file re-saved with blank ids.
 - v0.6.27 (2026-11-11 ~2:58 AM SGT): **CR-22 spec v0.3.14.** Lean: unknown/made-up project id refused, blank imports as template (FR-TL-26); one notification per import per new/changed owner (FR-TL-32, AC-74.13); phase target dates not importable (FR-TL-33, AC-74.14).
 - v0.6.26 (2026-11-11 ~2:26 AM SGT): **CR-22 spec v0.3.13.** Lean: timeline baselines stored in `timelineBaselines` (baseline history dialog shows only those; `baselineHistory` unchanged); no % complete, in-progress bars shown by status colour only.
