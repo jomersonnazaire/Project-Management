@@ -41,6 +41,20 @@ const projectSchema = new Schema(
       ],
       default: [],
     },
+    /**
+     * CR-22 FR-TL-23: the project's phase list, in order (array position). Tasks keep the phase
+     * name in `Task.phase`, matched to a record ignoring case and spaces (doc 14 §J). Phases that
+     * only exist as task text (not saved here yet) are listed after these.
+     */
+    phases: {
+      type: [
+        new Schema({
+          name: { type: String, required: true, trim: true, maxlength: 120 },
+          targetDate: { type: Date, default: null },
+        }),
+      ],
+      default: [],
+    },
     progress: { type: Number, min: 0, max: 100, default: 0 },
     /** Active contacts, chosen only from this project's client (FR-PRJ-11, doc 11). */
     activeContactIds: {

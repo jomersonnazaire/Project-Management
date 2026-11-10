@@ -19,7 +19,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "seed:qa-completed": "tsx --env-file-if-exists=.env scripts/seed-qa-completed.ts",
-    "renumber:tasks": "tsx --env-file-if-exists=.env scripts/renumber-tasks.ts"
+    "renumber:tasks": "tsx --env-file-if-exists=.env scripts/renumber-tasks.ts",
+    "migrate:phases": "tsx --env-file-if-exists=.env scripts/migrate-phases.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.3",
