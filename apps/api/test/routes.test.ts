@@ -140,6 +140,7 @@ describe('Route policy table', () => {
       'DELETE /projects/:id/phases projects.edit',
       'PUT /projects/:id/phase-list projects.edit',
       'GET /projects/:id/timeline tasks.view',
+      'POST /projects/:id/baseline tasks.edit',
       'POST /projects/:id/tasks tasks.create',
       'POST /projects/:id/tasks/reorder tasks.edit',
       'GET /tasks/mine tasks.view',

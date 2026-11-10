@@ -34,6 +34,8 @@ import {
   type PhaseDto,
   PHASE_NAME_DUPLICATE,
   UNKNOWN_PHASE_MESSAGE,
+  ACTUAL_FINISH_BEFORE_START,
+  saveBaselineSchema,
   PHASE_TARGET_STATUSES,
   savePhaseListSchema,
   type SavePhaseListInput,
@@ -239,6 +241,22 @@ function phaseTargetsEditableNow(user: ScopeUser, perms: PermissionGrid, project
     (user.systemRole === 'ADMIN' ||
       PHASE_TARGET_STATUSES.includes(project.status as (typeof PHASE_TARGET_STATUSES)[number]))
   );
+}
+
+/** FR-TL-31: the Philippine date each task was last marked Completed, from its history. */
+async function markedDoneOn(taskIds: Types.ObjectId[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!taskIds.length) return out;
+  const logs = await ActivityLogModel.find({
+    entityType: 'task',
+    entityId: { $in: taskIds },
+    changes: { $elemMatch: { field: 'status', new: 'COMPLETED' } },
+  })
+    .select('entityId at')
+    .sort({ at: 1 })
+    .lean();
+  for (const l of logs) out.set(l.entityId!.toString(), toDateOnly(todayPH(l.at)));
+  return out;
 }
 
 function timelinePhaseDto(ph: ProjectPhase): TimelinePhaseDto {
@@ -580,6 +598,8 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
         : null,
       plannedStart: dateOrNull(t.plannedStart),
       dueDate: dateOrNull(t.dueDate),
+      actualStart: dateOrNull(t.actualStart),
+      actualFinish: dateOrNull(t.actualFinish),
       estHours: typeof t.estHours === 'number' ? t.estHours : null,
       actualHours: t.actualHours ?? 0,
       status,
@@ -913,6 +933,51 @@ async function resolveTaskPhase(projectId: Types.ObjectId, plan: Record<string, 
   plan.phase = match.name;
 }
 
+/** CR-22 FR-TL-10: the PM's actual dates stay in order with the ones not being changed. */
+function assertActualsInOrder(
+  task: { actualStart?: Date | null; actualFinish?: Date | null },
+  update: Record<string, unknown>,
+) {
+  const start = ('actualStart' in update ? update.actualStart : task.actualStart) as Date | null;
+  const finish = (
+    'actualFinish' in update ? update.actualFinish : task.actualFinish
+  ) as Date | null;
+  if (start && finish && finish.getTime() < start.getTime()) {
+    throw badRequest(
+      'Some fields are invalid.',
+      [{ path: 'actualFinish', message: ACTUAL_FINISH_BEFORE_START }],
+      'VALIDATION_ERROR',
+    );
+  }
+}
+
+/**
+ * CR-22 FR-TL-10 (Q-147): actual dates that follow a status change, on the Philippine date.
+ * Actual start is set the first time work starts (In Progress, or straight to For review or
+ * Completed); Completed sets actual finish; leaving Completed (Reopen) clears it and keeps the start.
+ */
+export function actualsForStatus(
+  task: { actualStart?: Date | null; actualFinish?: Date | null },
+  from: TaskStatus,
+  to: TaskStatus,
+  today: Date,
+): Record<string, Date | null> {
+  const set: Record<string, Date | null> = {};
+  if (!task.actualStart && (to === 'IN_PROGRESS' || to === 'FOR_REVIEW' || to === 'COMPLETED'))
+    set.actualStart = today;
+  if (to === 'COMPLETED') set.actualFinish = today;
+  else if (from === 'COMPLETED' && task.actualFinish) set.actualFinish = null;
+  return set;
+}
+
+const actualChanges = (
+  task: { actualStart?: Date | null; actualFinish?: Date | null },
+  set: Record<string, Date | null>,
+) =>
+  (['actualStart', 'actualFinish'] as const)
+    .filter((f) => f in set)
+    .map((f) => ({ field: f, old: fmt(task[f] ?? null), new: fmt(set[f]) }));
+
 function toPlanUpdate(input: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
@@ -927,7 +992,8 @@ function toPlanUpdate(input: Record<string, unknown>) {
       k === 'code_challenge_method'
     )
       continue;
-    if (k === 'plannedStart' || k === 'dueDate') out[k] = v ? parseDateOnly(v as string) : null;
+    if (k === 'plannedStart' || k === 'dueDate' || k === 'actualStart' || k === 'actualFinish')
+      out[k] = v ? parseDateOnly(v as string) : null;
     else if (k === 'deliverable' || k === 'phase' || k === 'taskType') out[k] = v || null;
     else if (k === 'phaseId') out[k] = v || null;
     else out[k] = v;
@@ -1143,7 +1209,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const [tasks, phases, cal, holidays] = await Promise.all([
       TaskModel.find({ projectId: project._id })
         .select(
-          'order name phase phaseId status plannedStart dueDate isMilestone dependsOn ownerId',
+          'order name phase phaseId status plannedStart dueDate isMilestone dependsOn ownerId actualStart actualFinish baseline',
         )
         .sort({ order: 1 })
         .lean(),
@@ -1151,8 +1217,16 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       loadCalendar(),
       HolidayModel.find().select('date name').lean(),
     ]);
-    const owners = await userRefs(tasks.map((t) => t.ownerId));
+    const baselines = [...(project.timelineBaselines ?? [])].reverse();
+    const owners = await userRefs([
+      ...tasks.map((t) => t.ownerId),
+      ...baselines.map((b) => b.savedBy),
+    ]);
+    const doneOn = await markedDoneOn(
+      tasks.filter((t) => t.status === 'COMPLETED' && !t.actualFinish).map((t) => t._id),
+    );
     const open = !project.archived && project.status !== 'COMPLETED';
+    const planner = open && perms.tasks.edit && isPlanner(user, project);
     const dto: TimelineDto = {
       project: {
         id: project._id.toString(),
@@ -1182,15 +1256,114 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
           isMilestone: Boolean(t.isMilestone),
           dependsOn: (t.dependsOn ?? []).map(String),
           owner: o ? { id: o.id, name: o.name } : null,
+          actualStart: dateOrNull(t.actualStart),
+          actualFinish: dateOrNull(t.actualFinish),
+          baselineStart: dateOrNull(t.baseline?.start),
+          baselineFinish: dateOrNull(t.baseline?.finish),
+          doneOn: doneOn.get(t._id.toString()) ?? null,
+        };
+      }),
+      baselines: baselines.map((b) => {
+        const by = b.savedBy ? owners.get(b.savedBy.toString()) : null;
+        return {
+          id: b._id.toString(),
+          savedAt: b.savedAt.toISOString(),
+          savedBy: by ? { id: by.id, name: by.name } : null,
+          reason: b.reason ?? null,
+          taskCount: b.taskCount ?? 0,
         };
       }),
       can: {
-        plan: open && perms.tasks.edit && isPlanner(user, project),
+        plan: planner,
         editPhaseTargets: phaseTargetsEditableNow(user, perms, project),
         editPhaseNames: phaseEditableNow(user, perms, project),
+        saveBaseline: planner,
       },
     };
     res.json(dto);
+  });
+
+  // CR-22 FR-TL-08 (Q-133): Save baseline copies every task's planned dates into its baseline and
+  // adds a Baseline history entry. Admin or a PM on the project; the reason is optional.
+  p.post('/:id/baseline', perm('tasks', 'edit'), async (req, res) => {
+    const input = parseBody(saveBaselineSchema, req);
+    const project = await loadProject(req, 'view');
+    const user = currentUser(req);
+    assertNotArchived(project);
+    assertPlanOpen(project);
+    if (!isPlanner(user, project)) {
+      throw forbidden('Only an Admin or this project\u2019s PM can save the baseline.');
+    }
+    const tasks = await TaskModel.find({ projectId: project._id })
+      .select('plannedStart dueDate')
+      .lean();
+    const scheduled = tasks.filter(
+      (t) => t.plannedStart && t.dueDate && t.dueDate >= t.plannedStart,
+    );
+    const ids = new Set(scheduled.map((t) => t._id.toString()));
+    const entry = {
+      _id: new Types.ObjectId(),
+      savedAt: clockNow(),
+      savedBy: user._id,
+      reason: input.reason || null,
+      taskCount: scheduled.length,
+    };
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        if (tasks.length) {
+          await TaskModel.bulkWrite(
+            tasks.map((t) => ({
+              updateOne: {
+                filter: { _id: t._id },
+                update: {
+                  $set: {
+                    baseline: ids.has(t._id.toString())
+                      ? { start: t.plannedStart, finish: t.dueDate }
+                      : { start: null, finish: null },
+                  },
+                },
+              },
+            })),
+            { session },
+          );
+        }
+        await ProjectModel.updateOne(
+          { _id: project._id },
+          { $push: { timelineBaselines: entry } },
+          { session },
+        );
+        await auditMany(
+          [
+            {
+              actorId: user._id,
+              entityType: 'project',
+              entityId: project._id,
+              projectId: project._id,
+              action: 'baseline_saved',
+              reason: entry.reason ?? undefined,
+              meta: {
+                baselineId: entry._id.toString(),
+                taskCount: scheduled.length,
+                unscheduledCount: tasks.length - scheduled.length,
+              },
+            },
+          ],
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+    res.status(201).json({
+      baseline: {
+        id: entry._id.toString(),
+        savedAt: entry.savedAt.toISOString(),
+        savedBy: { id: user._id.toString(), name: user.name },
+        reason: entry.reason,
+        taskCount: entry.taskCount,
+      },
+    });
   });
 
   p.post('/:id/tasks', perm('tasks', 'create'), async (req, res) => {
@@ -1491,6 +1664,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     await validatePlan(withMembers(project, add), input as PlanInput, task.toObject() as TaskDoc);
     const update = toPlanUpdate(input as Record<string, unknown>);
     await resolveTaskPhase(project._id, update);
+    assertActualsInOrder(task, update);
     const before = task.toObject() as unknown as Record<string, unknown>;
     const changes = Object.entries(update)
       .map(([field, next]) => ({
@@ -1644,6 +1818,8 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       set['approval.comment'] = null;
     }
     set.status = to;
+    const actuals = actualsForStatus(task, from, to, todayPH(clockNow()));
+    Object.assign(set, actuals);
     const updated = await TaskModel.updateOne(
       { _id: task._id, version: input.version },
       { $set: set, $inc: { version: 1 } },
@@ -1656,7 +1832,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       entityId: task._id,
       projectId: project._id,
       action: meta.override ? 'task_status_override' : 'task_status_changed',
-      changes: [{ field: 'status', old: from, new: to }],
+      changes: [{ field: 'status', old: from, new: to }, ...actualChanges(task, actuals)],
       reason,
       meta: Object.keys(meta).length ? meta : null,
     });
@@ -1678,9 +1854,13 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     if (task.status !== 'BLOCKED')
       throw badRequest('This task isn’t blocked.', undefined, 'INVALID_TRANSITION');
     const back = (task.previousStatus as TaskStatus | null) ?? 'TODO';
+    const actuals = actualsForStatus(task, 'BLOCKED', back, todayPH(clockNow()));
     await TaskModel.updateOne(
       { _id: task._id, version },
-      { $set: { status: back, previousStatus: null, blockerReason: null }, $inc: { version: 1 } },
+      {
+        $set: { status: back, previousStatus: null, blockerReason: null, ...actuals },
+        $inc: { version: 1 },
+      },
     );
     await recomputeProject(project._id);
     await audit({
@@ -1692,6 +1872,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       changes: [
         { field: 'status', old: 'BLOCKED', new: back },
         { field: 'blockerReason', old: task.blockerReason, new: null },
+        ...actualChanges(task, actuals),
       ],
     });
     await respondTask(req, res, project, task._id);
@@ -1712,10 +1893,12 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       assertCan(req, project, task.toObject() as TaskDoc, 'approve');
       assertVersion(task, input.version);
       const to: TaskStatus = decision === 'approve' ? 'COMPLETED' : 'IN_PROGRESS';
+      const actuals = actualsForStatus(task, 'FOR_REVIEW', to, todayPH(clockNow()));
       await TaskModel.updateOne(
         { _id: task._id, version: input.version },
         {
           $set: {
+            ...actuals,
             status: to,
             'approval.state': decision === 'approve' ? 'APPROVED' : 'REJECTED',
             'approval.decidedBy': user._id,
@@ -1732,7 +1915,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         entityId: task._id,
         projectId: project._id,
         action: decision === 'approve' ? 'task_approved' : 'task_rejected',
-        changes: [{ field: 'status', old: 'FOR_REVIEW', new: to }],
+        changes: [{ field: 'status', old: 'FOR_REVIEW', new: to }, ...actualChanges(task, actuals)],
         reason: input.comment || undefined,
         // EC-20: self-approval is allowed (Q-14) and flagged.
         meta: task.ownerId?.equals(user._id) ? { selfApproval: true } : null,

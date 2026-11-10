@@ -47,7 +47,12 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
     expect(tl.tasks[0]!.plannedStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(tl.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(tl.calendar.workingDays).toEqual([1, 2, 3, 4, 5]);
-    expect(tl.can).toEqual({ plan: true, editPhaseTargets: true, editPhaseNames: true });
+    expect(tl.can).toEqual({
+      plan: true,
+      editPhaseTargets: true,
+      editPhaseNames: true,
+      saveBaseline: true,
+    });
   });
 
   it('FR-TL-14 / Q-142: members and viewers read it with no edit rights; outsiders get 404', async () => {
@@ -58,6 +63,7 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
       plan: false,
       editPhaseTargets: false,
       editPhaseNames: false,
+      saveBaseline: false,
     });
     const viewer = await timeline(w.viewer.agent, w.project.id);
     expect(viewer.status).toBe(200);
@@ -74,6 +80,7 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
       plan: true,
       editPhaseTargets: true,
       editPhaseNames: false,
+      saveBaseline: true,
     });
     expect((await timeline(w.admin.agent, w.project.id)).body.can.editPhaseNames).toBe(true);
     await ProjectModel.updateOne({ _id: w.project.id }, { $set: { status: 'COMPLETED' } });
@@ -81,6 +88,7 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
       plan: false,
       editPhaseTargets: false,
       editPhaseNames: false,
+      saveBaseline: false,
     });
   });
 });

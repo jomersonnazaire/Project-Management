@@ -15,6 +15,17 @@ const taskSchema = new Schema(
      */
     phaseId: { type: Schema.Types.ObjectId, default: null },
     phase: { type: String, default: null },
+    /** CR-22 FR-TL-10: first move to In Progress / Completed; Reopen clears the finish. */
+    actualStart: { type: Date, default: null },
+    actualFinish: { type: Date, default: null },
+    /** CR-22 FR-TL-08: the planned dates at the last Save baseline (both null when unscheduled). */
+    baseline: {
+      type: new Schema(
+        { start: { type: Date, default: null }, finish: { type: Date, default: null } },
+        { _id: false },
+      ),
+      default: null,
+    },
     taskType: { type: String, default: null },
     priority: { type: String, enum: PRIORITIES, default: 'MEDIUM' },
     mandatory: { type: Boolean, default: false },

@@ -54,6 +54,21 @@ const projectSchema = new Schema(
       ],
       default: [],
     },
+    /**
+     * CR-22 FR-TL-08: Save baseline entries (oldest first; the last is current). Separate from
+     * `baselineHistory`, which records changes to the project's own start and end dates (FR-PRJ).
+     */
+    timelineBaselines: {
+      type: [
+        new Schema({
+          savedAt: { type: Date, required: true },
+          savedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+          reason: { type: String, default: null },
+          taskCount: { type: Number, default: 0 },
+        }),
+      ],
+      default: [],
+    },
     progress: { type: Number, min: 0, max: 100, default: 0 },
     /** Active contacts, chosen only from this project's client (FR-PRJ-11, doc 11). */
     activeContactIds: {
