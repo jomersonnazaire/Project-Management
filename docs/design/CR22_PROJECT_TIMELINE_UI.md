@@ -79,7 +79,7 @@ With several, the copy is "N broken dependencies." and lists the first one. Show
 - **Background:** weekends `#f1f3f5`; holidays use the same tint with diagonal hatching and the holiday name as a tooltip. Both come from `loadCalendar()` (Q-131, Q-148).
 - **Vertical lines:** today (2 px primary), target (2 px `#22303e`), forecast (2 px dashed danger). The target line always shows, even with no forecast.
 - **Phase rows** (grey `#f8f9fa`):
-  - Left cells: collapse chevron, name and "· N tasks", then `Target Oct 30` with a second line `Completed Nov 3` or `Forecast Dec 11`, then a variance of `On time` (success), `+1d` (danger) or `−1d` (success).
+  - Left cells: collapse chevron, name and "· N tasks" (N counts every non-cancelled task in the phase, unscheduled ones included, so Go-live with 4 scheduled and 1 unscheduled shows "· 5 tasks"), then `Target Oct 30` with a second line `Completed Nov 3` or `Forecast Dec 11`, then a variance of `On time` (success), `+1d` (danger) or `−1d` (success).
   - Chart: a dark summary bar from the earliest start to the latest finish, plus a flag at the PM's target date. The flag is red when the phase is late.
   - A phase whose tasks are **all cancelled** shows "· 1 task, cancelled", "Completion —" and no summary bar (A-53).
 - **Unscheduled group** (FR-TL-02): always last. It shows "Unscheduled · N task(s), no dates" and its rows show "No dates" with no bar. The chart cell says "No dates, so it is left out of the critical path and forecast." If a scheduled task depends on it, the cell starts with the warning icon and "#17 depends on it; that link is ignored."
