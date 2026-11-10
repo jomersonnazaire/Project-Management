@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.24 (2026-11-11 ~1:34 AM SGT): **CR-22 spec v0.3.11.** Q-144 closed by Jomerson ("for now use the free"): free Gantt library, our own baseline and critical-path calculations, no dragging. All CR-22 questions closed; Part B builds now in three slices.
 - v0.6.23 (2026-11-11 ~1:27 AM SGT): **CR-22 spec v0.3.10.** Jomerson approved UIE's sample Excel template for now and the timeline mockup v0.9.20. Still locked except Q-144.
 - v0.6.22 (2026-11-11 ~1:03 AM SGT): **CR-22 spec v0.3.9.** Lean: phase reorder Planning-only for PMs; timeline read-only on phones; singular variance label for one day. Still locked except Q-144.
 - v0.6.21 (2026-11-11 ~12:59 AM SGT): **CR-22 spec v0.3.8.** Lean: PMs may change phase target dates in Planning, Active or On Hold (audited, baseline unchanged); phase add/rename/remove stays Planning-only for PMs (FR-TL-23, AC-73.14). Still locked except Q-144.
@@ -324,7 +325,7 @@ Jomerson (lead developer) gave these decisions in the room. Each row maps a deci
 - **Testing (Locked, A-47):** staging only; live seeded test accounts stay deactivated; after a live deploy, health check plus Jomerson's quick look; no live QA.
 - **Scheduling and handover (v0.3.2, Lean):** next-working-day successor start; unscheduled tasks out of forecast and critical path; forecast forward pass from today; working-day variance, late positive; no forecast for an empty project; "Stay on the project team" checkbox when the manager changes and, from v0.3.4, when a PM creates a project for another manager (ticked by default; not for Admins; handover note "You'll lose access to this project after the handover.", creation note "You won't have access to this project after you create it."); critical path = open zero-slack tasks, Done never critical (v0.3.3); team PM plans but doesn't edit the project.
 - **IDs:** FR-PRJ-35 to 41, FR-TSK-37, FR-TL-01 to 31, US-69 to 74, AC-69.1 to 74.12, EC-183 to 205, NFR-50 to 54, A-47 to 54, Q-127 to Q-149.
-- **Status:** **not built; locked for build (Lean, v0.3.1)** except **Q-144** (Jomerson). All other questions closed (Q-127 to Q-143, Q-145 to Q-149). **Part A builds now** (Deven); **Part B slice 1** starts once Jomerson has answered Q-144 and seen UIE's mockup. Pending Jomerson's approval.
+- **Status:** **not built; locked for build, all questions closed (v0.3.11).** Q-144 closed by Jomerson (free library). Jomerson approved UIE's mockup v0.9.20 and sample template. **Part A** is PR #49 (QA on staging); **Part B** builds now in three slices.
 
 ## 2. New questions for Jomerson (Q-87 to Q-106)
 **Update v0.3.1 (Jomerson, 2026-10-22, 8:38 PM SGT):** Q-91 and CR-03 (the mobile sign-in part of Q-92) are **decided**. So Q-91 is no longer open, and Q-92 now has only the M8 catch-up (CR-12) left.
@@ -332,7 +333,7 @@ Jomerson (lead developer) gave these decisions in the room. Each row maps a deci
 
 Q-87 Lift the Microsoft sign-in hold? (moot/closed: sign-in is live) · Q-88 One tenant ID only? · Q-89 §11 sign-in messages · Q-90 Auto-create or refuse unknown accounts? · Q-91 Users without a job role (decided v0.3.1: none until an Admin sets it) · Q-92 Is mobile in scope (sign-in, DAR, emails, M8 catch-up)? · Q-93 Delegated own-mailbox sender confirmed? · Q-94 Mail.Send admin consent confirmed? · Q-95 HTML DAR body before go-live? · Q-96 Saved copy showing stale recipients · Q-97 Manual or automatic supervisor notice · Q-98 Last send only, or send history? · Q-99 Bring email notifications forward? · Q-100 Action email sender · Q-101 Email box ticked by default? · Q-102 Who controls the email flag in production · Q-103 Keep the "added you to" notice? · Q-104 Refuse and audit a different Microsoft account with the same email? · Q-105 Idempotent Send, "outcome unknown" status and an already-sent warning? · Q-106 Company-domain-only DAR CC, or external addresses allowed?
 
-**Added v0.6.11 (CR-22):** Q-127 to Q-146, all **open** (Lean; Q-144 Jomerson). **v0.6.12:** Q-129 to Q-132, Q-138 and Q-139 **closed** (Lean); Q-133 and Q-134 partly closed; Q-147 to Q-149 added (open). **v0.6.13:** Q-135, Q-137, Q-147, Q-149 **closed**; proposed defaults on the rest for Lean; Q-144 open (Jomerson). **v0.6.14:** all 12 defaults accepted and closed (Lean); only Q-144 open. See the CR-22 spec §10.
+**Added v0.6.11 (CR-22):** Q-127 to Q-146, all **open** (Lean; Q-144 Jomerson). **v0.6.12:** Q-129 to Q-132, Q-138 and Q-139 **closed** (Lean); Q-133 and Q-134 partly closed; Q-147 to Q-149 added (open). **v0.6.13:** Q-135, Q-137, Q-147, Q-149 **closed**; proposed defaults on the rest for Lean; Q-144 open (Jomerson). **v0.6.14:** all 12 defaults accepted and closed (Lean); only Q-144 open. **v0.6.24:** Q-144 closed (Jomerson, free library). See the CR-22 spec §10.
 
 **Added v0.6 (CR-20):** Q-120 to Q-125. **v0.6.1:** Q-121 to Q-125 closed by Lean; only Q-120 (lunch backfill, Jomerson) open. **v0.6.6:** Q-120 closed (new and edited only). See the CR-20 spec §12.
 
