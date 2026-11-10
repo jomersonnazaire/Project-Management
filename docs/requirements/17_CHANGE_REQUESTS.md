@@ -6,6 +6,7 @@
 **Scope of this review:** whether each change meets the requirements. Deven is checking security, correctness and tests.
 
 **Doc change log:**
+- v0.6.21 (2026-11-11 ~12:59 AM SGT): **CR-22 spec v0.3.8.** Lean: PMs may change phase target dates in Planning, Active or On Hold (audited, baseline unchanged); phase add/rename/remove stays Planning-only for PMs (FR-TL-23, AC-73.14). Still locked except Q-144.
 - v0.6.20 (2026-11-11 ~12:59 AM SGT): **CR-22 spec v0.3.7.** UI reference set to UIE's design (mockup v0.9.20, `CR22_PROJECT_TIMELINE_UI.md`, sample/blank templates) on `docs/cr22-timeline-design`. Still locked except Q-144.
 - v0.6.19 (2026-11-11 ~12:53 AM SGT): **CR-22 spec v0.3.6.** From Queen's Part A review (Lean): no lose-access note when an Admin outgoing manager unticks (FR-PRJ-40); new FR-PRJ-40b, 44px chip remove tap area at 390px. Still locked except Q-144.
 - v0.6.18 (2026-11-11 ~12:48 AM SGT): **CR-22 spec v0.3.5.** Creation note reads "You won't have access to this project after you create it." (Deven's build); `keepCreatorOnTeam` on `POST /projects` confirmed, omitted = ticked. Still locked except Q-144.
