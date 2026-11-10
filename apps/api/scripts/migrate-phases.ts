@@ -32,9 +32,10 @@ async function main() {
   for (const p of r.changed) {
     console.log(
       `\n${p.projectName} (${p.projectId}): ${p.added.length} phase(s) added` +
-        `${p.added.length ? `: ${p.added.join(', ')}` : ''}; ${p.tasksRespelled.length} task(s) and ${p.foldersRespelled} folder(s) respelled`,
+        `${p.added.length ? `: ${p.added.join(', ')}` : ''}; ${p.tasksLinked.length} task(s) linked and ${p.foldersRespelled} folder(s) respelled`,
     );
-    for (const t of p.tasksRespelled) console.log(`  "${t.from}" → "${t.to}"`);
+    for (const t of p.tasksLinked)
+      console.log(`  task ${t.taskId}: "${t.from ?? ''}" → "${t.to ?? ''}"`);
   }
   console.log(
     r.changed.length

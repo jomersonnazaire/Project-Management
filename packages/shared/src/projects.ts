@@ -737,6 +737,11 @@ export const projectListQuerySchema = z.strictObject({
 
 const taskFields = {
   name: requiredText('Task name', 200),
+  /**
+   * CR-22 (Lead): the task's phase is a phase record of its project, by id; null = No phase.
+   * `phase` (a name) is still accepted from older clients and must name an existing phase.
+   */
+  phaseId: objectId.nullable().optional(),
   phase: optionalText(120),
   taskType: optionalText(60),
   priority: z.enum(PRIORITIES),
@@ -1045,6 +1050,8 @@ export interface TaskDto {
   projectId: string;
   order: number;
   name: string;
+  /** CR-22: the task's phase record (Project.phases); `phase` is its current name, for display. */
+  phaseId: string | null;
   phase: string | null;
   taskType: string | null;
   priority: Priority;
@@ -1189,6 +1196,8 @@ export const renamePhaseSchema = z.strictObject({
 
 /** A project phase: the tasks grouped under it, plus its evidence folder (FR-DOC-17). */
 export interface PhaseDto {
+  /** CR-22: the phase record id (tasks reference it); null only before the phase migration. */
+  id: string | null;
   name: string;
   taskCount: number;
   documentCount: number;

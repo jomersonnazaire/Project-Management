@@ -33,6 +33,7 @@ import {
   type PermissionGrid,
   type PhaseDto,
   PHASE_NAME_DUPLICATE,
+  UNKNOWN_PHASE_MESSAGE,
   PHASE_TARGET_STATUSES,
   savePhaseListSchema,
   type SavePhaseListInput,
@@ -66,6 +67,7 @@ import {
 import { audit, auditMany } from '../services/audit.js';
 import { loadCalendar } from '../services/calendar.js';
 import { taskRecordCounts } from '../services/taskRecords.js';
+import { phaseKey, syncProjectPhases } from '../services/phases.js';
 import { followUpUnseenCounts, markFollowUpsSeen } from '../services/followUpSeen.js';
 import { renumberProjectTasks } from '../services/taskOrder.js';
 import { notify } from '../services/notify.js';
@@ -117,14 +119,7 @@ export function taskCan(
   return { edit: status, plan, status, approve };
 }
 
-/**
- * A project's phases: task phases in plan order, then phases that only have an evidence folder
- * left (their tasks were deleted). Counts tasks, and documents in the folder and its sub-folders.
- */
-/** Doc 14 §J: phase identity ignores case and leading/trailing spaces. */
-export function phaseKey(name: string) {
-  return name.trim().toLowerCase();
-}
+export { phaseKey };
 
 export interface ProjectPhase {
   /** Phase record id (CR-22 FR-TL-23); null when the phase only exists as task or folder text. */
@@ -153,7 +148,7 @@ export async function projectPhases(
     .session(session ?? null)
     .lean();
   const tasks = await TaskModel.find({ projectId })
-    .select('phase order')
+    .select('phase phaseId order')
     .sort({ order: 1 })
     .session(session ?? null)
     .lean();
@@ -181,12 +176,21 @@ export async function projectPhases(
     });
   };
   for (const r of project?.phases ?? []) add(r.name, r);
-  for (const t of tasks) if (t.phase) add(t.phase);
+  const recordIds = new Set((project?.phases ?? []).map((r) => r._id.toString()));
+  // Lead: tasks belong to their phase record by id; only a task without one (before the phase
+  // migration) is matched by its phase text.
+  const linked = (t: (typeof tasks)[number]) =>
+    Boolean(t.phaseId && recordIds.has(t.phaseId.toString()));
+  for (const t of tasks) if (t.phase && !linked(t)) add(t.phase);
   for (const f of folders) if (f.kind === 'PHASE' && f.phase) add(f.phase);
   const out = [...byKey.values()];
   for (const ph of out) {
     const key = phaseKey(ph.name);
-    ph.taskCount = tasks.filter((t) => t.phase && phaseKey(t.phase) === key).length;
+    ph.taskCount = tasks.filter((t) =>
+      linked(t)
+        ? Boolean(ph.id?.equals(t.phaseId!))
+        : Boolean(t.phase && phaseKey(t.phase) === key),
+    ).length;
     const root = folders
       .filter((f) => f.kind === 'PHASE' && f.phase && phaseKey(f.phase) === key)
       .map((f) => f._id);
@@ -249,9 +253,12 @@ function timelinePhaseDto(ph: ProjectPhase): TimelinePhaseDto {
 
 /** Renames a phase everywhere: its tasks, its evidence folder and its phase record. */
 async function renamePhase(projectId: Id, src: ProjectPhase, newName: string) {
+  // Tasks point at the record by id; their name copy follows the record.
   await TaskModel.updateMany(
-    { projectId, phase: { $in: src.variants } },
-    { $set: { phase: newName }, $inc: { version: 1 } },
+    src.id
+      ? { projectId, $or: [{ phaseId: src.id }, { phaseId: null, phase: { $in: src.variants } }] }
+      : { projectId, phase: { $in: src.variants } },
+    { $set: { phase: newName, ...(src.id ? { phaseId: src.id } : {}) }, $inc: { version: 1 } },
   );
   const folders = await FolderModel.find({
     projectId,
@@ -375,6 +382,8 @@ async function savePhaseList(
   input: SavePhaseListInput,
   namesEditable: boolean,
 ): Promise<{ audits: PhaseAudit[]; targetsOnly: boolean }> {
+  // Lead: every phase gets its record (and its tasks a phaseId) before the list changes.
+  await syncProjectPhases(project._id, { apply: true });
   const current = await projectPhases(project._id);
   const used = new Set<ProjectPhase>();
   const rows = input.phases.map((row, index) => {
@@ -385,7 +394,7 @@ async function savePhaseList(
         throw conflict('The phase list changed. Refresh to see the latest.', 'PHASES_CHANGED');
       }
     } else if (row.originalName) {
-      match = current.find((c) => !c.id && phaseKey(c.name) === phaseKey(row.originalName!));
+      match = current.find((c) => phaseKey(c.name) === phaseKey(row.originalName!));
       if (!match) {
         throw conflict('The phase list changed. Refresh to see the latest.', 'PHASES_CHANGED');
       }
@@ -555,6 +564,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
       projectId: t.projectId.toString(),
       order: t.order ?? 0,
       name: t.name,
+      phaseId: t.phaseId ? t.phaseId.toString() : null,
       phase: t.phase ?? null,
       taskType: t.taskType ?? null,
       priority: t.priority as TaskDto['priority'],
@@ -868,13 +878,39 @@ async function writeWithMembers(
 }
 
 /**
- * CR-22 FR-TL-23: a task's phase uses the phase list's spelling when it matches ignoring case
- * and spaces (doc 14 §J), so one phase never splits into two groups.
+ * CR-22 (Lead): a task's phase is one of its project's phase records. `phaseId` picks it (null =
+ * No phase); an older client's `phase` name must match a phase ignoring case and spaces (doc 14
+ * §J). Anything else is 422 UNKNOWN_PHASE: new phases come only from the phase manager (or a
+ * Planning import). Sets both `phaseId` and the `phase` name copy on the update.
  */
-async function canonicalPhase(projectId: Id, phase: string): Promise<string> {
-  const name = phase.trim();
-  const match = (await projectPhases(projectId)).find((ph) => phaseKey(ph.name) === phaseKey(name));
-  return match?.name ?? name;
+async function resolveTaskPhase(projectId: Types.ObjectId, plan: Record<string, unknown>) {
+  if (!('phaseId' in plan) && !('phase' in plan)) return;
+  const byId = 'phaseId' in plan;
+  const wanted = byId ? (plan.phaseId as string | null) : (plan.phase as string | null);
+  delete plan.phaseId;
+  delete plan.phase;
+  if (!wanted || !wanted.trim()) {
+    plan.phaseId = null;
+    plan.phase = null;
+    return;
+  }
+  const find = async () =>
+    (await projectPhases(projectId)).find((ph) =>
+      byId ? ph.id?.toString() === wanted : phaseKey(ph.name) === phaseKey(wanted),
+    );
+  let match = await find();
+  if (match && !match.id) {
+    // A phase known only from task text (before the migration) gets its record now.
+    await syncProjectPhases(projectId, { apply: true });
+    match = await find();
+  }
+  if (!match?.id) {
+    throw unprocessable(UNKNOWN_PHASE_MESSAGE, 'UNKNOWN_PHASE', [
+      { path: byId ? 'phaseId' : 'phase', message: UNKNOWN_PHASE_MESSAGE },
+    ]);
+  }
+  plan.phaseId = match.id;
+  plan.phase = match.name;
 }
 
 function toPlanUpdate(input: Record<string, unknown>) {
@@ -893,6 +929,7 @@ function toPlanUpdate(input: Record<string, unknown>) {
       continue;
     if (k === 'plannedStart' || k === 'dueDate') out[k] = v ? parseDateOnly(v as string) : null;
     else if (k === 'deliverable' || k === 'phase' || k === 'taskType') out[k] = v || null;
+    else if (k === 'phaseId') out[k] = v || null;
     else out[k] = v;
   }
   if ('reviewerId' in input && input.reviewerId !== undefined)
@@ -952,6 +989,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       items: phases.map((ph): PhaseDto => {
         const reason = phaseDeleteBlockedReason(ph.taskCount, ph.documentCount);
         return {
+          id: ph.id ? ph.id.toString() : null,
           name: ph.name,
           taskCount: ph.taskCount,
           documentCount: ph.documentCount,
@@ -969,6 +1007,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const project = await loadProject(req, 'view');
     const user = currentUser(req);
     assertPhaseEdit(user, currentPermissions(req), project);
+    await syncProjectPhases(project._id, { apply: true });
     const phases = await projectPhases(project._id);
     // Doc 14 §J: phase names match ignoring case and leading/trailing spaces.
     const src = phases.find((x) => phaseKey(x.name) === phaseKey(input.name));
@@ -999,6 +1038,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const project = await loadProject(req, 'view');
     const user = currentUser(req);
     assertPhaseEdit(user, currentPermissions(req), project);
+    await syncProjectPhases(project._id, { apply: true });
     const phases = await projectPhases(project._id);
     if (phases.some((x) => phaseKey(x.name) === phaseKey(input.name))) {
       const msg = `"${input.name}" already exists.`;
@@ -1025,6 +1065,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const raw = typeof bodyName === 'string' ? bodyName : req.query.name;
     const name = typeof raw === 'string' ? raw.trim() : '';
     if (!name) throw badRequest('Say which phase to delete.');
+    await syncProjectPhases(project._id, { apply: true });
     const session = await mongoose.startSession();
     let folderIds: Types.ObjectId[] = [];
     let deleted = name;
@@ -1101,7 +1142,9 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const perms = currentPermissions(req);
     const [tasks, phases, cal, holidays] = await Promise.all([
       TaskModel.find({ projectId: project._id })
-        .select('order name phase status plannedStart dueDate isMilestone dependsOn ownerId')
+        .select(
+          'order name phase phaseId status plannedStart dueDate isMilestone dependsOn ownerId',
+        )
         .sort({ order: 1 })
         .lean(),
       projectPhases(project._id),
@@ -1131,6 +1174,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
           id: t._id.toString(),
           order: t.order ?? 0,
           name: t.name,
+          phaseId: t.phaseId ? t.phaseId.toString() : null,
           phase: t.phase ?? null,
           status: t.status as TaskStatus,
           plannedStart: dateOrNull(t.plannedStart),
@@ -1166,7 +1210,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       .select('order')
       .lean();
     const plan = toPlanUpdate(input);
-    if (typeof plan.phase === 'string') plan.phase = await canonicalPhase(project._id, plan.phase);
+    await resolveTaskPhase(project._id, plan);
     await writeWithMembers(project, add, async (session) => {
       await TaskModel.create(
         [
@@ -1446,9 +1490,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const add = await prepareMemberAdds(req, project, input);
     await validatePlan(withMembers(project, add), input as PlanInput, task.toObject() as TaskDoc);
     const update = toPlanUpdate(input as Record<string, unknown>);
-    if (typeof update.phase === 'string') {
-      update.phase = await canonicalPhase(project._id, update.phase);
-    }
+    await resolveTaskPhase(project._id, update);
     const before = task.toObject() as unknown as Record<string, unknown>;
     const changes = Object.entries(update)
       .map(([field, next]) => ({

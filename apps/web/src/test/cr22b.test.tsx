@@ -289,3 +289,97 @@ describe('CR-22 B: task form warns on a broken dependency (FR-TL-07, AC-72.8)', 
     );
   });
 });
+
+describe('CR-22 B (Lead): phase pick and the on-or-before broken rule', () => {
+  const phases = [
+    {
+      id: 'ph1',
+      name: 'Initiation',
+      taskCount: 0,
+      documentCount: 0,
+      deletable: false,
+      deleteBlockedReason: null,
+      editable: true,
+    },
+    {
+      id: 'ph2',
+      name: 'Build',
+      taskCount: 2,
+      documentCount: 0,
+      deletable: false,
+      deleteBlockedReason: null,
+      editable: true,
+    },
+  ];
+  const tasks = [
+    task({
+      id: 'k1',
+      order: 1,
+      name: 'Kickoff',
+      phaseId: 'ph2',
+      phase: 'Build',
+      plannedStart: '2026-11-02',
+      dueDate: '2026-11-06',
+    }),
+    task({
+      id: 'k2',
+      order: 2,
+      name: 'Workshops',
+      phaseId: 'ph2',
+      phase: 'Build',
+      plannedStart: '2026-11-09',
+      dueDate: '2026-11-12',
+      dependsOn: ['k1'],
+    }),
+  ];
+  const mount = () =>
+    api('PROJECT_MANAGER', (url, init) => {
+      if (url.includes('/tasks/') && init?.method === 'PATCH')
+        return { status: 200, body: { task: tasks[1] } };
+      if (url.endsWith(`/projects/${PID}/phases`)) return { status: 200, body: { items: phases } };
+      if (url.includes(`/projects/${PID}/tasks`)) return { status: 200, body: { items: tasks } };
+      if (url.endsWith(`/projects/${PID}`)) return { status: 200, body: { project: project() } };
+      return undefined;
+    });
+
+  it('the phase is a strict pick of the project phases plus No phase, saved by phaseId', async () => {
+    const m = mount();
+    renderAt(`/projects/${PID}`, <App />);
+    await screen.findByText('Kickoff');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Workshops' }));
+    const dialog = await screen.findByRole('dialog');
+    const pick = within(dialog).getByLabelText('Phase') as HTMLSelectElement;
+    expect(pick.tagName).toBe('SELECT');
+    await waitFor(() =>
+      expect([...pick.options].map((o) => o.text)).toEqual(['No phase', 'Initiation', 'Build']),
+    );
+    expect(pick.value).toBe('ph2');
+    expect(within(dialog).getByText(/New phases are added in Phases/)).toBeInTheDocument();
+    await userEvent.selectOptions(pick, 'Initiation');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save task' }));
+    await waitFor(() => {
+      const call = m.mock.calls.find(
+        ([u, i]) => String(u).includes('/tasks/k2') && i?.method === 'PATCH',
+      );
+      expect(call).toBeDefined();
+      const body = JSON.parse(String(call![1]!.body));
+      expect(body.phaseId).toBe('ph1');
+      expect(body).not.toHaveProperty('phase');
+    });
+  });
+
+  it('AC-72.4: a Saturday start after a Friday finish is not broken; a same-day start is', async () => {
+    mount();
+    renderAt(`/projects/${PID}`, <App />);
+    await screen.findByText('Kickoff');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Workshops' }));
+    const dialog = await screen.findByRole('dialog');
+    const start = within(dialog).getByLabelText(/Planned start|Start date|Start/);
+    await userEvent.clear(start);
+    await userEvent.type(start, '2026-11-07');
+    expect(within(dialog).queryByTestId('task-broken-dependency')).not.toBeInTheDocument();
+    await userEvent.clear(start);
+    await userEvent.type(start, '2026-11-06');
+    expect(within(dialog).getByTestId('task-broken-dependency')).toBeInTheDocument();
+  });
+});

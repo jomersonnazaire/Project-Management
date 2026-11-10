@@ -62,6 +62,7 @@ import {
   type ProjectDoc,
 } from '../services/projectService.js';
 import { assertProjectScope, isProjectPm, projectScopeFilter } from '../services/scope.js';
+import { syncProjectPhases } from '../services/phases.js';
 import { loadCalendar } from '../services/calendar.js';
 import { stopTimersForProject } from '../services/tracker.js';
 import { ensureDefaultFolders } from './documents.js';
@@ -378,6 +379,8 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
           { session },
         );
         if (tasks.length) await TaskModel.insertMany(tasks, { session });
+        // CR-22 (Lead): the template's phases become phase records; tasks get their phaseId.
+        await syncProjectPhases(projectId, { apply: true, session });
         await recomputeProject(projectId, session);
       });
     } catch (e) {
@@ -553,6 +556,8 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
         newPhaseNames.push(ph.name);
     }
     await ensureDefaultFolders(project as never, newPhaseNames);
+    // CR-22 (Lead): new template phases get their records; added tasks get their phaseId.
+    await syncProjectPhases(project._id, { apply: true });
     // Count what really changed: template phases that didn't exist before and exist now, so
     // phasesAdded + phasesMerged == the template's (distinct) phase count.
     const after = new Set(

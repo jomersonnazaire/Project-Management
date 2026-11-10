@@ -19,6 +19,11 @@ const timeline = async (agent: Agent, id: string) => {
 };
 const savePhases = (agent: Agent, id: string, phases: unknown[]) =>
   agent.put(`/api/v1/projects/${id}/phase-list`).set(CSRF).send({ phases });
+/** Data as it was before the phase migration: text phases only, no records, no phaseId. */
+const preMigration = async (pid: string) => {
+  await ProjectModel.updateOne({ _id: pid }, { $set: { phases: [] } });
+  await TaskModel.updateMany({ projectId: pid }, { $set: { phaseId: null } });
+};
 const listOf = (tl: TimelineDto) =>
   tl.phases.map((p) => ({
     id: p.id,
@@ -245,6 +250,7 @@ describe('CR-22 B: phase manager PUT /projects/:id/phase-list (FR-TL-23, AC-72.6
       .send({ name: 'New one', phase: '  extras ' });
     expect(created.status).toBe(201);
     expect(created.body.task.phase).toBe('Extras');
+    expect(created.body.task.phaseId).toBe(tl.phases[2]!.id);
     tl = (await timeline(w.pm.agent, w.project.id)).body as TimelineDto;
     expect(tl.phases.find((p) => p.name === 'Extras')?.taskCount).toBe(1);
     await TaskModel.deleteOne({ _id: created.body.task.id });
@@ -261,14 +267,18 @@ describe('CR-22 B: one-time phase migration (FR-TL-24, AC-72.7)', () => {
   it('dry run writes nothing; --apply creates records in task order, respells variants, audits once; re-run is a no-op', async () => {
     const w = await world(app);
     const pid = w.project.id as string;
+    await preMigration(pid);
     const tasks = await TaskModel.find({ projectId: pid }).sort({ order: 1 });
     await TaskModel.updateOne({ _id: tasks[1]!._id }, { $set: { phase: ' phase a' } });
     const dry = await migrateAllPhases({ apply: false });
     const mine = dry.changed.find((p) => p.projectId === pid)!;
     expect(mine.added).toEqual(['Phase A', 'Phase B']);
-    expect(mine.tasksRespelled).toEqual([
+    expect(mine.tasksLinked).toEqual([
+      { taskId: tasks[0]!._id.toString(), from: 'Phase A', to: 'Phase A' },
       { taskId: tasks[1]!._id.toString(), from: ' phase a', to: 'Phase A' },
+      { taskId: tasks[2]!._id.toString(), from: 'Phase B', to: 'Phase B' },
     ]);
+    expect((await TaskModel.find({ projectId: pid }).lean()).every((t) => !t.phaseId)).toBe(true);
     expect((await ProjectModel.findById(pid).lean())!.phases).toEqual([]);
 
     const applied = await migrateAllPhases({ apply: true });
@@ -280,6 +290,8 @@ describe('CR-22 B: one-time phase migration (FR-TL-24, AC-72.7)', () => {
     ]);
     const after = await TaskModel.find({ projectId: pid }).sort({ order: 1 }).lean();
     expect(after.map((t) => t.phase)).toEqual(['Phase A', 'Phase A', 'Phase B']);
+    const [a, b] = project.phases.map((p) => p._id.toString());
+    expect(after.map((t) => t.phaseId?.toString())).toEqual([a, a, b]);
     expect(
       await ActivityLogModel.countDocuments({
         projectId: pid,
@@ -295,5 +307,64 @@ describe('CR-22 B: one-time phase migration (FR-TL-24, AC-72.7)', () => {
         action: PHASE_MIGRATION_AUDIT_ACTION,
       }),
     ).toBe(1);
+  });
+});
+
+describe('CR-22 B (Lead): tasks reference their phase by phaseId', () => {
+  it('a task picks a phase record by id; renaming the phase keeps the task in it', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    let tl = (await timeline(w.pm.agent, pid)).body as TimelineDto;
+    const phaseB = tl.phases[1]!;
+    const created = await w.pm.agent
+      .post(`/api/v1/projects/${pid}/tasks`)
+      .set(CSRF)
+      .send({ name: 'Picked', phaseId: phaseB.id });
+    expect(created.status).toBe(201);
+    expect(created.body.task).toMatchObject({ phaseId: phaseB.id, phase: 'Phase B' });
+    const rename = listOf(tl).map((p) => (p.id === phaseB.id ? { ...p, name: 'Build' } : p));
+    expect((await savePhases(w.pm.agent, pid, rename)).status).toBe(200);
+    tl = (await timeline(w.pm.agent, pid)).body as TimelineDto;
+    const picked = tl.tasks.find((t) => t.name === 'Picked')!;
+    expect(picked).toMatchObject({ phaseId: phaseB.id, phase: 'Build' });
+    expect(tl.phases.find((p) => p.id === phaseB.id)).toMatchObject({
+      name: 'Build',
+      taskCount: 2,
+    });
+    // Clearing the phase: No phase.
+    const cleared = await w.pm.agent
+      .patch(`/api/v1/tasks/${picked.id}`)
+      .set(CSRF)
+      .send({ phaseId: null, version: created.body.task.version + 1 });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.task).toMatchObject({ phaseId: null, phase: null });
+  });
+
+  it('rejects an unknown phaseId or a phase name that is not in the list (422 UNKNOWN_PHASE)', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    await preMigration(pid);
+    const byId = await w.pm.agent
+      .post(`/api/v1/projects/${pid}/tasks`)
+      .set(CSRF)
+      .send({ name: 'Bad', phaseId: '64b000000000000000000000' });
+    expect(byId.status).toBe(422);
+    expect(byId.body.error.code).toBe('UNKNOWN_PHASE');
+    const byName = await w.pm.agent
+      .post(`/api/v1/projects/${pid}/tasks`)
+      .set(CSRF)
+      .send({ name: 'Bad', phase: 'Not a phase' });
+    expect(byName.status).toBe(422);
+    expect(byName.body.error.code).toBe('UNKNOWN_PHASE');
+    const project = (await ProjectModel.findById(pid).lean())!;
+    expect(project.phases.map((p) => p.name)).not.toContain('Not a phase');
+    // A name known only as task text (before the migration) still works, and gets its record.
+    const ok = await w.pm.agent
+      .post(`/api/v1/projects/${pid}/tasks`)
+      .set(CSRF)
+      .send({ name: 'Fine', phase: 'phase a' });
+    expect(ok.status).toBe(201);
+    expect(ok.body.task.phase).toBe('Phase A');
+    expect(ok.body.task.phaseId).toMatch(/^[0-9a-f]{24}$/);
   });
 });

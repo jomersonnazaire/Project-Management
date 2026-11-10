@@ -20,6 +20,7 @@ let n = 0;
 const task = (over: Partial<TimelineTaskInput> & { id: string }): TimelineTaskInput => ({
   order: ++n,
   name: over.id,
+  phaseId: null,
   phase: null,
   status: 'TODO',
   plannedStart: '2026-11-02',
@@ -65,7 +66,7 @@ describe('CR-22 B slice 1: scheduling basics', () => {
 });
 
 describe('CR-22 B slice 1: dependency links (FR-TL-06, 07, 28; EC-190)', () => {
-  it('flags a successor starting before the next working day after its predecessor', () => {
+  it('AC-72.4 (Lead): broken only when the successor starts on or before the predecessor finish', () => {
     const a = task({ id: 'a', plannedStart: '2026-11-02', dueDate: '2026-11-06' }); // Fri
     const ok = task({
       id: 'ok',
@@ -79,19 +80,27 @@ describe('CR-22 B slice 1: dependency links (FR-TL-06, 07, 28; EC-190)', () => {
       dueDate: '2026-11-10',
       dependsOn: ['a'],
     });
+    const before = task({
+      id: 'before',
+      plannedStart: '2026-11-05',
+      dueDate: '2026-11-10',
+      dependsOn: ['a'],
+    });
     const weekend = task({
       id: 'sat',
       plannedStart: '2026-11-07',
       dueDate: '2026-11-10',
       dependsOn: ['a'],
     });
-    const links = timelineLinks([a, ok, sameDay, weekend]);
+    const links = timelineLinks([a, ok, sameDay, before, weekend]);
     expect(links.map((l) => [l.to, l.state])).toEqual([
       ['ok', 'OK'],
       ['same', 'BROKEN'],
-      ['sat', 'BROKEN'],
+      ['before', 'BROKEN'],
+      ['sat', 'OK'],
     ]);
-    expect(links[1]!.earliestStart).toBe('2026-11-09');
+    // The forecast (slice 2) starts a Saturday successor on the next working day, Monday.
+    expect(links[3]!.earliestStart).toBe('2026-11-09');
   });
 
   it('links to an unscheduled or cancelled task are ignored, not broken', () => {
@@ -108,6 +117,14 @@ describe('CR-22 B slice 1: dependency links (FR-TL-06, 07, 28; EC-190)', () => {
       { id: 'x', plannedStart: '2026-11-09', dueDate: '2026-11-11', dependsOn: ['a', 'b'] },
       [a, b],
     );
+    // Starting the day after a Friday finish (a Saturday) is not broken.
+    const fri = task({ id: 'f', dueDate: '2026-11-13' });
+    expect(
+      brokenDependencies(
+        { id: 'x', plannedStart: '2026-11-14', dueDate: '2026-11-16', dependsOn: ['f'] },
+        [fri],
+      ),
+    ).toEqual([]);
     expect(res).toEqual([{ id: 'a', order: 9, name: 'Data migration', finish: '2026-11-09' }]);
     expect(
       brokenDependencies({ id: 'x', plannedStart: null, dueDate: null, dependsOn: ['a'] }, [a]),
@@ -202,6 +219,21 @@ describe('CR-22 B slice 1: buildTimeline (FR-TL-01 to 05, 23; AC-72.1, 72.5, 73.
   it('range covers bars, today and the target, padded to Mondays', () => {
     expect(m.range.start).toBe('2026-09-28');
     expect(m.range.end >= '2026-12-18').toBe(true);
+  });
+
+  it('tasks join their phase by id, so a renamed phase keeps its tasks', () => {
+    const r = buildTimeline({
+      tasks: [
+        task({ id: 'x', phaseId: 'p9', phase: 'Old name' }),
+        task({ id: 'y', phase: 'new NAME ' }),
+      ],
+      phases: [{ id: 'p9', name: 'New name', targetDate: null }],
+      plannedEndDate: null,
+      today: '2026-11-11',
+    });
+    expect(r.groups.map((g) => [g.name, g.tasks.map((t) => t.id)])).toEqual([
+      ['New name', ['x', 'y']],
+    ]);
   });
 
   it('No phase is left out when its only tasks are unscheduled', () => {

@@ -8,6 +8,12 @@ const taskSchema = new Schema(
     templateActivityId: { type: String, default: null },
     order: { type: Number, default: 0 },
     name: { type: String, required: true, trim: true, maxlength: 200 },
+    /**
+     * CR-22 (Lead): the task's phase record (`Project.phases._id`); null = No phase. `phase` is a
+     * copy of that phase's current name, kept in step by the API for display, the Checklist and the
+     * phase evidence folders. Never set `phase` without `phaseId`.
+     */
+    phaseId: { type: Schema.Types.ObjectId, default: null },
     phase: { type: String, default: null },
     taskType: { type: String, default: null },
     priority: { type: String, enum: PRIORITIES, default: 'MEDIUM' },

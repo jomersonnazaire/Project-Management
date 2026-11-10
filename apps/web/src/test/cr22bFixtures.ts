@@ -1,11 +1,15 @@
 import type { TimelineDto, TimelineTaskInput } from '@xc8/shared';
 import { PID } from './m2fixtures';
 
+const PHASE_IDS: Record<string, string> = { Initiation: 'ph1', Build: 'ph2', Spare: 'ph3' };
+
 /** CR-22 Part B: a timeline like UIE's mockup (fake data, today Wed Nov 11, 2026). */
 const t = (
   over: Partial<TimelineTaskInput> & { id: string; order: number; name: string },
 ): TimelineTaskInput => ({
   phase: null,
+  // Tasks point at their phase record by id (Lead); `phase` is its name.
+  phaseId: over.phase ? (PHASE_IDS[over.phase] ?? null) : null,
   status: 'TODO',
   plannedStart: '2026-11-02',
   dueDate: '2026-11-06',

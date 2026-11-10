@@ -6,7 +6,7 @@ import {
   NO_ESTIMATE_LABEL,
   BROKEN_LINK_TITLE,
   brokenDependencies,
-  type TimelineDto,
+  PHASE_PICK_HINT,
   PARTIES,
   PARTY_LABELS,
   PRIORITIES,
@@ -16,7 +16,6 @@ import {
   type ProjectDto,
   type TaskDto,
 } from '@xc8/shared';
-import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
@@ -24,7 +23,7 @@ import { ApiError, saveErrorMessage } from '../../api/client';
 import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { DependsOnPicker } from '../../components/DependsOnPicker';
-import { timelineKey } from '../../api/timelineHooks';
+import { useProjectPhases } from '../../api/issueHooks';
 import { shortDate } from '../../lib/format';
 import { EmailCheckbox } from '../../components/EmailCheckbox';
 import {
@@ -68,7 +67,12 @@ export function TaskFormModal({
   );
 
   const [name, setName] = useState(task?.name ?? '');
-  const [phase, setPhase] = useState(task?.phase ?? fixedPhase ?? '');
+  // CR-22 (Lead): the phase is a strict pick from the project's phases, by record id. A value is
+  // a phase id, `name:<phase>` for a phase known only by name (before the phase migration), or ''
+  // for No phase.
+  const [phase, setPhase] = useState(
+    task?.phaseId ?? (task?.phase ? `name:${task.phase}` : fixedPhase ? `name:${fixedPhase}` : ''),
+  );
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'MEDIUM');
   const [party, setParty] = useState<Party>(task?.party ?? 'INTERNAL');
   const [ownerId, setOwnerId] = useState(task?.owner?.id ?? '');
@@ -98,22 +102,35 @@ export function TaskFormModal({
 
   const serverErrors = mutation.error instanceof ApiError ? mutation.error.fieldErrors() : {};
   const err = (k: string) => errors[k] ?? serverErrors[k];
-  // CR-22 FR-TL-23: phases come from the project's phase list (when the Timeline has loaded it),
-  // then any phase text on tasks.
-  const qc = useQueryClient();
-  const timeline = qc.getQueryData<TimelineDto>(timelineKey(project.id));
-  const phases = Array.from(
-    new Set(
-      [...(timeline?.phases ?? []).map((p) => p.name), ...tasks.map((t) => t.phase)].filter(
-        Boolean,
-      ),
-    ),
-  ) as string[];
-  // CR-22 FR-TL-07 / AC-72.8: warn (never block) when the start is before a predecessor finishes.
+  const phaseList = useProjectPhases(project.id);
+  const options = (phaseList.data ?? []).map((p) => ({
+    value: p.id ?? `name:${p.name}`,
+    name: p.name,
+  }));
+  // Keep the task's current phase selectable while the list loads (or if it can't load).
+  if (phase && !options.some((o) => o.value === phase)) {
+    const name = phase.startsWith('name:') ? phase.slice(5) : (task?.phase ?? '');
+    const sameName = options.find((o) => o.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (!sameName) options.push({ value: phase, name });
+  }
+  const pickedOption =
+    options.find((o) => o.value === phase) ??
+    options.find(
+      (o) =>
+        phase.startsWith('name:') &&
+        o.name.trim().toLowerCase() === phase.slice(5).trim().toLowerCase(),
+    );
+  const pickedValue = phase ? (pickedOption?.value ?? phase) : '';
+  const phaseBody = !pickedValue
+    ? { phaseId: null }
+    : pickedValue.startsWith('name:')
+      ? { phase: pickedValue.slice(5) }
+      : { phaseId: pickedValue };
+  // CR-22 FR-TL-07 / AC-72.8: warn (never block) when the start is on or before a predecessor's
+  // finish.
   const broken = brokenDependencies(
     { id: task?.id ?? '', plannedStart: plannedStart || null, dueDate: dueDate || null, dependsOn },
     tasks,
-    timeline?.calendar,
   );
 
   const submit = (e: FormEvent) => {
@@ -131,7 +148,7 @@ export function TaskFormModal({
     if (Object.keys(next).length) return;
     const body = {
       name: name.trim(),
-      phase: phase.trim() || null,
+      ...phaseBody,
       priority,
       party,
       ownerId: ownerId || null,
@@ -236,16 +253,23 @@ export function TaskFormModal({
             ) : (
               <Form.Group className="col-md-4" controlId="task-phase">
                 <Form.Label>Phase</Form.Label>
-                <Form.Control
-                  list="task-phase-list"
-                  value={phase}
+                <Form.Select
+                  value={pickedValue}
                   onChange={(e) => setPhase(e.target.value)}
-                />
-                <datalist id="task-phase-list">
-                  {phases.map((p) => (
-                    <option key={p} value={p} />
+                  isInvalid={Boolean(err('phaseId') ?? err('phase'))}
+                  aria-describedby="task-phase-help"
+                >
+                  <option value="">No phase</option>
+                  {options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.name}
+                    </option>
                   ))}
-                </datalist>
+                </Form.Select>
+                <Form.Text id="task-phase-help">{PHASE_PICK_HINT}</Form.Text>
+                <Form.Control.Feedback type="invalid">
+                  {err('phaseId') ?? err('phase')}
+                </Form.Control.Feedback>
               </Form.Group>
             )}
             <Form.Group className="col-md-4" controlId="task-priority">

@@ -30,6 +30,8 @@ export interface TimelineTaskInput {
   id: string;
   order: number;
   name: string;
+  /** CR-22 (Lead): the phase record id; `phase` is the phase's current name. */
+  phaseId: string | null;
   phase: string | null;
   status: TaskStatus;
   plannedStart: string | null;
@@ -85,9 +87,10 @@ export function shortVarianceLabel(days: number): string {
 
 // ---------- Dependencies ----------
 /**
- * One finish-to-start link (FR-TL-06). OK: drawn normally. BROKEN (FR-TL-07): the successor starts
- * before the next working day after its predecessor's finish; drawn red, never blocks or moves
- * dates. UNSCHEDULED (FR-TL-28): one end has no dates, so the link is ignored and the scheduled
+ * One finish-to-start link (FR-TL-06). OK: drawn normally. BROKEN (FR-TL-07, AC-72.4; Lead): the
+ * successor's planned start is on or before its predecessor's finish; drawn red, never blocks or
+ * moves dates. A start on a non-working day right after the finish (Saturday after a Friday) is
+ * not broken; the forecast treats it as the next working day (FR-TL-27). UNSCHEDULED (FR-TL-28): one end has no dates, so the link is ignored and the scheduled
  * end shows a warning icon. CANCELLED (EC-190): one end is cancelled, so the link is satisfied.
  */
 export type TimelineLinkState = 'OK' | 'BROKEN' | 'UNSCHEDULED' | 'CANCELLED';
@@ -96,7 +99,7 @@ export interface TimelineLink {
   from: string;
   to: string;
   state: TimelineLinkState;
-  /** BROKEN: the earliest start the link allows (next working day after the predecessor). */
+  /** The earliest start the link allows: the next working day after the predecessor (FR-TL-27). */
   earliestStart: string | null;
 }
 
@@ -116,8 +119,7 @@ export function timelineLinks(
       else if (!isScheduled(pred) || !isScheduled(succ)) state = 'UNSCHEDULED';
       else {
         earliestStart = nextWorkingDayAfter(pred.dueDate!, cal);
-        if (succ.plannedStart! < earliestStart) state = 'BROKEN';
-        else earliestStart = null;
+        if (succ.plannedStart! <= pred.dueDate!) state = 'BROKEN';
       }
       out.push({ from: pred.id, to: succ.id, state, earliestStart });
     }
@@ -126,8 +128,8 @@ export function timelineLinks(
 }
 
 /**
- * FR-TL-07 / AC-72.8: the task form's warning when the planned start is before the next working
- * day after a predecessor's finish. Pure, so the form can check before saving. Never blocks.
+ * FR-TL-07 / AC-72.8: the task form's warning when the planned start is on or before a
+ * predecessor's finish. Pure, so the form can check before saving. Never blocks.
  */
 export function brokenDependencies(
   task: {
@@ -140,7 +142,6 @@ export function brokenDependencies(
     TimelineTaskInput,
     'id' | 'order' | 'name' | 'plannedStart' | 'dueDate' | 'status'
   >[],
-  cal: WorkCalendar = DEFAULT_CALENDAR,
 ) {
   if (!isScheduled(task)) return [];
   const byId = new Map(others.map((t) => [t.id, t]));
@@ -148,7 +149,7 @@ export function brokenDependencies(
     .map((id) => byId.get(id))
     .filter((p): p is NonNullable<typeof p> => Boolean(p) && p!.id !== task.id)
     .filter((p) => p.status !== 'CANCELLED' && isScheduled(p))
-    .filter((p) => task.plannedStart! < nextWorkingDayAfter(p.dueDate!, cal))
+    .filter((p) => task.plannedStart! <= p.dueDate!)
     .map((p) => ({ id: p.id, order: p.order, name: p.name, finish: p.dueDate! }));
 }
 
@@ -253,14 +254,28 @@ export function buildTimeline(input: {
     ordered.push(g);
     return g;
   };
+  const keyById = new Map<string, string>();
   for (const ph of input.phases) {
-    const key = timelinePhaseKey(ph.name);
+    const key = ph.id ? `id:${ph.id}` : timelinePhaseKey(ph.name);
+    if (ph.id) keyById.set(ph.id, key);
     if (!groups.has(key)) mk('PHASE', key, ph.name.trim(), ph);
   }
+  // Tasks join their phase record by id; a task with only a name (before the phase migration)
+  // joins by name, ignoring case and spaces.
+  const keyByName = new Map(
+    [...groups.values()].map((g) => [timelinePhaseKey(g.name), g.key] as const),
+  );
   const members = new Map<string, TimelineTaskInput[]>();
   for (const t of tasks) {
-    const key = t.phase?.trim() ? timelinePhaseKey(t.phase) : '';
-    if (key && !groups.has(key)) mk('PHASE', key, t.phase!.trim());
+    const key =
+      (t.phaseId && keyById.get(t.phaseId)) ||
+      (t.phase?.trim()
+        ? (keyByName.get(timelinePhaseKey(t.phase)) ?? timelinePhaseKey(t.phase))
+        : '');
+    if (key && !groups.has(key)) {
+      mk('PHASE', key, t.phase!.trim());
+      keyByName.set(timelinePhaseKey(t.phase!), key);
+    }
     if (!members.has(key)) members.set(key, []);
     members.get(key)!.push(t);
   }
@@ -374,6 +389,11 @@ export type SavePhaseListInput = z.infer<typeof savePhaseListSchema>;
 
 export const PHASE_NAME_REQUIRED = 'Enter a phase name.';
 export const PHASE_NAME_DUPLICATE = 'There\u2019s already a phase with this name.';
+/** Under the task form's phase pick (Lead: no free-text phases). */
+export const PHASE_PICK_HINT = 'New phases are added in Phases on the Timeline tab.';
+/** 422 UNKNOWN_PHASE (Lead): a task's phase must be one of its project's phases. */
+export const UNKNOWN_PHASE_MESSAGE =
+  'Pick a phase from this project\u2019s phase list. New phases are added in Phases on the Timeline.';
 
 // ---------- API DTO ----------
 export interface TimelinePhaseDto extends TimelinePhaseInput {
