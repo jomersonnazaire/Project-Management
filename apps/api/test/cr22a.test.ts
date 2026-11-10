@@ -314,3 +314,102 @@ describe('CR-22 create: keepCreatorOnTeam', () => {
     expect(await membersOf(own.body.project.id)).toEqual([w.pm.user._id.toString()]);
   });
 });
+
+describe('CR-22 A1: PM list totals, status counts and ?mine=true', () => {
+  interface ListBody {
+    items: { id: string; name: string }[];
+    total: number;
+    counts: Record<string, number>;
+  }
+  const list = async (a: Agent, query = '') =>
+    (await a.get(`/api/v1/projects${query}`)).body as ListBody;
+
+  /** P1 managed by PM (Planning); P2 by PM2 with PM on the team (Active); P3 by PM2 without PM
+   * (On hold); P4 by PM2 without PM (archived); P5 by PM2 with PM on the team (archived). */
+  async function fixtures(w: W) {
+    const pm2 = w.pm2.user._id.toString();
+    const pm = w.pm.user._id.toString();
+    const p2 = await secondProject(w, pm2, [pm]);
+    const p3 = await secondProject(w, pm2);
+    const p4 = await secondProject(w, pm2);
+    const p5 = await secondProject(w, pm2, [pm]);
+    await ProjectModel.updateOne({ _id: p2.id }, { $set: { status: 'ACTIVE' } });
+    await ProjectModel.updateOne({ _id: p3.id }, { $set: { status: 'ON_HOLD' } });
+    await ProjectModel.updateMany({ _id: { $in: [p4.id, p5.id] } }, { $set: { archived: true } });
+    return { p1: w.project as { id: string }, p2, p3, p4, p5 };
+  }
+
+  it('total and every status/tab count cover only projects the PM manages or is on', async () => {
+    const w = await world(app);
+    const { p1, p2, p5 } = await fixtures(w);
+    const all = await list(w.pm.agent);
+    expect(all.items.map((p) => p.id).sort()).toEqual([p1.id, p2.id].sort());
+    expect(all.total).toBe(2);
+    expect(all.counts).toMatchObject({
+      ALL: 2,
+      PLANNING: 1,
+      ACTIVE: 1,
+      ON_HOLD: 0,
+      COMPLETED: 0,
+      CANCELLED: 0,
+      ARCHIVED: 1,
+    });
+    // A tab with only hidden projects is empty, and Archived shows only the PM's archived one.
+    const onHold = await list(w.pm.agent, '?status=ON_HOLD');
+    expect(onHold).toMatchObject({ items: [], total: 0 });
+    const archived = await list(w.pm.agent, '?status=ARCHIVED');
+    expect(archived.items.map((p) => p.id)).toEqual([p5.id]);
+    expect(archived.total).toBe(1);
+    // Pagination counts visible rows only: no trailing empty page.
+    const page1 = await list(w.pm.agent, '?pageSize=1');
+    expect(page1.items).toHaveLength(1);
+    expect(page1.total).toBe(2);
+    expect((await list(w.pm.agent, '?pageSize=1&page=2')).items).toHaveLength(1);
+    expect((await list(w.pm.agent, '?pageSize=1&page=3')).items).toEqual([]);
+    // Searching a hidden project's name finds nothing.
+    expect((await list(w.pm.agent, '?q=Second')).items.map((p) => p.id)).toEqual([p2.id]);
+    // PM2 manages all four others: their counts include them.
+    expect((await list(w.pm2.agent)).counts).toMatchObject({
+      ALL: 2,
+      ACTIVE: 1,
+      ON_HOLD: 1,
+      ARCHIVED: 2,
+    });
+  });
+
+  it('?mine=true lists only projects the PM manages, not ones they are merely on', async () => {
+    const w = await world(app);
+    const { p1, p2, p3 } = await fixtures(w);
+    const mine = await list(w.pm.agent, '?mine=true');
+    expect(mine.items.map((p) => p.id)).toEqual([p1.id]);
+    expect(mine.total).toBe(1);
+    const theirs = await list(w.pm2.agent, '?mine=true');
+    expect(theirs.items.map((p) => p.id).sort()).toEqual([p2.id, p3.id].sort());
+  });
+});
+
+describe('CR-22 A2: note wording', () => {
+  it('one unowned task reads singular', async () => {
+    const w = await world(app);
+    const [first, second] = await TaskModel.find({ projectId: w.project.id })
+      .sort({ order: 1 })
+      .lean();
+    await TaskModel.updateMany(
+      { _id: { $in: [first!._id, second!._id] } },
+      { $set: { status: 'CANCELLED' } },
+    );
+    const res = await w.pm.agent
+      .patch(`/api/v1/projects/${w.project.id}`)
+      .set(CSRF)
+      .send({ status: 'ACTIVE' });
+    expect(res.status).toBe(200);
+    expect(res.body.notes).toEqual([
+      {
+        code: 'TASKS_WITHOUT_OWNER',
+        count: 1,
+        message:
+          '1 task has no owner yet. The status still changes; assign owners on the Checklist when you can.',
+      },
+    ]);
+  });
+});

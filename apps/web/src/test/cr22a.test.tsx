@@ -131,3 +131,18 @@ describe('CR-22 A2: status change with tasks lacking an owner', () => {
     expect(await screen.findByTestId('project-save-note')).toHaveTextContent(message);
   });
 });
+
+describe('CR-22 A2: note wording', () => {
+  it.each([
+    [1, '1 task has no owner yet.'],
+    [3, '3 tasks have no owner yet.'],
+  ])('%i unowned task(s): "%s"', async (count, start) => {
+    checklistApi(project({ status: 'PLANNING', unownedTaskCount: count }));
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Status'), 'ACTIVE');
+    const note = within(dialog).getByTestId('unowned-tasks-note');
+    expect(note.textContent!.startsWith(start)).toBe(true);
+  });
+});
