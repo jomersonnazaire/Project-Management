@@ -345,7 +345,7 @@ export function TaskPanel({
               />
 
               <h3 className="h6">History</h3>
-              <ul className="list-unstyled small mb-0">
+              <ul className="list-unstyled small mb-0 task-history">
                 {(history.data ?? []).map((h) => (
                   <li key={h.id} className="mb-2">
                     <span className="text-heading">{h.actor?.name ?? 'System'}</span>{' '}

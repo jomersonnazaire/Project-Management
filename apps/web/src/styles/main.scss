@@ -2005,3 +2005,11 @@ $board-gap: 0.75rem;
   font-weight: 500;
   vertical-align: middle;
 }
+
+// CR-23 (UIE r4): long unbroken import items in Task History and Project Activity wrap inside the panel.
+.audit-what {
+  overflow-wrap: anywhere;
+}
+.task-history > li {
+  min-width: 0;
+}
