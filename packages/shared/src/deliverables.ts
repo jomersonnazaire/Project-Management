@@ -24,6 +24,11 @@ export interface DeliverableItemDto {
   doneAt: string | null;
   /** UIE §4.5: ticked by a Checklist import ("Done · from import, {date}"). */
   doneFromImport: boolean;
+  /**
+   * CR-23 (Lean): the task's old single Deliverable text, shown until the task has real items.
+   * Read-only (no tick, edit, remove or reorder); counts as not done. Its id is `legacy`.
+   */
+  legacy: boolean;
   order: number;
   createdBy: { id: string; name: string } | null;
   createdAt: string;
@@ -33,7 +38,12 @@ export interface DeliverableItemDto {
 export interface TemplateDeliverableItemDto {
   id: string;
   text: string;
+  /** The activity's old Deliverable text, not yet moved into an item (id `legacy`). */
+  legacy?: boolean;
 }
+
+/** CR-23 (Lean): the id of the read-only item that shows an old Deliverable text. */
+export const LEGACY_DELIVERABLE_ID = 'legacy';
 
 /** UIE §5.4 copy. */
 export const deliverableTooLongMessage = (n: number) =>
@@ -52,6 +62,11 @@ export const DELIVERABLE_COPY = {
   TEXT_REQUIRED: 'Enter the deliverable.',
   LIMIT: `A task can have up to ${DELIVERABLE_MAX_ITEMS} deliverable items.`,
   /** FR-TSK-38: the old single text field is gone from write APIs. */
+  /** Under the read-only item that shows the old Deliverable text. */
+  LEGACY_NOTE:
+    'From the old Deliverable field. It becomes a normal item when you add the first deliverable.',
+  LEGACY_NOTE_READ: 'From the old Deliverable field.',
+  LEGACY_BADGE: 'Old text',
   FIELD_REMOVED:
     'Deliverable is now a checklist. Send deliverableItems instead of the old deliverable text.',
 } as const;
@@ -116,6 +131,8 @@ export const templateDeliverableItemsSchema = z
   .array(
     z.strictObject({
       id: z.string().trim().max(40).optional(),
+      /** Sent back as the DTO had it; ignored (the server knows which item is the old text). */
+      legacy: z.boolean().optional(),
       text: itemText,
     }),
   )

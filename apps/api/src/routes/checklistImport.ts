@@ -71,7 +71,7 @@ import {
   type TimelineExportRow,
 } from '../services/timelineImport/workbook.js';
 import { assertNotArchived, assertPlanOpen, loadProject } from './projects.js';
-import { sortedItems, type ItemLike } from '../services/deliverableItems.js';
+import { effectiveItems, sortedItems, type ItemLike } from '../services/deliverableItems.js';
 import {
   canAutoAddToTeam,
   canOwnFromImport,
@@ -258,7 +258,7 @@ async function planTasks(projectId: Types.ObjectId, session: mongoose.ClientSess
   const names = new Map((project?.phases ?? []).map((p) => [p._id.toString(), p.name]));
   const tasks = await TaskModel.find({ projectId })
     .select(
-      'order name phase phaseId isMilestone plannedStart dueDate dependsOn ownerId version deliverableItems',
+      'order name phase phaseId isMilestone plannedStart dueDate dependsOn ownerId version deliverableItems deliverable deliverableLegacyMoved',
     )
     .sort({ order: 1, _id: 1 })
     .session(session)
@@ -274,7 +274,8 @@ async function planTasks(projectId: Types.ObjectId, session: mongoose.ClientSess
     dependsOn: (t.dependsOn ?? []).map(String),
     ownerId: t.ownerId ? t.ownerId.toString() : null,
     version: t.version ?? 0,
-    deliverableItems: sortedItems(t.deliverableItems).map((i) => ({
+    // Lean: a task that only has its old Deliverable text compares as that one open item.
+    deliverableItems: effectiveItems(t).map((i) => ({
       text: i.text,
       done: Boolean(i.done),
     })),
@@ -484,7 +485,7 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
     if (withRows) {
       const tasks = await TaskModel.find({ projectId: project._id })
         .select(
-          'order name phase phaseId isMilestone plannedStart dueDate dependsOn ownerId baseline deliverableItems',
+          'order name phase phaseId isMilestone plannedStart dueDate dependsOn ownerId baseline deliverableItems deliverable deliverableLegacyMoved',
         )
         .sort({ order: 1, _id: 1 })
         .lean();
@@ -511,7 +512,8 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
         owner: t.ownerId ? (owners.get(t.ownerId.toString()) ?? null) : null,
         baselineStart: dateOf(t.baseline?.start),
         baselineFinish: dateOf(t.baseline?.finish),
-        deliverables: sortedItems(t.deliverableItems).map((i) => ({
+        // Lean: a task not moved yet exports its old Deliverable text as one open line.
+        deliverables: effectiveItems(t).map((i) => ({
           text: i.text,
           done: Boolean(i.done),
         })),
@@ -887,12 +889,16 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
           const f = r.fields!;
           const set: Record<string, unknown> = {};
           const old = before.get(r.taskId!) ?? {};
+          // Lean: the old Deliverable text (if not moved yet) is the current first item, so a
+          // matching line keeps it as a real item; the old field itself is never touched.
+          const current = effectiveItems(old as Parameters<typeof effectiveItems>[0], at);
           for (const field of r.dto.changes.flatMap((c) => FIELD_OF[c]))
-            set[field] = docValue(field, f, (old.deliverableItems ?? []) as ItemDoc[]);
+            set[field] = docValue(field, f, current);
           if ('deliverableItems' in set) tally(r.dto.deliverables);
+          const marker = 'deliverableItems' in set ? { deliverableLegacyMoved: true } : {};
           const done = await TaskModel.updateOne(
             { _id: r.taskId, version: r.version },
-            { $set: set, $inc: { version: 1 } },
+            { $set: { ...set, ...marker }, $inc: { version: 1 } },
             { session },
           );
           if (!done.modifiedCount) throw stale();
@@ -906,7 +912,7 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
             action: 'task_updated',
             changes: Object.keys(set).map((field) =>
               field === 'deliverableItems'
-                ? { field, old: itemsShown(old[field]), new: itemsShown(set[field]) }
+                ? { field, old: itemsShown(current), new: itemsShown(set[field]) }
                 : { field, old: show(old[field]), new: show(set[field]) },
             ),
             meta: {

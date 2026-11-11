@@ -39,6 +39,7 @@ const item = (
   doneBy: null,
   doneAt: null,
   doneFromImport: false,
+  legacy: false,
   order: 1,
   createdBy: null,
   createdAt: '2026-11-01T00:00:00.000Z',
@@ -79,7 +80,11 @@ function mount(
         ]);
       }
       if (m === 'POST' && !id)
-        return bump([...t.deliverableItems, item(`n${t.version}`, String(body.text))]);
+        // Like the API: the first add turns the old-text item into a real one.
+        return bump([
+          ...t.deliverableItems.map((i) => (i.legacy ? { ...i, id: 'conv', legacy: false } : i)),
+          item(`n${t.version}`, String(body.text)),
+        ]);
       if (m === 'PATCH')
         return bump(
           t.deliverableItems.map((i) =>
@@ -244,6 +249,41 @@ describe('CR-23 deliverables checklist in the task panel (UIE §5)', () => {
     expect(box).toHaveTextContent(
       'No deliverable items yet. Add what this task has to hand over, like a signed form or a test report.',
     );
+  });
+
+  it('Lean: the old Deliverable text is a read-only "Old text" item, counted as not done (0 of 1); the first add makes it a normal item', async () => {
+    const user = userEvent.setup();
+    const { calls } = mount({ items: [item('legacy', 'Old sign-off sheet', { legacy: true })] });
+    const box = await openPanel();
+    const row = within(box).getByTestId('deliverable-legacy');
+    expect(row).toHaveTextContent('Old sign-off sheet');
+    expect(row).toHaveTextContent('Old text');
+    expect(row).toHaveTextContent(
+      'From the old Deliverable field. It becomes a normal item when you add the first deliverable.',
+    );
+    expect(within(row).getByRole('checkbox', { name: 'Old sign-off sheet' })).toBeDisabled();
+    expect(
+      within(box).queryByRole('button', { name: /Old sign-off sheet/ }),
+    ).not.toBeInTheDocument();
+    expect(box).toHaveTextContent('0 of 1 done');
+
+    await user.type(within(box).getByLabelText('Add a deliverable'), 'Signed UAT form{Enter}');
+    await waitFor(() =>
+      expect(within(box).queryByTestId('deliverable-legacy')).not.toBeInTheDocument(),
+    );
+    expect(within(box).getByRole('checkbox', { name: 'Old sign-off sheet' })).toBeEnabled();
+    expect(
+      within(box).getByRole('button', { name: 'Remove Old sign-off sheet' }),
+    ).toBeInTheDocument();
+    expect(box).toHaveTextContent('0 of 2 done');
+    expect(calls('/deliverable-items').filter(([, i]) => i?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('Lean: viewers see the old text with the short note', async () => {
+    mount({ can: false, items: [item('legacy', 'Old sign-off sheet', { legacy: true })] });
+    const row = within(await openPanel()).getByTestId('deliverable-legacy');
+    expect(row).toHaveTextContent('From the old Deliverable field.');
+    expect(row).not.toHaveTextContent('It becomes a normal item');
   });
 
   it('an imported tick has no name', async () => {
@@ -439,5 +479,21 @@ describe('CR-23 import preview: deliverables (UIE §4.3 to §4.5)', () => {
     expect(
       within(dialog).getByTestId('import-row-2').querySelector('td.tli-cell'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('CR-23 (Lean): template activity with only its old Deliverable text', () => {
+  it('shows it read-only with the badge and no Remove; other items can be removed', async () => {
+    const { render } = await import('@testing-library/react');
+    const { DeliverableDraftList } = await import('../pages/projects/DeliverablesChecklist');
+    render(
+      <DeliverableDraftList legacyFirst items={['Kick-off deck', 'Agenda']} onChange={() => {}} />,
+    );
+    const box = screen.getByTestId('deliverables-draft');
+    expect(box).toHaveTextContent('Kick-off deck Old text');
+    expect(
+      within(box).queryByRole('button', { name: 'Remove Kick-off deck' }),
+    ).not.toBeInTheDocument();
+    expect(within(box).getByRole('button', { name: 'Remove Agenda' })).toBeInTheDocument();
   });
 });

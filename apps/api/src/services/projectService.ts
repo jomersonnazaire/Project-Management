@@ -29,7 +29,7 @@ import {
 } from '../models/index.js';
 import { canAddProjectMembers, canEditProjectScope, isPlanner, type ScopeUser } from './scope.js';
 import { checklistExcelAllowed, checklistImportAllowed } from './checklistAccess.js';
-import { copyTemplateItems } from './deliverableItems.js';
+import { copyTemplateItems, legacyDeliverable } from './deliverableItems.js';
 import { projectTypeRefs } from './projectTypes.js';
 import { now as clockNow } from '../lib/clock.js';
 
@@ -231,8 +231,9 @@ export function buildPlanTasks(
       dueDate,
       estHours: typeof a.estHours === 'number' ? a.estHours : null,
       dependsOn: (a.dependsOn ?? []).map((d) => taskIds.get(d)!).filter(Boolean),
-      // FR-TSK-38: the activity's items, unticked, text in full (Q-160).
-      deliverableItems: copyTemplateItems(a.deliverableItems),
+      // FR-TSK-38: the activity's items, unticked, text in full (Q-160). An activity that still
+      // only has its old Deliverable text gives the task that text as its first item (Lean).
+      deliverableItems: copyTemplateItems(a.deliverableItems, legacyDeliverable(a)),
       requiresApproval: Boolean(a.requiresApproval),
       isMilestone: Boolean(a.isMilestone),
     };

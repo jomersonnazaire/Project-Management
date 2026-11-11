@@ -1932,3 +1932,13 @@ $board-gap: 0.75rem;
     outline-width: 13px;
   }
 }
+
+/* CR-23 (Lean): the read-only item showing a task's old Deliverable text. */
+.dlv-legacy {
+  background: var(--bs-tertiary-bg);
+}
+.dlv-legacy-badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  vertical-align: middle;
+}

@@ -29,6 +29,10 @@ const activitySchema = new Schema(
     durationDays: { type: Number, min: 0, default: 1 },
     /** CR-23 FR-DLV-01: the activity's deliverable items, never ticked (copied onto new tasks). */
     deliverableItems: { type: [deliverableItemSchema], default: [] },
+    /** Pre-CR-23 single text, kept untouched for rollback (Lean); see Task.deliverable. */
+    deliverable: { type: String },
+    /** CR-23: true once the old text was copied into `deliverableItems` (or items were saved). */
+    deliverableLegacyMoved: { type: Boolean },
     requiresApproval: { type: Boolean, default: false },
     isMilestone: { type: Boolean, default: false },
     dependsOn: { type: [String], default: [] },

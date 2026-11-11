@@ -1,4 +1,5 @@
 import {
+  LEGACY_DELIVERABLE_ID,
   DELIVERABLE_COPY,
   DELIVERABLE_MAX_ITEMS,
   deliverableTextProblem,
@@ -29,10 +30,69 @@ export const sortedItems = <T extends { order?: number | null }>(items: T[] | nu
     .sort((a, b) => (a.it.order ?? 0) - (b.it.order ?? 0) || a.i - b.i)
     .map(({ it }) => it);
 
+/** Audit action when an old Deliverable text becomes the first item (migration or first add). */
+export const DELIVERABLE_MIGRATION_AUDIT_ACTION = 'deliverables_migrated';
+
+/**
+ * CR-23 (Lean) read fallback. A task or template activity that still has its old single
+ * `deliverable` text and no items yet (and wasn't converted before) shows that text as a read-only
+ * first item. The old field itself is never changed (rollback keeps working).
+ */
+export interface LegacyHolder {
+  deliverable?: string | null;
+  deliverableItems?: unknown[] | null;
+  deliverableLegacyMoved?: boolean | null;
+}
+export function legacyDeliverable(d: LegacyHolder | null | undefined): string | null {
+  if (!d || d.deliverableLegacyMoved || (d.deliverableItems?.length ?? 0) > 0) return null;
+  const t = typeof d.deliverable === 'string' ? d.deliverable.trim() : '';
+  return t || null;
+}
+
+/** The old text as a real first item, unticked, no author (same shape the migration writes). */
+export function legacyItem(text: string, at: Date) {
+  return {
+    _id: new Types.ObjectId(),
+    text,
+    done: false,
+    doneBy: null,
+    doneAt: null,
+    doneViaImport: false,
+    order: 1,
+    createdBy: null,
+    createdAt: at,
+  };
+}
+
+/** Items to read (export, import compare): real items, or the old text as one open item. */
+export function effectiveItems(
+  d: LegacyHolder & { deliverableItems?: ItemLike[] | null },
+  at: Date = new Date(),
+): ItemLike[] {
+  const legacy = legacyDeliverable(d);
+  return legacy ? [legacyItem(legacy, at)] : sortedItems(d.deliverableItems);
+}
+
 export function deliverableItemDtos(
   items: ItemLike[] | null | undefined,
   ref: (id?: Types.ObjectId | null) => { id: string; name: string } | null,
+  legacy: string | null = null,
 ): DeliverableItemDto[] {
+  if (legacy && !(items?.length ?? 0))
+    return [
+      {
+        id: LEGACY_DELIVERABLE_ID,
+        text: legacy,
+        done: false,
+        doneBy: null,
+        doneAt: null,
+        doneFromImport: false,
+        legacy: true,
+        order: 1,
+        createdBy: null,
+        createdAt: new Date(0).toISOString(),
+      },
+    ];
   return sortedItems(items).map((i, n) => {
     const by = ref(i.doneBy);
     const author = ref(i.createdBy);
@@ -43,6 +103,7 @@ export function deliverableItemDtos(
       doneBy: by ? { id: by.id, name: by.name } : null,
       doneAt: i.doneAt ? i.doneAt.toISOString() : null,
       doneFromImport: Boolean(i.done && i.doneViaImport),
+      legacy: false,
       order: n + 1,
       createdBy: author ? { id: author.id, name: author.name } : null,
       createdAt: (i.createdAt ?? new Date(0)).toISOString(),
@@ -85,8 +146,13 @@ export function newTaskItems(items: { text: string }[], actorId: Types.ObjectId)
  * FR-TSK-38 / FR-DLV-04 / Q-160: a template activity's items copied onto a new task, unticked, in
  * the same order, text in full (never cut to the cap).
  */
-export function copyTemplateItems(items: { text: string; order?: number | null }[] | undefined) {
+/** Template activity items onto a new task, unticked; an unmoved old text becomes the item. */
+export function copyTemplateItems(
+  items: { text: string; order?: number | null }[] | undefined,
+  legacy: string | null = null,
+) {
   const at = new Date();
+  if (legacy && !(items?.length ?? 0)) return [legacyItem(legacy, at)];
   return sortedItems(items ?? []).map((i, n) => ({
     _id: new Types.ObjectId(),
     text: i.text,

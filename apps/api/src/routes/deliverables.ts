@@ -18,6 +18,9 @@ import { assertDeliverablesOpen, deliverablesEditor } from '../services/checklis
 import {
   assertItemCount,
   assertItemText,
+  DELIVERABLE_MIGRATION_AUDIT_ACTION,
+  legacyDeliverable,
+  legacyItem,
   sortedItems,
   type ItemLike,
 } from '../services/deliverableItems.js';
@@ -65,7 +68,12 @@ async function saveItems(taskId: Types.ObjectId, version: number, items: Item[])
   const res = await TaskModel.updateOne(
     { _id: taskId, version },
     {
-      $set: { deliverableItems: items.map((i, n) => ({ ...i, order: n + 1 })) },
+      // The old `deliverable` text is left as it is (rollback, Lean); the marker stops the
+      // read-only fallback from coming back once the list was saved, even if it's emptied later.
+      $set: {
+        deliverableItems: items.map((i, n) => ({ ...i, order: n + 1 })),
+        deliverableLegacyMoved: true,
+      },
       $inc: { version: 1 },
     },
   );
@@ -115,7 +123,10 @@ export function deliverablesRouter(registry: RouteRegistry) {
     const { task, project } = await loadEditable(req);
     const t = asObject(task);
     checkVersion(t, input.version);
-    const items = itemsOf(t);
+    // Lean: the first item added turns the old Deliverable text (shown read-only until now) into a
+    // real first item, unticked, exactly as the migration does.
+    const legacy = legacyDeliverable(t);
+    const items = legacy ? [legacyItem(legacy, clockNow())] : itemsOf(t);
     assertItemCount(items.length + 1);
     assertItemText(input.text);
     const item: Item = {
@@ -130,6 +141,14 @@ export function deliverablesRouter(registry: RouteRegistry) {
       createdAt: clockNow(),
     };
     await saveItems(task._id, input.version, [...items, item]);
+    if (legacy)
+      await log(
+        req,
+        task,
+        DELIVERABLE_MIGRATION_AUDIT_ACTION,
+        [{ field: 'deliverableItems', old: null, new: legacy }],
+        { itemId: items[0]!._id.toString(), text: legacy, onFirstAdd: true },
+      );
     await log(
       req,
       task,

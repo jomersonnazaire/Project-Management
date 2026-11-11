@@ -89,6 +89,7 @@ import { assertNotArchived, assertPlanOpen, loadProject } from './projects.js';
 import { canEditDeliverables } from '../services/checklistAccess.js';
 import {
   deliverableItemDtos,
+  legacyDeliverable,
   newTaskItems,
   rejectLegacyDeliverable,
 } from '../services/deliverableItems.js';
@@ -618,7 +619,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
       status,
       previousStatus: (t.previousStatus ?? null) as TaskStatus | null,
       dependsOn: (t.dependsOn ?? []).map(String),
-      deliverableItems: deliverableItemDtos(t.deliverableItems, nameRef),
+      deliverableItems: deliverableItemDtos(t.deliverableItems, nameRef, legacyDeliverable(t)),
       blockerReason: t.blockerReason ?? null,
       requiresApproval: Boolean(t.requiresApproval),
       reviewer: ref(t.approval?.reviewerId),

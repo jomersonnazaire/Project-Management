@@ -739,6 +739,7 @@ function ActivityModal({
               <div className="form-label">Deliverables</div>
               <DeliverableDraftList
                 items={a.deliverableItems.map((i) => i.text)}
+                legacyFirst={Boolean(a.deliverableItems[0]?.legacy)}
                 onChange={(texts) =>
                   set({
                     deliverableItems: texts.map((text, n) => {

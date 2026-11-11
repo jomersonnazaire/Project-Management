@@ -19,9 +19,12 @@ import {
   TemplateModel,
   UserModel,
 } from '../src/models/index.js';
-import { migrateAllDeliverables } from '../scripts/lib/migrateDeliverables.js';
+import {
+  migrateAllDeliverables,
+  restoreLegacyDeliverables,
+} from '../scripts/lib/migrateDeliverables.js';
 import { CSRF, makeApp, useDatabase } from './helpers.js';
-import { resetRules, world } from './m2helpers.js';
+import { resetRules, seedLegacyDeliverable, world } from './m2helpers.js';
 
 /** CR-23: Checklist Excel import (FR-CLX-*) and deliverable checklists (FR-DLV-*), Q-151, Q-168. */
 useDatabase();
@@ -542,54 +545,363 @@ describe('CR-23 Q-151: owners named in the file', () => {
   });
 });
 
-describe('CR-23 FR-DLV-04: migrating the old Deliverable text', () => {
-  it('dry run writes nothing; apply makes the text the first unticked item, untruncated; re-run is a no-op', async () => {
+describe('CR-23 FR-DLV-04: migrating the old Deliverable text (Lean: old field kept)', () => {
+  it('dry run writes nothing; apply copies the text into a first unticked item, keeps the old field (text and empty), re-run changes nothing', async () => {
     const w = await world(app);
     const pid = w.project.id as string;
     const [a, b] = await TaskModel.find({ projectId: pid }).sort({ order: 1 }).limit(2).lean();
     const long = 'Q'.repeat(450);
-    await TaskModel.collection.updateOne(
-      { _id: a!._id },
-      { $set: { deliverable: `  ${long} ` }, $unset: { deliverableItems: '' } },
-    );
+    await seedLegacyDeliverable({ taskId: a!._id.toString() }, `  ${long} `);
     await TaskModel.collection.updateOne(
       { _id: b!._id },
       { $set: { deliverable: '', deliverableItems: [] } },
     );
-    const tpl = await TemplateModel.findById(w.template.id).lean();
-    await TemplateModel.collection.updateOne(
-      { _id: tpl!._id },
-      {
-        $set: {
-          'activities.0.deliverable': 'Workshop minutes',
-          'activities.0.deliverableItems': [],
-        },
-      },
-    );
+    await seedLegacyDeliverable({ templateId: w.template.id, activity: 0 }, 'Workshop minutes');
+    const raw = async (id: Types.ObjectId) => (await TaskModel.collection.findOne({ _id: id }))!;
+    const vA = (await raw(a!._id)).version;
 
     const dry = await migrateAllDeliverables({ apply: false });
-    expect(dry.tasks.map((t) => t.text)).toEqual([long, null]);
-    expect(dry.templates[0]!.activities[0]!.text).toBe('Workshop minutes');
-    expect(await TaskModel.collection.countDocuments({ deliverable: { $exists: true } })).toBe(2);
+    expect(dry.tasks.map((t) => t.text)).toEqual([long]);
+    expect(dry.templates[0]!.activities).toEqual([
+      { id: expect.any(String), text: 'Workshop minutes' },
+    ]);
+    expect((await raw(a!._id)).deliverableItems).toEqual([]);
 
     const done = await migrateAllDeliverables({ apply: true });
-    expect(done.tasks).toHaveLength(2);
-    const ra = await TaskModel.collection.findOne({ _id: a!._id });
-    expect(ra!.deliverable).toBeUndefined();
-    expect(ra!.deliverableItems).toHaveLength(1);
-    expect(ra!.deliverableItems[0]).toMatchObject({ text: long, done: false, order: 1 });
-    expect((await TaskModel.collection.findOne({ _id: b!._id }))!.deliverableItems).toEqual([]);
-    const rt = await TemplateModel.collection.findOne({ _id: tpl!._id });
-    expect(rt!.activities[0].deliverable).toBeUndefined();
+    expect(done.tasks).toHaveLength(1);
+    const ra = await raw(a!._id);
+    expect(ra.deliverable).toBe(`  ${long} `); // untouched, for a rollback
+    expect(ra.deliverableLegacyMoved).toBe(true);
+    expect(ra.deliverableItems).toHaveLength(1);
+    expect(ra.deliverableItems[0]).toMatchObject({
+      text: long,
+      done: false,
+      order: 1,
+      createdBy: null,
+    });
+    const rb = await raw(b!._id);
+    expect(rb.deliverable).toBe(''); // empty strings are not cleared either
+    expect(rb.deliverableItems).toEqual([]);
+    const rt = await TemplateModel.collection.findOne({ _id: new Types.ObjectId(w.template.id) });
+    expect(rt!.activities[0].deliverable).toBe('Workshop minutes');
     expect(rt!.activities[0].deliverableItems.map((i: { text: string }) => i.text)).toEqual([
       'Workshop minutes',
     ]);
     expect(await ActivityLogModel.countDocuments({ action: 'deliverables_migrated' })).toBe(2);
-    // The API shows the migrated item.
-    expect((await getTask(w.pm.agent, a!._id.toString())).deliverableItems[0]!.text).toBe(long);
+    const t = await getTask(w.pm.agent, a!._id.toString());
+    expect(t.deliverableItems.map((i) => [i.text, i.legacy])).toEqual([[long, false]]);
 
+    // Re-run: nothing changes (decided by the items / marker, not by the old field).
     const again = await migrateAllDeliverables({ apply: true });
     expect([again.tasks.length, again.templates.length]).toEqual([0, 0]);
+    expect((await raw(a!._id)).version).toBe(vA + 1);
     expect(await ActivityLogModel.countDocuments({ action: 'deliverables_migrated' })).toBe(2);
+
+    // Emptying the list later doesn't bring the old text back (marker), and a re-run leaves it.
+    await TaskModel.collection.updateOne({ _id: a!._id }, { $set: { deliverableItems: [] } });
+    expect((await migrateAllDeliverables({ apply: true })).tasks).toHaveLength(0);
+    expect((await getTask(w.pm.agent, a!._id.toString())).deliverableItems).toEqual([]);
+  });
+});
+
+describe('CR-23 (Lean): read-only fallback for the old Deliverable text', () => {
+  it('DTO shows the old text as one read-only open item; it cannot be ticked; the first add converts it', async () => {
+    const w = await world(app);
+    const t0 = await ownedTask(w);
+    await seedLegacyDeliverable({ taskId: t0.id }, ' Old sign-off sheet ');
+    let t = await getTask(w.pm.agent, t0.id);
+    expect(t.deliverableItems).toEqual([
+      expect.objectContaining({
+        id: 'legacy',
+        text: 'Old sign-off sheet',
+        done: false,
+        legacy: true,
+      }),
+    ]);
+    // Not a real item: tick / edit / remove are refused.
+    const tick = await w.member.agent
+      .patch(`/api/v1/tasks/${t.id}/deliverable-items/legacy`)
+      .set(CSRF)
+      .send({ done: true, version: t.version });
+    expect([400, 404]).toContain(tick.status);
+    const del = await w.member.agent
+      .delete(`/api/v1/tasks/${t.id}/deliverable-items/legacy?version=${t.version}`)
+      .set(CSRF);
+    expect([400, 404]).toContain(del.status);
+
+    const res = await add(w.member.agent, t, 'Signed UAT form');
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    t = res.body.task;
+    expect(t.deliverableItems.map((i) => [i.text, i.done, i.legacy])).toEqual([
+      ['Old sign-off sheet', false, false],
+      ['Signed UAT form', false, false],
+    ]);
+    expect(t.deliverableItems[0]!.createdBy).toBeNull();
+    const raw = await TaskModel.collection.findOne({ _id: new Types.ObjectId(t.id) });
+    expect(raw!.deliverable).toBe(' Old sign-off sheet '); // left untouched for rollback
+    expect(raw!.deliverableLegacyMoved).toBe(true);
+    const conv = await ActivityLogModel.findOne({
+      entityId: t.id,
+      action: 'deliverables_migrated',
+    }).lean();
+    expect(conv?.actorId?.toString()).toBe(w.member.user._id.toString());
+
+    // Removing every item later leaves the list empty (the old text doesn't come back).
+    for (const i of [...t.deliverableItems]) {
+      const r = await w.member.agent
+        .delete(`/api/v1/tasks/${t.id}/deliverable-items/${i.id}?version=${t.version}`)
+        .set(CSRF);
+      expect(r.status).toBe(200);
+      t = r.body.task;
+    }
+    expect(t.deliverableItems).toEqual([]);
+  });
+
+  it('Excel: a not-yet-migrated task exports the old text as an open line; the unchanged file changes nothing; adding a line converts', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const first = (await tl(w.pm.agent, pid)).tasks[0]!;
+    await seedLegacyDeliverable({ taskId: first.id }, 'Old minutes');
+    const file = await exported(w.pm.agent, pid);
+    const ws = (await load(file)).getWorksheet('Checklist')!;
+    expect(String(ws.getRow(2).getCell(col('deliverables')).value)).toBe('Old minutes');
+
+    const same = await preview(w.pm.agent, pid, file);
+    expect(same.rows[0]!.changes).not.toContain('deliverables');
+    expect((await getTask(w.pm.agent, first.id)).deliverableItems[0]!.legacy).toBe(true);
+
+    const more = await edit(file, (s) => {
+      s.getRow(2).getCell(col('deliverables')).value = 'Old minutes\n[x] Agenda';
+    });
+    await commit(w.pm.agent, pid, more);
+    const t = await getTask(w.pm.agent, first.id);
+    expect(t.deliverableItems.map((i) => [i.text, i.done, i.legacy])).toEqual([
+      ['Old minutes', false, false],
+      ['Agenda', true, false],
+    ]);
+    const raw = await TaskModel.collection.findOne({ _id: new Types.ObjectId(first.id) });
+    expect(raw!.deliverable).toBe('Old minutes');
+    expect(raw!.deliverableLegacyMoved).toBe(true);
+  });
+
+  it('templates: the activity shows the old text read-only; saving it unchanged keeps the fallback; new projects get it as an item', async () => {
+    const w = await world(app);
+    await seedLegacyDeliverable({ templateId: w.template.id, activity: 0 }, 'Kick-off deck');
+    const get = async () =>
+      (await w.admin.agent.get(`/api/v1/templates/${w.template.id}`)).body.template;
+    const tpl = await get();
+    expect(tpl.activities[0].deliverableItems).toEqual([
+      { id: 'legacy', text: 'Kick-off deck', legacy: true },
+    ]);
+
+    // A draft saved with the old-text item as it came keeps the fallback and the old field.
+    await TemplateModel.collection.updateOne(
+      { _id: new Types.ObjectId(w.template.id) },
+      { $set: { status: 'DRAFT' } },
+    );
+    const save = await w.admin.agent
+      .patch(`/api/v1/templates/${w.template.id}`)
+      .set(CSRF)
+      .send({ activities: tpl.activities });
+    expect(save.status, JSON.stringify(save.body)).toBe(200);
+    let raw = await TemplateModel.collection.findOne({ _id: new Types.ObjectId(w.template.id) });
+    expect(raw!.activities[0]).toMatchObject({
+      deliverable: 'Kick-off deck',
+      deliverableItems: [],
+    });
+    await TemplateModel.collection.updateOne(
+      { _id: new Types.ObjectId(w.template.id) },
+      { $set: { status: 'PUBLISHED' } },
+    );
+
+    // A project made from it gets the text as a real first item.
+    const res = await w.pm.agent
+      .post('/api/v1/projects')
+      .set(CSRF)
+      .send({
+        name: 'From old template',
+        projectTypeId: w.project.projectType?.id ?? w.project.projectTypeId,
+        clientId: w.acme.client.id,
+        managerId: w.pm.user._id.toString(),
+        startDate: '2026-10-12',
+        plannedEndDate: '2026-12-18',
+        templateId: w.template.id,
+      });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const tasks = (await tl(w.pm.agent, res.body.project.id)).tasks;
+    const first = await getTask(w.pm.agent, tasks[0]!.id);
+    expect(first.deliverableItems.map((i) => [i.text, i.legacy])).toEqual([
+      ['Kick-off deck', false],
+    ]);
+
+    // Editing the list (adding an item) turns the old text into a real item.
+    await TemplateModel.collection.updateOne(
+      { _id: new Types.ObjectId(w.template.id) },
+      { $set: { status: 'DRAFT' } },
+    );
+    const acts = (await get()).activities;
+    acts[0].deliverableItems = [...acts[0].deliverableItems, { text: 'Attendance list' }];
+    expect(
+      (
+        await w.admin.agent
+          .patch(`/api/v1/templates/${w.template.id}`)
+          .set(CSRF)
+          .send({ activities: acts })
+      ).status,
+    ).toBe(200);
+    raw = await TemplateModel.collection.findOne({ _id: new Types.ObjectId(w.template.id) });
+    expect(raw!.activities[0].deliverable).toBe('Kick-off deck');
+    expect(raw!.activities[0].deliverableItems.map((i: { text: string }) => i.text)).toEqual([
+      'Kick-off deck',
+      'Attendance list',
+    ]);
+    expect(
+      (await get()).activities[0].deliverableItems.map((i: { legacy?: boolean }) =>
+        Boolean(i.legacy),
+      ),
+    ).toEqual([false, false]);
+  });
+});
+
+describe('CR-23 --restore-legacy: reverting the first (f73cf65) migration on staging', () => {
+  /** What the f73cf65 script left: field unset, one authorless item, an actor-less audit entry. */
+  async function oldMigrated(taskId: Types.ObjectId, projectId: string, text: string, at: Date) {
+    await TaskModel.collection.updateOne(
+      { _id: taskId },
+      {
+        $unset: { deliverable: '', deliverableLegacyMoved: '' },
+        $set: {
+          deliverableItems: [
+            {
+              _id: new Types.ObjectId(),
+              text,
+              done: false,
+              doneBy: null,
+              doneAt: null,
+              doneViaImport: false,
+              order: 1,
+              createdBy: null,
+              createdAt: at,
+            },
+          ],
+        },
+      },
+    );
+    await ActivityLogModel.create({
+      actorId: null,
+      entityType: 'task',
+      entityId: taskId,
+      projectId,
+      action: 'deliverables_migrated',
+      changes: [{ field: 'deliverableItems', old: null, new: text }],
+      at,
+    });
+  }
+
+  it('unchanged items: text back and item removed (as before any migration); changed items: text back, items kept (skipped-items); others untouched; dry run and re-run write nothing', async () => {
+    // Earlier tests in this file leave migration entries behind; start from staging's shape.
+    await ActivityLogModel.deleteMany({ action: 'deliverables_migrated' });
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const [a, b, c] = await TaskModel.find({ projectId: pid }).sort({ order: 1 }).limit(3).lean();
+    const at = new Date(Date.now() - 60_000);
+    await oldMigrated(a!._id, pid, 'Old A', at);
+    await oldMigrated(b!._id, pid, 'Old B', at);
+    // B was ticked by a user after the migration.
+    await TaskModel.collection.updateOne(
+      { _id: b!._id },
+      { $set: { 'deliverableItems.0.done': true } },
+    );
+    await ActivityLogModel.create({
+      actorId: w.pm.user._id,
+      entityType: 'task',
+      entityId: b!._id,
+      projectId: pid,
+      action: 'deliverable_item_ticked',
+      changes: [{ field: 'deliverableItems', old: false, new: true }],
+    });
+    // C still has its field (current migration): named in an entry but never touched.
+    await seedLegacyDeliverable({ taskId: c!._id.toString() }, 'Old C');
+    await ActivityLogModel.create({
+      actorId: null,
+      entityType: 'task',
+      entityId: c!._id,
+      projectId: pid,
+      action: 'deliverables_migrated',
+      changes: [{ field: 'deliverableItems', old: null, new: 'Old C' }],
+      at,
+    });
+    // A template activity the old script migrated.
+    const tid = new Types.ObjectId(w.template.id);
+    const tpl = await TemplateModel.collection.findOne({ _id: tid });
+    const actId = String(tpl!.activities[0].id);
+    await TemplateModel.collection.updateOne(
+      { _id: tid },
+      {
+        $unset: { 'activities.0.deliverable': '' },
+        $set: {
+          'activities.0.deliverableItems': [
+            { _id: new Types.ObjectId(), text: 'Old T', done: false, order: 1, createdBy: null },
+          ],
+        },
+      },
+    );
+    await ActivityLogModel.create({
+      actorId: null,
+      entityType: 'template',
+      entityId: tid,
+      action: 'deliverables_migrated',
+      changes: [{ field: `activities.${actId}.deliverableItems`, old: null, new: 'Old T' }],
+      at,
+    });
+    const raw = async (id: Types.ObjectId) => (await TaskModel.collection.findOne({ _id: id }))!;
+    const before = { a: await raw(a!._id), c: await raw(c!._id) };
+
+    const dry = await restoreLegacyDeliverables({ apply: false });
+    expect(dry.tasks.map((t) => t.text)).toEqual(['Old A']);
+    expect(dry.skippedItems.map((s) => s.text)).toEqual(['Old B']);
+    expect(dry.templates).toEqual([
+      { templateId: w.template.id, activities: [{ id: actId, text: 'Old T' }] },
+    ]);
+    expect(dry.leftAlone).toBe(1);
+    expect(await raw(a!._id)).toEqual(before.a);
+
+    await restoreLegacyDeliverables({ apply: true });
+    const ra = await raw(a!._id);
+    expect(ra).toMatchObject({ deliverable: 'Old A', deliverableItems: [] });
+    expect('deliverableLegacyMoved' in ra).toBe(false);
+    expect(ra.version).toBe(before.a.version + 1);
+    const rb = await raw(b!._id);
+    expect(rb.deliverable).toBe('Old B');
+    expect(rb.deliverableItems).toHaveLength(1);
+    expect(rb.deliverableLegacyMoved).toBe(true);
+    expect(await raw(c!._id)).toEqual(before.c);
+    const rt = await TemplateModel.collection.findOne({ _id: tid });
+    expect(rt!.activities[0]).toMatchObject({ deliverable: 'Old T', deliverableItems: [] });
+
+    // Fallback shows on A; B shows its kept items.
+    expect((await getTask(w.pm.agent, a!._id.toString())).deliverableItems[0]).toMatchObject({
+      text: 'Old A',
+      legacy: true,
+    });
+    expect((await getTask(w.pm.agent, b!._id.toString())).deliverableItems[0]).toMatchObject({
+      text: 'Old B',
+      done: true,
+      legacy: false,
+    });
+
+    // Idempotent.
+    const settled = { a: await raw(a!._id), b: await raw(b!._id) };
+    const again = await restoreLegacyDeliverables({ apply: true });
+    expect([again.tasks.length, again.skippedItems.length, again.templates.length]).toEqual([
+      0, 0, 0,
+    ]);
+    expect({ a: await raw(a!._id), b: await raw(b!._id) }).toEqual(settled);
+
+    // The current migration can then run again and keeps the restored field.
+    const m = await migrateAllDeliverables({ apply: true });
+    expect(m.tasks.map((t) => t.text)).toEqual(expect.arrayContaining(['Old A', 'Old C']));
+    expect((await raw(a!._id)).deliverable).toBe('Old A');
+    expect((await raw(b!._id)).deliverableItems).toHaveLength(1);
   });
 });

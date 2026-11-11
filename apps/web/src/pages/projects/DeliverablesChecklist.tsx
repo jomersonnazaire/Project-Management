@@ -160,7 +160,10 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
     focusAfter.current = id;
     run({ kind: 'restore', itemId: id });
   };
+  // Lean: the old Deliverable text (read-only until the first add) never moves.
+  const movable = items.some((i) => i.legacy) ? [] : items;
   const move = (from: number, to: number) => {
+    if (!movable.length) return;
     const ids = items.map((i) => i.id);
     const next = moveWithinGroup(ids, () => true, from, to);
     if (next.join() !== ids.join()) run({ kind: 'reorder', itemIds: next });
@@ -220,6 +223,32 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
           {items.map((i, n) => {
             const cb = `${uid}-cb-${i.id}`;
             const line = doneLine(i, today);
+            if (i.legacy)
+              return (
+                <li
+                  key={i.id}
+                  className="list-group-item dlv-row dlv-legacy d-flex align-items-start gap-2"
+                  data-testid="deliverable-legacy"
+                >
+                  <input
+                    id={cb}
+                    type="checkbox"
+                    className="form-check-input dlv-cb"
+                    checked={false}
+                    disabled
+                    aria-describedby={`${cb}-note`}
+                  />
+                  <div className="flex-grow-1 min-w-0">
+                    <label htmlFor={cb} className="dlv-text">
+                      {i.text}
+                    </label>{' '}
+                    <LegacyBadge />
+                    <div id={`${cb}-note`} className="small text-body-secondary">
+                      {editable ? COPY.LEGACY_NOTE : COPY.LEGACY_NOTE_READ}
+                    </div>
+                  </div>
+                </li>
+              );
             if (editing?.id === i.id) {
               const r = editing.text.trim().length;
               const errId = `${uid}-edit-err`;
@@ -427,6 +456,16 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
   );
 }
 
+/** Marks the read-only item that shows a pre-CR-23 Deliverable text (Lean). */
+function LegacyBadge() {
+  return (
+    <span className="badge rounded-pill text-bg-light border dlv-legacy-badge">
+      <i className="bx bx-lock-alt me-1" aria-hidden="true" />
+      {COPY.LEGACY_BADGE}
+    </span>
+  );
+}
+
 /**
  * CR-23 FR-DLV-01: the new-task form's deliverables, kept in the form until the task is saved
  * (then sent as `deliverableItems`). Same 200-character and 50-item rules; no ticks yet.
@@ -434,9 +473,12 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
 export function DeliverableDraftList({
   items,
   onChange,
+  legacyFirst = false,
 }: {
   items: string[];
   onChange: (next: string[]) => void;
+  /** Templates (Lean): items[0] is the activity's old Deliverable text, shown read-only. */
+  legacyFirst?: boolean;
 }) {
   const uid = useId();
   const [draft, setDraft] = useState('');
@@ -460,16 +502,27 @@ export function DeliverableDraftList({
               key={`${n}-${text}`}
               className="list-group-item dlv-row d-flex align-items-start gap-2"
             >
-              <span className="flex-grow-1 dlv-text">{text}</span>
-              <Button
-                size="sm"
-                variant="link"
-                className="dlv-icon text-danger"
-                aria-label={`Remove ${text}`}
-                onClick={() => onChange(items.filter((_, i) => i !== n))}
-              >
-                <i className="bx bx-trash" aria-hidden="true" />
-              </Button>
+              <span className="flex-grow-1 dlv-text">
+                {text}
+                {legacyFirst && n === 0 && (
+                  <>
+                    {' '}
+                    <LegacyBadge />
+                    <span className="d-block small text-body-secondary">{COPY.LEGACY_NOTE}</span>
+                  </>
+                )}
+              </span>
+              {!(legacyFirst && n === 0) && (
+                <Button
+                  size="sm"
+                  variant="link"
+                  className="dlv-icon text-danger"
+                  aria-label={`Remove ${text}`}
+                  onClick={() => onChange(items.filter((_, i) => i !== n))}
+                >
+                  <i className="bx bx-trash" aria-hidden="true" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
