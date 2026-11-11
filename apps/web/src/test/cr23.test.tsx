@@ -1,4 +1,5 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { focusManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import {
   XLSX_MIME,
@@ -184,6 +185,78 @@ describe('CR-23 deliverables checklist in the task panel (UIE §5)', () => {
     );
     expect(add).toHaveClass('is-invalid');
     expect(calls('/deliverable-items').filter(([, i]) => i?.method === 'POST')).toHaveLength(0);
+  });
+
+  describe("UIE #51 retest: focus after an inline edit goes back to that row's checkbox", () => {
+    it('Enter: after the save resolves, the list re-renders and the task is refetched', async () => {
+      const { fetch } = mount();
+      const inner = fetch.getMockImplementation()!;
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      fetch.mockImplementation(async (input, init) => {
+        if (init?.method === 'PATCH') await gate;
+        return inner(input, init);
+      });
+      const user = userEvent.setup();
+      const box = await openPanel();
+      await user.click(within(box).getByRole('button', { name: 'Edit Defect log' }));
+      const edit = within(box).getByRole('textbox', { name: 'Edit Defect log' });
+      await user.clear(edit);
+      await user.type(edit, 'Defect log v2{Enter}');
+      // Still saving: the editor stays open.
+      expect(within(box).getByRole('textbox', { name: 'Edit Defect log' })).toBeInTheDocument();
+      const getsBefore = fetch.mock.calls.filter(
+        ([u, i]) => String(u).endsWith('/tasks/k1') && (i?.method ?? 'GET') === 'GET',
+      ).length;
+      release();
+      const saved = await within(box).findByRole('checkbox', { name: 'Defect log v2' });
+      await waitFor(() => expect(document.activeElement).toBe(saved));
+      // A refetch after the save (window focus, as in the app) re-renders the list; focus stays.
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await waitFor(() =>
+        expect(
+          fetch.mock.calls.filter(
+            ([u, i]) => String(u).endsWith('/tasks/k1') && (i?.method ?? 'GET') === 'GET',
+          ).length,
+        ).toBeGreaterThan(getsBefore),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      expect(document.activeElement).toBe(
+        within(box).getByRole('checkbox', { name: 'Defect log v2' }),
+      );
+      expect(document.activeElement).not.toBe(document.body);
+      focusManager.setFocused(undefined);
+    });
+
+    it("Escape cancels and focuses the row's checkbox", async () => {
+      const { calls } = mount();
+      const user = userEvent.setup();
+      const box = await openPanel();
+      await user.click(within(box).getByRole('button', { name: 'Edit Defect log' }));
+      await user.type(within(box).getByRole('textbox', { name: 'Edit Defect log' }), ' x');
+      await user.keyboard('{Escape}');
+      expect(within(box).queryByRole('textbox', { name: 'Edit Defect log' })).toBeNull();
+      expect(document.activeElement).toBe(
+        within(box).getByRole('checkbox', { name: 'Defect log' }),
+      );
+      expect(calls('/deliverable-items').filter(([, i]) => i?.method === 'PATCH')).toHaveLength(0);
+    });
+
+    it("Cancel closes the editor and focuses the row's checkbox", async () => {
+      const { calls } = mount();
+      const user = userEvent.setup();
+      const box = await openPanel();
+      await user.click(within(box).getByRole('button', { name: 'Edit UAT script' }));
+      await user.click(within(box).getByRole('button', { name: 'Cancel' }));
+      expect(within(box).queryByRole('textbox', { name: 'Edit UAT script' })).toBeNull();
+      expect(document.activeElement).toBe(
+        within(box).getByRole('checkbox', { name: 'UAT script' }),
+      );
+      expect(calls('/deliverable-items').filter(([, i]) => i?.method === 'PATCH')).toHaveLength(0);
+    });
   });
 
   it('remove shows Undo with focus on it; Undo puts the item back', async () => {

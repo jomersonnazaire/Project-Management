@@ -12,7 +12,7 @@ import {
   type ProjectDto,
   type TaskDto,
 } from '@xc8/shared';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Form } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
 import { useDeliverableChange, withTick, type DeliverableChange } from '../../api/deliverableHooks';
@@ -80,7 +80,10 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
   const [flash, setFlash] = useState<string | null>(null);
   const addRef = useRef<HTMLInputElement>(null);
   const undoRef = useRef<HTMLButtonElement>(null);
-  const focusAfter = useRef<string | null>(null);
+  // UIE #51 retest: the row whose checkbox gets focus once it's back in the DOM (after an edit
+  // closes with Enter, Escape or Cancel, or after Undo). State, not a ref, so it survives the
+  // rerenders of the save, the cache update and the refetch.
+  const [focusRow, setFocusRow] = useState<string | null>(null);
   const rule = useTextRule(draft);
   const atLimit = items.length >= DELIVERABLE_MAX_ITEMS;
   const done = items.filter((i) => i.done).length;
@@ -97,13 +100,21 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
     const t = setTimeout(() => setFlash(null), 1200);
     return () => clearTimeout(t);
   }, [flash]);
-  // After Undo, focus the restored row's checkbox (UIE §5.7).
-  useEffect(() => {
-    const id = focusAfter.current;
-    if (id && items.some((i) => i.id === id)) {
-      focusAfter.current = null;
-      document.getElementById(`${uid}-cb-${id}`)?.focus();
-    }
+  // Focus the pending row's checkbox as soon as it's rendered (Undo, UIE §5.7; inline edit). It
+  // waits while the row is still being edited or isn't back yet (restore round trip).
+  useLayoutEffect(() => {
+    if (!focusRow || editing) return;
+    const el = document.getElementById(`${uid}-cb-${focusRow}`);
+    if (!el) return;
+    el.focus();
+    // Done only once the box really has focus; otherwise try again on the next render.
+    if (document.activeElement !== el) return;
+    setFocusRow(null);
+    // If something later in the same frame drops focus to <body> (the closed editor's input
+    // going away), put it back once.
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body && el.isConnected) el.focus();
+    });
   });
 
   const run = (c: DeliverableChange, onDone?: (t: TaskDto) => void, onFail?: () => void) => {
@@ -139,6 +150,12 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
       });
     run({ kind: 'tick', itemId: i.id, done: next }, clear, clear);
   };
+  /** Escape or Cancel: close the editor and put focus back on that row's checkbox. */
+  const cancelEdit = () => {
+    if (!editing) return;
+    setFocusRow(editing.id);
+    setEditing(null);
+  };
   const saveEdit = () => {
     if (!editing) return;
     const text = editing.text.trim();
@@ -147,8 +164,8 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
       return setEditing({ ...editing, error: deliverableTooLongMessage(text.length) });
     const id = editing.id;
     run({ kind: 'edit', itemId: id, text }, () => {
-      // UIE #51 item 5: focus goes back to this row's checkbox once it's rendered again (as Undo).
-      focusAfter.current = id;
+      // UIE #51 item 5: focus goes back to this row's checkbox once it's rendered again.
+      setFocusRow(id);
       setEditing(null);
     });
   };
@@ -158,7 +175,7 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
     if (!undo) return;
     const id = undo.id;
     setUndo(null);
-    focusAfter.current = id;
+    setFocusRow(id);
     run({ kind: 'restore', itemId: id });
   };
   // Lean: the old Deliverable text (read-only until the first add) never moves.
@@ -273,7 +290,7 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
                       } else if (e.key === 'Escape') {
                         e.preventDefault();
                         e.stopPropagation();
-                        setEditing(null);
+                        cancelEdit();
                       }
                     }}
                   />
@@ -289,7 +306,7 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
                         {r}/{DELIVERABLE_MAX_TEXT}
                       </span>
                     )}
-                    <Button size="sm" variant="outline-secondary" onClick={() => setEditing(null)}>
+                    <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>
                       Cancel
                     </Button>
                     <Button size="sm" onClick={saveEdit} disabled={change.isPending}>
