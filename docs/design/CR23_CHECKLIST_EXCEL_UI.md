@@ -1,6 +1,6 @@
 # CR-23: Checklist Excel and deliverable checklists, UI spec (mockup v0.9.21)
 
-Build spec for Deven. It follows **Rich's CR-23 v0.1.2** (`docs/requirements/17_CR-23_CHECKLIST_EXCEL_AND_DELIVERABLE_CHECKLISTS.md`, branch `docs/cr-23-checklist`, `77eb9f8`) and Jomerson's and Lean's calls of Nov 11. Two questions are still open for Jomerson: **Q-150** and **Q-151**. The mockup draws them as purple dashed notes. They are not decided, so don't build either one.
+Build spec for Deven. It follows **Rich's CR-23 v0.1.6** (`docs/requirements/17_CR-23_CHECKLIST_EXCEL_AND_DELIVERABLE_CHECKLISTS.md`, branch `docs/cr-23-checklist`, `542a387`) and Jomerson's and Lean's calls of Nov 11. **Q-150, Q-151 and Q-166 are closed** (§9). Nothing in this spec is open.
 
 - **Mockup:** `docs/design/mockup/index-v0.9.21.html`
   - `#cr23-checklist`: the Checklist tab with the Excel menu, the read-only view, the empty state and the task panel
@@ -9,7 +9,7 @@ Build spec for Deven. It follows **Rich's CR-23 v0.1.2** (`docs/requirements/17_
   - `#timeline`: the Timeline toolbar without Excel controls. `#timeline-import` is kept for reference only and is marked "Replaced".
   - Every other v0.9.20 section is unchanged.
 - **Screenshots:** `docs/design/review/cr23-mock-*.png` (1440 and 390 wide; see §10).
-- **Example data only.** "Acme Test Co Rollout", Test PM, Test BA, Test Admin, Dev One, Dev Two and QA One are fake. Every email is a placeholder (`pm@`, `ba@`, `admin@`, `dev1@`, `dev2@`, `qa@`, `contractor@`, `dev9@` `xceler8.example`). The mockup's "today" is **Wed, Nov 11, 2026**.
+- **Example data only.** "Acme Test Co Rollout", Test PM, Test BA, Test Admin, Dev One, Dev Two and QA One are fake. Every email is a placeholder (`pm@`, `ba@`, `admin@`, `dev1@`, `dev2@`, `dev3@`, `qa@`, `viewer@`, `contractor@`, `dev9@` `xceler8.example`). The mockup's "today" is **Wed, Nov 11, 2026**.
 - **Theme:** Sneat tokens from `THEME_TOKENS.md` (AA-darkened). New mockup CSS is scoped under `.ck23`. Class names are for the mockup only, so use the app's components. The import modal reuses the CR-22 `ti-*` styles unchanged.
 - **v1 is web only** (Q-165).
 
@@ -85,7 +85,7 @@ Each one is a danger alert above the drop zone, and nothing is imported. The cop
 - **Older Timeline files (Lean, Nov 11):** a workbook whose sheet is named **Timeline** (downloaded before CR-23) still imports. It has no Deliverables column, so deliverable items are left unchanged (a missing column is not a blank cell). The preview shows the grey note "This is an older timeline file, so deliverables won't change."
 - **No sheet:** "This file has no Checklist sheet. Use the OpsTrack template or a downloaded checklist, and keep the sheet name Checklist (an older Timeline sheet also works). Nothing was imported."
 - **Columns:** "Some columns are missing or out of order: Phase, Deliverables. Keep row 1 of the template as it is, then try again. Nothing was imported."
-- **Other project:** "This file was exported from a different project. Export the checklist from Acme Test Co Rollout, or start from the blank template. Nothing was imported." The mockup shows the **Q-150** note under this error.
+- **Other project:** "This file was exported from a different project. Export the checklist from Acme Test Co Rollout, or start from the blank template. Nothing was imported." The file only ever changes the project it's uploaded into; it never creates a project (Q-150, closed).
 - **Over 2,000 rows:** "This file has {n} rows. You can import up to 2,000 at a time. Split it into smaller files and import them one by one. Nothing was imported."
 - **Empty, unreadable and over 5 MB:** the CR-22 Q24 copy, with "Checklist sheet" in place of "Timeline sheet".
 
@@ -94,10 +94,12 @@ Each one is a danger alert above the drop zone, and nothing is imported. The cop
 - **Filter chips:** All, Errors (shown only when there are errors), **Removes or clears** (new), New and Update, followed by "{n} unchanged".
 - **Alerts, in this order:**
   1. **Errors** (danger), as in CR-22: "Fix {n} errors in the file and upload again. Any row with an error stops the whole import, because rows depend on each other. Nothing has been saved. Show rows with errors"
-  2. **Deliverables lost** (warning, new; shown when any row removes, unticks or clears items): "**{n} tasks will lose deliverable items or ticks.** The Deliverables cell replaces each task's list, and a blank cell clears it. Check the crossed-out items before you import. Show these rows"
-  3. **New phase** (purple info): "New phase {name} will be added at the end of the phase list." The FR-TL-20 phase lock applies (Q-159), and the mockup shows the **Q-150** note here.
-  4. **Baseline ignored** (secondary): "**Baseline columns are ignored on import**, so they aren't shown here. Click **Save baseline** on the Timeline after importing to update the baseline."
-  5. **New numbering** (plain line), as in CR-22: "New tasks go to the end of the list… (file 30 → #9, file 31 → #10)…"
+  2. **Changed since export** (warning), as in CR-22, including Deliverables changes (Lean).
+  3. **Deliverables lost** (warning, new; shown when any row removes, unticks or clears items): "**{n} tasks will lose deliverable items or ticks.** The Deliverables cell replaces each task's list, and a blank cell clears it. Check the crossed-out items before you import. Show these rows". Count deliverable losses only; an owner that's cleared counts in the **Removes or clears** chip but not here.
+  4. **Team additions** (info, `bx-user-plus`, new, Q-151): "**2 people will be added to the project team:** contractor@xceler8.example, dev3@xceler8.example. They join as project members and keep their app role. Cancel adds no one." Emails in file order, lower case, each once. Don't say "as Members": the app role doesn't change (FR-PRJ-19).
+  5. **New phase** (purple info): "New phase {name} will be added at the end of the phase list." The FR-TL-20 phase lock applies (Q-159). The file never creates a project (Q-150).
+  6. **Baseline ignored** (secondary): "**Baseline columns are ignored on import**, so they aren't shown here. Click **Save baseline** on the Timeline after importing to update the baseline."
+  7. **New numbering** (plain line), as in CR-22: "New tasks go to the end of the list… (file 30 → #9, file 31 → #10)…"
 - **Table:**
   - **Columns:** Row, Result, Task number, Task name, Phase, Milestone, Start, Finish, Depends on, Owner, **Deliverables**.
   - The baseline columns are left out to keep the table inside 1130 px. Measured scroll width is 1078 / 1078 with no sideways scroll; keep it that way.
@@ -124,22 +126,38 @@ Each one is a danger alert above the drop zone, and nothing is imported. The cop
 - **Footnote:** "Crossed-out values are what OpsTrack has now. (blank) means the cell is empty, so that field will be cleared. In Deliverables, + green lines are added and a crossed-out line on its own is removed."
 - **Footer:** the help line, then Cancel and **Import N rows**. With no errors, the help line reads "Owners of new or changed tasks get one notification each."
 
-### 4.4 Row errors
-These use the CR-22 §5.2 copy, plus two new ones:
+### 4.4 Row errors and owner notes
+Errors use the CR-22 §5.2 copy, plus two new ones:
 
 | Case | Message |
 |---|---|
 | Item too long (new, NFR-56) | Deliverables: line {n} is longer than 200 characters (it has {count}). |
 | Too many items (new, NFR-56) | Deliverables: this task would have {n} items. The most is 50. |
-| Not a member (Q-151 open) | {email} isn't a member of this project. Add them to the project first. The mockup shows the Q-151 note. |
 
-The mockup preview has 15 rows: Unchanged 2, Update 5, New 2 and Error 6 (a missing name, an unknown owner, a non-member, a bad Finish date, a missing dependency and an item over 200 characters). The 5 updates are: 1 adds an item, 1 changes Finish and Owner, 1 has a blank Deliverables cell, 1 removes 2 items and unticks 1, and 1 ticks an item. The Done screen shows the totals after the errors are fixed.
+**Owners (Q-151, closed by Jomerson; Lean's Viewer rule).** For this import, these replace the FR-TL-21 "isn't a member" and "isn't an active internal user" row errors. None of them blocks the import.
+
+| Owner email in the file | Result | Row note (amber, `bx-info-circle`) | Owner cell |
+|---|---|---|---|
+| Matches an active internal user who is on the team (any case) | as today | none | the email |
+| Matches an active internal user who isn't on the team | owner set; the person is added to the team as a normal project member, keeping their app role (FR-PRJ-19); listed in the Team additions notice | none | the email |
+| Same email on several rows | added once, listed once | none | the email |
+| No user with that email, a deactivated user, or a client portal contact | row imports **without an owner** | "Email {email} doesn't exist." | the email in muted text, then **No owner** (amber, 12 px, semibold); a replaced owner is struck through under it |
+| A Viewer | row imports **without an owner**; not added to the team | "{email} can't own tasks." | same as above |
+
+- Matching ignores upper and lower case ("Dev3@Xceler8.example" matches dev3@).
+- On an Update row that had an owner, the result also reads "**Clears: Owner**" (danger) and the row counts in **Removes or clears**.
+- **Cancel adds no one.** People are added only when the import is saved, in the same transaction.
+- **Audit:** each team addition is audited and sends the existing team-add and assignment notifications.
+- Done screen: "{n} people were added to the project team." after the Deliverables line.
+
+The mockup preview has 17 rows: Unchanged 1, Update 6, New 6 and Error 4 (a missing name, a bad Finish date, a missing dependency and an item over 200 characters). The 6 updates are: 1 adds an item, 1 changes Finish and Owner, 1 has a blank Deliverables cell, 1 removes 2 items and unticks 1, 1 names a Viewer as owner, and 1 ticks an item. The new rows include an unknown email (dev9@, no owner), contractor@ twice (added once) and Dev3@ in mixed case. The Done screen shows the totals after the errors are fixed.
 
 ### 4.5 Importing and Done
 - **Importing:** a spinner, with "Importing…" and "Don't close this window."
 - **Done:** a success circle and **Checklist imported**, followed by:
-  - "2 tasks added at the end (#9 and #10) and 6 updated. 2 rows were unchanged."
-  - "Deliverables: 4 items added, 3 removed, 1 ticked and 1 unticked. No tasks were deleted. Baselines didn't change."
+  - "6 tasks added at the end (#9 to #14) and 6 updated. 1 row was unchanged."
+  - "Deliverables: 7 items added, 3 removed, 1 ticked and 1 unticked. No tasks were deleted. Baselines didn't change."
+  - "2 people were added to the project team."
   - "The checklist, timeline, critical path and forecast are up to date. Owners of new or changed tasks get one notification each."
   - The button **Back to checklist**.
 - **Imported ticks:** v0.1.2 leaves `doneBy` and `doneAt` unset. The list then shows "Done · from import, Nov 11" under the item instead of a name. This isn't drawn in the mockup (§9a).
@@ -148,8 +166,8 @@ The mockup preview has 15 rows: Unchanged 2, Update 5, New 2 and Error 6 (a miss
 The modal isn't shown. A card reads **Import checklist from Excel** and "Open this on a larger screen to make changes." (FR-CLX-08).
 
 ## 5. Deliverables checklist (task panel and task form, `#cr23-deliverables`)
-### 5.1 Who can change it (Q-153, Q-161, Q-166)
-- **Editors:** the **task owner**, the project's **PM** and **Admins** can add, tick, untick, edit and remove items.
+### 5.1 Who can change it (Q-153, Q-161, Q-166 closed)
+- **Editors:** the **task owner**, the project's **PM** and **Admins** can add, tick, untick, edit and remove items (Admins: Q-166, closed by Lean).
 - **Read-only:** everyone else, including **assignees**, Members and Viewers. They see the list with ticked items still struck through, disabled checkboxes, no Edit or Remove, no add box, and the line: "View only. The task owner, the project PM and Admins change deliverables."
 - **Locked projects:** on Completed, Cancelled and archived projects, the list is read-only for everyone (FR-DLV-06, Q-155), and the view-only line becomes the status message:
   - Completed: "This project is completed, so its plan is read-only. Reopen the project to change tasks."
@@ -190,15 +208,25 @@ The modal isn't shown. A card reads **Import checklist from Excel** and "Open th
 - **Migrated text isn't cut** (Q-160). An old Deliverable longer than 200 characters becomes one full item. It can still be ticked, and editing it applies the 200-character rule.
 
 ### 5.5 Audit (Q-157)
-Every add, text edit, tick, untick, reorder and remove writes an entry to the task's audit log (FR-DLV-07), and an import writes its own entries. They show in the task's **Activity log** in the existing format, for example:
+Every add, text edit, tick, untick, reorder and remove in the task panel writes one entry to the task's audit log (FR-DLV-07). **An import writes one entry per task that lists every item change on that task** (Lean's call), not one entry per item. They show in the task's **Activity log** in the existing format, for example:
 - "QA One ticked deliverable “UAT script”"
 - "Test PM removed deliverable “Defect log”"
-- "Test PM imported the checklist: Deliverables 2 items removed, 1 unticked"
+- "Test PM imported the checklist: added “Cutover runbook v2”; removed “Rollback plan”, “Contact sheet”; unticked “Cutover runbook”"
+
+Each team addition from an import is audited too (Q-151).
 
 The panel doesn't show a separate history.
 
 ### 5.6 Migration and templates
-- An existing single-text Deliverable becomes the **first item, unticked** (Deven, FR-DLV-04). It isn't specially marked in the UI (see the "Old text field, moved over" demo).
+- **Old Deliverable text (Deven, #51 `8e0eeed`; Lean):** the migration keeps the old single-text `deliverable`. Until the task has items, that text shows as a **read-only first item** (`legacy: true`, id `legacy`):
+  - an unticked, **disabled** checkbox on a light grey row (`#f5f5f9`), the text in the normal colour, an "Old text" pill (`bx-lock-alt`), and under it a muted caption tied to the checkbox with `aria-describedby`:
+    - editors: "From the old Deliverable field. It becomes a normal item when you add the first deliverable."
+    - read-only users: "From the old Deliverable field."
+  - no Edit, Remove or reorder controls, for everyone. The label uses `cursor: default`.
+  - it counts as not done: "0 of 1 done", and the Checklist chip reads 0/1.
+  - the add row stays for editors. **The first add turns the old text into a normal item** (unticked, editable), then appends the new one.
+  - Templates show the same pill and caption on an activity's old text, with no Remove.
+  - Demo: "Old Deliverable text (read-only)" on `#cr23-deliverables`; screenshots `cr23-mock-deliverables-legacy-1440.png` and `-390.png`.
 - Templates hold deliverable items too, so the template editor uses the same list, with no ticks. A project made from a template, or a template applied to a project, starts with **every item unticked** (FR-TSK-38).
 
 ### 5.7 Keyboard and screen readers
@@ -231,7 +259,7 @@ The panel doesn't show a separate history.
 | E | Start | date cell or YYYY-MM-DD |
 | F | Finish | the same |
 | G | Depends on | task numbers in this file, e.g. "3, 5" |
-| H | Owner | email; a non-member is a row error (Q-151 open) |
+| H | Owner | email, any case. Not on the team: added automatically if active and internal; unknown, deactivated, client contact or Viewer: imported without an owner, with a row note (Q-151, §4.4) |
 | I | Baseline start | export only, ignored on import |
 | J | Baseline finish | export only, ignored on import |
 | K | **Deliverables** | **one item per line** (Alt+Enter); **`[x] `** in front of done items; a re-upload **replaces** the list; a blank cell **clears** it; 200 characters per line; 50 lines at most |
@@ -247,9 +275,11 @@ The panel doesn't show a separate history.
 - Colour is never the only signal: removed lines are struck through as well as red, the Result column spells out "2 items removed, 1 unticked", and done items carry three cues.
 - Contrast: muted text is `#5d6878`. Don't use `#8592a3` for text (`m8b.test.tsx`).
 
-## 9. Open for Jomerson (drawn as purple dashed notes)
-- **Q-150:** Can the file **add new phases only**, or also **create a new project**? The mockup shows today's rule: a new phase is added on the open project (FR-TL-20), and another project's file is refused.
-- **Q-151:** Should an **owner who isn't on the team be auto-added**? The mockup shows today's rule, a row error. If the answer is yes, the row becomes New and a notice lists who will be added ("1 person will be added to the project team as a Member: contractor@xceler8.example.").
+## 9. Decisions (Nov 11)
+- **Q-150 (Jomerson):** the file adds phases to the project it's uploaded into only, and never creates a project. The FR-TL-20 phase lock stays, and another project's file is still refused.
+- **Q-151 (Jomerson; Lean for Viewers):** an owner who isn't on the team is added automatically when their email matches an active internal user (case-insensitive), as a normal project member keeping their app role. Unknown, deactivated and client-contact emails, and Viewers, import without an owner with a row note. See §4.4.
+- **Q-166 (Lean):** Admins can add, tick, edit and remove items, like the task owner and the PM.
+- **Audit (Lean):** an import writes one audit entry per task listing every item change.
 
 **Closed by Lean (Nov 11):** the **Changed since export** confirm covers Deliverables too (item b). On Completed, Cancelled and archived projects Import is **disabled** (tooltip "This project is {status}, so the checklist can't be imported.") and both downloads still work. UIE's calls stand: imported ticks show "Done · from import, {date}", duplicate lines become separate items, downloads work on phone, reorder works like Checklist rows, and a migrated item over 200 characters can be ticked, with the limit applying only on edit.
 
@@ -274,7 +304,10 @@ The panel doesn't show a separate history.
 | cr23-mock-import-preview-errorrows-1440.png | The Errors filter |
 | cr23-mock-import-preview-removed-items-1440.png | The Removes or clears filter: removed, unticked and blank Deliverables |
 | cr23-mock-import-preview-clean-1440.png | Preview with no errors, Import 8 rows enabled |
-| cr23-mock-import-otherproject-1440.png | Other project's file, with the Q-150 note |
+| cr23-mock-import-otherproject-1440.png | Other project's file (refused) |
+| cr23-mock-import-autoadd-1440.png | Preview with the Team additions notice (Q-151) |
+| cr23-mock-import-owner-rows-1440.png | Owner notes: Viewer row with No owner and Clears: Owner |
+| cr23-mock-deliverables-legacy-1440.png / -390.png | Old Deliverable text as a read-only first item |
 | cr23-mock-import-done-1440.png | Done |
 | cr23-mock-import-phone-390.png | "Open this on a larger screen" |
 | cr23-mock-deliverables-owner-1440.png / -390.png | 2 of 5 done, as the task owner |
