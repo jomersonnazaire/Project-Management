@@ -154,10 +154,13 @@ export const ownerMissingMessage = (email: string) => `Email ${email} doesn't ex
 /** Lean (2026-11-11): a Viewer named as Owner in the file; the row imports without an owner. */
 export const cantOwnMessage = (email: string) => `${email} can't own tasks.`;
 /** CR-23 Q-151, UIE §9: "1 person will be added to the project team as a Member: a@…, b@…." */
+/** UIE §4.3 Team additions (c5e0ee8): bold lead, the emails, then the rest. Never "as Members". */
+export const addMembersLead = (n: number) =>
+  `${n} ${n === 1 ? 'person' : 'people'} will be added to the project team:`;
+export const ADD_MEMBERS_REST =
+  'They join as project members and keep their app role. Cancel adds no one.';
 export const addMembersNotice = (emails: string[]) =>
-  `${emails.length} ${emails.length === 1 ? 'person' : 'people'} will be added to the project team as ${
-    emails.length === 1 ? 'a Member' : 'Members'
-  }: ${emails.join(', ')}.`;
+  `${addMembersLead(emails.length)} ${emails.join(', ')}. ${ADD_MEMBERS_REST}`;
 export const addedMembersLine = (n: number) =>
   `${n} ${n === 1 ? 'person was' : 'people were'} added to the project team.`;
 export const notMemberMessage = (email: string) =>

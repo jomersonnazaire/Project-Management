@@ -169,7 +169,9 @@ describe('CR-23 deliverables checklist in the task panel (UIE §5)', () => {
     expect(within(box).getByText('Enter saves · Esc cancels')).toBeInTheDocument();
     await user.clear(edit);
     await user.type(edit, 'Defect log v2{Enter}');
-    expect(await within(box).findByRole('checkbox', { name: 'Defect log v2' })).toBeInTheDocument();
+    const saved = await within(box).findByRole('checkbox', { name: 'Defect log v2' });
+    // UIE #51 item 5: focus goes back to the edited row's checkbox.
+    await waitFor(() => expect(saved).toHaveFocus());
 
     const add = within(box).getByLabelText('Add a deliverable');
     await user.click(add);
@@ -355,9 +357,10 @@ const PREVIEW: TimelineImportPreviewDto = {
     }),
     row({
       row: 3,
-      values: { ...blank(), number: '2', name: 'Design', owner: '' },
-      changes: ['deliverables'],
-      clears: ['deliverables'],
+      values: { ...blank(), number: '2', name: 'Design', owner: 'ghost@xceler8.example' },
+      changes: ['owner', 'deliverables'],
+      clears: ['owner', 'deliverables'],
+      old: { owner: 'dev1@xceler8.example' },
       warnings: [{ field: 'owner', message: 'Email ghost@xceler8.example doesn’t exist.' }],
       deliverables: {
         lines: [{ kind: 'removed', text: 'Spec', done: true }],
@@ -436,15 +439,20 @@ describe('CR-23 import preview: deliverables (UIE §4.3 to §4.5)', () => {
     expect(r2.querySelector('.tli-dl-untick .tli-was')).toHaveTextContent('[x] C');
     expect(r2.querySelector('.tli-loss')).toBeInTheDocument();
     const r3 = within(dialog).getByTestId('import-row-3');
-    expect(r3).toHaveTextContent('Clears: Deliverables (1 item)');
+    expect(r3).toHaveTextContent('Clears: Owner, Deliverables (1 item)');
     expect(r3).toHaveTextContent('(blank)');
     expect(r3).toHaveTextContent('Email ghost@xceler8.example doesn’t exist.');
     expect(dialog).toHaveTextContent(
       "2 tasks will lose deliverable items or ticks. The Deliverables cell replaces each task's list, and a blank cell clears it.",
     );
-    expect(dialog).toHaveTextContent(
-      '1 person will be added to the project team as a Member: contractor@xceler8.example.',
+    const team = within(dialog).getByTestId('team-additions');
+    expect(team).toHaveTextContent(
+      '1 person will be added to the project team: contractor@xceler8.example. They join as project members and keep their app role. Cancel adds no one.',
     );
+    expect(team.querySelector('strong')).toHaveTextContent(
+      '1 person will be added to the project team:',
+    );
+    expect(team).not.toHaveTextContent('as a Member');
     expect(dialog).toHaveTextContent('Owners of new or changed tasks get one notification each.');
     await user.click(within(dialog).getByRole('button', { name: 'Show these rows' }));
     expect(within(dialog).getByRole('button', { name: /Removes or clears/ })).toHaveAttribute(
@@ -470,6 +478,26 @@ describe('CR-23 import preview: deliverables (UIE §4.3 to §4.5)', () => {
     expect(within(dialog).getByTestId('legacy-sheet-note')).toHaveTextContent(
       "This is an older timeline file, so deliverables won't change.",
     );
+  });
+
+  it("UIE #51: an owner the import can't use shows the file email muted, then No owner, then the old owner struck out", async () => {
+    const { dialog } = await previewDialog();
+    const r3 = within(dialog).getByTestId('import-row-3');
+    const cell = r3.querySelector('td.tli-f-owner')!;
+    expect(cell).toHaveClass('tli-nown');
+    expect(cell.textContent).toBe('ghost@xceler8.exampleNo ownerdev1@xceler8.example');
+    expect(cell.querySelector('.tli-noown')).toHaveTextContent('No owner');
+    expect(cell.querySelector('s.tli-was')).toHaveTextContent('dev1@xceler8.example');
+    expect(r3).toHaveTextContent('Clears: Owner');
+    // A usable owner has no note.
+    expect(within(dialog).getByTestId('import-row-2').querySelector('.tli-noown')).toBeNull();
+  });
+
+  it('UIE #51: an older Timeline file has no Deliverables column in the preview', async () => {
+    const { dialog } = await previewDialog({ ...PREVIEW, noDeliverablesColumn: true });
+    expect(within(dialog).queryByRole('columnheader', { name: 'Deliverables' })).toBeNull();
+    expect(within(dialog).getByRole('columnheader', { name: 'Owner' })).toBeInTheDocument();
+    expect(within(dialog).getByTestId('import-row-2').querySelectorAll('td')).toHaveLength(10);
   });
 
   it('Queen: body cells wrap long unbroken text', async () => {

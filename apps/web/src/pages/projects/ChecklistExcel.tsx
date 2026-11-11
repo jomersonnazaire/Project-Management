@@ -59,7 +59,7 @@ export function ChecklistExcelMenu({
   );
   return (
     <Dropdown align="end">
-      <Dropdown.Toggle size="sm" variant="outline-secondary" id="ckx-excel">
+      <Dropdown.Toggle size="sm" variant="outline-secondary" id="ckx-excel" aria-haspopup="menu">
         <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
         Excel
       </Dropdown.Toggle>

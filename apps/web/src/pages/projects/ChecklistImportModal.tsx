@@ -8,7 +8,8 @@ import {
   TIMELINE_VISIBLE_FIELDS,
   DELIVERABLES_LOST_REST,
   TIMELINE_ROW_HELP_CLEAN,
-  addMembersNotice,
+  ADD_MEMBERS_REST,
+  addMembersLead,
   addedMembersLine,
   changedAlertLead,
   changedAlertRest,
@@ -352,8 +353,12 @@ function Cell({ r, f }: { r: TimelineImportRowDto; f: TimelineImportField }) {
   const changed = PLAN.has(f) && r.changes.includes(f as TimelinePlanField);
   const cleared = changed && r.clears.includes(f as TimelinePlanField);
   const old = changed ? r.old[f as TimelinePlanField] : undefined;
+  // UIE §4.4 (c5e0ee8): an owner the import can't use ("doesn't exist", "can't own tasks").
+  const noOwner = f === 'owner' && Boolean(value) && r.warnings.some((w) => w.field === 'owner');
   const cls = [
     'tli-cell',
+    `tli-f-${f}`,
+    noOwner ? 'tli-nown' : '',
     bad ? 'tli-bad' : '',
     changed && !bad ? 'tli-chg' : '',
     ro ? 'tli-ro' : '',
@@ -374,6 +379,7 @@ function Cell({ r, f }: { r: TimelineImportRowDto; f: TimelineImportField }) {
       ) : (
         <span className="text-body-secondary">—</span>
       )}
+      {noOwner && <span className="tli-noown">No owner</span>}
       {old !== undefined && f !== 'deliverables' && (
         <s className="tli-was">{old ? breakable(f, old) : 'blank'}</s>
       )}
@@ -573,6 +579,10 @@ export function ChecklistImportModal({
         ? notConfirmedHelp(left)
         : TIMELINE_ROW_HELP_CLEAN;
     const newRows = rows.filter((r) => r.result === 'NEW' && r.willBe !== null);
+    // UIE #51: an older Timeline file has no Deliverables column, so the preview doesn't show one.
+    const shownFields = data.noDeliverablesColumn
+      ? TIMELINE_VISIBLE_FIELDS.filter((f) => f !== 'deliverables')
+      : TIMELINE_VISIBLE_FIELDS;
     body = (
       <>
         <Steps at={2} />
@@ -679,16 +689,19 @@ export function ChecklistImportModal({
             </Button>
           </Alert>
         )}
+        {data.addMembers.length > 0 && (
+          <Alert tone="info" icon="bx-group">
+            <span data-testid="team-additions">
+              <strong>{addMembersLead(data.addMembers.length)}</strong> {data.addMembers.join(', ')}
+              . {ADD_MEMBERS_REST}
+            </span>
+          </Alert>
+        )}
         {data.newPhases.map((name) => (
           <Alert key={name} tone="info" icon="bx-layer-plus">
             {newPhaseNotice(name)}
           </Alert>
         ))}
-        {data.addMembers.length > 0 && (
-          <Alert tone="info" icon="bx-group">
-            {addMembersNotice(data.addMembers)}
-          </Alert>
-        )}
         {data.noDeliverablesColumn && (
           <p className="small text-body-secondary mb-2" data-testid="legacy-sheet-note">
             <i className="bx bx-info-circle me-1" aria-hidden="true" />
@@ -719,7 +732,7 @@ export function ChecklistImportModal({
                 <th scope="col" className="tli-result">
                   Result
                 </th>
-                {TIMELINE_VISIBLE_FIELDS.map((f) => (
+                {shownFields.map((f) => (
                   <th
                     scope="col"
                     key={f}
@@ -757,7 +770,7 @@ export function ChecklistImportModal({
                       onConfirm={() => toggle(r.row)}
                     />
                   </td>
-                  {TIMELINE_VISIBLE_FIELDS.map((f) => (
+                  {shownFields.map((f) => (
                     <Cell key={f} r={r} f={f} />
                   ))}
                 </tr>
@@ -765,7 +778,7 @@ export function ChecklistImportModal({
               {lists[filter].length === 0 && (
                 <tr>
                   <td
-                    colSpan={TIMELINE_VISIBLE_FIELDS.length + 2}
+                    colSpan={shownFields.length + 2}
                     className="text-center text-body-secondary py-4"
                   >
                     No rows here.
@@ -777,7 +790,8 @@ export function ChecklistImportModal({
         </div>
         <p className="small text-body-secondary mt-2 mb-0">
           Crossed-out values are what OpsTrack has now. <span className="text-danger">(blank)</span>{' '}
-          {COPY.FOOTNOTE_REST} {COPY.FOOTNOTE_DELIVERABLES}
+          {COPY.FOOTNOTE_REST}
+          {!data.noDeliverablesColumn && ` ${COPY.FOOTNOTE_DELIVERABLES}`}
         </p>
       </>
     );

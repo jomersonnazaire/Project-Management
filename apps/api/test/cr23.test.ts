@@ -426,6 +426,40 @@ describe('CR-23: deliverables in the Checklist Excel file (FR-CLX-04, 10 to 13)'
     );
   });
 
+  it('UIE #51: changed-since-export skips item changes when the file has no Deliverables column', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const t = await ownedTask(w);
+    const exportedFile = await exported(w.pm.agent, pid);
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await add(w.pm.agent, t, 'Added after export')).status).toBe(201);
+    const rename = (ws: ExcelJS.Worksheet) => {
+      ws.getRow(2).getCell(col('name')).value = 'Renamed';
+    };
+    // With the column, the item change still asks for a confirm.
+    const withCol = await preview(w.pm.agent, pid, await edit(exportedFile, rename));
+    expect(withCol.rows[0]!.result).toBe('CHANGED');
+    expect(withCol.rows[0]!.changedSince).toContain('Deliverables changed');
+    // An older Timeline file can't change items, so the row is a plain update.
+    const old = await edit(exportedFile, (ws) => {
+      ws.name = 'Timeline';
+      ws.spliceColumns(col('deliverables'), 1);
+      rename(ws);
+    });
+    const p = await preview(w.pm.agent, pid, old);
+    expect(p.noDeliverablesColumn).toBe(true);
+    expect(p.rows[0]!.result).toBe('UPDATE');
+    expect(p.rows[0]!.changedSince ?? null).toBeNull();
+    // A plan change since export still counts without the column.
+    const { version } = await getTask(w.pm.agent, t.id);
+    const patched = await w.pm.agent
+      .patch(`/api/v1/tasks/${t.id}`)
+      .set(CSRF)
+      .send({ name: 'Edited in app', version });
+    expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+    expect((await preview(w.pm.agent, pid, old)).rows[0]!.result).toBe('CHANGED');
+  });
+
   it('import is disabled on Completed, Cancelled and archived projects; download still works', async () => {
     const w = await world(app);
     const pid = w.project.id as string;

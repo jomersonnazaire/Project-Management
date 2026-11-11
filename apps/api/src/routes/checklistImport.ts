@@ -184,7 +184,13 @@ async function changedSince(
   taskIds: string[],
   since: Date | null,
   session: mongoose.ClientSession | null,
+  withDeliverables: boolean,
 ): Promise<Map<string, string>> {
+  // UIE #51: a file with no Deliverables column (older Timeline file) never changes items, so
+  // item changes since its export don't need a confirm.
+  const fields = new Set(
+    [...PLAN_LOG_FIELDS].filter((f) => withDeliverables || f !== 'deliverableItems'),
+  );
   const out = new Map<string, string>();
   if (!taskIds.length) return out;
   if (!since) {
@@ -195,7 +201,7 @@ async function changedSince(
     entityType: 'task',
     entityId: { $in: taskIds.map((id) => new Types.ObjectId(id)) },
     at: { $gt: since },
-    'changes.field': { $in: [...PLAN_LOG_FIELDS] },
+    'changes.field': { $in: [...fields] },
   })
     .select('entityId actorId at changes')
     .sort({ at: -1 })
@@ -223,7 +229,7 @@ async function changedSince(
   for (const [id, l] of latest) {
     const parts: string[] = [];
     for (const c of l.changes ?? []) {
-      if (!c.field || !PLAN_LOG_FIELDS.has(c.field)) continue;
+      if (!c.field || !fields.has(c.field)) continue;
       if (c.field === 'ownerId')
         parts.push(
           `Owner set to ${c.new ? (emails.get(String(c.new)) ?? 'another user') : 'nobody'}`,
@@ -393,7 +399,7 @@ async function contextFor(
     ),
     canAddPhase,
     statusLabel: PROJECT_STATUS_LABELS[project.status as ProjectStatus] ?? String(project.status),
-    changedSince: await changedSince(matched, since, session),
+    changedSince: await changedSince(matched, since, session, file.hasDeliverables),
     hasDeliverables: file.hasDeliverables,
   };
 }

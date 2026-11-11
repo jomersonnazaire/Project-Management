@@ -147,8 +147,9 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
       return setEditing({ ...editing, error: deliverableTooLongMessage(text.length) });
     const id = editing.id;
     run({ kind: 'edit', itemId: id, text }, () => {
+      // UIE #51 item 5: focus goes back to this row's checkbox once it's rendered again (as Undo).
+      focusAfter.current = id;
       setEditing(null);
-      document.getElementById(`${uid}-cb-${id}`)?.focus();
     });
   };
   const remove = (i: DeliverableItemDto) =>
@@ -230,15 +231,17 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
                   className="list-group-item dlv-row dlv-legacy d-flex align-items-start gap-2"
                   data-testid="deliverable-legacy"
                 >
-                  <input
-                    id={cb}
-                    type="checkbox"
-                    className="form-check-input dlv-cb"
-                    checked={false}
-                    disabled
-                    aria-describedby={`${cb}-note`}
-                  />
-                  <div className="flex-grow-1 min-w-0">
+                  <label className="dlv-hit">
+                    <input
+                      id={cb}
+                      type="checkbox"
+                      className="form-check-input dlv-cb"
+                      checked={false}
+                      disabled
+                      aria-describedby={`${cb}-note`}
+                    />
+                  </label>
+                  <div className="flex-grow-1 min-w-0 dlv-body">
                     <label htmlFor={cb} className="dlv-text">
                       {i.text}
                     </label>{' '}
@@ -319,15 +322,18 @@ export function DeliverablesChecklist({ task, project }: { task: TaskDto; projec
                     />
                   </span>
                 )}
-                <input
-                  id={cb}
-                  type="checkbox"
-                  className="form-check-input dlv-cb"
-                  checked={i.done}
-                  disabled={!editable}
-                  onChange={(e) => tick(i, e.target.checked)}
-                />
-                <div className="flex-grow-1 min-w-0">
+                {/* UIE #51 item 6: the wrapping label is the 36 / 44 px hit area. */}
+                <label className="dlv-hit">
+                  <input
+                    id={cb}
+                    type="checkbox"
+                    className="form-check-input dlv-cb"
+                    checked={i.done}
+                    disabled={!editable}
+                    onChange={(e) => tick(i, e.target.checked)}
+                  />
+                </label>
+                <div className="flex-grow-1 min-w-0 dlv-body">
                   <label htmlFor={cb} className={`dlv-text${i.done ? ' is-done' : ''}`}>
                     {i.text}
                   </label>
