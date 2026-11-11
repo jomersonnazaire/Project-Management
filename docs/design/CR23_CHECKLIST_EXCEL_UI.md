@@ -82,7 +82,8 @@ The modal title is **Import checklist from Excel**, and Cancel and Done return t
 ### 4.2 File errors
 Each one is a danger alert above the drop zone, and nothing is imported. The copy follows CR-22 and Q24, with "Checklist" wording:
 - **Wrong type:** "This file isn't an .xlsx workbook. Save it as Excel Workbook (.xlsx) and try again. Nothing was imported."
-- **No sheet:** "This file has no Checklist sheet. Use the OpsTrack template or a downloaded checklist, and keep the sheet name Checklist. Nothing was imported."
+- **Older Timeline files (Lean, Nov 11):** a workbook whose sheet is named **Timeline** (downloaded before CR-23) still imports. It has no Deliverables column, so deliverable items are left unchanged (a missing column is not a blank cell). The preview shows the grey note "This is an older timeline file, so deliverables won't change."
+- **No sheet:** "This file has no Checklist sheet. Use the OpsTrack template or a downloaded checklist, and keep the sheet name Checklist (an older Timeline sheet also works). Nothing was imported."
 - **Columns:** "Some columns are missing or out of order: Phase, Deliverables. Keep row 1 of the template as it is, then try again. Nothing was imported."
 - **Other project:** "This file was exported from a different project. Export the checklist from Acme Test Co Rollout, or start from the blank template. Nothing was imported." The mockup shows the **Q-150** note under this error.
 - **Over 2,000 rows:** "This file has {n} rows. You can import up to 2,000 at a time. Split it into smaller files and import them one by one. Nothing was imported."
@@ -250,7 +251,11 @@ The panel doesn't show a separate history.
 - **Q-150:** Can the file **add new phases only**, or also **create a new project**? The mockup shows today's rule: a new phase is added on the open project (FR-TL-20), and another project's file is refused.
 - **Q-151:** Should an **owner who isn't on the team be auto-added**? The mockup shows today's rule, a row error. If the answer is yes, the row becomes New and a notice lists who will be added ("1 person will be added to the project team as a Member: contractor@xceler8.example.").
 
-**Smaller items for Rich and Lean** (the mockup assumes the answers shown):
+**Closed by Lean (Nov 11):** the **Changed since export** confirm covers Deliverables too (item b). On Completed, Cancelled and archived projects Import is **disabled** (tooltip "This project is {status}, so the checklist can't be imported.") and both downloads still work. UIE's calls stand: imported ticks show "Done · from import, {date}", duplicate lines become separate items, downloads work on phone, reorder works like Checklist rows, and a migrated item over 200 characters can be ticked, with the limit applying only on edit.
+
+**Carried from CR-22 QA (Queen):** preview body cells wrap long unbroken text (`overflow-wrap:anywhere`, so a 201-character name never makes the table scroll sideways), and the Cancelled badge is hidden at 390 in the Gantt left column.
+
+**Earlier items** (kept for history):
 - **a. Imported ticks:** `doneBy` and `doneAt` are unset in v0.1.2. The mockup shows "Done · from import, {date}".
 - **b. Untick by file:** "[x] removed from a line" unticks the item. That follows from "the `[x]` marks set the ticks", but it means an export taken before someone ticked an item will untick it. The **Changed since export** confirm from CR-22 should also cover Deliverables.
 - **c. Duplicate lines in one cell:** the mockup assumes both are kept as separate items. Alternatively, they could be a row error.
