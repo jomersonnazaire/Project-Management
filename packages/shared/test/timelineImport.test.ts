@@ -51,9 +51,9 @@ describe('CR-22 B3 timeline import cell rules (§B4)', () => {
 
   it('file name and UIE lines', () => {
     expect(timelineExportFileName('Acme Test Co Rollout', '2026-11-09')).toBe(
-      'acme-test-co-rollout-timeline-2026-11-09.xlsx',
+      'acme-test-co-rollout-checklist-2026-11-09.xlsx',
     );
-    expect(timelineExportFileName('***', '2026-11-09')).toBe('project-timeline-2026-11-09.xlsx');
+    expect(timelineExportFileName('***', '2026-11-09')).toBe('project-checklist-2026-11-09.xlsx');
     expect(
       numberingLine([
         { file: 30, final: 21 },

@@ -1770,6 +1770,46 @@ $board-gap: 0.75rem;
 .tli-cell.tli-chg {
   background: #f1f1ff;
 }
+// CR-23 / Queen (CR-22 QA): long unbroken text wraps inside its cell, so a 201-character name
+// never makes the preview scroll sideways. Dates still don't wrap (.tli-date).
+.tli-tbl tbody td {
+  overflow-wrap: anywhere;
+}
+// CR-23 UIE §4.3: a cell that loses deliverable items.
+.tli-cell.tli-loss {
+  background: #fff6f4;
+}
+.tli-pre {
+  white-space: pre-line;
+}
+.tli-dl {
+  min-width: 180px;
+  li + li {
+    margin-top: 2px;
+  }
+  .tli-dl-done {
+    color: #5d6878;
+  }
+  .tli-dl-add {
+    color: #2e7d17;
+    font-weight: 600;
+  }
+  .tli-dl-tick {
+    color: #4547c9;
+    font-weight: 600;
+  }
+  .tli-dl-untick,
+  .tli-dl-gone {
+    color: #b8240a;
+    font-weight: 600;
+  }
+  .tli-dl-gone s {
+    color: #b8240a;
+  }
+  .tli-was {
+    font-weight: 400;
+  }
+}
 .tli-cell.tli-bad {
   background: #ffe0db;
   outline: 1px solid #b8240a;
@@ -1797,4 +1837,98 @@ $board-gap: 0.75rem;
 }
 .tli-foot {
   gap: 8px;
+}
+
+// ----- CR-23: Checklist Excel menu, deliverable chips and the deliverables checklist -----
+.ckx-menu {
+  min-width: 300px;
+  max-width: 340px;
+}
+.ckx-chip {
+  cursor: pointer;
+  font-weight: 500;
+}
+.dlv-bar {
+  width: 72px;
+  height: 6px;
+}
+.dlv-empty {
+  border: 1px dashed #d0d4d9;
+  border-radius: 6px;
+  padding: 12px;
+}
+.dlv-list.dlv-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+.dlv-row {
+  min-height: 44px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  transition: background-color 0.6s;
+}
+.dlv-row.dlv-flash {
+  background: #e7e7ff;
+}
+.dlv-cb {
+  width: 18px;
+  height: 18px;
+  margin: 3px 0 0;
+  flex-shrink: 0;
+  // A 36 px hit box around the 18 px box.
+  outline: 9px solid transparent;
+  cursor: pointer;
+}
+.dlv-text {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  &.is-done {
+    text-decoration: line-through;
+    color: #5d6878;
+  }
+}
+.dlv-by {
+  color: #5d6878;
+}
+.dlv-icon {
+  padding: 2px 6px;
+  color: #5d6878;
+}
+.dlv-undo {
+  background: #2f3349;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+.dlv-grip,
+.dlv-touch {
+  flex-shrink: 0;
+}
+// Edit and Remove show on hover and focus on desktop; always on touch and at 390. The ↑ / ↓
+// buttons are the touch alternative to drag (FR-DLV-05).
+@media (hover: hover) and (pointer: fine) and (min-width: 761px) {
+  .dlv-touch {
+    display: none !important;
+  }
+  .dlv-row .dlv-actions {
+    opacity: 0;
+  }
+  .dlv-row:hover .dlv-actions,
+  .dlv-row:focus-within .dlv-actions {
+    opacity: 1;
+  }
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .dlv-grip {
+    display: none;
+  }
+  .dlv-row .btn,
+  .dlv-add .btn,
+  .dlv-add .form-control {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .dlv-cb {
+    outline-width: 13px;
+  }
 }

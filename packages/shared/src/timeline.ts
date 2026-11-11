@@ -574,7 +574,7 @@ export const TIMELINE_READ_ONLY_NOTE =
 export const TIMELINE_PHONE_NOTE = 'On a phone you can view the timeline and open task details.';
 export const TIMELINE_LARGER_SCREEN = 'Open this on a larger screen to make changes.';
 export const TIMELINE_EMPTY_HELP =
-  'A task needs both a start and a finish to show on the timeline. Add dates in the Checklist, or import a timeline from Excel.';
+  'A task needs both a start and a finish to show on the timeline. Add dates in the Checklist, or import a checklist from Excel there.';
 export const BROKEN_LINK_TITLE = 'Starts before a task it depends on finishes.';
 export const PHASE_NAMES_LOCKED_TIP =
   'Phases can be added, renamed or removed only while the project is in Planning';
@@ -726,9 +726,5 @@ export interface TimelineDto {
     editPhaseNames: boolean;
     /** Save baseline: Admin or a PM on the project, project open (FR-TL-08, Q-133). */
     saveBaseline: boolean;
-    /** Excel › Download timeline and Download template: planners (FR-TL-14, AC-74.5). */
-    excel: boolean;
-    /** Excel › Import: planners while Planning, Active or On hold, not archived (Q-141). */
-    importExcel: boolean;
   };
 }

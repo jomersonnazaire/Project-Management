@@ -23,6 +23,7 @@ import { EstAct, TaskStatusBadge } from '../../components/ProjectBadges';
 import { ReasonModal } from '../../components/ReasonModal';
 import { dateTime, shortDate } from '../../lib/format';
 import { followUpRecipients } from '../../lib/m3ui';
+import { DeliverablesChecklist } from './DeliverablesChecklist';
 import { EvidenceSection } from './EvidenceSection';
 import { FollowUpThread } from './FollowUpThread';
 import { TaskFormModal } from './TaskFormModal';
@@ -288,7 +289,6 @@ export function TaskPanel({
                   <EstAct est={t.estHours} act={t.actualHours} />
                 </Row>
                 <Row label="Depends on">{t.dependsOn.map(nameOf).join(', ') || '–'}</Row>
-                <Row label="Deliverable">{t.deliverable ?? '–'}</Row>
                 {t.requiresApproval && (
                   <Row label="Approval">
                     {t.approval.state === 'NONE' ? 'Needed' : t.approval.state.toLowerCase()}
@@ -297,6 +297,9 @@ export function TaskPanel({
                   </Row>
                 )}
               </dl>
+
+              {/* CR-23 FR-DLV-01: the deliverables checklist (UIE §5). */}
+              <DeliverablesChecklist task={t} project={project} />
 
               <EvidenceSection task={t} archived={archived} />
 

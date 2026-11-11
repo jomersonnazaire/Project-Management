@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import ExcelJS from 'exceljs';
 import {
   XLSX_MIME,
+  type ProjectDto,
+  type TaskDto,
   type TimelineDto,
   type TimelineImportPreviewDto,
   type TimelineImportRowDto,
@@ -10,13 +12,14 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { timelineDto } from './cr22bFixtures';
-import { PID, api, project } from './m2fixtures';
+import { PID, api, project, task } from './m2fixtures';
 import { renderAt } from './utils';
 
 /**
- * CR-22 Part B slice 3: timeline Excel import and export (FR-TL-15 to 26, UIE §4 to §6).
- * The API does the checking (apps/api/test/cr22b3.test.ts); these cover the menu, the empty
- * state, the preview, confirm-overwrite, the stale preview and the done screen.
+ * CR-22 Part B slice 3: Excel import and export (FR-TL-15 to 26), moved by CR-23 to the Checklist
+ * tab (UIE §3, §4). The API does the checking (apps/api/test/cr22b3.test.ts, cr23.test.ts); these
+ * cover the menu, the empty state, the preview, confirm-overwrite, the stale preview and the done
+ * screen. CR-23's deliverable-specific cases are in cr23.test.tsx.
  */
 let compact = false;
 beforeEach(() => {
@@ -44,6 +47,7 @@ const blankValues = (): TimelineImportRowDto['values'] => ({
   owner: '',
   baselineStart: '',
   baselineFinish: '',
+  deliverables: '',
   taskId: '',
 });
 const row = (over: Partial<TimelineImportRowDto>): TimelineImportRowDto => ({
@@ -54,8 +58,10 @@ const row = (over: Partial<TimelineImportRowDto>): TimelineImportRowDto => ({
   changes: [],
   clears: [],
   errors: [],
+  warnings: [],
   changedSince: null,
   willBe: null,
+  deliverables: null,
   ...over,
 });
 const PREVIEW: TimelineImportPreviewDto = {
@@ -96,9 +102,12 @@ const PREVIEW: TimelineImportPreviewDto = {
     error: 0,
     errorMessages: 0,
     clears: 1,
+    losesDeliverables: 0,
   },
   newPhases: ['Hypercare'],
+  addMembers: [],
   baselineFilled: false,
+  noDeliverablesColumn: false,
   token: 'tok',
 };
 
@@ -106,15 +115,17 @@ type Reply = { status: number; body: unknown };
 function mount(
   opts: {
     tl?: TimelineDto;
+    project?: ProjectDto;
+    tasks?: TaskDto[];
     role?: 'PROJECT_MANAGER' | 'MEMBER';
     preview?: () => Reply;
     commit?: () => Reply;
   } = {},
 ) {
   return api(opts.role ?? 'PROJECT_MANAGER', (url) => {
-    if (url.includes('/timeline/import/preview'))
+    if (url.includes('/checklist/import/preview'))
       return opts.preview?.() ?? { status: 200, body: PREVIEW };
-    if (url.includes('/timeline/import/commit'))
+    if (url.includes('/checklist/import/commit'))
       return (
         opts.commit?.() ?? {
           status: 200,
@@ -125,22 +136,32 @@ function mount(
             unchanged: 1,
             leftUnconfirmed: 0,
             newPhases: ['Hypercare'],
+            addedMembers: 0,
+            deliverables: { added: 0, removed: 0, ticked: 0, unticked: 0 },
           },
         }
       );
-    if (url.includes('/timeline/template') || url.includes('/timeline/export'))
+    if (url.includes('/checklist/template') || url.includes('/checklist/export'))
       return { status: 200, body: {} };
     if (url.endsWith(`/projects/${PID}/timeline`))
       return { status: 200, body: opts.tl ?? timelineDto() };
-    if (url.includes(`/projects/${PID}/tasks`)) return { status: 200, body: { items: [] } };
-    if (url.endsWith(`/projects/${PID}`)) return { status: 200, body: { project: project() } };
+    if (url.includes(`/projects/${PID}/tasks`))
+      return { status: 200, body: { items: opts.tasks ?? [task()] } };
+    if (url.endsWith(`/projects/${PID}`))
+      return { status: 200, body: { project: opts.project ?? project() } };
     return undefined;
   });
 }
+/** CR-23: the Excel menu is on the Checklist tab. */
 const open = async () => {
+  renderAt(`/projects/${PID}`, <App />);
+  return screen.findByTestId('started-from');
+};
+const openTimeline = async () => {
   renderAt(`/projects/${PID}/timeline`, <App />);
   return screen.findByTestId('timeline');
 };
+const IMPORT_ITEM = /^Import from Excel…/;
 const xlsx = () => new File(['PK'], 'acme-timeline-2026-11-09.xlsx', { type: XLSX_MIME });
 const called = (fetch: ReturnType<typeof mount>, part: string) =>
   fetch.mock.calls.filter(([u]) => String(u).includes(part));
@@ -149,7 +170,7 @@ async function openModal() {
   const user = userEvent.setup({ applyAccept: false });
   await open();
   await user.click(screen.getByRole('button', { name: 'Excel' }));
-  await user.click(screen.getByRole('button', { name: 'Import from Excel…' }));
+  await user.click(screen.getByRole('button', { name: IMPORT_ITEM }));
   const dialog = await screen.findByRole('dialog');
   return { user, dialog };
 }
@@ -160,46 +181,70 @@ async function preview() {
   return { user, dialog };
 }
 
-describe('CR-22 B3 Excel menu and empty state (FR-TL-15/16, UIE §4)', () => {
-  it('a planner sees Excel ▾ with import, download timeline and template; downloads hit the API', async () => {
+describe('CR-23 Excel menu on the Checklist and empty state (FR-CLX-01..03, 08; UIE §3)', () => {
+  it('a planner sees Excel ▾ with import, download checklist and template; downloads hit the API', async () => {
     const fetch = mount();
     const user = userEvent.setup();
     await open();
     await user.click(screen.getByRole('button', { name: 'Excel' }));
-    expect(screen.getByRole('button', { name: 'Import from Excel…' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Download timeline (.xlsx)' }));
-    await waitFor(() => expect(called(fetch, '/timeline/export')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: IMPORT_ITEM })).toHaveTextContent(
+      'Add or update tasks, dates, links, owners and deliverables',
+    );
+    await user.click(screen.getByRole('button', { name: /^Download checklist \(\.xlsx\)/ }));
+    await waitFor(() => expect(called(fetch, '/checklist/export')).toHaveLength(1));
+    expect(
+      await screen.findByText(/^Downloaded .*-checklist-\d{4}-\d{2}-\d{2}\.xlsx \(1 task\)\.$/),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Excel' }));
-    await user.click(screen.getByRole('button', { name: 'Download template' }));
-    await waitFor(() => expect(called(fetch, '/timeline/template')).toHaveLength(1));
+    await user.click(screen.getByRole('button', { name: /^Download template/ }));
+    await waitFor(() => expect(called(fetch, '/checklist/template')).toHaveLength(1));
+    expect(
+      await screen.findByText('Template downloaded: OpsTrack-checklist-template.xlsx'),
+    ).toBeInTheDocument();
   });
 
-  it('with downloads only (e.g. Completed) the menu has no import item', async () => {
-    const base = timelineDto();
-    mount({ tl: timelineDto({ can: { ...base.can, importExcel: false } }) });
+  it('Completed: downloads still work and Import is disabled with the status tooltip copy', async () => {
+    const base = project();
+    mount({
+      project: project({
+        status: 'COMPLETED',
+        can: { ...base.can, checklistImport: false },
+      }),
+    });
     const user = userEvent.setup();
     await open();
     await user.click(screen.getByRole('button', { name: 'Excel' }));
-    expect(screen.queryByRole('button', { name: 'Import from Excel…' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Download template' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: IMPORT_ITEM })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(
+      screen.getByLabelText(/This project is completed, so the checklist can't be imported\./),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Download template/ })).toBeEnabled();
   });
 
-  it('without the right there is no Excel menu', async () => {
-    const base = timelineDto();
-    mount({ tl: timelineDto({ can: { ...base.can, excel: false, importExcel: false } }) });
+  it('a Member sees no Excel menu, just the view-only line', async () => {
+    const base = project();
+    mount({
+      project: project({ can: { ...base.can, checklistExcel: false, checklistImport: false } }),
+    });
     await open();
     expect(screen.queryByRole('button', { name: 'Excel' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('checklist-view-only')).toHaveTextContent(
+      'View only. The project PM or an Admin changes the plan and imports from Excel. If you own a task, you can tick its deliverables in the task panel.',
+    );
   });
 
-  it('the empty state offers Import from Excel and Download template beside Open Checklist', async () => {
-    mount({ tl: timelineDto({ tasks: [] }) });
+  it('the empty Checklist offers Import from Excel and the template link', async () => {
+    mount({ tasks: [] });
     const user = userEvent.setup();
     await open();
-    const imp = await screen.findByRole('button', { name: 'Import from Excel' });
-    expect(screen.getByRole('button', { name: 'Download template' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Checklist' })).toBeInTheDocument();
+    expect(await screen.findByText('No phases or activities yet')).toBeInTheDocument();
+    const imp = screen.getByRole('button', { name: 'Import from Excel' });
+    expect(screen.getByRole('button', { name: 'Download the template' })).toBeInTheDocument();
     await user.click(imp);
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Import timeline from Excel');
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Import checklist from Excel');
   });
 
   it('on a phone, import shows the larger-screen message instead of the modal', async () => {
@@ -208,9 +253,27 @@ describe('CR-22 B3 Excel menu and empty state (FR-TL-15/16, UIE §4)', () => {
     const user = userEvent.setup();
     await open();
     await user.click(screen.getByRole('button', { name: 'Excel' }));
-    await user.click(screen.getByRole('button', { name: 'Import from Excel…' }));
+    await user.click(screen.getByRole('button', { name: IMPORT_ITEM }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent(/larger screen/i);
+    expect(screen.getByText('Open this on a larger screen to make changes.')).toBeInTheDocument();
+  });
+
+  it('the Timeline has no Excel controls; its note links to the Checklist', async () => {
+    mount();
+    await openTimeline();
+    expect(screen.queryByRole('button', { name: 'Excel' })).not.toBeInTheDocument();
+    const note = screen.getByTestId('timeline-checklist-note');
+    expect(note).toHaveTextContent(
+      'The timeline shows what the Checklist sets. To change many tasks at once, use Excel on the Checklist.',
+    );
+    expect(within(note).getByRole('link')).toHaveAttribute('href', `/projects/${PID}`);
+  });
+
+  it('the empty Timeline only offers Open Checklist', async () => {
+    mount({ tl: timelineDto({ tasks: [] }) });
+    await openTimeline();
+    expect(await screen.findByRole('link', { name: 'Open Checklist' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Import from Excel' })).not.toBeInTheDocument();
   });
 });
 
@@ -225,14 +288,16 @@ describe('CR-22 B3 import preview and commit (FR-TL-17 to 25, UIE §5)', () => {
     );
     expect(dialog).toHaveTextContent('file 9 → #6');
     expect(within(dialog).queryByTestId('import-row-5')).not.toBeInTheDocument();
-    expect(called(fetch, '/timeline/import/commit')).toHaveLength(0);
+    expect(called(fetch, '/checklist/import/commit')).toHaveLength(0);
     // 1 update + 1 new; the changed row isn't counted until it's confirmed.
     expect(within(dialog).getByRole('button', { name: 'Import 2 rows' })).toBeEnabled();
     expect(dialog).toHaveTextContent('1 changed row not confirmed will be left as it is.');
-    // UIE retest: headers wrap at the last space; the lock stays with the last word.
-    const head = within(dialog).getByRole('columnheader', { name: /Baseline start/ });
-    expect(head.querySelector('.text-nowrap')).toHaveTextContent(/^start$/);
-    expect(head.querySelector('.text-nowrap .bx-lock-alt')).toBeInTheDocument();
+    // CR-23 UIE §4.3: the baseline columns are left out; Deliverables is the last column.
+    const heads = within(dialog)
+      .getAllByRole('columnheader')
+      .map((h) => h.textContent);
+    expect(heads).not.toContain('Baseline start');
+    expect(heads.at(-1)).toBe('Deliverables');
   });
 
   it('confirm overwrite adds the row and sends its Excel row number with the token', async () => {
@@ -240,12 +305,12 @@ describe('CR-22 B3 import preview and commit (FR-TL-17 to 25, UIE §5)', () => {
     const { user, dialog } = await preview();
     await user.click(within(dialog).getByRole('button', { name: 'Confirm overwrite' }));
     await user.click(within(dialog).getByRole('button', { name: 'Import 3 rows' }));
-    expect(await within(dialog).findByText('Timeline imported')).toBeInTheDocument();
-    const [url, init] = called(fetch, '/timeline/import/commit')[0]!;
+    expect(await within(dialog).findByText('Checklist imported')).toBeInTheDocument();
+    const [url, init] = called(fetch, '/checklist/import/commit')[0]!;
     expect(String(url)).toContain('confirm=3');
     expect(JSON.stringify(init?.headers)).toContain('tok');
     expect(dialog).toHaveTextContent('1 task added at the end (#6) and 2 updated.');
-    await user.click(within(dialog).getByRole('button', { name: 'Back to timeline' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Back to checklist' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
@@ -311,14 +376,14 @@ describe('CR-22 B3 import preview and commit (FR-TL-17 to 25, UIE §5)', () => {
     expect(await within(dialog).findByText('This preview is out of date.')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Import 2 rows' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: 'Check again' }));
-    await waitFor(() => expect(called(fetch, '/timeline/import/preview')).toHaveLength(2));
+    await waitFor(() => expect(called(fetch, '/checklist/import/preview')).toHaveLength(2));
   });
 });
 
 describe("CR-22 B Lead's slice-2 call: no % complete", () => {
   it('in-progress bars use the status colour only, with no fill or progress element', async () => {
     mount();
-    const tl = await open();
+    const tl = await openTimeline();
     const bars = tl.querySelectorAll('.tlx-bar');
     expect(bars.length).toBeGreaterThan(0);
     expect(
@@ -329,7 +394,7 @@ describe("CR-22 B Lead's slice-2 call: no % complete", () => {
 });
 
 describe('CR-22 B3 Q20: one assignment notice per import', () => {
-  it('the bell shows the usual "assigned you to" notice listing the tasks; it opens the timeline', async () => {
+  it('the bell shows the usual "assigned you to" notice listing the tasks; it opens the project', async () => {
     api('MEMBER', (url) => {
       if (url.endsWith('/notifications/unread-count')) return { status: 200, body: { unread: 1 } };
       if (url.endsWith('/notifications'))
@@ -343,7 +408,7 @@ describe('CR-22 B3 Q20: one assignment notice per import', () => {
                 type: 'ASSIGNED',
                 actor: { id: 'u2', name: 'Maria Perez' },
                 message: null,
-                link: `/projects/${PID}/timeline`,
+                link: `/projects/${PID}`,
                 task: null,
                 tasks: [
                   { id: 'k1', name: 'Kickoff' },
@@ -366,7 +431,7 @@ describe('CR-22 B3 Q20: one assignment notice per import', () => {
       name: /Maria P\. assigned you to Kickoff, Go-live · SAP B1 Rollout/,
     });
     await userEvent.click(item);
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/projects/${PID}/timeline`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/projects/${PID}`));
   });
 });
 
@@ -385,7 +450,7 @@ describe('CR-22 B3 NFR-52: 5 MB and 2,000 rows are checked before upload (Q24 co
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'This file is 6 MB. The limit is 5 MB. Remove extra sheets or images and try again. Nothing was imported.',
     );
-    expect(called(fetch, '/timeline/import/preview')).toHaveLength(0);
+    expect(called(fetch, '/checklist/import/preview')).toHaveLength(0);
   });
 
   it('over 2,000 rows: refused in the browser with the row count; nothing is uploaded', async () => {
@@ -398,7 +463,7 @@ describe('CR-22 B3 NFR-52: 5 MB and 2,000 rows are checked before upload (Q24 co
     expect(await within(dialog).findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent(
       'This file has 2,001 rows. You can import up to 2,000 at a time. Split it into smaller files and import them one by one. Nothing was imported.',
     );
-    expect(called(fetch, '/timeline/import/preview')).toHaveLength(0);
+    expect(called(fetch, '/checklist/import/preview')).toHaveLength(0);
   });
 });
 
@@ -423,7 +488,7 @@ describe('CR-22 B UIE review of 6cc0f3e (Gantt)', () => {
 
   it('"All N" leaves cancelled tasks out; a cancelled task has no baseline bar', async () => {
     mount({ tl: withCancelled() });
-    const tl = await open();
+    const tl = await openTimeline();
     const all = within(tl).getByRole('button', { name: /^All/ });
     expect(all).toHaveTextContent('All 5'); // 6 tasks, 1 cancelled
     expect(within(tl).queryByTestId('baseline-b3')).not.toBeInTheDocument();
@@ -432,7 +497,7 @@ describe('CR-22 B UIE review of 6cc0f3e (Gantt)', () => {
 
   it('names clip at the end (inner span), zero variance reads 0d, one-day tasks read as a range', async () => {
     mount({ tl: withCancelled() });
-    const tl = await open();
+    const tl = await openTimeline();
     const row = within(tl).getByTestId('row-b1');
     expect(row.querySelector('.tlx-name-link > .tlx-name-text')).toHaveTextContent(/.+/);
     expect(within(tl).getByTestId('var-a1')).toHaveTextContent('0d');
@@ -441,7 +506,7 @@ describe('CR-22 B UIE review of 6cc0f3e (Gantt)', () => {
 
   it("the Unscheduled note sits in the left column under the name; the legend has the review's items", async () => {
     mount();
-    const tl = await open();
+    const tl = await openTimeline();
     const row = within(tl).getByTestId('row-u1');
     expect(row).toHaveClass('tlx-row-nodates');
     expect(row.querySelector('.tlx-left')).toContainElement(within(tl).getByTestId('nodates-u1'));
@@ -475,15 +540,26 @@ describe('CR-22 B UIE review of 6cc0f3e (Gantt)', () => {
     compact = true;
     mount();
     const user = userEvent.setup();
-    await open();
+    await openTimeline();
     await user.click(screen.getByRole('button', { name: 'Gantt' }));
     const row = await screen.findByTestId('row-b1');
     expect(within(row).queryByText('Delayed')).not.toBeInTheDocument();
   });
 
+  it('Queen (CR-23 UIE §9): at 390 the Cancelled badge is hidden in the Gantt left column', async () => {
+    compact = true;
+    mount({ tl: withCancelled() });
+    const user = userEvent.setup();
+    await openTimeline();
+    await user.click(screen.getByRole('button', { name: 'Gantt' }));
+    const row = await screen.findByTestId('row-b3');
+    expect(row.querySelector('.tlx-badge')).not.toBeInTheDocument();
+    expect(row).toHaveTextContent('(Cancelled)'); // screen-reader text only
+  });
+
   it('the empty state has no toolbar', async () => {
     mount({ tl: timelineDto({ tasks: [] }) });
-    await open();
+    await openTimeline();
     expect(await screen.findByTestId('timeline-empty')).toBeInTheDocument();
     expect(screen.queryByTestId('timeline-toolbar')).not.toBeInTheDocument();
   });

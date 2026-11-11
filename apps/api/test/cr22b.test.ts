@@ -47,13 +47,12 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
     expect(tl.tasks[0]!.plannedStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(tl.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(tl.calendar.workingDays).toEqual([1, 2, 3, 4, 5]);
+    // CR-23: the Excel rights moved to project.can.checklistExcel / checklistImport (cr23.test.ts).
     expect(tl.can).toEqual({
       plan: true,
       editPhaseTargets: true,
       editPhaseNames: true,
       saveBaseline: true,
-      excel: true,
-      importExcel: true,
     });
   });
 
@@ -66,8 +65,6 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
       editPhaseTargets: false,
       editPhaseNames: false,
       saveBaseline: false,
-      excel: false,
-      importExcel: false,
     });
     const viewer = await timeline(w.viewer.agent, w.project.id);
     expect(viewer.status).toBe(200);
@@ -85,8 +82,6 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
       editPhaseTargets: true,
       editPhaseNames: false,
       saveBaseline: true,
-      excel: true,
-      importExcel: true,
     });
     expect((await timeline(w.admin.agent, w.project.id)).body.can.editPhaseNames).toBe(true);
     await ProjectModel.updateOne({ _id: w.project.id }, { $set: { status: 'COMPLETED' } });
@@ -95,9 +90,6 @@ describe('CR-22 B: GET /projects/:id/timeline', () => {
       editPhaseTargets: false,
       editPhaseNames: false,
       saveBaseline: false,
-      // CR-22 B3: a planner can still download the timeline of a completed project.
-      excel: true,
-      importExcel: false,
     });
   });
 });

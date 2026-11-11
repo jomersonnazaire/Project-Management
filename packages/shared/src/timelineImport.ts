@@ -1,10 +1,13 @@
+import type { DeliverablesDiff } from './deliverables.js';
+
 /**
- * CR-22 Part B slice 3: timeline Excel template, export and import (FR-TL-15 to 22, 25, 26; §B4,
- * §B5; UIE CR22_PROJECT_TIMELINE_UI.md §5 and §6). Shared by the API (workbook, checks, DTOs) and
- * the web app (modal copy). Limits follow CR-19 (NFR-52).
+ * CR-22 Part B slice 3 engine, moved to the Checklist by CR-23 (FR-CLX-01 to 13; UIE
+ * CR23_CHECKLIST_EXCEL_UI.md §4 and §7): the ONE Excel template, download and import, with the
+ * CR-22 timeline columns plus Deliverables. Shared by the API (workbook, checks, DTOs) and the web
+ * app (modal copy). Limits follow CR-19 (NFR-52). Names keep the `TIMELINE_` prefix of the engine.
  */
 
-/** §B4 columns, in order. The first ten are visible; `Task ID` (column K) is hidden. */
+/** CR-23 §7 columns, in order. The first eleven are visible; `Task ID` (column L) is hidden. */
 export const TIMELINE_COLUMNS = [
   { field: 'number', header: 'Task number' },
   { field: 'name', header: 'Task name' },
@@ -16,14 +19,20 @@ export const TIMELINE_COLUMNS = [
   { field: 'owner', header: 'Owner' },
   { field: 'baselineStart', header: 'Baseline start' },
   { field: 'baselineFinish', header: 'Baseline finish' },
+  { field: 'deliverables', header: 'Deliverables' },
   { field: 'taskId', header: 'Task ID' },
 ] as const;
 export type TimelineImportField = (typeof TIMELINE_COLUMNS)[number]['field'];
 export const TIMELINE_COLUMN_LABEL = Object.fromEntries(
   TIMELINE_COLUMNS.map((c) => [c.field, c.header]),
 ) as Record<TimelineImportField, string>;
-/** The 10 columns the preview table shows (the hidden Task ID isn't shown, UIE §5.1). */
-export const TIMELINE_VISIBLE_FIELDS = TIMELINE_COLUMNS.slice(0, 10).map((c) => c.field);
+/**
+ * CR-23 UIE §4.3: the columns the preview table shows. The baseline columns are left out (ignored
+ * on import) so the table fits without sideways scroll; the hidden Task ID isn't shown.
+ */
+export const TIMELINE_VISIBLE_FIELDS: TimelineImportField[] = TIMELINE_COLUMNS.map(
+  (c) => c.field,
+).filter((f) => f !== 'baselineStart' && f !== 'baselineFinish' && f !== 'taskId');
 /** Fields an import writes (§B4: status, assignees, estimate, priority and party never change). */
 export const TIMELINE_PLAN_FIELDS = [
   'name',
@@ -34,15 +43,19 @@ export const TIMELINE_PLAN_FIELDS = [
   // Owner before Depends on, so "Clears: Owner, Depends on" reads as UIE's copy.
   'owner',
   'dependsOn',
+  'deliverables',
 ] as const satisfies readonly TimelineImportField[];
 export type TimelinePlanField = (typeof TIMELINE_PLAN_FIELDS)[number];
 
-export const TIMELINE_SHEET = 'Timeline';
+/** CR-23 FR-CLX-10: the data sheet is "Checklist". */
+export const TIMELINE_SHEET = 'Checklist';
+/** CR-23 FR-CLX-10 / FR-CLX-11: a pre-CR-23 file's sheet, still imported (no Deliverables). */
+export const LEGACY_TIMELINE_SHEET = 'Timeline';
 export const TIMELINE_INSTRUCTIONS_SHEET = 'Instructions';
 export const TIMELINE_META_SHEET = '_meta';
-export const TIMELINE_TEMPLATE_ID = 'opstrack-timeline';
-export const TIMELINE_TEMPLATE_VERSION = 1;
-export const TIMELINE_TEMPLATE_NAME = 'OpsTrack-timeline-template.xlsx';
+export const TIMELINE_TEMPLATE_ID = 'opstrack-checklist';
+export const TIMELINE_TEMPLATE_VERSION = 2;
+export const TIMELINE_TEMPLATE_NAME = 'OpsTrack-checklist-template.xlsx';
 export const TIMELINE_MAX_DEPENDENCIES = 50;
 /** Q24 length limits (task model: name 200; phase names 120). */
 export const TIMELINE_MAX_NAME = 200;
@@ -50,7 +63,7 @@ export const TIMELINE_MAX_PHASE = 120;
 /** Q24: a Depends on cell longer than this isn't parsed (50 numbers fit easily). */
 export const TIMELINE_MAX_DEPENDS_TEXT = 500;
 
-/** File names: `acme-test-co-rollout-timeline-2026-11-09.xlsx` (UIE §5.1 file chip). */
+/** File names: `acme-test-co-rollout-checklist-2026-11-11.xlsx` (CR-23 UIE §3.1 toast). */
 export function timelineSlug(projectName: string): string {
   const s = projectName
     .normalize('NFKD')
@@ -63,7 +76,7 @@ export function timelineSlug(projectName: string): string {
   return s || 'project';
 }
 export const timelineExportFileName = (projectName: string, phDate: string) =>
-  `${timelineSlug(projectName)}-timeline-${phDate}.xlsx`;
+  `${timelineSlug(projectName)}-checklist-${phDate}.xlsx`;
 
 /** §B4 date rule: a date cell (read as YYYY-MM-DD) or YYYY-MM-DD text; a real calendar date. */
 export function parseTimelineDate(text: string): string | null {
@@ -128,11 +141,25 @@ export const badDateMessage = (column: string) =>
   `${column} isn't a valid date. Use a date cell or YYYY-MM-DD.`;
 /** Lean (UIE review item 6): Depends on numbers only point to rows in the same file. */
 export const missingDependencyMessage = (n: number) =>
-  `Depends on: ${n} isn't a task number in this file. To link an existing task, include its row from a downloaded timeline.`;
+  `Depends on: ${n} isn't a task number in this file. To link an existing task, include its row from a downloaded checklist.`;
 export const cycleMessage = (labels: (number | string)[]) =>
   `Depends on: circular dependency ${labels.join(' → ')}.`;
 export const unknownOwnerMessage = (email: string) =>
   `Owner ${email} isn't an active internal user.`;
+/**
+ * CR-23 Q-151 (Jomerson): an Owner email with no user, or a deactivated one, isn't a row error any
+ * more; the row imports without an owner and the preview says this (word for word).
+ */
+export const ownerMissingMessage = (email: string) => `Email ${email} doesn't exist.`;
+/** Lean (2026-11-11): a Viewer named as Owner in the file; the row imports without an owner. */
+export const cantOwnMessage = (email: string) => `${email} can't own tasks.`;
+/** CR-23 Q-151, UIE §9: "1 person will be added to the project team as a Member: a@…, b@…." */
+export const addMembersNotice = (emails: string[]) =>
+  `${emails.length} ${emails.length === 1 ? 'person' : 'people'} will be added to the project team as ${
+    emails.length === 1 ? 'a Member' : 'Members'
+  }: ${emails.join(', ')}.`;
+export const addedMembersLine = (n: number) =>
+  `${n} ${n === 1 ? 'person was' : 'people were'} added to the project team.`;
 export const notMemberMessage = (email: string) =>
   `${email} isn't a member of this project. Add them to the project first.`;
 export const phaseNotAllowedMessage = (name: string, status: string) =>
@@ -155,13 +182,14 @@ export const TIMELINE_FILE_ERRORS = {
     lead: "We couldn't open this file.",
     rest: 'It may be damaged or password-protected. Open it in Excel, save it again as Excel Workbook (.xlsx), then try again. Nothing was imported.',
   },
+  // CR-23 UIE §4.2 (8cf8071).
   NO_TIMELINE_SHEET: {
-    lead: 'This file has no Timeline sheet.',
-    rest: 'Use the OpsTrack template or a downloaded timeline, and keep the sheet name Timeline. Nothing was imported.',
+    lead: 'This file has no Checklist sheet.',
+    rest: 'Use the OpsTrack template or a downloaded checklist, and keep the sheet name Checklist (an older Timeline sheet also works). Nothing was imported.',
   },
   EMPTY_FILE: {
     lead: 'This file has no tasks.',
-    rest: 'Add at least one row under the headers on the Timeline sheet and try again. Nothing was imported.',
+    rest: 'Add at least one row under the headers on the Checklist sheet and try again. Nothing was imported.',
   },
 } as const;
 /** The 5 MB upload limit (same as CR-19), checked in the browser and by the API. */
@@ -187,7 +215,7 @@ export const columnsError = (names: string[]) => ({
 });
 export const otherProjectError = (projectName: string) => ({
   lead: 'This file was exported from a different project.',
-  rest: `Export the timeline from ${projectName}, or start from the blank template. Nothing was imported.`,
+  rest: `Export the checklist from ${projectName}, or start from the blank template. Nothing was imported.`,
 });
 export const tooManyTimelineRowsError = (n: number, max: number) => ({
   lead: `This file has ${n.toLocaleString('en-US')} rows.`,
@@ -204,26 +232,40 @@ export const TIMELINE_FILE_ERROR_CODES = [
   'TOO_MANY_ROWS',
 ] as const;
 
-/** UIE §5.1 copy used by the modal. */
+/** CR-23 UIE §4 copy used by the modal. */
 export const TIMELINE_IMPORT_COPY = {
   NEVER_DELETES_LEAD: 'Import adds and updates tasks. It never deletes tasks.',
   NEVER_DELETES_REST:
-    "Rows exported from OpsTrack update their own task (matched by a hidden Task ID). Rows you add become new tasks at the end of the list. Tasks that aren't in the file stay as they are. A blank cell clears that field.",
+    'Rows downloaded from OpsTrack update their own task (matched by a hidden Task ID). Rows you add become new tasks at the end of the list. A blank cell clears that field.',
+  DELIVERABLES_LEAD: "The Deliverables cell replaces the task's list:",
+  DELIVERABLES_REST:
+    "lines that aren't in the cell are removed, and only lines starting with [x] stay ticked.",
+  /** CR-23 UIE §4.2 (Lean, FR-CLX-10/11): an older Timeline file has no Deliverables column. */
+  LEGACY_SHEET: "This is an older timeline file, so deliverables won't change.",
   LIMITS: '.xlsx only · up to 5 MB · 2,000 rows',
   READING: 'Reading file…',
   READING_SUB: 'Checking every row. Nothing is saved yet.',
   IMPORTING: 'Importing…',
   IMPORTING_SUB: "Don't close this window.",
-  BASELINE_IGNORED_LEAD: 'Baseline columns are ignored on import.',
+  /** CR-23 UIE §4.3: "**Baseline columns are ignored on import**, so they aren't shown here." */
+  BASELINE_IGNORED_LEAD: 'Baseline columns are ignored on import',
   STALE_LEAD: 'This preview is out of date.',
   STALE_REST: 'The project changed after you checked the file. Nothing was saved.',
   FOOTNOTE_REST: 'means the cell is empty, so that field will be cleared.',
-  NOTHING_DELETED:
-    "Nothing was deleted. Baselines didn't change: click Save baseline if you want the new dates as the baseline.",
-  UP_TO_DATE: 'The timeline, critical path and forecast are up to date.',
+  FOOTNOTE_DELIVERABLES:
+    'In Deliverables, + green lines are added and a crossed-out line on its own is removed.',
+  NOTHING_DELETED: "No tasks were deleted. Baselines didn't change.",
+  UP_TO_DATE:
+    'The checklist, timeline, critical path and forecast are up to date. Owners of new or changed tasks get one notification each.',
   IMPORT_NOT_ALLOWED: 'Import works while the project is Planning, Active or On hold.',
+  /** CR-23 UIE §1: the Timeline toolbar note (no Excel controls there). */
+  TIMELINE_NOTE_LEAD: 'The timeline shows what the Checklist sets.',
+  TIMELINE_NOTE_REST: 'To change many tasks at once, use Excel on the Checklist.',
+  PHONE: 'Open this on a larger screen to make changes.',
 } as const;
 
+/** CR-23 UIE §4.3 footer help line when nothing blocks the import. */
+export const TIMELINE_ROW_HELP_CLEAN = 'Owners of new or changed tasks get one notification each.';
 export const errorsAlertLead = (n: number) =>
   `Fix ${n} error${n === 1 ? '' : 's'} in the file and upload again.`;
 export const changedAlertLead = (n: number) =>
@@ -232,6 +274,14 @@ export const changedAlertRest = (n: number) =>
   `Nothing is saved for ${n === 1 ? 'it' : 'them'} unless you confirm. Confirming replaces the OpsTrack values with the file values.`;
 export const notConfirmedHelp = (n: number) =>
   `${n} changed row${n === 1 ? '' : 's'} not confirmed will be left as ${n === 1 ? 'it is' : 'they are'}.`;
+/** CR-23 UIE §4.3 warning (FR-CLX-12). */
+export const deliverablesLostLead = (n: number) =>
+  `${n} task${n === 1 ? '' : 's'} will lose deliverable items or ticks.`;
+export const DELIVERABLES_LOST_REST =
+  "The Deliverables cell replaces each task's list, and a blank cell clears it. Check the crossed-out items before you import.";
+/** CR-23 UIE §3.1 / AC-75.13: Import disabled on a locked project. */
+export const importLockedTooltip = (status: string) =>
+  `This project is ${status}, so the checklist can't be imported.`;
 export const newPhaseNotice = (name: string) =>
   `New phase ${name} will be added at the end of the phase list.`;
 export const numberingLine = (pairs: { file: number; final: number }[]) =>
@@ -286,10 +336,17 @@ export interface TimelineImportRowDto {
   /** Fields a blank cell clears (FR-TL-17, Q-145). */
   clears: TimelinePlanField[];
   errors: { field: TimelineImportField | null; message: string }[];
+  /** CR-23 Q-151: notes that don't stop the import ("Email … doesn't exist."). */
+  warnings: { field: TimelineImportField | null; message: string }[];
   /** FR-TL-25: who changed the task after the export, when the row is CHANGED. */
   changedSince: string | null;
   /** NEW rows: the task number it will get. */
   willBe: number | null;
+  /**
+   * CR-23 FR-CLX-04/11: the Deliverables cell against the task's items; null when the file has no
+   * Deliverables column (items unchanged) or the row has an error before it is compared.
+   */
+  deliverables: DeliverablesDiff | null;
 }
 
 export interface TimelineImportCounts {
@@ -302,6 +359,8 @@ export interface TimelineImportCounts {
   /** Error messages (UIE "Fix N errors"). */
   errorMessages: number;
   clears: number;
+  /** CR-23 FR-CLX-12: rows that remove, untick or clear deliverable items. */
+  losesDeliverables: number;
 }
 
 export interface TimelineImportPreviewDto {
@@ -312,7 +371,11 @@ export interface TimelineImportPreviewDto {
   rows: TimelineImportRowDto[];
   counts: TimelineImportCounts;
   newPhases: string[];
+  /** CR-23 Q-151: emails of active users the import adds to the project team. */
+  addMembers: string[];
   baselineFilled: boolean;
+  /** CR-23 FR-CLX-10/11: the file has no Deliverables column (an older Timeline file). */
+  noDeliverablesColumn: boolean;
   token: string;
 }
 
@@ -323,6 +386,10 @@ export interface TimelineImportCommitDto {
   unchanged: number;
   leftUnconfirmed: number;
   newPhases: string[];
+  /** CR-23 Q-151: how many people the import added to the project team. */
+  addedMembers: number;
+  /** CR-23 UIE §4.5: deliverable item totals across the import. */
+  deliverables: { added: number; removed: number; ticked: number; unticked: number };
 }
 
 /** FR-TL-25: the commit names the CHANGED rows the PM confirmed (Excel row numbers). */

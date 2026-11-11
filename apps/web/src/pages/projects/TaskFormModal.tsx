@@ -32,8 +32,10 @@ import {
   taskPatch,
   useContactOptions,
   usePeople,
+  useTask,
   useTaskMutation,
 } from '../../api/projectHooks';
+import { DeliverableDraftList, DeliverablesChecklist } from './DeliverablesChecklist';
 
 /** Add or edit a task's plan (FR-TSK-01, FR-TSK-14). Only the project's planners see this. */
 export function TaskFormModal({
@@ -86,7 +88,9 @@ export function TaskFormModal({
   const [actualFinish, setActualFinish] = useState(task?.actualFinish ?? '');
   const [est, setEst] = useState(task?.estHours == null ? '' : String(task.estHours));
   const [dependsOn, setDependsOn] = useState<string[]>(task?.dependsOn ?? []);
-  const [deliverable, setDeliverable] = useState(task?.deliverable ?? '');
+  // CR-23: a new task's deliverable items wait in the form; an existing task's save at once.
+  const [newItems, setNewItems] = useState<string[]>([]);
+  const live = useTask(task?.id ?? null).data ?? task;
   const [mandatory, setMandatory] = useState(task?.mandatory ?? false);
   const [requiresApproval, setRequiresApproval] = useState(task?.requiresApproval ?? false);
   const [reviewerId, setReviewerId] = useState(task?.reviewer?.id ?? '');
@@ -164,7 +168,6 @@ export function TaskFormModal({
       dueDate: dueDate || null,
       estHours,
       dependsOn,
-      deliverable: deliverable.trim() || null,
       mandatory,
       requiresApproval,
       reviewerId: requiresApproval ? reviewerId || null : null,
@@ -187,7 +190,10 @@ export function TaskFormModal({
     mutation.mutate(
       task
         ? taskPatch(task.id, { ...withAdds, version: task.version })
-        : taskCreate(project.id, withAdds),
+        : taskCreate(project.id, {
+            ...withAdds,
+            ...(newItems.length ? { deliverableItems: newItems.map((text) => ({ text })) } : {}),
+          }),
       {
         onSuccess: (data) => {
           // Saved, with its in-app notifications; the email is extra (from my own Outlook).
@@ -486,10 +492,18 @@ export function TaskFormModal({
                 </Alert>
               ))}
             </div>
-            <Form.Group className="col-md-6" controlId="task-deliverable">
-              <Form.Label>Deliverable</Form.Label>
-              <Form.Control value={deliverable} onChange={(e) => setDeliverable(e.target.value)} />
-            </Form.Group>
+            <div className="col-12">
+              {live ? (
+                <DeliverablesChecklist task={live} project={project} />
+              ) : (
+                <>
+                  <div className="form-label" id="task-deliverables-label">
+                    Deliverables
+                  </div>
+                  <DeliverableDraftList items={newItems} onChange={setNewItems} />
+                </>
+              )}
+            </div>
             <div className="col-12 d-flex flex-wrap gap-4 align-items-center">
               <Form.Check
                 id="task-mandatory"

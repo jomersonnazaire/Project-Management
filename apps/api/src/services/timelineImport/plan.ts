@@ -15,13 +15,25 @@ import {
   duplicateTaskIdMessage,
   findCycle,
   missingDependencyMessage,
-  notMemberMessage,
+  DELIVERABLE_EMPTY_LINE_MESSAGE,
+  DELIVERABLE_MAX_ITEMS,
+  DELIVERABLE_MAX_TEXT,
+  deliverableLineTooLongMessage,
+  deliverablesChanged,
+  deliverablesLose,
+  diffDeliverables,
+  formatDeliverablesCell,
+  ownerMissingMessage,
+  cantOwnMessage,
+  parseDeliverablesCell,
+  tooManyDeliverablesMessage,
+  type DeliverableLine,
+  type DeliverablesDiff,
   parseDependsOn,
   parseMilestone,
   parseTaskNumber,
   parseTimelineDate,
   phaseNotAllowedMessage,
-  unknownOwnerMessage,
   type TimelineImportCounts,
   type TimelineImportField,
   type TimelineImportResult,
@@ -32,9 +44,14 @@ import { phaseKey } from '../phases.js';
 import type { TimelineFileRow } from './workbook.js';
 
 /**
- * CR-22 FR-TL-17 to 21, 25, 26 (§B4, §B5): the import preview's result, row by row. Pure: the
- * route loads the project's tasks, phases, people and post-export history and passes them in, so
- * the same function runs for the preview and again inside the commit's transaction.
+ * CR-22 FR-TL-17 to 20, 25, 26 (§B4, §B5), moved to the Checklist by CR-23 (FR-CLX-02 to 13): the
+ * import preview's result, row by row. Pure: the route loads the project's tasks, phases, people
+ * and post-export history and passes them in, so the same function runs for the preview and again
+ * inside the commit's transaction.
+ *
+ * Owners (CR-23 Q-151, Jomerson, replaces FR-TL-21 for this import): an active user who isn't on
+ * the project is added to the team on import (listed in the preview); an email with no user, or a
+ * deactivated one, isn't an error: the row imports without an owner and says so.
  */
 
 export interface PlanTask {
@@ -48,6 +65,8 @@ export interface PlanTask {
   dependsOn: string[];
   ownerId: string | null;
   version: number;
+  /** CR-23: the task's deliverable items, in `order`. */
+  deliverableItems: DeliverableLine[];
 }
 
 export interface PlanContext {
@@ -55,8 +74,11 @@ export interface PlanContext {
   tasks: PlanTask[];
   /** The project's phases in list order (records and text-only ones). */
   phases: { id: string | null; name: string }[];
-  /** Active internal users by lower-case email, for the emails in the file. */
-  usersByEmail: Map<string, { id: string; active: boolean }>;
+  /** Internal users by lower-case email, for the emails in the file. */
+  usersByEmail: Map<
+    string,
+    { id: string; active: boolean; email: string; addable: boolean; canOwn: boolean }
+  >;
   /** Owner emails of the current tasks, by user id (for the struck-through old value). */
   emailById: Map<string, string>;
   /** Manager and members. */
@@ -67,6 +89,8 @@ export interface PlanContext {
   statusLabel: string;
   /** FR-TL-25: tasks changed after the file's export time, with UIE's description. */
   changedSince: Map<string, string>;
+  /** CR-23 FR-CLX-11: the file has a Deliverables column (an older Timeline file may not). */
+  hasDeliverables: boolean;
 }
 
 /** What the commit writes for a row. Dates are YYYY-MM-DD; deps are row refs or task ids. */
@@ -80,6 +104,8 @@ export interface PlannedFields {
   /** `task:<id>` for existing tasks, `row:<excel row>` for new rows. */
   dependsOn: string[];
   ownerId: string | null;
+  /** CR-23: the Deliverables cell's items; null = column missing, items unchanged (FR-CLX-11). */
+  deliverables: DeliverableLine[] | null;
 }
 
 export interface PlannedRow {
@@ -92,6 +118,8 @@ export interface PlannedRow {
 export interface TimelinePlan {
   rows: PlannedRow[];
   newPhases: string[];
+  /** CR-23 Q-151: active users the import adds to the project team, in file order. */
+  addMembers: { id: string; email: string }[];
   baselineFilled: boolean;
   counts: TimelineImportCounts;
 }
@@ -124,6 +152,9 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
   type Work = {
     file: TimelineFileRow;
     errors: { field: TimelineImportField | null; message: string }[];
+    warnings: { field: TimelineImportField | null; message: string }[];
+    addMember: { id: string; email: string } | null;
+    diff: DeliverablesDiff | null;
     number: number | null;
     deps: number[];
     task: PlanTask | null;
@@ -180,15 +211,42 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
       }
     }
 
-    // Owner: an active internal user who is on the project (FR-TL-21, Q-140).
+    // Owner (CR-23 Q-151): an active user; one who isn't on the team is added on import. An
+    // unknown or deactivated email isn't an error: the row imports without an owner and says so.
+    // A task keeps an owner whose account was deactivated when the file names that same owner.
     let ownerId: string | null = null;
+    let addMember: Work['addMember'] = null;
+    const warnings: Work['warnings'] = [];
     const email = v.owner.trim();
     if (email) {
       const u = ctx.usersByEmail.get(email.toLowerCase());
-      if (!u || !u.active) err('owner', unknownOwnerMessage(email));
-      else if (!ctx.memberIds.has(u.id)) err('owner', notMemberMessage(email));
-      else ownerId = u.id;
+      if (u && u.active && !u.canOwn) {
+        // Lean: a Viewer can't own tasks from the file, on the team or not (this import only).
+        warnings.push({ field: 'owner', message: cantOwnMessage(email) });
+      } else if (u && u.active && (ctx.memberIds.has(u.id) || u.addable)) {
+        ownerId = u.id;
+        // Anyone already on the project (manager or member) is skipped.
+        if (!ctx.memberIds.has(u.id)) addMember = { id: u.id, email: u.email };
+      } else if (u && task && task.ownerId === u.id) ownerId = u.id;
+      else warnings.push({ field: 'owner', message: ownerMissingMessage(email) });
     }
+
+    // Deliverables (CR-23 FR-CLX-04, Q-158): one item per line, `[x] ` = done. A missing column
+    // leaves the items as they are; a blank cell in a present column clears them (FR-CLX-11).
+    let deliverables: DeliverableLine[] | null = null;
+    if (ctx.hasDeliverables) {
+      deliverables = parseDeliverablesCell(v.deliverables);
+      // Text already on this task may stay longer than the cap (migrated, Q-160).
+      const keep = new Set((task?.deliverableItems ?? []).map((i) => i.text));
+      deliverables.forEach((line, i) => {
+        if (!line.text) err('deliverables', DELIVERABLE_EMPTY_LINE_MESSAGE);
+        else if (line.text.length > DELIVERABLE_MAX_TEXT && !keep.has(line.text))
+          err('deliverables', deliverableLineTooLongMessage(i + 1, line.text.length));
+      });
+      if (deliverables.length > DELIVERABLE_MAX_ITEMS)
+        err('deliverables', tooManyDeliverablesMessage(deliverables.length));
+    }
+    const diff = deliverables ? diffDeliverables(task?.deliverableItems ?? [], deliverables) : null;
 
     // Depends on: Task numbers in this file (Q-149).
     let deps: number[] = [];
@@ -209,6 +267,9 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
     return {
       file,
       errors,
+      warnings,
+      addMember,
+      diff,
       number,
       deps,
       task,
@@ -222,6 +283,7 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
         dueDate: dates.finish,
         dependsOn: [],
         ownerId,
+        deliverables,
       },
     };
   });
@@ -290,8 +352,10 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
       changes: [] as TimelinePlanField[],
       clears: [] as TimelinePlanField[],
       errors: w.errors,
+      warnings: w.warnings,
       changedSince: null as string | null,
       willBe: null as number | null,
+      deliverables: w.diff,
     };
     if (w.errors.length) {
       return {
@@ -352,6 +416,12 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
         old: ownerEmail,
         cleared: Boolean(t.ownerId) && !f.ownerId,
       },
+      deliverables: {
+        same: !w.diff || !deliverablesChanged(w.diff),
+        old: formatDeliverablesCell(t.deliverableItems),
+        cleared:
+          Boolean(f.deliverables) && t.deliverableItems.length > 0 && !f.deliverables!.length,
+      },
     };
     for (const field of TIMELINE_PLAN_FIELDS) {
       const c = compare[field];
@@ -385,12 +455,25 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
       [...cycleMessages].filter((m) => dtos.some((r) => r.errors.some((e) => e.message === m)))
         .length,
     clears: dtos.filter((r) => r.clears.length > 0).length,
+    losesDeliverables: out.filter(
+      (r) =>
+        r.fields &&
+        r.dto.result !== 'UNCHANGED' &&
+        r.dto.deliverables &&
+        deliverablesLose(r.dto.deliverables),
+    ).length,
   };
+  // Q-151: who joins the team, once each, from rows that save.
+  const addMembers = new Map<string, { id: string; email: string }>();
+  for (const w of work)
+    if (w.addMember && !w.errors.length && !addMembers.has(w.addMember.id))
+      addMembers.set(w.addMember.id, w.addMember);
   // New phases only matter when they'd be used by a row that saves.
   const used = new Set(out.filter((r) => r.fields).map((r) => r.fields!.phaseKey));
   return {
     rows: out,
     newPhases: [...newPhaseByKey].filter(([k]) => used.has(k)).map(([, n]) => n),
+    addMembers: [...addMembers.values()],
     baselineFilled: rows.some((r) => r.values.baselineStart || r.values.baselineFinish),
     counts,
   };

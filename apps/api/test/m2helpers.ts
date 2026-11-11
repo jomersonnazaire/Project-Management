@@ -25,7 +25,7 @@ export const SMALL_TEMPLATE: TemplateInput = {
       estHours: 8,
       offsetDays: 0,
       durationDays: 2,
-      deliverable: 'Minutes',
+      deliverableItems: [{ text: 'Minutes' }],
     },
     {
       id: 'a2',

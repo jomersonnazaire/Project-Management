@@ -1,5 +1,6 @@
 import { PARTIES, PRIORITIES, TASK_STATUSES } from '@xc8/shared';
 import { Schema, model, type InferSchemaType } from 'mongoose';
+import { deliverableItemSchema } from './deliverableItem.js';
 
 /** Project tasks (FR-TSK-01..14, 07 §2). `version` gives optimistic concurrency (EC-18). */
 const taskSchema = new Schema(
@@ -48,7 +49,11 @@ const taskSchema = new Schema(
     status: { type: String, enum: TASK_STATUSES, default: 'TODO' },
     previousStatus: { type: String, enum: [...TASK_STATUSES, null], default: null },
     dependsOn: { type: [Schema.Types.ObjectId], ref: 'Task', default: [] },
-    deliverable: { type: String, default: null },
+    /**
+     * CR-23 FR-DLV-01: the deliverable checklist, in `order`. Replaces the old single `deliverable`
+     * text (scripts/migrate-deliverables.ts moves it into the first item and removes it).
+     */
+    deliverableItems: { type: [deliverableItemSchema], default: [] },
     blockerReason: { type: String, default: null },
     requiresApproval: { type: Boolean, default: false },
     approval: {

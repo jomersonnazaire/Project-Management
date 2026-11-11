@@ -86,6 +86,12 @@ import {
   type ScopeUser,
 } from '../services/scope.js';
 import { assertNotArchived, assertPlanOpen, loadProject } from './projects.js';
+import { canEditDeliverables } from '../services/checklistAccess.js';
+import {
+  deliverableItemDtos,
+  newTaskItems,
+  rejectLegacyDeliverable,
+} from '../services/deliverableItems.js';
 
 /**
  * Tasks: board, checklist, task details and My tasks (FR-TSK-01..14, workflow §2). The gate checks
@@ -118,7 +124,13 @@ export function taskCan(
     (user.systemRole === 'ADMIN' ||
       (user.systemRole === 'PROJECT_MANAGER' && canEditProjectScope(user, project)) ||
       reviewer);
-  return { edit: status, plan, status, approve };
+  return {
+    edit: status,
+    plan,
+    status,
+    approve,
+    deliverables: canEditDeliverables(user, perms, project, t),
+  };
 }
 
 export { phaseKey };
@@ -228,20 +240,6 @@ export function phaseEditableNow(user: ScopeUser, perms: PermissionGrid, project
   return (
     mayManagePhases(user, perms, project) &&
     (user.systemRole === 'ADMIN' || project.status === 'PLANNING')
-  );
-}
-
-/** CR-22 FR-TL-14 / AC-74.5: Excel template and export, for the project's planners. */
-export function timelineExcelAllowed(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
-  return !project.archived && perms.tasks.edit && isPlanner(user, project);
-}
-
-/** CR-22 Q-141: import is for planners while the project is Planning, Active or On hold. */
-export const TIMELINE_IMPORT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD'] as const;
-export function timelineImportAllowed(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
-  return (
-    timelineExcelAllowed(user, perms, project) &&
-    (TIMELINE_IMPORT_STATUSES as readonly string[]).includes(project.status ?? '')
   );
 }
 
@@ -553,6 +551,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
     ...(t.assigneeIds ?? []),
     ...(t.evidence ?? []).map((e) => e.addedBy),
     ...(t.followUps ?? []).map((f) => f.authorId),
+    ...(t.deliverableItems ?? []).flatMap((i) => [i.doneBy, i.createdBy]),
   ]);
   const contactIds = tasks
     .flatMap((t) => [t.clientContactId, ...(t.followUps ?? []).map((f) => f.contactId)])
@@ -619,7 +618,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
       status,
       previousStatus: (t.previousStatus ?? null) as TaskStatus | null,
       dependsOn: (t.dependsOn ?? []).map(String),
-      deliverable: t.deliverable ?? null,
+      deliverableItems: deliverableItemDtos(t.deliverableItems, nameRef),
       blockerReason: t.blockerReason ?? null,
       requiresApproval: Boolean(t.requiresApproval),
       reviewer: ref(t.approval?.reviewerId),
@@ -1008,7 +1007,8 @@ function toPlanUpdate(input: Record<string, unknown>) {
       continue;
     if (k === 'plannedStart' || k === 'dueDate' || k === 'actualStart' || k === 'actualFinish')
       out[k] = v ? parseDateOnly(v as string) : null;
-    else if (k === 'deliverable' || k === 'phase' || k === 'taskType') out[k] = v || null;
+    else if (k === 'deliverableItems') continue;
+    else if (k === 'phase' || k === 'taskType') out[k] = v || null;
     else if (k === 'phaseId') out[k] = v || null;
     else out[k] = v;
   }
@@ -1292,8 +1292,6 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         editPhaseTargets: phaseTargetsEditableNow(user, perms, project),
         editPhaseNames: phaseEditableNow(user, perms, project),
         saveBaseline: planner,
-        excel: timelineExcelAllowed(user, perms, project),
-        importExcel: timelineImportAllowed(user, perms, project),
       },
     };
     res.json(dto);
@@ -1383,6 +1381,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
   });
 
   p.post('/:id/tasks', perm('tasks', 'create'), async (req, res) => {
+    rejectLegacyDeliverable(req);
     const input = parseBody(createTaskSchema, req);
     if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const project = await loadProject(req, 'view');
@@ -1392,6 +1391,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       throw forbidden('Only the project manager can add tasks.');
     }
     const _id = new Types.ObjectId();
+    const items = newTaskItems(input.deliverableItems ?? [], currentUser(req)._id);
     const add = await prepareMemberAdds(req, project, input);
     await validatePlan(withMembers(project, add), input, { _id, party: input.party });
     const last = await TaskModel.findOne({ projectId: project._id })
@@ -1408,6 +1408,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
             projectId: project._id,
             order: (last?.order ?? 0) + 1,
             ...plan,
+            deliverableItems: items,
             approval: { reviewerId: input.reviewerId ?? null },
           },
         ],
@@ -1671,6 +1672,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
 
   // Plan fields are PM-only (FR-TSK-14, AC-10.4); the template is never touched (AC-10.2).
   r.patch('/:id', perm('tasks', 'edit'), async (req, res) => {
+    rejectLegacyDeliverable(req);
     const input = parseBody(updateTaskSchema, req);
     if (input.emailReturn === 'mobile') useMobileEmailReturn(res, input.code_challenge!);
     const { task, project } = await loadTask(req);

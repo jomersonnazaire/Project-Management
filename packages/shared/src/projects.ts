@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { mobilePkceFields } from './schemas.js';
 import type { ProjectTypeRefDto } from './projectTypes.js';
 import { JOB_ROLES, type JobRole, type SystemRole } from './roles.js';
+import {
+  newDeliverableItemsSchema,
+  templateDeliverableItemsSchema,
+  type DeliverableItemDto,
+  type TemplateDeliverableItemDto,
+} from './deliverables.js';
 
 /**
  * Milestone 2: implementation templates, projects and tasks (doc 03 TPL/PRJ/TSK, doc 11 FR-PRJ-11..13).
@@ -584,7 +590,8 @@ export const templateActivitySchema = z.strictObject({
   estHours: z.number().min(0).max(10_000).nullable().default(null),
   offsetDays: z.number().int().min(0).max(3650).default(0),
   durationDays: z.number().int().min(0).max(3650).default(1),
-  deliverable: optionalText(500),
+  /** CR-23 FR-DLV-01: the activity's deliverable checklist (never ticked on a template). */
+  deliverableItems: templateDeliverableItemsSchema.default([]),
   requiresApproval: z.boolean().default(false),
   isMilestone: z.boolean().default(false),
   dependsOn: z.array(localId).max(50).default([]),
@@ -759,7 +766,6 @@ const taskFields = {
   /** null = no estimate (EC-58). */
   estHours: z.number().min(0).max(10_000).nullable(),
   dependsOn: z.array(objectId).max(50),
-  deliverable: optionalText(500),
   requiresApproval: z.boolean(),
   reviewerId: objectId.nullable(),
   isMilestone: z.boolean(),
@@ -803,6 +809,8 @@ export const createTaskSchema = z
     requiresApproval: taskFields.requiresApproval.default(false),
     reviewerId: taskFields.reviewerId.optional(),
     isMilestone: taskFields.isMilestone.default(false),
+    /** CR-23: a new task's first deliverable items (task form), unticked. Planners only. */
+    deliverableItems: newDeliverableItemsSchema.optional(),
     addMemberIds,
     emailNewAssignees,
     ...emailReturnFields,
@@ -896,7 +904,8 @@ export interface TemplateActivityDto {
   estHours: number | null;
   offsetDays: number;
   durationDays: number;
-  deliverable: string | null;
+  /** CR-23 FR-DLV-01 (the old single `deliverable` text is migrated into this list). */
+  deliverableItems: TemplateDeliverableItemDto[];
   requiresApproval: boolean;
   isMilestone: boolean;
   dependsOn: string[];
@@ -1006,6 +1015,13 @@ export interface ProjectDto extends ProjectListItemDto {
     addMembers: boolean;
     /** Read the project Activity log (doc 11 §12). */
     activity: boolean;
+    /**
+     * CR-23 FR-CLX-01 / AC-75.13: the Checklist's Excel menu (Download checklist, Download
+     * template): the project's PM and Admins, at any status.
+     */
+    checklistExcel: boolean;
+    /** CR-23 FR-CLX-03: Excel › Import, while Planning, Active or On hold and not archived. */
+    checklistImport: boolean;
   };
 }
 
@@ -1081,7 +1097,8 @@ export interface TaskDto {
   status: TaskStatus;
   previousStatus: TaskStatus | null;
   dependsOn: string[];
-  deliverable: string | null;
+  /** CR-23 FR-DLV-01, FR-DLV-05: the task's deliverable checklist, in `order`. */
+  deliverableItems: DeliverableItemDto[];
   blockerReason: string | null;
   requiresApproval: boolean;
   reviewer: UserRefDto | null;
@@ -1103,7 +1120,14 @@ export interface TaskDto {
   daysLate: number;
   version: number;
   /** What the caller may do on this task. */
-  can: { edit: boolean; plan: boolean; status: boolean; approve: boolean };
+  can: {
+    edit: boolean;
+    plan: boolean;
+    status: boolean;
+    approve: boolean;
+    /** CR-23 FR-DLV-02/03/06: add, tick, edit, reorder and remove deliverable items. */
+    deliverables: boolean;
+  };
   /** Planners (Admin, the project's PM) may delete a task only while nothing is recorded under it. */
   deletable: boolean;
   /** Why a planner can't delete it (e.g. "This task has 3 time entries; remove them first."). */

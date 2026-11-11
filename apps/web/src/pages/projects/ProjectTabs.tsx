@@ -8,6 +8,7 @@ import {
   moveWithinGroup,
   phaseNotEmptyMessage,
   plural,
+  deliverableProgress,
   type PhaseDto,
   type ProjectDto,
   type TaskDto,
@@ -42,6 +43,9 @@ import { EstAct, FollowUpBadge, TaskStatusBadge } from '../../components/Project
 import { dateTime, initials, shortDate } from '../../lib/format';
 import { moveLabel, useStatusMove } from './useStatusMove';
 import { useConfirm } from '../../components/ConfirmModal';
+import { CHECKLIST_VIEW_ONLY } from './checklistCopy';
+import { ChecklistExcelMenu, ChecklistExcelToast } from './ChecklistExcel';
+import { useChecklistExcel, type ChecklistExcel } from './useChecklistExcel';
 
 interface TabProps {
   project: ProjectDto;
@@ -93,6 +97,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   const phases = Array.from(new Set(tasks.map(phaseOf)));
   const summary = effortSummary(tasks);
   const reorder = useReorderTasks(project.id);
+  const excel = useChecklistExcel(project, tasks);
   const { isOpen, toggle } = useCollapsedPhases(user?.id, project.id);
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<TaskDto | null>(null);
@@ -174,6 +179,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
     <ChecklistToolbar
       project={project}
       tasks={tasks}
+      excel={excel}
       hasPhases={phases.length > 0 || emptyPhases.length > 0}
     />
   );
@@ -215,15 +221,35 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
         </>
       );
     }
-    // FR-PRJ-29: blank project empty state; the buttons live in the toolbar above.
+    // FR-PRJ-29 / CR-23 UIE §3.3: blank project empty state; + Add phase and Apply template live
+    // in the toolbar above, the Excel import and template link here.
+    const excelHere = project.can.checklistExcel;
     return (
       <>
         {toolbar}
-        <EmptyState icon="bx-list-check" title="No phases yet">
+        <EmptyState icon="bx-list-check" title="No phases or activities yet">
           {project.can.planTasks
-            ? 'Add your first phase, or apply a template.'
-            : 'Phases will show here once the plan is ready.'}
+            ? 'Add a phase, apply a template, or import a checklist from Excel. Every row in the file becomes a task with its phase, dates, owner and deliverables.'
+            : 'No activities yet. The project PM sets up the checklist.'}
         </EmptyState>
+        {excelHere && project.can.planTasks && (
+          <div className="d-flex flex-wrap justify-content-center align-items-center gap-2 mb-3">
+            {project.can.checklistImport && (
+              <Button size="sm" variant="outline-secondary" onClick={excel.openImport}>
+                <i className="bx bx-upload me-1" aria-hidden="true" />
+                Import from Excel
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="link"
+              className="p-0 align-baseline"
+              onClick={excel.downloadTemplate}
+            >
+              Download the template
+            </Button>
+          </div>
+        )}
       </>
     );
   }
@@ -344,6 +370,7 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
                             {t.party === 'CLIENT' && (
                               <span className="badge bg-label-info ms-2">Client</span>
                             )}
+                            <DeliverablesChip t={t} onOpen={() => onOpen(t.id)} />
                           </td>
                           <td data-label="Owner">{t.owner?.name ?? '–'}</td>
                           <td data-label="Due" className="text-nowrap">
@@ -469,6 +496,26 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
   );
 }
 
+/** CR-23 UIE §3.2: "2/5" after the activity name; opens the task panel. None without items. */
+function DeliverablesChip({ t, onOpen }: { t: TaskDto; onOpen: () => void }) {
+  const items = t.deliverableItems ?? [];
+  if (!items.length) return null;
+  const done = items.filter((i) => i.done).length;
+  const all = done === items.length;
+  return (
+    <button
+      type="button"
+      className={`badge border-0 ms-2 ckx-chip ${all ? 'bg-label-success' : 'bg-label-secondary'}`}
+      aria-label={`Deliverables: ${deliverableProgress(items)}`}
+      title={`Deliverables: ${deliverableProgress(items)}`}
+      onClick={onOpen}
+    >
+      <i className="bx bx-list-check me-1" aria-hidden="true" />
+      {done}/{items.length}
+    </button>
+  );
+}
+
 /**
  * Checklist toolbar (FR-PRJ-29..31, doc 14 v1.2.6): the starting-template label, "+ Add phase"
  * (Project PM in Planning, or Admin) and "Apply template" (Planning only), plus the result toast.
@@ -476,10 +523,12 @@ export function ChecklistTab({ project, tasks, onOpen }: TabProps) {
 function ChecklistToolbar({
   project,
   tasks,
+  excel,
   hasPhases,
 }: {
   project: ProjectDto;
   tasks: TaskDto[];
+  excel: ChecklistExcel;
   hasPhases: boolean;
 }) {
   const { user } = useAuth();
@@ -526,8 +575,17 @@ function ChecklistToolbar({
               {PHASE_LOCK_NOTE}
             </small>
           )}
+          {/* CR-23 UIE §3.1: the one Excel import/download, planners only. */}
+          {project.can.checklistExcel && <ChecklistExcelMenu project={project} excel={excel} />}
         </span>
       </div>
+      {!project.can.checklistExcel && (
+        <p className="small text-body-secondary mb-3" data-testid="checklist-view-only">
+          {CHECKLIST_VIEW_ONLY}
+        </p>
+      )}
+      <ChecklistExcelToast excel={excel} />
+      {excel.modal}
       {toast && (
         <div className={`alert ${toastInfo ? 'alert-info' : 'alert-success'} py-2`} role="status">
           {toast}

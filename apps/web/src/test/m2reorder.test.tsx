@@ -52,7 +52,7 @@ const activity = (id: string, phaseId: string, name: string, dependsOn: string[]
     estHours: 4,
     offsetDays: 0,
     durationDays: 1,
-    deliverable: null,
+    deliverableItems: [],
     requiresApproval: false,
     isMilestone: false,
     dependsOn,
@@ -463,12 +463,20 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
         planTasks: false,
         addMembers: false,
         activity: true,
+        checklistExcel: false,
+        checklistImport: false,
       },
     } as const;
     const mine = (t: TaskDto) =>
       t.id === 'k2'
-        ? { ...t, can: { edit: true, plan: false, status: true, approve: false } }
-        : { ...t, can: { edit: false, plan: false, status: false, approve: false } };
+        ? {
+            ...t,
+            can: { edit: true, plan: false, status: true, approve: false, deliverables: false },
+          }
+        : {
+            ...t,
+            can: { edit: false, plan: false, status: false, approve: false, deliverables: false },
+          };
     const memberApi = (role: 'MEMBER' | 'VIEWER', items: TaskDto[]) =>
       api(role, (url) => {
         if (url.includes(`/tasks/k2`)) return { status: 200, body: { task: items[1] } };
@@ -505,7 +513,7 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
       'VIEWER',
       tasks.map((t) => ({
         ...t,
-        can: { edit: false, plan: false, status: false, approve: false },
+        can: { edit: false, plan: false, status: false, approve: false, deliverables: false },
       })),
     );
     renderAt(`/projects/${PID}`, <App />);
@@ -541,6 +549,8 @@ describe('Project Checklist (FR-PRJ-14..16)', () => {
           planTasks: false,
           addMembers: false,
           activity: true,
+          checklistExcel: false,
+          checklistImport: false,
         },
       }),
     );

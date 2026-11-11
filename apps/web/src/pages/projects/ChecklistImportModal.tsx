@@ -6,8 +6,17 @@ import {
   TIMELINE_MAX_BYTES,
   TIMELINE_RESULT_LABELS,
   TIMELINE_VISIBLE_FIELDS,
+  DELIVERABLES_LOST_REST,
+  TIMELINE_ROW_HELP_CLEAN,
+  addMembersNotice,
+  addedMembersLine,
   changedAlertLead,
   changedAlertRest,
+  deliverablesDoneLine,
+  deliverablesGainText,
+  deliverablesLose,
+  deliverablesLossText,
+  deliverablesLostLead,
   errorsAlertLead,
   fileTooLargeError,
   importDoneLine,
@@ -21,24 +30,26 @@ import {
   type TimelineImportResult,
   type TimelineImportRowDto,
   type TimelinePlanField,
+  type DeliverablesDiff,
 } from '@xc8/shared';
 import { useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { Button, Form, Modal, Spinner } from 'react-bootstrap';
-import { ApiError } from '../../../api/client';
+import { ApiError } from '../../api/client';
 import {
-  downloadTimelineTemplate,
-  useTimelineImportCommit,
-  useTimelineImportPreview,
-} from '../../../api/timelineHooks';
-import { timelineRowCount } from './timelineRowCount';
+  downloadChecklistTemplate,
+  useChecklistImportCommit,
+  useChecklistImportPreview,
+} from '../../api/checklistHooks';
+import { checklistRowCount } from './checklistRowCount';
 
 /**
- * CR-22 Part B slice 3: Import timeline from Excel (UIE §5, `modal-xl`). Choose file → Check rows
- * (preview, nothing saved) → Done. Any row error blocks the import (Q-146); Changed-since-export
- * rows are saved only when confirmed (FR-TL-25).
+ * CR-23 (UIE §4): Import checklist from Excel, on the Checklist tab. The CR-22 import (Choose file
+ * → Check rows (preview, nothing saved) → Done) moved here and reads a Deliverables column too.
+ * Any row error blocks the import (Q-146); Changed-since-export rows (deliverables included) are
+ * saved only when confirmed (FR-TL-25).
  */
 
-type Filter = 'all' | 'errors' | 'changed' | 'clears' | 'new' | 'update';
+type Filter = 'all' | 'errors' | 'changed' | 'losses' | 'new' | 'update';
 type Problem = { lead: string; rest: string };
 
 const BADGE: Record<TimelineImportResult, string> = {
@@ -72,7 +83,7 @@ function problemOf(e: unknown): Problem {
 async function localProblem(f: File): Promise<Problem | null> {
   if (!/\.xlsx$/i.test(f.name)) return TIMELINE_FILE_ERRORS.NOT_XLSX;
   if (f.size > TIMELINE_MAX_BYTES) return fileTooLargeError(f.size);
-  const rows = await timelineRowCount(f);
+  const rows = await checklistRowCount(f);
   if (rows !== null && rows > CLIENT_IMPORT_MAX_ROWS)
     return tooManyTimelineRowsError(rows, CLIENT_IMPORT_MAX_ROWS);
   return null;
@@ -153,7 +164,7 @@ function DropZone({ onFile }: { onFile: (f: File) => void }) {
     >
       <i className="bx bx-cloud-upload tli-drop-icon" aria-hidden="true" />
       <p className="mb-2">
-        <strong>Drop your timeline file here</strong> or
+        <strong>Drop your checklist file here</strong> or
       </p>
       <Button onClick={() => input.current?.click()}>Choose file</Button>
       <input
@@ -184,21 +195,41 @@ function ResultCell({
   onConfirm: () => void;
 }) {
   const label = (f: TimelinePlanField) => TIMELINE_COLUMN_LABEL[f];
-  const changes = r.changes.filter((c) => !r.clears.includes(c));
+  // Deliverables get their own wording (UIE §4.3, Q-158).
+  const d = r.changes.includes('deliverables') ? r.deliverables : null;
+  const dCleared = r.clears.includes('deliverables');
+  const gain = d && !dCleared ? deliverablesGainText(d) : null;
+  const loss = d && !dCleared ? deliverablesLossText(d) : null;
+  const changes = r.changes.filter((c) => !r.clears.includes(c) && c !== 'deliverables').map(label);
+  if (gain) changes.push(gain);
+  const clears = r.clears.filter((c) => c !== 'deliverables').map(label);
+  if (dCleared && d) clears.push(`Deliverables (${d.removed} item${d.removed === 1 ? '' : 's'})`);
+  const updating = r.result === 'UPDATE' || r.result === 'CHANGED';
+  const added = r.result === 'NEW' && r.deliverables ? r.deliverables.added : 0;
   return (
     <>
       <span className={`badge ${BADGE[r.result]}`}>{TIMELINE_RESULT_LABELS[r.result]}</span>
       {r.result === 'NEW' && r.willBe !== null && (
         <span className="tli-rsn text-body-secondary">Added at the end as #{r.willBe}</span>
       )}
-      {(r.result === 'UPDATE' || r.result === 'CHANGED') && changes.length > 0 && (
-        <span className="tli-rsn">Changes: {changes.map(label).join(', ')}</span>
+      {updating && changes.length > 0 && (
+        <span className="tli-rsn">Changes: {changes.join(', ')}</span>
       )}
-      {(r.result === 'UPDATE' || r.result === 'CHANGED') && r.clears.length > 0 && (
-        <span className="tli-rsn text-danger fw-semibold">
-          Clears: {r.clears.map(label).join(', ')}
+      {updating && loss && <span className="tli-rsn text-danger fw-bold">{loss}</span>}
+      {updating && clears.length > 0 && (
+        <span className="tli-rsn text-danger fw-semibold">Clears: {clears.join(', ')}</span>
+      )}
+      {added > 0 && (
+        <span className="tli-rsn text-body-secondary">
+          Deliverables: {added} item{added === 1 ? '' : 's'}
         </span>
       )}
+      {r.warnings.map((w) => (
+        <span key={w.message} className="tli-rsn tli-warn">
+          <i className="bx bx-info-circle me-1" aria-hidden="true" />
+          {w.message}
+        </span>
+      ))}
       {r.errors.map((e) => (
         <span key={e.message} className="tli-rsn text-danger">
           {e.message}
@@ -248,7 +279,73 @@ const breakable = (f: TimelineImportField, v: string): ReactNode =>
     v
   );
 
+/** UIE §4.3 table: one line per item in file order, then removed lines struck through. */
+function DeliverablesLines({ d, cleared }: { d: DeliverablesDiff; cleared: boolean }) {
+  const box = (done: boolean) => (done ? '[x] ' : '[ ] ');
+  return (
+    <ul className="tli-dl list-unstyled mb-0">
+      {cleared && <li className="text-danger fw-semibold">(blank)</li>}
+      {d.lines.map((l, i) => {
+        switch (l.kind) {
+          case 'same':
+            return (
+              <li key={i} className={l.done ? 'tli-dl-done' : undefined}>
+                {box(l.done)}
+                {l.text}
+              </li>
+            );
+          case 'added':
+            return (
+              <li key={i} className="tli-dl-add">
+                <span className="visually-hidden">Added: </span>+ {box(l.done)}
+                {l.text}
+              </li>
+            );
+          case 'ticked':
+          case 'unticked':
+            return (
+              <li key={i} className={l.kind === 'ticked' ? 'tli-dl-tick' : 'tli-dl-untick'}>
+                <span className="visually-hidden">
+                  {l.kind === 'ticked' ? 'Ticked: ' : 'Unticked: '}
+                </span>
+                {box(l.done)}
+                {l.text}
+                <s className="tli-was">
+                  {box(!l.done)}
+                  {l.text}
+                </s>
+              </li>
+            );
+          case 'removed':
+            return (
+              <li key={i} className="tli-dl-gone">
+                <span className="visually-hidden">Removed: </span>
+                <s>
+                  {box(l.done)}
+                  {l.text}
+                </s>
+              </li>
+            );
+        }
+      })}
+    </ul>
+  );
+}
+
 function Cell({ r, f }: { r: TimelineImportRowDto; f: TimelineImportField }) {
+  if (f === 'deliverables' && r.deliverables && !r.errors.some((e) => e.field === f)) {
+    const loses = r.result !== 'NEW' && deliverablesLose(r.deliverables);
+    const tone = loses ? ' tli-loss' : r.changes.includes('deliverables') ? ' tli-chg' : '';
+    return (
+      <td className={`tli-cell${tone}`}>
+        {r.deliverables.lines.length === 0 ? (
+          <span className="text-body-secondary">—</span>
+        ) : (
+          <DeliverablesLines d={r.deliverables} cleared={r.clears.includes('deliverables')} />
+        )}
+      </td>
+    );
+  }
   const value = r.values[f];
   const ro = BASELINE.includes(f);
   const bad = r.errors.some((e) => e.field === f);
@@ -267,26 +364,34 @@ function Cell({ r, f }: { r: TimelineImportRowDto; f: TimelineImportField }) {
   return (
     <td className={cls}>
       {value ? (
-        breakable(f, value)
+        f === 'deliverables' ? (
+          <span className="tli-pre">{value}</span>
+        ) : (
+          breakable(f, value)
+        )
       ) : cleared ? (
         <span className="text-danger">(blank)</span>
       ) : (
         <span className="text-body-secondary">—</span>
       )}
-      {old !== undefined && <s className="tli-was">{old ? breakable(f, old) : 'blank'}</s>}
+      {old !== undefined && f !== 'deliverables' && (
+        <s className="tli-was">{old ? breakable(f, old) : 'blank'}</s>
+      )}
     </td>
   );
 }
 
-export function TimelineImportModal({
+export function ChecklistImportModal({
   projectId,
+  projectName,
   onClose,
 }: {
   projectId: string;
+  projectName?: string;
   onClose: () => void;
 }) {
-  const preview = useTimelineImportPreview(projectId);
-  const commit = useTimelineImportCommit(projectId);
+  const preview = useChecklistImportPreview(projectId);
+  const commit = useChecklistImportCommit(projectId);
   const committing = useRef(false);
   const [file, setFile] = useState<File | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -335,7 +440,7 @@ export function TimelineImportModal({
   };
   const template = () => {
     setTplError(null);
-    downloadTimelineTemplate(projectId).catch((e: unknown) =>
+    downloadChecklistTemplate(projectId).catch((e: unknown) =>
       setTplError(e instanceof ApiError ? e.message : "Couldn't download the template. Try again."),
     );
   };
@@ -355,11 +460,16 @@ export function TimelineImportModal({
           <div className="tli-done-ic mx-auto mb-3" aria-hidden="true">
             <i className="bx bx-check" />
           </div>
-          <h3 className="h5 mb-2">Timeline imported</h3>
+          <h3 className="h5 mb-2">Checklist imported</h3>
           <p className="mb-1">{importDoneLine(done)}</p>
-          <p className="mb-1">{COPY.NOTHING_DELETED}</p>
+          <p className="mb-1">
+            {[deliverablesDoneLine(done.deliverables), COPY.NOTHING_DELETED]
+              .filter(Boolean)
+              .join(' ')}
+          </p>
+          {done.addedMembers > 0 && <p className="mb-1">{addedMembersLine(done.addedMembers)}</p>}
           <p className="small text-body-secondary">{COPY.UP_TO_DATE}</p>
-          <Button onClick={onClose}>Back to timeline</Button>
+          <Button onClick={onClose}>Back to checklist</Button>
         </div>
       </>
     );
@@ -395,16 +505,18 @@ export function TimelineImportModal({
           </Alert>
         )}
         <Alert tone="info" icon="bx-info-circle">
-          <strong>{COPY.NEVER_DELETES_LEAD}</strong> {COPY.NEVER_DELETES_REST}
+          <strong>{COPY.NEVER_DELETES_LEAD}</strong> {COPY.NEVER_DELETES_REST}{' '}
+          <strong>{COPY.DELIVERABLES_LEAD}</strong> {COPY.DELIVERABLES_REST}
         </Alert>
         <DropZone onFile={choose} />
         <p className="small text-body-secondary mb-0">
-          To edit this project&apos;s tasks, use <strong>Excel › Download timeline (.xlsx)</strong>{' '}
-          on the Timeline, change the file, then import it here. To start a plan from scratch,{' '}
+          To edit this project&apos;s plan, use <strong>Excel › Download checklist (.xlsx)</strong>{' '}
+          on the Checklist, change the file, then import it here. To start from scratch,{' '}
           <Button variant="link" className="p-0 align-baseline small" onClick={template}>
             download the template
           </Button>
-          ; every row in it imports as a new task. Dates as a date cell or YYYY-MM-DD.
+          ; every row in it imports as a new task. Dates as a date cell or YYYY-MM-DD. Deliverables:
+          one item per line in the cell (Alt+Enter for a new line); put [x] in front of a done item.
         </p>
       </>
     );
@@ -424,18 +536,29 @@ export function TimelineImportModal({
       all: rows.filter((r) => showUnchanged || r.result !== 'UNCHANGED'),
       errors: rows.filter((r) => r.result === 'ERROR'),
       changed: changedRows,
-      clears: rows.filter((r) => r.clears.length > 0),
+      // CR-23 "Removes or clears": blank cells that clear a field, and lost deliverable items.
+      losses: rows.filter(
+        (r) =>
+          r.result !== 'ERROR' &&
+          r.result !== 'UNCHANGED' &&
+          (r.clears.length > 0 ||
+            (r.result !== 'NEW' && r.deliverables !== null && deliverablesLose(r.deliverables))),
+      ),
       new: rows.filter((r) => r.result === 'NEW'),
       update: rows.filter((r) => r.result === 'UPDATE'),
     };
-    const chips: [Filter, string, number, string][] = [
+    const allChips: [Filter, string, number, string][] = [
       ['all', 'All', rows.length, 'secondary'],
       ['errors', 'Errors', data.counts.error, 'danger'],
       ['changed', 'Changed since export', data.counts.changed, 'warning'],
-      ['clears', 'Clears fields', data.counts.clears, 'danger'],
+      ['losses', 'Removes or clears', lists.losses.length, 'danger'],
       ['new', 'New', data.counts.new, 'info'],
       ['update', 'Update', data.counts.update, 'primary'],
     ];
+    // UIE §4.3: Errors (and Changed since export) only when there are some.
+    const chips = allChips.filter(
+      ([key, , count]) => (key !== 'errors' && key !== 'changed') || count > 0,
+    );
     const toggle = (row: number) =>
       setConfirmed((s) => {
         const next = new Set(s);
@@ -448,7 +571,7 @@ export function TimelineImportModal({
       ? errorsAlertLead(data.counts.errorMessages)
       : left
         ? notConfirmedHelp(left)
-        : '';
+        : TIMELINE_ROW_HELP_CLEAN;
     const newRows = rows.filter((r) => r.result === 'NEW' && r.willBe !== null);
     body = (
       <>
@@ -478,7 +601,7 @@ export function TimelineImportModal({
           </span>
           <span className="small text-body-secondary">
             {data.exported?.at
-              ? `Exported from this project ${exportedOn(data.exported.at)}`
+              ? `Downloaded from this project${projectName ? ` (${projectName})` : ''} ${exportedOn(data.exported.at)}`
               : 'Template file, not an export of this project'}{' '}
             · {rows.length} rows
           </span>
@@ -543,10 +666,39 @@ export function TimelineImportModal({
             {changedAlertRest(changedRows.length)}
           </Alert>
         )}
+        {data.counts.losesDeliverables > 0 && (
+          <Alert tone="warning" icon="bx-error">
+            <strong>{deliverablesLostLead(data.counts.losesDeliverables)}</strong>{' '}
+            {DELIVERABLES_LOST_REST}{' '}
+            <Button
+              variant="link"
+              className="p-0 align-baseline"
+              onClick={() => setFilter('losses')}
+            >
+              Show these rows
+            </Button>
+          </Alert>
+        )}
+        {data.newPhases.map((name) => (
+          <Alert key={name} tone="info" icon="bx-layer-plus">
+            {newPhaseNotice(name)}
+          </Alert>
+        ))}
+        {data.addMembers.length > 0 && (
+          <Alert tone="info" icon="bx-group">
+            {addMembersNotice(data.addMembers)}
+          </Alert>
+        )}
+        {data.noDeliverablesColumn && (
+          <p className="small text-body-secondary mb-2" data-testid="legacy-sheet-note">
+            <i className="bx bx-info-circle me-1" aria-hidden="true" />
+            {COPY.LEGACY_SHEET}
+          </p>
+        )}
         {data.baselineFilled && (
           <Alert tone="secondary" icon="bx-lock-alt">
-            <strong>{COPY.BASELINE_IGNORED_LEAD}</strong> Click <strong>Save baseline</strong> after
-            importing to update the baseline.
+            <strong>{COPY.BASELINE_IGNORED_LEAD}</strong>, so they aren&apos;t shown here. Click{' '}
+            <strong>Save baseline</strong> on the Timeline after importing to update the baseline.
           </Alert>
         )}
         {newRows.length > 0 && (
@@ -557,11 +709,6 @@ export function TimelineImportModal({
             )}
           </p>
         )}
-        {data.newPhases.map((name) => (
-          <Alert key={name} tone="info" icon="bx-layer-plus">
-            {newPhaseNotice(name)}
-          </Alert>
-        ))}
         <div className="tli-twrap">
           <table className="table table-sm tli-tbl mb-0">
             <thead>
@@ -617,7 +764,10 @@ export function TimelineImportModal({
               ))}
               {lists[filter].length === 0 && (
                 <tr>
-                  <td colSpan={12} className="text-center text-body-secondary py-4">
+                  <td
+                    colSpan={TIMELINE_VISIBLE_FIELDS.length + 2}
+                    className="text-center text-body-secondary py-4"
+                  >
                     No rows here.
                   </td>
                 </tr>
@@ -627,7 +777,7 @@ export function TimelineImportModal({
         </div>
         <p className="small text-body-secondary mt-2 mb-0">
           Crossed-out values are what OpsTrack has now. <span className="text-danger">(blank)</span>{' '}
-          {COPY.FOOTNOTE_REST}
+          {COPY.FOOTNOTE_REST} {COPY.FOOTNOTE_DELIVERABLES}
         </p>
       </>
     );
@@ -677,10 +827,10 @@ export function TimelineImportModal({
       keyboard={!busy}
       size="xl"
       dialogClassName="tli-modal"
-      aria-labelledby="timeline-import-title"
+      aria-labelledby="checklist-import-title"
     >
       <Modal.Header closeButton={!busy}>
-        <Modal.Title id="timeline-import-title">Import timeline from Excel</Modal.Title>
+        <Modal.Title id="checklist-import-title">Import checklist from Excel</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {tplError && (

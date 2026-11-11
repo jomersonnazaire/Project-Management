@@ -35,6 +35,7 @@ import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 import { useConfirm } from '../../components/ConfirmModal';
 import { DependsOnPicker } from '../../components/DependsOnPicker';
+import { DeliverableDraftList } from '../projects/DeliverablesChecklist';
 
 interface Draft {
   name: string;
@@ -350,7 +351,8 @@ export function TemplateEditorPage() {
                                 a.mandatory ? 'Mandatory' : 'Optional',
                                 a.requiresApproval && 'Needs approval',
                                 a.isMilestone && 'Milestone',
-                                a.deliverable && `Deliverable: ${a.deliverable}`,
+                                a.deliverableItems.length > 0 &&
+                                  `Deliverables: ${a.deliverableItems.map((i) => i.text).join(', ')}`,
                               ]
                                 .filter(Boolean)
                                 .join(' · ')}
@@ -452,7 +454,11 @@ export function TemplateEditorPage() {
                     'dependency',
                     'dependencies',
                   )}{' '}
-                  · {plural(draft.activities.filter((a) => a.deliverable).length, 'deliverable')}
+                  ·{' '}
+                  {plural(
+                    draft.activities.reduce((n, a) => n + a.deliverableItems.length, 0),
+                    'deliverable',
+                  )}
                 </p>
                 <p className="mb-0 text-body-secondary small">
                   {draft.activities.filter((a) => a.estHours === null).length} without an estimate
@@ -589,7 +595,7 @@ function ActivityModal({
         estHours: null,
         offsetDays: 0,
         durationDays: 1,
-        deliverable: null,
+        deliverableItems: [],
         requiresApproval: false,
         isMilestone: false,
         dependsOn: [],
@@ -728,13 +734,21 @@ function ActivityModal({
                 onChange={(e) => set({ durationDays: Math.max(0, Number(e.target.value) || 0) })}
               />
             </Form.Group>
-            <Form.Group className="col-12" controlId="act-deliverable">
-              <Form.Label>Deliverable</Form.Label>
-              <Form.Control
-                value={a.deliverable ?? ''}
-                onChange={(e) => set({ deliverable: e.target.value || null })}
+            {/* CR-23 UIE §5.6: the same list, no ticks; projects copy the items unticked. */}
+            <div className="col-12">
+              <div className="form-label">Deliverables</div>
+              <DeliverableDraftList
+                items={a.deliverableItems.map((i) => i.text)}
+                onChange={(texts) =>
+                  set({
+                    deliverableItems: texts.map((text, n) => {
+                      const same = a.deliverableItems[n];
+                      return same && same.text === text ? same : { id: '', text };
+                    }),
+                  })
+                }
               />
-            </Form.Group>
+            </div>
             <div className="col-12">
               <DependsOnPicker
                 id="act-deps"
