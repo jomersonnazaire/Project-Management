@@ -8,8 +8,10 @@ import {
   END_AFTER_START,
   type ActionEmailStartDto,
   type ProjectDto,
+  type ProjectSaveNoteDto,
   type ProjectStatus,
   type UpdateProjectInput,
+  unownedTasksNote,
 } from '@xc8/shared';
 import { useState, type FormEvent } from 'react';
 import { Alert, Button, Form, Modal } from 'react-bootstrap';
@@ -32,13 +34,18 @@ import { EmailCheckbox } from '../../components/EmailCheckbox';
 export function ProjectEditModal({
   project,
   onClose,
+  onNotes,
 }: {
   project: ProjectDto;
   onClose: () => void;
+  /** CR-22 A2: non-blocking notes from the save (e.g. tasks without an owner). */
+  onNotes?: (notes: ProjectSaveNoteDto[]) => void;
 }) {
   const update = useUpdateProject(project.id);
   const { user } = useAuth();
   const [handover, setHandover] = useState<UpdateProjectInput | null>(null);
+  // CR-22 handover: the outgoing manager stays on the team unless unticked.
+  const [keepOnTeam, setKeepOnTeam] = useState(true);
   const people = usePeople();
   const clients = useClients();
   const [name, setName] = useState(project.name);
@@ -64,7 +71,14 @@ export function ProjectEditModal({
   const [emailAdded, setEmailAdded] = useState(true);
   const wantsEmail = useWantsEmail(emailAdded) && added.length > 0;
   const [, setParams] = useSearchParams();
-  const saved = ({ email }: { email?: ActionEmailStartDto }) => {
+  const saved = ({
+    email,
+    notes,
+  }: {
+    email?: ActionEmailStartDto;
+    notes?: ProjectSaveNoteDto[];
+  }) => {
+    if (notes?.length) onNotes?.(notes);
     const next = continueSaveEmail(email);
     if (next && 'redirected' in next) return;
     if (next) setParams((p) => ({ ...Object.fromEntries(p), email_error: next.error }));
@@ -88,6 +102,9 @@ export function ProjectEditModal({
   // Q-69: the leave-Planning confirm depends on phases (not tasks); falls back to the task count.
   const phaseList = useProjectPhases(project.id, project.status === 'PLANNING');
   const phaseCount = phaseList.data ? phaseList.data.length : project.taskCount;
+  const managerChanging = Boolean(project.managerId) && managerId !== project.managerId;
+  const handingOverMine = managerChanging && project.managerId === user?.id;
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next: Record<string, string> = {};
@@ -110,8 +127,17 @@ export function ProjectEditModal({
       body.description = description.trim() || null;
     if (status !== project.status) body.status = status;
     if (projectTypeId !== (project.projectType?.id ?? '')) body.projectTypeId = projectTypeId;
-    if (managerId !== project.managerId) body.managerId = managerId;
-    const members = memberIds.filter((m) => m !== managerId);
+    if (managerId !== project.managerId) {
+      body.managerId = managerId;
+      if (project.managerId) body.keepPreviousManagerOnTeam = keepOnTeam;
+    }
+    const members = memberIds.filter((m) => {
+      if (m === managerId) return false;
+      // Stay off: the outgoing PM is not in the team in the payload either.
+      if (handingOverMine && user?.systemRole !== 'ADMIN' && !keepOnTeam && m === project.managerId)
+        return false;
+      return true;
+    });
     if (members.join() !== project.members.map((m) => m.id).join()) body.memberIds = members;
     if (clientChanged) {
       body.clientId = clientId;
@@ -153,6 +179,7 @@ export function ProjectEditModal({
     update.mutate(body, { onSuccess: saved });
   };
 
+  const outgoingName = project.manager?.name ?? 'The current manager';
   const managers = (people.data ?? []).filter(
     (p) => p.systemRole === 'ADMIN' || p.systemRole === 'PROJECT_MANAGER',
   );
@@ -226,6 +253,15 @@ export function ProjectEditModal({
                   ))}
                 </Form.Select>
               </Form.Group>
+              {project.status === 'PLANNING' &&
+                status === 'ACTIVE' &&
+                project.unownedTaskCount > 0 && (
+                  <div className="col-12">
+                    <Alert variant="info" className="mb-0 py-2" data-testid="unowned-tasks-note">
+                      {unownedTasksNote(project.unownedTaskCount)}
+                    </Alert>
+                  </div>
+                )}
               <Form.Group className="col-md-6" controlId="edit-prj-client">
                 <Form.Label>Client</Form.Label>
                 <Form.Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
@@ -261,6 +297,27 @@ export function ProjectEditModal({
                     <option value={project.manager.id}>{project.manager.name}</option>
                   )}
                 </Form.Select>
+                {managerChanging && (
+                  <>
+                    <Form.Check
+                      className="mt-2"
+                      id="edit-prj-keep-on-team"
+                      label={
+                        handingOverMine
+                          ? 'Stay on the project team'
+                          : `Keep ${outgoingName} on the project team`
+                      }
+                      checked={keepOnTeam}
+                      onChange={(e) => setKeepOnTeam(e.target.checked)}
+                    />
+                    {/* Admins keep access whatever they pick, so they get no note. */}
+                    {!keepOnTeam && handingOverMine && user?.systemRole !== 'ADMIN' && (
+                      <Form.Text className="d-block" data-testid="lose-access-note">
+                        You&apos;ll lose access to this project after the handover.
+                      </Form.Text>
+                    )}
+                  </>
+                )}
               </Form.Group>
               <ProjectTypeSelect
                 id="edit-prj-type"
@@ -308,21 +365,30 @@ export function ProjectEditModal({
                 >
                   {(people.data ?? [])
                     .filter((p) => p.id !== managerId)
-                    .map((p) => (
-                      <Form.Check
-                        key={p.id}
-                        id={`edit-prj-member-${p.id}`}
-                        label={p.name}
-                        checked={memberIds.includes(p.id)}
-                        onChange={(e) =>
-                          setMemberIds(
-                            e.target.checked
-                              ? [...memberIds, p.id]
-                              : memberIds.filter((x) => x !== p.id),
-                          )
-                        }
-                      />
-                    ))}
+                    .map((p) => {
+                      // A PM unticking Stay must not still appear ticked under Team members.
+                      const stayOff =
+                        handingOverMine &&
+                        user?.systemRole !== 'ADMIN' &&
+                        !keepOnTeam &&
+                        p.id === project.managerId;
+                      return (
+                        <Form.Check
+                          key={p.id}
+                          id={`edit-prj-member-${p.id}`}
+                          label={p.name}
+                          checked={stayOff ? false : memberIds.includes(p.id)}
+                          disabled={stayOff}
+                          onChange={(e) =>
+                            setMemberIds(
+                              e.target.checked
+                                ? [...memberIds, p.id]
+                                : memberIds.filter((x) => x !== p.id),
+                            )
+                          }
+                        />
+                      );
+                    })}
                 </div>
                 <div className="mt-2">
                   <EmailCheckbox
@@ -360,6 +426,7 @@ export function ProjectEditModal({
         {handover && (
           <HandoverModal
             name={managers.find((m) => m.id === handover.managerId)?.name ?? 'the new manager'}
+            staysOnTeam={handover.keepPreviousManagerOnTeam !== false}
             pending={update.isPending}
             onCancel={() => setHandover(null)}
             onConfirm={() =>

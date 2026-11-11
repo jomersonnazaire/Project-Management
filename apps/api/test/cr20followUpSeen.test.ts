@@ -128,9 +128,11 @@ describe('CR-20 FR-NTF-09..13: follow-up seen state', () => {
     const w = await world(app);
     const { b, taskId } = await team(w);
     await followUp(b.agent, taskId);
-    // Another PM can view the project (read-only for them) and so may mark it seen.
-    expect((await seen(w.pm2.agent, taskId)).status).toBe(200);
-    expect(await checklist(w.pm2.agent, w, taskId)).toEqual([1, 0]);
+    // A Viewer can view the project (read-only) and so may mark it seen. A PM not on the
+    // project no longer sees it (CR-22 A1): 404, like the outsider.
+    expect((await seen(w.viewer.agent, taskId)).status).toBe(200);
+    expect(await checklist(w.viewer.agent, w, taskId)).toEqual([1, 0]);
+    expect((await seen(w.pm2.agent, taskId)).status).toBe(404);
     expect((await seen(w.outsider.agent, taskId)).status).toBe(404);
     expect((await w.pm.agent.post(`/api/v1/tasks/${taskId}/follow-ups/seen`).send({})).status).toBe(
       403,

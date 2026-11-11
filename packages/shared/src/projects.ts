@@ -668,6 +668,13 @@ export const createProjectSchema = z
      * The server works out who they are; the response carries the Microsoft URL to continue.
      */
     emailAddedMembers: z.boolean().optional(),
+    /**
+     * CR-22: a non-admin PM creating a project for another manager stays on its team (members)
+     * unless this is false; omitted = true. false also overrides the creator being listed in
+     * `memberIds` (they then can't see the project, CR-22 A1). Ignored for Admins and when the
+     * creator is the manager.
+     */
+    keepCreatorOnTeam: z.boolean().optional(),
     ...emailReturnFields,
   })
   .refine((v) => v.plannedEndDate > v.startDate, {
@@ -702,6 +709,13 @@ export const updateProjectSchema = z
      * server diffs the member list before and after the save; the client never names them.
      */
     emailAddedMembers: z.boolean().optional(),
+    /**
+     * CR-22 handover: when this save changes the manager, keep the outgoing manager on the team
+     * (members) or take them off it. Omitted = keep (true), for PMs and Admins alike, so nobody
+     * silently loses access; false removes them (a PM then loses access, CR-22 A1). Ignored when
+     * the manager doesn't change. It wins over `memberIds` for the outgoing manager.
+     */
+    keepPreviousManagerOnTeam: z.boolean().optional(),
     ...emailReturnFields,
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.')
@@ -953,6 +967,8 @@ export interface ActiveContactDto {
 export interface ProjectDto extends ProjectListItemDto {
   /** DR-23: true once the project has issues; the code is then read-only. */
   codeLocked: boolean;
+  /** CR-22 A2: tasks with no accountable owner (cancelled ones don't count). */
+  unownedTaskCount: number;
   description: string | null;
   type: TemplateType | null;
   manager: UserRefDto | null;
@@ -977,6 +993,22 @@ export interface ProjectDto extends ProjectListItemDto {
     /** Read the project Activity log (doc 11 §12). */
     activity: boolean;
   };
+}
+
+/**
+ * CR-22 A2: a non-blocking note on a project save. Planning → Active goes through even when some
+ * tasks have no owner; that save answers with this note (and the edit form shows it before saving).
+ * Other status changes carry no note (Q-127).
+ */
+export interface ProjectSaveNoteDto {
+  code: 'TASKS_WITHOUT_OWNER';
+  count: number;
+  message: string;
+}
+
+/** CR-22 A2: the note's wording, shared by the API response and the edit form. */
+export function unownedTasksNote(count: number): string {
+  return `${count} task${count === 1 ? ' has' : 's have'} no owner yet. The status still changes; assign owners on the Checklist when you can.`;
 }
 
 /**

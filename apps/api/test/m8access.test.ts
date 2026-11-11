@@ -198,7 +198,11 @@ describe('Scope limits stay fixed in code (FR-ACL-07, NFR-25)', () => {
         (p) => p.id,
       );
     expect(await status(w.member.agent)).toEqual([w.project.id]);
-    expect((await status(w.pm.agent)).sort()).toEqual([w.project.id, otherId].sort());
+    // CR-22 A1: PMs see only projects they manage or are on; Admins and Viewers see all.
+    expect(await status(w.pm.agent)).toEqual([w.project.id]);
+    expect(await status(w.pm2.agent)).toEqual([otherId]);
+    expect((await status(w.admin.agent)).sort()).toEqual([w.project.id, otherId].sort());
+    expect((await status(w.viewer.agent)).sort()).toEqual([w.project.id, otherId].sort());
     // A filter on a project outside scope just finds nothing, export included.
     for (const url of [
       `/api/v1/reports/overdue?projectId=${otherId}`,

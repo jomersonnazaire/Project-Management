@@ -48,6 +48,9 @@ export function NewProjectPage() {
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmHandover, setConfirmHandover] = useState(false);
+  // CR-22: a PM creating for another manager stays on the team unless unticked (Admins never see it).
+  const [keepOnTeam, setKeepOnTeam] = useState(true);
+  const forAnother = user?.systemRole === 'PROJECT_MANAGER' && !!managerId && managerId !== user.id;
   // Action emails: the initial team except me, for the checkbox label only. The API works out
   // who to email from the saved project and only takes the opt-in.
   const initial = [managerId, ...memberIds].filter(
@@ -109,6 +112,7 @@ export function NewProjectPage() {
         plannedEndDate,
         description: description.trim() || null,
         ...(wantsEmail ? { emailAddedMembers: true } : {}),
+        ...(forAnother ? { keepCreatorOnTeam: keepOnTeam } : {}),
       },
       {
         onSuccess: (res) => {
@@ -145,6 +149,8 @@ export function NewProjectPage() {
         <HandoverModal
           name={managers.find((m) => m.id === managerId)?.name ?? 'the new manager'}
           pending={create.isPending}
+          staysOnTeam={keepOnTeam}
+          creating
           onCancel={() => setConfirmHandover(false)}
           onConfirm={send}
         />
@@ -289,6 +295,22 @@ export function NewProjectPage() {
                 <Form.Control.Feedback type="invalid">
                   {fieldError('managerId')}
                 </Form.Control.Feedback>
+                {forAnother && (
+                  <>
+                    <Form.Check
+                      className="mt-2"
+                      id="prj-keep-on-team"
+                      label="Stay on the project team"
+                      checked={keepOnTeam}
+                      onChange={(e) => setKeepOnTeam(e.target.checked)}
+                    />
+                    {!keepOnTeam && (
+                      <Form.Text className="d-block" data-testid="lose-access-note">
+                        You won&apos;t have access to this project after you create it.
+                      </Form.Text>
+                    )}
+                  </>
+                )}
               </Form.Group>
               <fieldset className="col-md-6">
                 <legend className="form-label fs-6">Team members</legend>

@@ -607,7 +607,9 @@ describe('FR-DOC-43: restricted folders', () => {
     ).toEqual([]);
 
     // Everyone else: the folder, sub-folder and documents don't exist for them.
-    for (const agent of [member2.agent, w.viewer.agent, w.pm2.agent]) {
+    // (pm2 isn't on the project, so the whole project is a 404 for them: CR-22 A1.)
+    expect((await w.pm2.agent.get(`${base(w)}/documents`)).status).toBe(404);
+    for (const agent of [member2.agent, w.viewer.agent]) {
       const names = (await folders(agent, w)).map((f) => f.name);
       expect(names).not.toContain('Contracts');
       expect(names).not.toContain('Signed SOWs');
@@ -676,7 +678,7 @@ describe('FR-DOC-43: restricted folders', () => {
     ).toBe(403);
     expect(
       (await access(w.pm2.agent, w, contracts, { restricted: true, memberIds: [] })).status,
-    ).toBe(403);
+    ).toBe(404);
     const phaseA = await folderId(w, 'Phase A');
     const phase = await access(w.pm.agent, w, phaseA, { restricted: true, memberIds: [] });
     expect(phase.status).toBe(422);

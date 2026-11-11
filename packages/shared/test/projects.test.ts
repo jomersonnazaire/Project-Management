@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  unownedTasksNote,
   PM_PROJECT_EDIT_SCOPE,
   addWorkingDays,
   computeProject,
@@ -277,5 +278,14 @@ describe('DR-25: hours as HH:MM', () => {
     expect(hoursHHMM(40)).toBe('40:00');
     expect(hoursHHMM(null)).toBe('–');
     expect(formatSignedHours(-0.25)).toBe('−00:15');
+  });
+});
+
+describe('CR-22 A2 unownedTasksNote', () => {
+  it('uses singular for 1 and plural otherwise', () => {
+    expect(unownedTasksNote(1)).toBe(
+      '1 task has no owner yet. The status still changes; assign owners on the Checklist when you can.',
+    );
+    expect(unownedTasksNote(2)).toMatch(/^2 tasks have no owner yet\./);
   });
 });

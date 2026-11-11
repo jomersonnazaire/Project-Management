@@ -155,9 +155,15 @@ export async function toProjectDto(
     active: Boolean(c.active),
   }));
   const editScope = canEditProjectScope(user, project);
+  const unownedTaskCount = await TaskModel.countDocuments({
+    projectId: project._id,
+    ownerId: null,
+    status: { $ne: 'CANCELLED' },
+  });
   return {
     ...item!,
     codeLocked: (project.issueSeq ?? 0) > 0,
+    unownedTaskCount,
     description: project.description ?? null,
     type: (project.type ?? null) as TemplateType | null,
     manager: project.managerId ? (users.get(project.managerId.toString()) ?? null) : null,

@@ -34,6 +34,7 @@ import { dragHandleProps, dropTargetProps } from '../../lib/dragRow';
 import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 import { useConfirm } from '../../components/ConfirmModal';
+import { DependsOnPicker } from '../../components/DependsOnPicker';
 
 interface Draft {
   name: string;
@@ -734,24 +735,19 @@ function ActivityModal({
                 onChange={(e) => set({ deliverable: e.target.value || null })}
               />
             </Form.Group>
-            <Form.Group className="col-12" controlId="act-deps">
-              <Form.Label>Depends on</Form.Label>
-              <Form.Select
-                multiple
+            <div className="col-12">
+              <DependsOnPicker
+                id="act-deps"
+                selfId={a.id}
+                options={draft.activities.map((x, n) => ({
+                  id: x.id,
+                  label: `#${n + 1} ${x.name}`,
+                  dependsOn: x.dependsOn,
+                }))}
                 value={a.dependsOn}
-                onChange={(e) =>
-                  set({ dependsOn: Array.from(e.target.selectedOptions).map((o) => o.value) })
-                }
-              >
-                {draft.activities
-                  .filter((x) => x.id !== a.id)
-                  .map((x) => (
-                    <option key={x.id} value={x.id}>
-                      #{draft.activities.indexOf(x) + 1} {x.name}
-                    </option>
-                  ))}
-              </Form.Select>
-            </Form.Group>
+                onChange={(dependsOn) => set({ dependsOn })}
+              />
+            </div>
             <div className="col-12 d-flex flex-wrap gap-4">
               <Form.Check
                 id="act-mandatory"

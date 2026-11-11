@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActionEmailStartDto,
+  ProjectSaveNoteDto,
   CreateProjectInput,
   CreateTaskInput,
   MyTasksDto,
@@ -127,10 +128,13 @@ export function useUpdateProject(id: string) {
   return useMutation({
     // `email` is there when the save asked to email the people it added (action emails).
     mutationFn: (body: UpdateProjectInput) =>
-      api<{ project: ProjectDto; email?: ActionEmailStartDto }>(`/projects/${id}`, {
-        method: 'PATCH',
-        body,
-      }),
+      api<{ project: ProjectDto; notes?: ProjectSaveNoteDto[]; email?: ActionEmailStartDto }>(
+        `/projects/${id}`,
+        {
+          method: 'PATCH',
+          body,
+        },
+      ),
     onSuccess: () => invalidateProjects(qc),
   });
 }

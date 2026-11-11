@@ -61,7 +61,7 @@ describe('Plan edits are PM-only (FR-TSK-14, AC-10.1/10.4, AC-05.*, EC-22)', () 
         .send({ version: t2!.version, ...change });
       expect(res.status, JSON.stringify(change)).toBe(403);
     }
-    // Another PM (not managing) and a Viewer can't either; the outsider can't see it at all.
+    // Another PM not on the project doesn't see it (404, CR-22 A1); a Viewer can't edit either.
     expect(
       (
         await w.pm2.agent
@@ -69,7 +69,7 @@ describe('Plan edits are PM-only (FR-TSK-14, AC-10.1/10.4, AC-05.*, EC-22)', () 
           .set(CSRF)
           .send({ version: t1!.version, estHours: 1 })
       ).status,
-    ).toBe(403);
+    ).toBe(404);
     expect(
       (
         await w.viewer.agent
@@ -101,7 +101,7 @@ describe('Plan edits are PM-only (FR-TSK-14, AC-10.1/10.4, AC-05.*, EC-22)', () 
           .set(CSRF)
           .send({ name: 'x' })
       ).status,
-    ).toBe(403);
+    ).toBe(404);
     expect((await w.member.agent.delete(`/api/v1/tasks/${t1!.id}`).set(CSRF)).status).toBe(403);
   });
 
@@ -307,7 +307,7 @@ describe('Task state machine (workflow §2, FR-TSK-02..06, TC-F04/F06/F09/F11/F1
     expect(
       (await w.pm2.agent.post(`/api/v1/tasks/${t3!.id}/approve`).set(CSRF).send({ version: v }))
         .status,
-    ).toBe(403);
+    ).toBe(404);
     expect(
       (await w.viewer.agent.post(`/api/v1/tasks/${t3!.id}/approve`).set(CSRF).send({ version: v }))
         .status,
@@ -374,7 +374,15 @@ describe('Task state machine (workflow §2, FR-TSK-02..06, TC-F04/F06/F09/F11/F1
     const w = await world(app);
     const [t1] = await tasksOf(w.pm.agent, w.project.id); // no owner yet
     expect((await move(w.member.agent, t1!.id, { status: 'IN_PROGRESS' })).status).toBe(403);
-    expect((await move(w.pm2.agent, t1!.id, { status: 'IN_PROGRESS' })).status).toBe(403);
+    // CR-22 A1: a PM not on the project doesn't see the task at all.
+    expect(
+      (
+        await w.pm2.agent
+          .post(`/api/v1/tasks/${t1!.id}/status`)
+          .set(CSRF)
+          .send({ version: t1!.version, status: 'IN_PROGRESS' })
+      ).status,
+    ).toBe(404);
     expect((await move(w.viewer.agent, t1!.id, { status: 'IN_PROGRESS' })).status).toBe(403);
     expect(
       (

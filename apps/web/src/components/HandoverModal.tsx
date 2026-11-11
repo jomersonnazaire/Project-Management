@@ -4,11 +4,17 @@ import { Button, Modal } from 'react-bootstrap';
 export function HandoverModal({
   name,
   pending,
+  staysOnTeam,
+  creating = false,
   onCancel,
   onConfirm,
 }: {
   name: string;
   pending?: boolean;
+  /** CR-22: whether I stay on the project team ("Stay on the project team", edit or create). */
+  staysOnTeam: boolean;
+  /** Creating a project for another manager (vs handing over an existing one). */
+  creating?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -20,8 +26,12 @@ export function HandoverModal({
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        After this, only {name} and Admins can edit or archive it. You&apos;ll still be able to view
-        it.
+        After this, only {name} and Admins can edit or archive it.{' '}
+        {staysOnTeam
+          ? "You'll stay on the project team, so you can still view it and plan its tasks."
+          : creating
+            ? "You won't have access to this project after you create it."
+            : "You'll be taken off the project team and lose access to it."}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="outline-secondary" onClick={onCancel}>

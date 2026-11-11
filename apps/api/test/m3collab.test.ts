@@ -138,8 +138,9 @@ describe('TC-N12 / AC-41.1: who reads and posts', () => {
     expect((await post(w.viewer.agent)).status).toBe(403);
     expect((await w.outsider.agent.get(messages(w))).status).toBe(404);
     expect((await post(w.outsider.agent)).status).toBe(404);
-    expect((await w.pm2.agent.get(messages(w))).status).toBe(200);
-    expect((await post(w.pm2.agent)).status).toBe(403);
+    // CR-22 A1: a PM not on the project is out of scope, like the outsider.
+    expect((await w.pm2.agent.get(messages(w))).status).toBe(404);
+    expect((await post(w.pm2.agent)).status).toBe(404);
     const list = (await w.member.agent.get(messages(w))).body.items;
     // Oldest first (FR-CNV-01).
     expect(list.map((m: { author: { id: string } }) => m.author.id)).toEqual([

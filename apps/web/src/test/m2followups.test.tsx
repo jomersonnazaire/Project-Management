@@ -149,7 +149,7 @@ describe('PM handover confirmation (doc 11 §12)', () => {
       name: 'Hand over this project to Pat Manager?',
     });
     expect(dialog).toHaveTextContent(
-      "After this, only Pat Manager and Admins can edit or archive it. You'll still be able to view it.",
+      "After this, only Pat Manager and Admins can edit or archive it. You'll stay on the project team, so you can still view it and plan its tasks.",
     );
     const handOver = within(dialog).getByRole('button', { name: 'Hand over' });
     expect(handOver).toHaveClass('btn-primary');
@@ -163,8 +163,114 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     await userEvent.click(within(again).getByRole('button', { name: 'Hand over' }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
-      expect(JSON.parse(String(call?.[1]?.body))).toEqual({ managerId: 'pm2' });
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: true,
+      });
     });
+  });
+
+  it('CR-22: "Stay on the project team" is ticked by default; unticked shows a note and sends false', async () => {
+    const fetchMock = projectApi(pmProject, 'PROJECT_MANAGER');
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    expect(screen.queryByLabelText('Stay on the project team')).not.toBeInTheDocument();
+    const manager = await screen.findByLabelText('Project manager');
+    await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
+    await userEvent.selectOptions(manager, 'pm2');
+    const stay = screen.getByLabelText('Stay on the project team');
+    expect(stay).toBeChecked();
+    expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
+    await userEvent.click(stay);
+    expect(screen.getByTestId('lose-access-note')).toHaveTextContent(
+      "You'll lose access to this project after the handover.",
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Hand over this project to Pat Manager?',
+    });
+    expect(dialog).toHaveTextContent("You'll be taken off the project team and lose access to it.");
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: false,
+      });
+    });
+  });
+
+  it('CR-22: unticking Stay unchecks and disables the outgoing PM under Team members', async () => {
+    const onTeam = project({
+      managerId: ME_PM,
+      members: [
+        { id: ME_PM, name: 'Me PM', active: true },
+        { id: 'u2', name: 'Maria Member', active: true },
+      ],
+    });
+    const fetchMock = projectApi(onTeam, 'PROJECT_MANAGER');
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    const manager = await screen.findByLabelText('Project manager');
+    await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
+    // Still the manager: they are hidden from Team members.
+    expect(screen.queryByRole('checkbox', { name: 'Me PM' })).not.toBeInTheDocument();
+    await userEvent.selectOptions(manager, 'pm2');
+    const me = screen.getByRole('checkbox', { name: 'Me PM' });
+    const maria = screen.getByRole('checkbox', { name: 'Maria Member' });
+    expect(me).toBeChecked();
+    expect(me).toBeEnabled();
+    expect(maria).toBeChecked();
+    await userEvent.click(screen.getByLabelText('Stay on the project team'));
+    expect(me).not.toBeChecked();
+    expect(me).toBeDisabled();
+    expect(maria).toBeChecked();
+    expect(maria).toBeEnabled();
+    // Re-ticking Stay restores the previous checked state.
+    await userEvent.click(screen.getByLabelText('Stay on the project team'));
+    expect(me).toBeChecked();
+    expect(me).toBeEnabled();
+    await userEvent.click(screen.getByLabelText('Stay on the project team'));
+    expect(me).not.toBeChecked();
+    expect(me).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Hand over this project to Pat Manager?',
+    });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: false,
+        memberIds: ['u2'],
+      });
+    });
+  });
+
+  it('CR-22: re-ticking Stay restores an unchecked outgoing PM row', async () => {
+    const onTeam = project({
+      managerId: ME_PM,
+      members: [
+        { id: ME_PM, name: 'Me PM', active: true },
+        { id: 'u2', name: 'Maria Member', active: true },
+      ],
+    });
+    projectApi(onTeam, 'PROJECT_MANAGER');
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    const manager = await screen.findByLabelText('Project manager');
+    await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
+    await userEvent.selectOptions(manager, 'pm2');
+    const me = screen.getByRole('checkbox', { name: 'Me PM' });
+    await userEvent.click(me);
+    expect(me).not.toBeChecked();
+    await userEvent.click(screen.getByLabelText('Stay on the project team'));
+    expect(me).not.toBeChecked();
+    expect(me).toBeDisabled();
+    await userEvent.click(screen.getByLabelText('Stay on the project team'));
+    expect(me).not.toBeChecked();
+    expect(me).toBeEnabled();
   });
 
   it('Admins change the manager without the handover dialog', async () => {
@@ -174,15 +280,57 @@ describe('PM handover confirmation (doc 11 §12)', () => {
     const manager = await screen.findByLabelText('Project manager');
     await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
     await userEvent.selectOptions(manager, 'pm2');
+    // CR-22: Admins get the same choice for the outgoing manager, ticked by default.
+    const keep = screen.getByLabelText(/^Keep .+ on the project team$/);
+    expect(keep).toBeChecked();
+    // Admins get no lose-access note when unticking (they keep access either way).
+    await userEvent.click(keep);
+    expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
+    await userEvent.click(keep);
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PATCH')).toBe(true),
-    );
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
+      expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: true,
+      });
+    });
     expect(screen.queryByText(/Hand over this project/)).not.toBeInTheDocument();
   });
 
-  it('a PM creating a project for another PM confirms the handover too', async () => {
-    const fetchMock = api('PROJECT_MANAGER', (url, init) => {
+  it('CR-22: Admins unticking Keep leave the outgoing manager checked under Team members', async () => {
+    const onTeam = project({
+      managerId: ME_PM,
+      members: [
+        { id: ME_PM, name: 'Me PM', active: true },
+        { id: 'u2', name: 'Maria Member', active: true },
+      ],
+    });
+    const fetchMock = projectApi(onTeam, 'ADMIN');
+    renderAt(`/projects/${PID}`, <App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    const manager = await screen.findByLabelText('Project manager');
+    await waitFor(() => expect(within(manager).getByText('Pat Manager')).toBeInTheDocument());
+    await userEvent.selectOptions(manager, 'pm2');
+    const me = screen.getByRole('checkbox', { name: 'Me PM' });
+    expect(me).toBeChecked();
+    expect(me).toBeEnabled();
+    await userEvent.click(screen.getByLabelText(/^Keep .+ on the project team$/));
+    expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
+    expect(me).toBeChecked();
+    expect(me).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'PATCH');
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        managerId: 'pm2',
+        keepPreviousManagerOnTeam: false,
+      });
+    });
+  });
+
+  function createApi(role: 'PROJECT_MANAGER' | 'ADMIN') {
+    return api(role, (url, init) => {
       if (url.includes('/templates'))
         return {
           status: 200,
@@ -208,27 +356,78 @@ describe('PM handover confirmation (doc 11 §12)', () => {
         return { status: 201, body: { project: project(), warnings: [] } };
       return undefined;
     });
+  }
+
+  async function fillNewProject(manager = 'pm2') {
     renderAt(`/projects/new?clientId=${ACME.id}`, <App />);
     await userEvent.selectOptions(await screen.findByLabelText('Template (optional)'), 't1');
     await screen.findByRole('option', { name: 'Implementation' });
     await userEvent.selectOptions(screen.getByLabelText('Project type *'), 'pt1');
-    // DR-10 in the template preview.
-    expect(screen.getByTestId('template-preview')).toHaveTextContent(
-      'Generates 1 activity, 1 dependency and 1 deliverable.',
-    );
     await userEvent.type(screen.getByLabelText('Project name'), 'For Pat');
     await userEvent.clear(screen.getByLabelText('Baseline start'));
     await userEvent.type(screen.getByLabelText('Baseline start'), '2026-10-12');
     await userEvent.type(screen.getByLabelText('Baseline end'), '2026-12-18');
-    await userEvent.selectOptions(screen.getByLabelText('Project manager'), 'pm2');
+    await userEvent.selectOptions(screen.getByLabelText('Project manager'), manager);
+  }
+
+  const posted = (fetchMock: ReturnType<typeof createApi>) => {
+    const call = fetchMock.mock.calls.find(([, i]) => i?.method === 'POST');
+    return call ? JSON.parse(String(call[1]!.body)) : undefined;
+  };
+
+  it('a PM creating a project for another PM confirms the handover and stays on the team by default', async () => {
+    const fetchMock = createApi('PROJECT_MANAGER');
+    await fillNewProject();
+    // DR-10 in the template preview.
+    expect(screen.getByTestId('template-preview')).toHaveTextContent(
+      'Generates 1 activity, 1 dependency and 1 deliverable.',
+    );
+    const stay = screen.getByLabelText('Stay on the project team');
+    expect(stay).toBeChecked();
+    expect(screen.queryByTestId('lose-access-note')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
     const dialog = await screen.findByRole('dialog', {
       name: 'Hand over this project to Pat Manager?',
     });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'POST')).toBe(true),
+    expect(dialog).toHaveTextContent(
+      "You'll stay on the project team, so you can still view it and plan its tasks.",
     );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
+    await waitFor(() => expect(posted(fetchMock)).toMatchObject({ keepCreatorOnTeam: true }));
+  });
+
+  it('CR-22: unticking "Stay on the project team" on create shows the note and sends false', async () => {
+    const fetchMock = createApi('PROJECT_MANAGER');
+    await fillNewProject();
+    await userEvent.click(screen.getByLabelText('Stay on the project team'));
+    expect(screen.getByTestId('lose-access-note')).toHaveTextContent(
+      "You won't have access to this project after you create it.",
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Hand over this project to Pat Manager?',
+    });
+    expect(dialog).toHaveTextContent("You won't have access to this project after you create it.");
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hand over' }));
+    await waitFor(() => expect(posted(fetchMock)).toMatchObject({ keepCreatorOnTeam: false }));
+  });
+
+  it('CR-22: no checkbox when the PM manages it themselves', async () => {
+    const pmApi = createApi('PROJECT_MANAGER');
+    await fillNewProject(ME_PM);
+    expect(screen.queryByLabelText('Stay on the project team')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(posted(pmApi)).toBeDefined());
+    expect(posted(pmApi)).not.toHaveProperty('keepCreatorOnTeam');
+  });
+
+  it('CR-22: Admins never see "Stay on the project team" on create', async () => {
+    const adminApi = createApi('ADMIN');
+    await fillNewProject();
+    expect(screen.queryByLabelText('Stay on the project team')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(posted(adminApi)).toBeDefined());
+    expect(posted(adminApi)).not.toHaveProperty('keepCreatorOnTeam');
   });
 });
 

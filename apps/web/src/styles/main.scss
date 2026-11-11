@@ -1099,3 +1099,14 @@ $board-gap: 0.75rem;
     }
   }
 }
+
+/* CR-22: a Depends On chip's remove (×) gets a 44px tap area on phones. */
+@media (max-width: 575.98px) {
+  .dep-chip-remove {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

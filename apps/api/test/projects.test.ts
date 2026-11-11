@@ -185,27 +185,37 @@ describe('Create a project from a template (US-09, FR-PRJ-01..05)', () => {
 });
 
 describe('Project scope (FR-ACL-07, Q-12, Q-26)', () => {
-  it('Members see only their projects (404 otherwise); PMs and Viewers see all', async () => {
-    const { pm2, member, outsider, viewer, project } = await world(app);
-    for (const u of [pm2, viewer, member]) {
+  it('Members and PMs see only their projects (404 otherwise, CR-22 A1); Admins and Viewers see all', async () => {
+    const { admin, pm, pm2, member, outsider, viewer, project } = await world(app);
+    for (const u of [admin, pm, viewer, member]) {
       expect((await u.agent.get(`/api/v1/projects/${project.id}`)).status).toBe(200);
       expect(names(await u.agent.get('/api/v1/projects'))).toContain('Rollout P');
     }
+    // CR-22 A1: a PM who neither manages the project nor is on its team gets the same 404.
+    expect((await pm2.agent.get(`/api/v1/projects/${project.id}`)).status).toBe(404);
+    expect((await pm2.agent.get(`/api/v1/projects/${project.id}/tasks`)).status).toBe(404);
+    expect(names(await pm2.agent.get('/api/v1/projects'))).not.toContain('Rollout P');
     expect((await outsider.agent.get(`/api/v1/projects/${project.id}`)).status).toBe(404);
     expect((await outsider.agent.get(`/api/v1/projects/${project.id}/tasks`)).status).toBe(404);
     expect((await outsider.agent.get('/api/v1/projects')).body.items).toEqual([]);
   });
 
-  it('TC-D12 / Q-12: a PM edits and archives only projects they manage, but views the others', async () => {
+  it('TC-D12 / Q-12: a PM edits and archives only projects they manage; on another team they only view (CR-22 A1)', async () => {
     const { pm, pm2, project } = await world(app);
+    // Not on the project at all: 404 for everything (CR-22 A1).
+    expect((await pm2.agent.get(`/api/v1/projects/${project.id}`)).status).toBe(404);
+    expect(
+      (await pm2.agent.patch(`/api/v1/projects/${project.id}`).set(CSRF).send({ name: 'Hijack' }))
+        .status,
+    ).toBe(404);
+    // On the team list (not the manager): visible, but no edit or archive.
+    await ProjectModel.updateOne({ _id: project.id }, { $addToSet: { memberIds: pm2.user._id } });
     const view = await pm2.agent.get(`/api/v1/projects/${project.id}`);
     expect(view.status).toBe(200);
-    expect(view.body.project.can).toEqual({
+    expect(view.body.project.can).toMatchObject({
       edit: false,
       archive: false,
       delete: false,
-      planTasks: false,
-      addMembers: false,
       // doc 11 §12: PMs read the Activity log of any project they can view.
       activity: true,
     });
@@ -293,16 +303,46 @@ describe('Project scope (FR-ACL-07, Q-12, Q-26)', () => {
   });
 });
 
-describe('Project lifecycle and edits (FR-PRJ-05/12, AC-10.3, EC-24)', () => {
-  it('AC-10.3 activation is blocked while tasks lack an accountable owner, and the message lists them', async () => {
-    const { pm, member, project } = await world(app);
+describe('Project lifecycle and edits (FR-PRJ-05/12, CR-22 A2, EC-24)', () => {
+  it('CR-22 A2 Planning → Active goes through with tasks lacking an owner, with a note counting them (cancelled excluded)', async () => {
+    const { pm, project } = await world(app);
+    const before = await pm.agent.get(`/api/v1/projects/${project.id}`);
+    expect(before.body.project.unownedTaskCount).toBe(3);
+    // A cancelled task without an owner doesn't count.
+    const [first] = await TaskModel.find({ projectId: project.id }).sort({ order: 1 }).lean();
+    await TaskModel.updateOne({ _id: first!._id }, { $set: { status: 'CANCELLED' } });
     const res = await pm.agent
       .patch(`/api/v1/projects/${project.id}`)
       .set(CSRF)
       .send({ status: 'ACTIVE' });
-    expect(res.status).toBe(422);
-    expect(res.body.error.code).toBe('TASKS_WITHOUT_OWNER');
-    expect(res.body.error.message).toMatch(/Kickoff, Design, Client sign-off/);
+    expect(res.status).toBe(200);
+    expect(res.body.project).toMatchObject({ status: 'ACTIVE', unownedTaskCount: 2 });
+    expect(res.body.notes).toEqual([
+      {
+        code: 'TASKS_WITHOUT_OWNER',
+        count: 2,
+        message:
+          '2 tasks have no owner yet. The status still changes; assign owners on the Checklist when you can.',
+      },
+    ]);
+    // Q-127: only Planning → Active carries the note; other status changes don't.
+    const hold = await pm.agent
+      .patch(`/api/v1/projects/${project.id}`)
+      .set(CSRF)
+      .send({ status: 'ON_HOLD' });
+    expect(hold.status).toBe(200);
+    expect(hold.body.notes).toBeUndefined();
+    // Edits that don't change the status carry no note.
+    const rename = await pm.agent
+      .patch(`/api/v1/projects/${project.id}`)
+      .set(CSRF)
+      .send({ name: 'Rollout P2' });
+    expect(rename.status).toBe(200);
+    expect(rename.body.notes).toBeUndefined();
+  });
+
+  it('AC-10.3 status transitions; Completed stays blocked by open tasks; no note once every task has an owner', async () => {
+    const { pm, member, project } = await world(app);
     const tasks = (await pm.agent.get(`/api/v1/projects/${project.id}/tasks`)).body.items;
     for (const t of tasks) {
       const body: Record<string, unknown> = {
@@ -320,6 +360,7 @@ describe('Project lifecycle and edits (FR-PRJ-05/12, AC-10.3, EC-24)', () => {
       .set(CSRF)
       .send({ status: 'ACTIVE' });
     expect(ok.body.project.status).toBe('ACTIVE');
+    expect(ok.body.notes).toBeUndefined();
     expect(
       (
         await pm.agent

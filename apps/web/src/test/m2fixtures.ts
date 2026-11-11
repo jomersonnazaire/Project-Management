@@ -17,6 +17,7 @@ export const project = (over: Partial<ProjectDto> = {}): ProjectDto => ({
   name: 'SAP B1 Rollout',
   code: 'ACME-SAP',
   codeLocked: false,
+  unownedTaskCount: 0,
   clientId: ACME.id,
   clientName: ACME.name,
   managerId: ME_PM,

@@ -16,6 +16,8 @@ import {
   type ProjectStatus,
   PROJECT_TYPE_INACTIVE_PICK,
   PROJECT_TYPE_REQUIRED,
+  type ProjectSaveNoteDto,
+  unownedTasksNote,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
@@ -329,9 +331,17 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
     const end = parseDateOnly(input.plannedEndDate);
     const projectId = new Types.ObjectId();
     const managerId = new Types.ObjectId(input.managerId);
-    const memberIds = [...new Set([input.managerId, ...input.memberIds])].map(
-      (id) => new Types.ObjectId(id),
-    );
+    // CR-22: a PM creating for another manager stays on the team unless keepCreatorOnTeam: false.
+    const creator = user._id.toString();
+    const pmHandingOver = user.systemRole === 'PROJECT_MANAGER' && input.managerId !== creator;
+    const keepCreator = input.keepCreatorOnTeam ?? true;
+    const memberIds = [
+      ...new Set([
+        input.managerId,
+        ...input.memberIds.filter((id) => !pmHandingOver || keepCreator || id !== creator),
+        ...(pmHandingOver && keepCreator ? [creator] : []),
+      ]),
+    ].map((id) => new Types.ObjectId(id));
     // FR-CAL-02/03: dates use the calendar as it is now (working days + holidays).
     const tasks = template ? buildPlanTasks(template, projectId, start, await loadCalendar()) : [];
 
@@ -637,6 +647,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
       project.managerId = new Types.ObjectId(input.managerId);
     }
     let removedMembers: string[] = [];
+    const membersAtStart = project.memberIds.map(String).sort();
     if (input.memberIds !== undefined) {
       const current = project.memberIds.map(String);
       const added = input.memberIds.filter((id) => !current.includes(id));
@@ -652,6 +663,24 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
       !project.memberIds.some((id) => id.equals(project.managerId!))
     ) {
       project.memberIds.push(project.managerId);
+    }
+    // CR-22 handover: the outgoing manager stays on the team unless the save says otherwise
+    // (keepPreviousManagerOnTeam: false). Idempotent: never a duplicate member.
+    const outgoing = previousManager;
+    if (outgoing && outgoing !== project.managerId?.toString()) {
+      const keep = input.keepPreviousManagerOnTeam ?? true;
+      const onTeam = project.memberIds.some((id) => id.toString() === outgoing);
+      if (keep && !onTeam) project.memberIds.push(new Types.ObjectId(outgoing));
+      if (!keep && onTeam) {
+        project.memberIds = project.memberIds.filter((id) => id.toString() !== outgoing);
+        if (!removedMembers.includes(outgoing)) removedMembers.push(outgoing);
+      }
+      if (!keep || !onTeam) {
+        const next = project.memberIds.map(String).sort();
+        const entry = changes.find((c) => c.field === 'memberIds');
+        if (entry) entry.new = next;
+        else track('memberIds', membersAtStart, next);
+      }
     }
 
     // Changing the client: blocked while tasks tag the old client's contacts (EC-24); clears the
@@ -733,6 +762,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
     }
 
     let closedNow = false;
+    const notes: ProjectSaveNoteDto[] = [];
     if (input.status !== undefined && input.status !== project.status) {
       const from = project.status as ProjectStatus;
       closedNow = input.status !== 'ACTIVE';
@@ -742,23 +772,22 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
           'INVALID_TRANSITION',
         );
       }
-      if (input.status === 'ACTIVE' && from === 'PLANNING') {
-        // AC-10.3: every task needs an accountable owner before the project goes Active.
-        const missing = await TaskModel.find({
-          projectId: project._id,
-          ownerId: null,
-          status: { $ne: 'CANCELLED' },
-        })
-          .select('name order')
-          .sort({ order: 1 })
-          .lean();
-        if (missing.length) {
-          throw unprocessable(
-            `Give these tasks an accountable owner first: ${missing.map((t) => t.name).join(', ')}.`,
-            'TASKS_WITHOUT_OWNER',
-            { tasks: missing.map((t) => ({ id: t._id.toString(), name: t.name })) },
-          );
-        }
+      // CR-22 A2 (was AC-10.3): tasks without an owner no longer block Planning → Active. That
+      // move answers with a note counting them (cancelled ones excluded); others carry none (Q-127).
+      const unowned =
+        from === 'PLANNING' && input.status === 'ACTIVE'
+          ? await TaskModel.countDocuments({
+              projectId: project._id,
+              ownerId: null,
+              status: { $ne: 'CANCELLED' },
+            })
+          : 0;
+      if (unowned) {
+        notes.push({
+          code: 'TASKS_WITHOUT_OWNER',
+          count: unowned,
+          message: unownedTasksNote(unowned),
+        });
       }
       if (input.status === 'COMPLETED') {
         const open = await TaskModel.countDocuments({
@@ -832,6 +861,7 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
     );
     res.json({
       project: await toProjectDto(fresh as ProjectDoc, user, currentPermissions(req)),
+      ...(notes.length ? { notes } : {}),
       ...(email ? { email } : {}),
     });
   });

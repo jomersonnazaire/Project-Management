@@ -93,7 +93,7 @@ describe('TC-N03 / AC-39.1: allowed types', () => {
     const w = await world(app);
     const [t1] = await staffed(w);
     expect((await evidenceTicket(w.viewer.agent, t1!.id, 'a.pdf', 10)).status).toBe(403);
-    expect((await evidenceTicket(w.pm2.agent, t1!.id, 'a.pdf', 10)).status).toBe(403);
+    expect((await evidenceTicket(w.pm2.agent, t1!.id, 'a.pdf', 10)).status).toBe(404);
     expect((await evidenceTicket(w.outsider.agent, t1!.id, 'a.pdf', 10)).status).toBe(404);
     const up = await uploadEvidence(w.member.agent, t1!.id, 'a.pdf', FILES.pdf());
     const ev = up.body.task.evidence[0].id;

@@ -19,6 +19,7 @@ import { Alert, Button, Form, Modal } from 'react-bootstrap';
 import { ApiError, saveErrorMessage } from '../../api/client';
 import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
 import { useAuth } from '../../auth/AuthContext';
+import { DependsOnPicker } from '../../components/DependsOnPicker';
 import { EmailCheckbox } from '../../components/EmailCheckbox';
 import {
   taskCreate,
@@ -370,24 +371,20 @@ export function TaskFormModal({
                 Leave blank for {NO_ESTIMATE_LABEL.toLowerCase()}.
               </Form.Text>
             </Form.Group>
-            <Form.Group className="col-md-6" controlId="task-deps">
-              <Form.Label>Depends on</Form.Label>
-              <Form.Select
-                multiple
+            <div className="col-md-6">
+              <DependsOnPicker
+                id="task-deps"
+                selfId={task?.id ?? null}
+                options={tasks.map((t) => ({
+                  id: t.id,
+                  label: `#${t.order} ${t.name}`,
+                  dependsOn: t.dependsOn,
+                }))}
                 value={dependsOn}
-                onChange={(e) =>
-                  setDependsOn(Array.from(e.target.selectedOptions).map((o) => o.value))
-                }
-              >
-                {tasks
-                  .filter((t) => t.id !== task?.id)
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      #{t.order} {t.name}
-                    </option>
-                  ))}
-              </Form.Select>
-            </Form.Group>
+                onChange={setDependsOn}
+                error={err('dependsOn')}
+              />
+            </div>
             <Form.Group className="col-md-6" controlId="task-deliverable">
               <Form.Label>Deliverable</Form.Label>
               <Form.Control value={deliverable} onChange={(e) => setDeliverable(e.target.value)} />
