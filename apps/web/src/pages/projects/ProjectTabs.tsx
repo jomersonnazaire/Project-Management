@@ -14,6 +14,7 @@ import {
   type TaskDto,
   type TaskStatus,
 } from '@xc8/shared';
+import { auditLine } from '../../components/auditLine';
 import { Fragment, useState, type DragEvent } from 'react';
 import { useEdgeFade } from '../../lib/useEdgeFade';
 import { Button, Form, Modal } from 'react-bootstrap';
@@ -1246,8 +1247,7 @@ export function ActivityTab({ project }: { project: ProjectDto }) {
             {activity.data!.map((a) => (
               <li key={a.id} className="mb-3">
                 <span className="text-heading">{a.actor?.name ?? 'System'}</span>{' '}
-                {a.action.replace(/_/g, ' ')}
-                {a.changes.length > 0 && ` (${a.changes.map((c) => c.field).join(', ')})`}
+                <span className="audit-what">{auditLine(a, (x) => x.replace(/_/g, ' '))}</span>
                 {a.reason && <div className="small text-body-secondary">“{a.reason}”</div>}
                 <div className="small text-body-secondary">{dateTime(a.at)}</div>
               </li>

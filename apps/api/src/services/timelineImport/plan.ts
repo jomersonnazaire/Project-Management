@@ -213,7 +213,9 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
 
     // Owner (CR-23 Q-151): an active user; one who isn't on the team is added on import. An
     // unknown or deactivated email isn't an error: the row imports without an owner and says so.
-    // A task keeps an owner whose account was deactivated when the file names that same owner.
+    // FR-CLX-06 / AC-75.20 / EC-224: a deactivated or unknown email ALWAYS imports without an
+    // owner, even when that person owns the task today (the row then reads "Clears: Owner").
+    // Lean: a Viewer named as owner never owns from the file, even one who owns the task today.
     let ownerId: string | null = null;
     let addMember: Work['addMember'] = null;
     const warnings: Work['warnings'] = [];
@@ -227,8 +229,7 @@ export function planTimelineImport(rows: TimelineFileRow[], ctx: PlanContext): T
         ownerId = u.id;
         // Anyone already on the project (manager or member) is skipped.
         if (!ctx.memberIds.has(u.id)) addMember = { id: u.id, email: u.email };
-      } else if (u && task && task.ownerId === u.id) ownerId = u.id;
-      else warnings.push({ field: 'owner', message: ownerMissingMessage(email) });
+      } else warnings.push({ field: 'owner', message: ownerMissingMessage(email) });
     }
 
     // Deliverables (CR-23 FR-CLX-04, Q-158): one item per line, `[x] ` = done. A missing column

@@ -3,6 +3,7 @@ import {
   DELIVERABLE_COPY,
   DELIVERABLE_MAX_ITEMS,
   deliverableTextProblem,
+  type DeliverableAuditChange,
   type DeliverableItemDto,
 } from '@xc8/shared';
 import type { Request } from 'express';
@@ -178,3 +179,116 @@ export function rejectLegacyDeliverable(req: Request) {
     acts.some((a) => a && typeof a === 'object' && 'deliverable' in (a as object));
   if (legacy) throw unprocessable(DELIVERABLE_COPY.FIELD_REMOVED, 'DELIVERABLE_FIELD_REMOVED');
 }
+
+/**
+ * CR-23 AC-76.18 (Lean): every item change an import makes on one task, in the panel's per-item
+ * shape (see `DeliverableAuditChange`). `before` is what the task showed (its items, or its old
+ * Deliverable text as one item when `oldText`), `after` the saved list; kept items share ids.
+ * A line whose text changed in the same position is listed as an edit of the item it replaced.
+ */
+export function itemAuditChanges(
+  before: ItemLike[],
+  after: ItemLike[],
+  oldText = false,
+): DeliverableAuditChange[] {
+  const id = (i: ItemLike) => i._id.toString();
+  const old = sortedItems(before);
+  const next = sortedItems(after);
+  const oldById = new Map(old.map((i) => [id(i), i]));
+  const nextIds = new Set(next.map(id));
+  const removedAt = new Map(
+    old.map((i, n) => [n, i] as const).filter(([, i]) => !nextIds.has(id(i))),
+  );
+  const out: DeliverableAuditChange[] = [];
+  const edits: DeliverableAuditChange[] = [];
+  next.forEach((i, n) => {
+    const was = oldById.get(id(i));
+    if (was) {
+      if (oldText)
+        out.push({
+          action: 'deliverables_migrated',
+          itemId: id(i),
+          text: i.text,
+          old: null,
+          new: i.text,
+          oldText: true,
+        });
+      if (Boolean(was.done) !== Boolean(i.done))
+        out.push({
+          action: i.done ? 'deliverable_item_ticked' : 'deliverable_item_unticked',
+          itemId: id(i),
+          text: i.text,
+          old: Boolean(was.done),
+          new: Boolean(i.done),
+        });
+      return;
+    }
+    const replaced = oldText ? undefined : removedAt.get(n);
+    if (replaced) {
+      removedAt.delete(n);
+      edits.push({
+        action: 'deliverable_item_updated',
+        itemId: id(i),
+        text: i.text,
+        old: replaced.text,
+        new: i.text,
+        replacedItemId: id(replaced),
+      });
+      if (Boolean(replaced.done) !== Boolean(i.done))
+        edits.push({
+          action: i.done ? 'deliverable_item_ticked' : 'deliverable_item_unticked',
+          itemId: id(i),
+          text: i.text,
+          old: Boolean(replaced.done),
+          new: Boolean(i.done),
+        });
+      return;
+    }
+    out.unshift({
+      action: 'deliverable_item_added',
+      itemId: id(i),
+      text: i.text,
+      old: null,
+      new: i.text,
+    });
+    if (i.done)
+      out.push({
+        action: 'deliverable_item_ticked',
+        itemId: id(i),
+        text: i.text,
+        old: false,
+        new: true,
+      });
+  });
+  const removed = [...removedAt.values()].map((i): DeliverableAuditChange => ({
+    action: 'deliverable_item_deleted',
+    // Old text that never became an item has no item id.
+    itemId: oldText ? null : id(i),
+    text: i.text,
+    old: i.text,
+    new: null,
+    ...(oldText ? { oldText: true } : {}),
+  }));
+  const keptOld = old.map(id).filter((x) => nextIds.has(x));
+  const keptNew = next.map(id).filter((x) => oldById.has(x));
+  const reorder: DeliverableAuditChange[] =
+    keptOld.join() !== keptNew.join()
+      ? [
+          {
+            action: 'deliverable_items_reordered',
+            itemId: null,
+            text: null,
+            old: keptOld,
+            new: keptNew,
+          },
+        ]
+      : [];
+  // Order: adds (file order), edits, removes, ticks / unticks, reorder.
+  const adds = out.filter((c) => c.action === 'deliverable_item_added').reverse();
+  const rest = out.filter((c) => c.action !== 'deliverable_item_added');
+  return [...adds, ...edits, ...removed, ...rest, ...reorder];
+}
+
+/** The `changes` rows that go with `itemAuditChanges` (the panel's `{ field, old, new }`). */
+export const itemAuditRows = (list: DeliverableAuditChange[]) =>
+  list.map((c) => ({ field: 'deliverableItems', old: c.old, new: c.new }));

@@ -5,6 +5,7 @@ import { JOB_ROLES, type JobRole, type SystemRole } from './roles.js';
 import {
   newDeliverableItemsSchema,
   templateDeliverableItemsSchema,
+  type DeliverableAuditChange,
   type DeliverableItemDto,
   type TemplateDeliverableItemDto,
 } from './deliverables.js';
@@ -1263,6 +1264,8 @@ export interface TaskHistoryDto {
   action: string;
   changes: { field: string; old: unknown; new: unknown }[];
   reason: string | null;
+  /** CR-23 AC-76.18: the deliverable item changes this entry records (panel or import). */
+  deliverables: DeliverableAuditChange[] | null;
 }
 
 export interface MyTaskDto {

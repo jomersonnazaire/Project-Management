@@ -8,6 +8,7 @@ import {
   type ProjectDto,
   type TaskDto,
 } from '@xc8/shared';
+import { auditLine } from '../../components/auditLine';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Button, Form, Offcanvas } from 'react-bootstrap';
 import { useAllIssues } from '../../api/issueHooks';
@@ -348,8 +349,9 @@ export function TaskPanel({
                 {(history.data ?? []).map((h) => (
                   <li key={h.id} className="mb-2">
                     <span className="text-heading">{h.actor?.name ?? 'System'}</span>{' '}
-                    {h.action.replace(/^task_/, '').replace(/_/g, ' ')}
-                    {h.changes.length > 0 && ` (${h.changes.map((c) => c.field).join(', ')})`}
+                    <span className="audit-what">
+                      {auditLine(h, (a) => a.replace(/^task_/, '').replace(/_/g, ' '))}
+                    </span>
                     {h.reason && <div className="text-body-secondary">“{h.reason}”</div>}
                     <div className="text-body-secondary">{dateTime(h.at)}</div>
                   </li>

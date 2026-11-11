@@ -287,3 +287,121 @@ export const deliverableLineTooLongMessage = (n: number, count: number) =>
 export const tooManyDeliverablesMessage = (n: number) =>
   `Deliverables: this task would have ${n} items. The most is ${DELIVERABLE_MAX_ITEMS}.`;
 export const DELIVERABLE_EMPTY_LINE_MESSAGE = 'Deliverables: a line has [x] but no text.';
+
+/**
+ * CR-23 FR-DLV-07 / AC-76.18 (Lean): one item change in the audit log. A task-panel edit writes
+ * one entry per item with this `action` (the entry's own action), `changes: [{ field:
+ * 'deliverableItems', old, new }]` and `meta: { itemId, text }`. A Checklist import writes ONE
+ * entry per task (`task_updated` / `task_created`) whose `meta.deliverableItems` lists every item
+ * change in this shape, with the same `old` / `new` values the panel records (and one matching
+ * `deliverableItems` row in `changes` each):
+ *   added     old null,        new text
+ *   updated   old text,        new text   (import: a changed line in the same position)
+ *   ticked    old false,       new true
+ *   unticked  old true,        new false
+ *   deleted   old text,        new null
+ *   reordered old [item ids],  new [item ids]
+ *   deliverables_migrated  old null, new text  (the old Deliverable text kept as a real item)
+ */
+export type DeliverableAuditAction =
+  | 'deliverable_item_added'
+  | 'deliverable_item_updated'
+  | 'deliverable_item_ticked'
+  | 'deliverable_item_unticked'
+  | 'deliverable_item_deleted'
+  | 'deliverable_items_reordered'
+  | 'deliverables_migrated';
+export interface DeliverableAuditChange {
+  action: DeliverableAuditAction;
+  /** The item's id; null for the list (reorder) and for old text removed before it was an item. */
+  itemId: string | null;
+  /** The item's text (its new text after an edit); null for a reorder. */
+  text: string | null;
+  old: unknown;
+  new: unknown;
+  /** Import edit: the id of the item the changed line replaced. */
+  replacedItemId?: string;
+  /** The change is to a task's old single Deliverable text (read-only item until now). */
+  oldText?: boolean;
+}
+
+const AUDIT_ACTIONS = new Set<string>([
+  'deliverable_item_added',
+  'deliverable_item_updated',
+  'deliverable_item_ticked',
+  'deliverable_item_unticked',
+  'deliverable_item_deleted',
+  'deliverable_items_reordered',
+  'deliverables_migrated',
+]);
+
+/** The item changes an audit entry records (panel or import), or null when it has none. */
+export function deliverableAuditChanges(e: {
+  action: string;
+  changes?: { field?: string | null; old?: unknown; new?: unknown }[] | null;
+  meta?: unknown;
+}): DeliverableAuditChange[] | null {
+  const meta = (e.meta ?? null) as {
+    deliverableItems?: unknown;
+    itemId?: unknown;
+    text?: unknown;
+  } | null;
+  if (meta && Array.isArray(meta.deliverableItems))
+    return meta.deliverableItems.length
+      ? (meta.deliverableItems as DeliverableAuditChange[])
+      : null;
+  if (!AUDIT_ACTIONS.has(e.action)) return null;
+  const c = (e.changes ?? []).find((x) => x.field === 'deliverableItems');
+  return [
+    {
+      action: e.action as DeliverableAuditAction,
+      itemId: typeof meta?.itemId === 'string' ? meta.itemId : null,
+      text: typeof meta?.text === 'string' ? meta.text : null,
+      old: c?.old ?? null,
+      new: c?.new ?? null,
+    },
+  ];
+}
+
+const q = (t: unknown) => `“${String(t ?? '')}”`;
+/**
+ * UIE §5.5: what the Activity log / History shows after the actor's name.
+ *   panel:  "ticked deliverable “UAT script”", "removed deliverable “Defect log”"
+ *   import: "imported the checklist: added “Cutover runbook v2”; removed “Rollback plan”,
+ *            “Contact sheet”; unticked “Cutover runbook”"
+ */
+export function deliverableAuditText(list: DeliverableAuditChange[], imported: boolean): string {
+  const by = (a: DeliverableAuditAction) => list.filter((c) => c.action === a);
+  const groups: [string, string[]][] = [
+    ['added', by('deliverable_item_added').map((c) => q(c.text))],
+    ['kept the old text', by('deliverables_migrated').map((c) => q(c.text))],
+    ['edited', by('deliverable_item_updated').map((c) => `${q(c.old)} → ${q(c.new)}`)],
+    ['removed', by('deliverable_item_deleted').map((c) => q(c.old ?? c.text))],
+    ['ticked', by('deliverable_item_ticked').map((c) => q(c.text))],
+    ['unticked', by('deliverable_item_unticked').map((c) => q(c.text))],
+  ];
+  const parts = groups.filter(([, v]) => v.length).map(([verb, v]) => `${verb} ${v.join(', ')}`);
+  if (by('deliverable_items_reordered').length) parts.push('reordered the list');
+  if (imported) return `imported the checklist: ${parts.join('; ')}`;
+  // Panel entries hold one change.
+  const c = list[0];
+  if (!c) return '';
+  switch (c.action) {
+    case 'deliverable_item_updated':
+      return `edited deliverable ${q(c.old)} → ${q(c.new)}`;
+    case 'deliverable_items_reordered':
+      return 'reordered deliverables';
+    case 'deliverable_item_deleted':
+      return `removed deliverable ${q(c.old ?? c.text)}`;
+    case 'deliverables_migrated':
+      return `kept the old Deliverable text ${q(c.text)} as an item`;
+    default: {
+      const verb = {
+        deliverable_item_added: 'added',
+        deliverable_item_ticked: 'ticked',
+        deliverable_item_unticked: 'unticked',
+      }[c.action];
+      return `${verb} deliverable ${q(c.text)}`;
+    }
+  }
+}

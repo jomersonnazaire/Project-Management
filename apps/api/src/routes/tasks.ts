@@ -44,6 +44,7 @@ import {
   type TaskDto,
   type TaskRecordCounts,
   type TaskStatus,
+  deliverableAuditChanges,
 } from '@xc8/shared';
 import type { Request, Response } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
@@ -1667,6 +1668,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         action: e.action,
         changes: e.changes ?? [],
         reason: e.reason ?? null,
+        deliverables: deliverableAuditChanges(e),
       })),
     });
   });

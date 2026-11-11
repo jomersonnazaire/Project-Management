@@ -17,7 +17,6 @@ import {
   timelineExportFileName,
   toDateOnly,
   type DeliverablesDiff,
-  formatDeliverablesCell,
   matchDeliverables,
   type DeliverableLine,
   type ProjectStatus,
@@ -71,7 +70,14 @@ import {
   type TimelineExportRow,
 } from '../services/timelineImport/workbook.js';
 import { assertNotArchived, assertPlanOpen, loadProject } from './projects.js';
-import { effectiveItems, sortedItems, type ItemLike } from '../services/deliverableItems.js';
+import {
+  effectiveItems,
+  itemAuditChanges,
+  itemAuditRows,
+  legacyDeliverable,
+  sortedItems,
+  type ItemLike,
+} from '../services/deliverableItems.js';
 import {
   canAutoAddToTeam,
   canOwnFromImport,
@@ -819,13 +825,6 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
           totals.ticked += d.ticked;
           totals.unticked += d.unticked;
         };
-        const itemsShown = (items: unknown) =>
-          formatDeliverablesCell(
-            sortedItems((items ?? []) as ItemDoc[]).map((i) => ({
-              text: i.text,
-              done: Boolean(i.done),
-            })),
-          );
         const show = (v: unknown): unknown =>
           v instanceof Date
             ? toDateOnly(v)
@@ -857,6 +856,8 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
             tally(r.dto.deliverables);
             const doc = docs[i]!;
             gave(doc.ownerId, doc._id as Types.ObjectId);
+            // AC-76.18: every item on the new task, listed one by one (panel shape).
+            const itemChanges = itemAuditChanges([], (doc.deliverableItems ?? []) as ItemDoc[]);
             entries.push({
               actorId: user._id,
               entityType: 'task',
@@ -867,14 +868,24 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
                 .flat()
                 .filter((field) => {
                   const v = doc[field];
-                  return v !== null && v !== false && !(Array.isArray(v) && !v.length);
+                  return (
+                    field !== 'deliverableItems' &&
+                    v !== null &&
+                    v !== false &&
+                    !(Array.isArray(v) && !v.length)
+                  );
                 })
-                .map((field) => ({
+                .map((field): { field: string; old: unknown; new: unknown } => ({
                   field,
                   old: null,
-                  new: field === 'deliverableItems' ? itemsShown(doc[field]) : show(doc[field]),
-                })),
-              meta: { ...meta, row: r.dto.row },
+                  new: show(doc[field]),
+                }))
+                .concat(itemAuditRows(itemChanges)),
+              meta: {
+                ...meta,
+                row: r.dto.row,
+                ...(itemChanges.length ? { deliverableItems: itemChanges } : {}),
+              },
             });
           }
         }
@@ -908,6 +919,16 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
             { session },
           );
           if (!done.modifiedCount) throw stale();
+          // AC-76.18: one entry per task that lists every item change (panel shape), including
+          // an old Deliverable text kept as a real item or removed.
+          const itemChanges =
+            'deliverableItems' in set
+              ? itemAuditChanges(
+                  current,
+                  set.deliverableItems as ItemDoc[],
+                  Boolean(legacyDeliverable(old as Parameters<typeof legacyDeliverable>[0])),
+                )
+              : [];
           if ('ownerId' in set && String(set.ownerId) !== String(old.ownerId ?? null))
             gave(set.ownerId, new Types.ObjectId(r.taskId!));
           entries.push({
@@ -916,14 +937,14 @@ export function checklistImportRouter(config: AppConfig, registry: RouteRegistry
             entityId: new Types.ObjectId(r.taskId!),
             projectId: project._id,
             action: 'task_updated',
-            changes: Object.keys(set).map((field) =>
-              field === 'deliverableItems'
-                ? { field, old: itemsShown(current), new: itemsShown(set[field]) }
-                : { field, old: show(old[field]), new: show(set[field]) },
-            ),
+            changes: Object.keys(set)
+              .filter((field) => field !== 'deliverableItems')
+              .map((field) => ({ field, old: show(old[field]), new: show(set[field]) }))
+              .concat(itemAuditRows(itemChanges)),
             meta: {
               ...meta,
               row: r.dto.row,
+              ...(itemChanges.length ? { deliverableItems: itemChanges } : {}),
               ...('deliverableItems' in set && r.dto.deliverables
                 ? {
                     deliverables: {

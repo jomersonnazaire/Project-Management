@@ -579,6 +579,250 @@ describe('CR-23 Q-151: owners named in the file', () => {
   });
 });
 
+describe('CR-23 AC-76.18 / TC-23-100: the import audit lists every item change', () => {
+  const importLogs = (taskId: string) =>
+    ActivityLogModel.find({ entityId: taskId, 'meta.via': 'checklist_import' }).lean();
+  const kinds = (meta: unknown) =>
+    (
+      (meta as { deliverableItems?: { action: string; text: string | null }[] }).deliverableItems ??
+      []
+    ).map((c) => [c.action, c.text]);
+  const tick = (agent: Agent, t: TaskDto, n: number, done = true) =>
+    agent
+      .patch(`/api/v1/tasks/${t.id}/deliverable-items/${t.deliverableItems[n]!.id}`)
+      .set(CSRF)
+      .send({ done, version: t.version });
+
+  it('one task_updated entry: added, edited, removed, ticked, unticked and reordered, in the panel shape', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    let t = await ownedTask(w);
+    await TaskModel.updateOne({ _id: t.id }, { $set: { deliverableItems: [] } });
+    t = await getTask(w.pm.agent, t.id);
+    for (const x of ['A', 'B', 'C', 'D', 'R', 'E', 'F'])
+      t = (await add(w.pm.agent, t, x)).body.task;
+    t = (await tick(w.pm.agent, t, 5)).body.task; // E done
+    const ids = Object.fromEntries(t.deliverableItems.map((i) => [i.text, i.id]));
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      // A/B swap, C edited in place, D ticked, R removed, E unticked, New added.
+      ws.getRow(2).getCell(col('deliverables')).value = 'B\nA\nC v2\n[x] D\nE\nF\nNew';
+    });
+    await commit(w.pm.agent, pid, file);
+    const logs = await importLogs(t.id);
+    const entries = logs.filter((l) => l.entityType === 'task');
+    expect(entries.map((l) => l.action)).toEqual(['task_updated']);
+    const log = entries[0]!;
+    expect(kinds(log.meta)).toEqual([
+      ['deliverable_item_added', 'New'],
+      ['deliverable_item_updated', 'C v2'],
+      ['deliverable_item_deleted', 'R'],
+      ['deliverable_item_ticked', 'D'],
+      ['deliverable_item_unticked', 'E'],
+      ['deliverable_items_reordered', null],
+    ]);
+    const after = await getTask(w.pm.agent, t.id);
+    const newIds = Object.fromEntries(after.deliverableItems.map((i) => [i.text, i.id]));
+    const list = (log.meta as { deliverableItems: Record<string, unknown>[] }).deliverableItems;
+    expect(list[1]).toMatchObject({
+      itemId: newIds['C v2'],
+      replacedItemId: ids.C,
+      old: 'C',
+      new: 'C v2',
+    });
+    expect(list[2]).toMatchObject({ itemId: ids.R, old: 'R', new: null });
+    expect(list[5]).toMatchObject({
+      old: [ids.A, ids.B, ids.D, ids.E, ids.F],
+      new: [ids.B, ids.A, ids.D, ids.E, ids.F],
+    });
+    // `changes` has one panel-shaped row per item change, all on deliverableItems.
+    expect(log.changes.map((c) => [c.field, c.old, c.new])).toEqual([
+      ['deliverableItems', null, 'New'],
+      ['deliverableItems', 'C', 'C v2'],
+      ['deliverableItems', 'R', null],
+      ['deliverableItems', false, true],
+      ['deliverableItems', true, false],
+      [
+        'deliverableItems',
+        [ids.A, ids.B, ids.D, ids.E, ids.F],
+        [ids.B, ids.A, ids.D, ids.E, ids.F],
+      ],
+    ]);
+    // Same row as a panel tick records.
+    const panel = (await tick(w.pm.agent, after, 0, true)).body.task as TaskDto;
+    const panelLog = await ActivityLogModel.findOne({
+      entityId: panel.id,
+      action: 'deliverable_item_ticked',
+    }).lean();
+    const row = (c: { field?: string | null; old?: unknown; new?: unknown }) => [
+      c.field,
+      c.old,
+      c.new,
+    ];
+    expect(panelLog!.changes.map(row)).toEqual([row(log.changes[3]!)]);
+    // The task History (the audit view) gets the list, panel and import alike.
+    const hist = (await w.pm.agent.get(`/api/v1/tasks/${t.id}/history`)).body.items as {
+      action: string;
+      deliverables: { action: string }[] | null;
+    }[];
+    const imported = hist.find((h) => h.action === 'task_updated' && h.deliverables)!;
+    expect(imported.deliverables!.map((c) => c.action)).toHaveLength(6);
+    expect(hist.find((h) => h.action === 'deliverable_item_ticked')!.deliverables).toEqual([
+      expect.objectContaining({
+        action: 'deliverable_item_ticked',
+        text: 'B',
+        old: false,
+        new: true,
+      }),
+    ]);
+    const act = (await w.pm.agent.get(`/api/v1/projects/${pid}/activity`)).body.items as {
+      action: string;
+      deliverables: unknown[] | null;
+    }[];
+    expect(act.some((a) => a.action === 'task_updated' && a.deliverables?.length === 6)).toBe(true);
+  });
+
+  it('a blank cell that clears the task lists each removed item', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    let t = await ownedTask(w);
+    await TaskModel.updateOne({ _id: t.id }, { $set: { deliverableItems: [] } });
+    t = await getTask(w.pm.agent, t.id);
+    for (const x of ['X', 'Y']) t = (await add(w.pm.agent, t, x)).body.task;
+    t = (await tick(w.pm.agent, t, 1)).body.task;
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('deliverables')).value = null;
+    });
+    await commit(w.pm.agent, pid, file);
+    const [log] = await importLogs(t.id);
+    expect(kinds(log!.meta)).toEqual([
+      ['deliverable_item_deleted', 'X'],
+      ['deliverable_item_deleted', 'Y'],
+    ]);
+    expect(log!.changes.map((c) => [c.field, c.old, c.new])).toEqual([
+      ['deliverableItems', 'X', null],
+      ['deliverableItems', 'Y', null],
+    ]);
+  });
+
+  it("a new task's entry lists each item it was created with (and the ones ticked)", async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      const r = ws.getRow(5);
+      r.getCell(col('number')).value = 21;
+      r.getCell(col('name')).value = 'Cutover';
+      r.getCell(col('phase')).value = 'Phase B';
+      r.getCell(col('milestone')).value = 'N';
+      r.getCell(col('start')).value = '2026-12-01';
+      r.getCell(col('finish')).value = '2026-12-03';
+      r.getCell(col('deliverables')).value = '[x] Runbook\nContacts';
+    });
+    const { done } = await commit(w.pm.agent, pid, file);
+    const log = await ActivityLogModel.findOne({
+      'meta.importId': done.importId,
+      action: 'task_created',
+    }).lean();
+    expect(kinds(log!.meta)).toEqual([
+      ['deliverable_item_added', 'Runbook'],
+      ['deliverable_item_added', 'Contacts'],
+      ['deliverable_item_ticked', 'Runbook'],
+    ]);
+    expect(log!.changes.filter((c) => c.field === 'deliverableItems')).toHaveLength(3);
+    expect(log!.changes.map((c) => c.field)).toContain('name');
+  });
+
+  it('old Deliverable text: kept as a real item, or removed (no item id), is listed', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const [a, b] = await TaskModel.find({ projectId: pid }).sort({ order: 1 }).limit(2).lean();
+    await seedLegacyDeliverable({ taskId: a!._id.toString() }, 'Old spec');
+    await seedLegacyDeliverable({ taskId: b!._id.toString() }, 'Old plan');
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      expect(ws.getRow(2).getCell(col('deliverables')).value).toBe('Old spec');
+      ws.getRow(2).getCell(col('deliverables')).value = '[x] Old spec\nExtra';
+      ws.getRow(3).getCell(col('deliverables')).value = 'Replacement';
+    });
+    await commit(w.pm.agent, pid, file);
+    const [la] = await importLogs(a!._id.toString());
+    expect(kinds(la!.meta)).toEqual([
+      ['deliverable_item_added', 'Extra'],
+      ['deliverables_migrated', 'Old spec'],
+      ['deliverable_item_ticked', 'Old spec'],
+    ]);
+    const kept = (await getTask(w.pm.agent, a!._id.toString())).deliverableItems[0]!;
+    expect((la!.meta as { deliverableItems: unknown[] }).deliverableItems[1]).toMatchObject({
+      itemId: kept.id,
+      oldText: true,
+      old: null,
+      new: 'Old spec',
+    });
+    const [lb] = await importLogs(b!._id.toString());
+    expect(kinds(lb!.meta)).toEqual([
+      ['deliverable_item_added', 'Replacement'],
+      ['deliverable_item_deleted', 'Old plan'],
+    ]);
+    expect((lb!.meta as { deliverableItems: unknown[] }).deliverableItems[1]).toMatchObject({
+      itemId: null,
+      oldText: true,
+      old: 'Old plan',
+      new: null,
+    });
+  });
+});
+
+describe('CR-23 FR-CLX-06 / AC-75.20 / EC-224 / TC-23-039: an owner who can no longer own', () => {
+  it('a deactivated owner who owns the task today is cleared, with the note and "Clears: Owner"', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const t = await ownedTask(w);
+    const file = await exported(w.pm.agent, pid);
+    await UserModel.updateOne({ _id: w.member.user._id }, { $set: { active: false } });
+    const p = await preview(w.pm.agent, pid, file);
+    const row = p.rows[0]!;
+    expect(row.values.owner.toLowerCase()).toBe(w.member.user.email.toLowerCase());
+    expect(row.errors).toEqual([]);
+    expect(row.warnings.map((x) => x.message)).toContain(
+      `Email ${row.values.owner} doesn't exist.`,
+    );
+    expect(row.result).toBe('UPDATE');
+    expect(row.clears).toContain('owner');
+    await commit(w.pm.agent, pid, file);
+    expect((await getTask(w.pm.agent, t.id)).owner).toBeNull();
+  });
+
+  it('an unknown email on an owned task also clears the owner', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const t = await ownedTask(w);
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('owner')).value = 'ghost@xceler8.example';
+    });
+    const row = (await preview(w.pm.agent, pid, file)).rows[0]!;
+    expect(row.warnings.map((x) => x.message)).toContain(
+      "Email ghost@xceler8.example doesn't exist.",
+    );
+    expect(row.clears).toContain('owner');
+    await commit(w.pm.agent, pid, file);
+    expect((await getTask(w.pm.agent, t.id)).owner).toBeNull();
+  });
+
+  it('Lean: a Viewer who owns the task today is cleared too, with "can\'t own tasks"', async () => {
+    const w = await world(app);
+    const pid = w.project.id as string;
+    const t = await ownedTask(w);
+    await ProjectModel.updateOne({ _id: pid }, { $addToSet: { memberIds: w.viewer.user._id } });
+    await TaskModel.updateOne({ _id: t.id }, { $set: { ownerId: w.viewer.user._id } });
+    const file = await edit(await exported(w.pm.agent, pid), (ws) => {
+      ws.getRow(2).getCell(col('owner')).value = w.viewer.user.email;
+    });
+    const row = (await preview(w.pm.agent, pid, file)).rows[0]!;
+    expect(row.warnings.map((x) => x.message)).toContain(`${w.viewer.user.email} can't own tasks.`);
+    expect(row.clears).toContain('owner');
+    await commit(w.pm.agent, pid, file);
+    expect((await getTask(w.pm.agent, t.id)).owner).toBeNull();
+  });
+});
+
 describe('CR-23 FR-DLV-04: migrating the old Deliverable text (Lean: old field kept)', () => {
   it('dry run writes nothing; apply copies the text into a first unticked item, keeps the old field (text and empty), re-run changes nothing', async () => {
     const w = await world(app);

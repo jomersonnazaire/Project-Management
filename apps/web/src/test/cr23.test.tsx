@@ -50,7 +50,13 @@ const QA = { id: 'u3', name: 'QA One' };
 
 /** A stateful API for one task's deliverables. */
 function mount(
-  opts: { items?: DeliverableItemDto[]; can?: boolean; project?: ProjectDto; fail?: number } = {},
+  opts: {
+    items?: DeliverableItemDto[];
+    can?: boolean;
+    project?: ProjectDto;
+    fail?: number;
+    history?: unknown[];
+  } = {},
 ) {
   let t: TaskDto = task({
     deliverableItems: opts.items ?? [
@@ -111,6 +117,8 @@ function mount(
       }
     }
     if (url.endsWith('/tasks/k1')) return { status: 200, body: { task: t } };
+    if (opts.history && url.endsWith('/tasks/k1/history'))
+      return { status: 200, body: { items: opts.history } };
     if (url.includes(`/projects/${PID}/tasks`)) return { status: 200, body: { items: [t] } };
     if (url.endsWith(`/projects/${PID}`))
       return { status: 200, body: { project: opts.project ?? project() } };
@@ -127,6 +135,64 @@ const openPanel = async () => {
 };
 
 describe('CR-23 deliverables checklist in the task panel (UIE §5)', () => {
+  it('AC-76.18: History lists each item change, for a panel edit and an import (UIE §5.5)', async () => {
+    const PM = { id: 'u1', name: 'Test PM' };
+    const at = '2026-11-10T02:00:00.000Z';
+    const ch = (action: string, text: string | null, old: unknown, nu: unknown) => ({
+      action,
+      itemId: 'x',
+      text,
+      old,
+      new: nu,
+    });
+    mount({
+      history: [
+        {
+          id: 'h1',
+          at,
+          actor: PM,
+          action: 'task_updated',
+          changes: [],
+          reason: null,
+          deliverables: [
+            ch('deliverable_item_added', 'Cutover runbook v2', null, 'Cutover runbook v2'),
+            ch('deliverable_item_deleted', 'Rollback plan', 'Rollback plan', null),
+            ch('deliverable_item_deleted', 'Contact sheet', 'Contact sheet', null),
+            ch('deliverable_item_unticked', 'Cutover runbook', true, false),
+          ],
+        },
+        {
+          id: 'h2',
+          at,
+          actor: QA,
+          action: 'deliverable_item_ticked',
+          changes: [{ field: 'deliverableItems', old: false, new: true }],
+          reason: null,
+          deliverables: [ch('deliverable_item_ticked', 'UAT script', false, true)],
+        },
+        {
+          id: 'h3',
+          at,
+          actor: PM,
+          action: 'task_updated',
+          changes: [{ field: 'name', old: 'a', new: 'b' }],
+          reason: null,
+          deliverables: null,
+        },
+      ],
+    });
+    await openPanel();
+    const list = (await screen.findByText(/imported the checklist/)).closest('ul')!;
+    const lines = within(list)
+      .getAllByRole('listitem')
+      .map((li) => li.querySelector('.audit-what')!.textContent);
+    expect(lines).toEqual([
+      'imported the checklist: added “Cutover runbook v2”; removed “Rollback plan”, “Contact sheet”; unticked “Cutover runbook”',
+      'ticked deliverable “UAT script”',
+      'updated (name)',
+    ]);
+  });
+
   it('shows "1 of 2 done", a struck-through done item with who ticked it, and the chip on the row', async () => {
     mount();
     const box = await openPanel();
