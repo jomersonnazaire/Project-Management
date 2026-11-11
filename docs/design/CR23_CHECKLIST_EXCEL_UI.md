@@ -226,6 +226,8 @@ The panel doesn't show a separate history.
   - it counts as not done: "0 of 1 done", and the Checklist chip reads 0/1.
   - the add row stays for editors. **The first add turns the old text into a normal item** (unticked, editable), then appends the new one.
   - Templates show the same pill and caption on an activity's old text, with no Remove.
+  - Excel: the download writes the old text as one unticked line in Deliverables. Importing that cell unchanged changes nothing (the row stays Unchanged). Importing a changed cell turns the old text into a real item: the matching line keeps it, and the preview shows it as a plain kept line with the "+" lines under it (`cr23-ui-import-legacy-item-changed-1440.png`).
+  - The old `deliverable` field itself is never changed (kept for rollback).
   - Demo: "Old Deliverable text (read-only)" on `#cr23-deliverables`; screenshots `cr23-mock-deliverables-legacy-1440.png` and `-390.png`.
 - Templates hold deliverable items too, so the template editor uses the same list, with no ticks. A project made from a template, or a template applied to a project, starts with **every item unticked** (FR-TSK-38).
 
