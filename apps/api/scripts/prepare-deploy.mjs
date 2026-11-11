@@ -42,6 +42,8 @@ writeFileSync(
         start: 'node dist/server.js',
         seed: 'node dist/seed.js',
         'seed:qa-completed': 'node dist/seed-qa-completed.js',
+        // CR-22: dry run by default; `npm run migrate:phases -- --apply` writes.
+        'migrate:phases': 'node dist/scripts/migrate-phases.js',
       },
       dependencies: pinned,
     },

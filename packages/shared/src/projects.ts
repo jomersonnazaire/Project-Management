@@ -737,6 +737,11 @@ export const projectListQuerySchema = z.strictObject({
 
 const taskFields = {
   name: requiredText('Task name', 200),
+  /**
+   * CR-22 (Lead): the task's phase is a phase record of its project, by id; null = No phase.
+   * `phase` (a name) is still accepted from older clients and must name an existing phase.
+   */
+  phaseId: objectId.nullable().optional(),
   phase: optionalText(120),
   taskType: optionalText(60),
   priority: z.enum(PRIORITIES),
@@ -748,6 +753,9 @@ const taskFields = {
   clientContactId: objectId.nullable(),
   plannedStart: dateOnlySchema('Planned start').nullable(),
   dueDate: dateOnlySchema('Due date').nullable(),
+  /** CR-22 FR-TL-10: set by status changes; the PM can edit both (audited). */
+  actualStart: dateOnlySchema('Actual start').nullable().optional(),
+  actualFinish: dateOnlySchema('Actual finish').nullable().optional(),
   /** null = no estimate (EC-58). */
   estHours: z.number().min(0).max(10_000).nullable(),
   dependsOn: z.array(objectId).max(50),
@@ -773,6 +781,10 @@ const emailNewAssignees = z.boolean().optional();
 
 const datesInOrder = (v: { plannedStart?: string | null; dueDate?: string | null }) =>
   !v.plannedStart || !v.dueDate || v.dueDate >= v.plannedStart;
+/** CR-22 FR-TL-10. */
+export const ACTUAL_FINISH_BEFORE_START = "Actual finish can't be before actual start.";
+const actualsInOrder = (v: { actualStart?: string | null; actualFinish?: string | null }) =>
+  !v.actualStart || !v.actualFinish || v.actualFinish >= v.actualStart;
 
 export const createTaskSchema = z
   .strictObject({
@@ -796,6 +808,7 @@ export const createTaskSchema = z
     ...emailReturnFields,
   })
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START })
+  .refine(actualsInOrder, { path: ['actualFinish'], message: ACTUAL_FINISH_BEFORE_START })
   .refine(emailReturnOk, emailReturnIssue);
 export type CreateTaskInput = z.input<typeof createTaskSchema>;
 
@@ -812,6 +825,7 @@ export const updateTaskSchema = z
     emailNewAssignees: typeof emailNewAssignees;
   } & typeof emailReturnFields)
   .refine(datesInOrder, { path: ['dueDate'], message: DUE_NOT_BEFORE_START })
+  .refine(actualsInOrder, { path: ['actualFinish'], message: ACTUAL_FINISH_BEFORE_START })
   .refine(emailReturnOk, emailReturnIssue);
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
 
@@ -1045,6 +1059,8 @@ export interface TaskDto {
   projectId: string;
   order: number;
   name: string;
+  /** CR-22: the task's phase record (Project.phases); `phase` is its current name, for display. */
+  phaseId: string | null;
   phase: string | null;
   taskType: string | null;
   priority: Priority;
@@ -1056,6 +1072,9 @@ export interface TaskDto {
   clientContact: (Ref & { active: boolean }) | null;
   plannedStart: string | null;
   dueDate: string | null;
+  /** CR-22 FR-TL-10. */
+  actualStart: string | null;
+  actualFinish: string | null;
   /** null = no estimate (EC-58). */
   estHours: number | null;
   actualHours: number;
@@ -1189,6 +1208,8 @@ export const renamePhaseSchema = z.strictObject({
 
 /** A project phase: the tasks grouped under it, plus its evidence folder (FR-DOC-17). */
 export interface PhaseDto {
+  /** CR-22: the phase record id (tasks reference it); null only before the phase migration. */
+  id: string | null;
   name: string;
   taskCount: number;
   documentCount: number;

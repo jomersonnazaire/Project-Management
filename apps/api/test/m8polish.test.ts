@@ -606,7 +606,8 @@ describe('m8-polish: optional template, add phase, apply template', () => {
     expect(
       (await w.member.agent.post(url).set(CSRF).send({ templateId: w.template.id })).status,
     ).toBe(404);
-    // An existing hand-made phase and activity come first.
+    // An existing hand-made phase and activity come first (CR-22: the phase is added first).
+    await w.pm.agent.post(`/api/v1/projects/${p.id}/phases`).set(CSRF).send({ name: 'Own phase' });
     await w.pm.agent
       .post(`/api/v1/projects/${p.id}/tasks`)
       .set(CSRF)

@@ -8,7 +8,24 @@ const taskSchema = new Schema(
     templateActivityId: { type: String, default: null },
     order: { type: Number, default: 0 },
     name: { type: String, required: true, trim: true, maxlength: 200 },
+    /**
+     * CR-22 (Lead): the task's phase record (`Project.phases._id`); null = No phase. `phase` is a
+     * copy of that phase's current name, kept in step by the API for display, the Checklist and the
+     * phase evidence folders. Never set `phase` without `phaseId`.
+     */
+    phaseId: { type: Schema.Types.ObjectId, default: null },
     phase: { type: String, default: null },
+    /** CR-22 FR-TL-10: first move to In Progress / Completed; Reopen clears the finish. */
+    actualStart: { type: Date, default: null },
+    actualFinish: { type: Date, default: null },
+    /** CR-22 FR-TL-08: the planned dates at the last Save baseline (both null when unscheduled). */
+    baseline: {
+      type: new Schema(
+        { start: { type: Date, default: null }, finish: { type: Date, default: null } },
+        { _id: false },
+      ),
+      default: null,
+    },
     taskType: { type: String, default: null },
     priority: { type: String, enum: PRIORITIES, default: 'MEDIUM' },
     mandatory: { type: Boolean, default: false },

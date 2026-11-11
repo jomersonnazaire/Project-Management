@@ -14,6 +14,9 @@ export async function notify(input: {
   type: NotificationType;
   project: { _id: Id; managerId?: Id | null; memberIds?: Id[] | null };
   taskId?: Id | null;
+  /** Several tasks in one notice (CR-22 timeline import); opens `link`. */
+  taskIds?: Id[];
+  link?: string | null;
   issueId?: Id | null;
   actorId: Id | null;
   recipients: (Id | null | undefined)[];
@@ -25,6 +28,8 @@ export async function notify(input: {
       userId: u._id,
       projectId: input.project._id,
       taskId: input.taskId ?? null,
+      ...(input.taskIds?.length ? { taskIds: input.taskIds } : {}),
+      ...(input.link ? { link: input.link } : {}),
       issueId: input.issueId ?? null,
       type: input.type,
       actorId: input.actorId,

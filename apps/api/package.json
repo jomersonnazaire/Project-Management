@@ -19,7 +19,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "seed:qa-completed": "tsx --env-file-if-exists=.env scripts/seed-qa-completed.ts",
-    "renumber:tasks": "tsx --env-file-if-exists=.env scripts/renumber-tasks.ts"
+    "renumber:tasks": "tsx --env-file-if-exists=.env scripts/renumber-tasks.ts",
+    "migrate:phases": "node dist/scripts/migrate-phases.js",
+    "migrate:phases:dev": "tsx --env-file-if-exists=.env scripts/migrate-phases.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.3",
@@ -32,6 +34,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
+    "jszip": "^3.10.2",
     "mongoose": "^8.19.0",
     "pdfkit": "^0.17.2",
     "pino": "^10.0.0",
@@ -47,7 +50,6 @@
     "@types/pdfkit": "^0.17.6",
     "@types/supertest": "^6.0.3",
     "@xc8/shared": "*",
-    "jszip": "^3.10.2",
     "mongodb-memory-server": "^10.2.0",
     "supertest": "^7.1.4",
     "tsup": "^8.5.0",

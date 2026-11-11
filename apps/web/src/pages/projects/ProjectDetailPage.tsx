@@ -30,17 +30,11 @@ import { ProgressBar, ProjectBadge, ScheduleVariance } from '../../components/Pr
 import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 import { ProjectEditModal } from './ProjectEditModal';
-import {
-  ActivityTab,
-  BoardTab,
-  ChecklistTab,
-  ComingSoonTab,
-  ContactsTab,
-  TeamTab,
-} from './ProjectTabs';
+import { ActivityTab, BoardTab, ChecklistTab, ContactsTab, TeamTab } from './ProjectTabs';
 import { ConversationTab } from './ConversationTab';
 import { DocumentsTab } from './DocumentsTab';
 import { ProjectTimeTab } from './ProjectTimeTab';
+import { TimelineTab } from './timeline/TimelineTab';
 import { TaskFormModal } from './TaskFormModal';
 import { TaskPanel } from './TaskPanel';
 import { ProjectIssuesTab } from '../issues/ProjectIssuesTab';
@@ -299,7 +293,7 @@ export function ProjectDetailPage() {
             <Route path="board" element={<BoardTab project={p} tasks={list} onOpen={setTask} />} />
             <Route path="team" element={<TeamTab project={p} tasks={list} />} />
             <Route path="contacts" element={<ContactsTab project={p} />} />
-            <Route path="timeline" element={<ComingSoonTab title="The timeline" />} />
+            <Route path="timeline" element={<TimelineTab project={p} onOpen={setTask} />} />
             <Route
               path="conversation"
               element={<ConversationTab project={p} tasks={list} onOpenTask={setTask} />}

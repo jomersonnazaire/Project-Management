@@ -27,7 +27,7 @@ interface Payload {
 }
 
 /** JSON with sorted object keys, so the hash never depends on property order. */
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (value === undefined) return 'null';
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (value instanceof Date) return JSON.stringify(value.toISOString());

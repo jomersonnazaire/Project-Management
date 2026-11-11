@@ -1,9 +1,13 @@
 import {
+  ACTUAL_FINISH_BEFORE_START,
   DUE_NOT_BEFORE_START,
   jobRoleLabel,
   type JobRole,
   type PersonDto,
   NO_ESTIMATE_LABEL,
+  BROKEN_LINK_TITLE,
+  brokenDependencies,
+  PHASE_PICK_HINT,
   PARTIES,
   PARTY_LABELS,
   PRIORITIES,
@@ -20,6 +24,8 @@ import { ApiError, saveErrorMessage } from '../../api/client';
 import { continueSaveEmail, joinNames, useWantsEmail } from '../../api/emailHooks';
 import { useAuth } from '../../auth/AuthContext';
 import { DependsOnPicker } from '../../components/DependsOnPicker';
+import { useProjectPhases } from '../../api/issueHooks';
+import { shortDate } from '../../lib/format';
 import { EmailCheckbox } from '../../components/EmailCheckbox';
 import {
   taskCreate,
@@ -62,7 +68,12 @@ export function TaskFormModal({
   );
 
   const [name, setName] = useState(task?.name ?? '');
-  const [phase, setPhase] = useState(task?.phase ?? fixedPhase ?? '');
+  // CR-22 (Lead): the phase is a strict pick from the project's phases, by record id. A value is
+  // a phase id, `name:<phase>` for a phase known only by name (before the phase migration), or ''
+  // for No phase.
+  const [phase, setPhase] = useState(
+    task?.phaseId ?? (task?.phase ? `name:${task.phase}` : fixedPhase ? `name:${fixedPhase}` : ''),
+  );
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'MEDIUM');
   const [party, setParty] = useState<Party>(task?.party ?? 'INTERNAL');
   const [ownerId, setOwnerId] = useState(task?.owner?.id ?? '');
@@ -70,6 +81,9 @@ export function TaskFormModal({
   const [clientContactId, setClientContactId] = useState(task?.clientContact?.id ?? '');
   const [plannedStart, setPlannedStart] = useState(task?.plannedStart ?? '');
   const [dueDate, setDueDate] = useState(task?.dueDate ?? '');
+  // CR-22 FR-TL-10: set by status changes; the PM can correct them (editing only).
+  const [actualStart, setActualStart] = useState(task?.actualStart ?? '');
+  const [actualFinish, setActualFinish] = useState(task?.actualFinish ?? '');
   const [est, setEst] = useState(task?.estHours == null ? '' : String(task.estHours));
   const [dependsOn, setDependsOn] = useState<string[]>(task?.dependsOn ?? []);
   const [deliverable, setDeliverable] = useState(task?.deliverable ?? '');
@@ -92,7 +106,36 @@ export function TaskFormModal({
 
   const serverErrors = mutation.error instanceof ApiError ? mutation.error.fieldErrors() : {};
   const err = (k: string) => errors[k] ?? serverErrors[k];
-  const phases = Array.from(new Set(tasks.map((t) => t.phase).filter(Boolean))) as string[];
+  const phaseList = useProjectPhases(project.id);
+  const options = (phaseList.data ?? []).map((p) => ({
+    value: p.id ?? `name:${p.name}`,
+    name: p.name,
+  }));
+  // Keep the task's current phase selectable while the list loads (or if it can't load).
+  if (phase && !options.some((o) => o.value === phase)) {
+    const name = phase.startsWith('name:') ? phase.slice(5) : (task?.phase ?? '');
+    const sameName = options.find((o) => o.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (!sameName) options.push({ value: phase, name });
+  }
+  const pickedOption =
+    options.find((o) => o.value === phase) ??
+    options.find(
+      (o) =>
+        phase.startsWith('name:') &&
+        o.name.trim().toLowerCase() === phase.slice(5).trim().toLowerCase(),
+    );
+  const pickedValue = phase ? (pickedOption?.value ?? phase) : '';
+  const phaseBody = !pickedValue
+    ? { phaseId: null }
+    : pickedValue.startsWith('name:')
+      ? { phase: pickedValue.slice(5) }
+      : { phaseId: pickedValue };
+  // CR-22 FR-TL-07 / AC-72.8: warn (never block) when the start is on or before a predecessor's
+  // finish.
+  const broken = brokenDependencies(
+    { id: task?.id ?? '', plannedStart: plannedStart || null, dueDate: dueDate || null, dependsOn },
+    tasks,
+  );
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -104,12 +147,14 @@ export function TaskFormModal({
       next.estHours = 'Enter hours of 0 or more, or leave blank.';
     }
     if (plannedStart && dueDate && dueDate < plannedStart) next.dueDate = DUE_NOT_BEFORE_START;
+    if (actualStart && actualFinish && actualFinish < actualStart)
+      next.actualFinish = ACTUAL_FINISH_BEFORE_START;
     if (party === 'CLIENT' && !clientContactId) next.clientContactId = 'Choose the client contact.';
     setErrors(next);
     if (Object.keys(next).length) return;
     const body = {
       name: name.trim(),
-      phase: phase.trim() || null,
+      ...phaseBody,
       priority,
       party,
       ownerId: ownerId || null,
@@ -124,6 +169,13 @@ export function TaskFormModal({
       requiresApproval,
       reviewerId: requiresApproval ? reviewerId || null : null,
       isMilestone,
+      // Only sent when changed, so a save never rewrites them by accident.
+      ...(task && (actualStart || null) !== (task.actualStart ?? null)
+        ? { actualStart: actualStart || null }
+        : {}),
+      ...(task && (actualFinish || null) !== (task.actualFinish ?? null)
+        ? { actualFinish: actualFinish || null }
+        : {}),
     };
     const roles = new Set([body.ownerId, body.reviewerId, ...assigneeIds].filter(Boolean));
     const joining = added.filter((p) => roles.has(p.id) && !memberIds.has(p.id));
@@ -214,16 +266,23 @@ export function TaskFormModal({
             ) : (
               <Form.Group className="col-md-4" controlId="task-phase">
                 <Form.Label>Phase</Form.Label>
-                <Form.Control
-                  list="task-phase-list"
-                  value={phase}
+                <Form.Select
+                  value={pickedValue}
                   onChange={(e) => setPhase(e.target.value)}
-                />
-                <datalist id="task-phase-list">
-                  {phases.map((p) => (
-                    <option key={p} value={p} />
+                  isInvalid={Boolean(err('phaseId') ?? err('phase'))}
+                  aria-describedby="task-phase-help"
+                >
+                  <option value="">No phase</option>
+                  {options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.name}
+                    </option>
                   ))}
-                </datalist>
+                </Form.Select>
+                <Form.Text id="task-phase-help">{PHASE_PICK_HINT}</Form.Text>
+                <Form.Control.Feedback type="invalid">
+                  {err('phaseId') ?? err('phase')}
+                </Form.Control.Feedback>
               </Form.Group>
             )}
             <Form.Group className="col-md-4" controlId="task-priority">
@@ -371,6 +430,37 @@ export function TaskFormModal({
                 Leave blank for {NO_ESTIMATE_LABEL.toLowerCase()}.
               </Form.Text>
             </Form.Group>
+            {task && (
+              <>
+                <Form.Group className="col-md-4" controlId="task-actual-start">
+                  <Form.Label>Actual start</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={actualStart}
+                    onChange={(e) => setActualStart(e.target.value)}
+                    aria-describedby="task-actual-hint"
+                  />
+                </Form.Group>
+                <Form.Group className="col-md-4" controlId="task-actual-finish">
+                  <Form.Label>Actual finish</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={actualFinish}
+                    onChange={(e) => setActualFinish(e.target.value)}
+                    isInvalid={Boolean(err('actualFinish'))}
+                    aria-describedby="task-actual-hint"
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {err('actualFinish')}
+                  </Form.Control.Feedback>
+                </Form.Group>
+                <div className="col-md-4 d-flex align-items-end">
+                  <Form.Text id="task-actual-hint">
+                    Set when the task starts and is completed. Change them if they&apos;re wrong.
+                  </Form.Text>
+                </div>
+              </>
+            )}
             <div className="col-md-6">
               <DependsOnPicker
                 id="task-deps"
@@ -384,6 +474,17 @@ export function TaskFormModal({
                 onChange={setDependsOn}
                 error={err('dependsOn')}
               />
+              {broken.map((b) => (
+                <Alert
+                  key={b.id}
+                  variant="warning"
+                  className="py-2 small mt-2 mb-0"
+                  data-testid="task-broken-dependency"
+                >
+                  <strong>{BROKEN_LINK_TITLE}</strong> #{b.order} {b.name} finishes{' '}
+                  {shortDate(b.finish)}. You can still save. Dates aren&apos;t moved.
+                </Alert>
+              ))}
             </div>
             <Form.Group className="col-md-6" controlId="task-deliverable">
               <Form.Label>Deliverable</Form.Label>

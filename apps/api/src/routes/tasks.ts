@@ -32,6 +32,15 @@ import {
   type NotificationType,
   type PermissionGrid,
   type PhaseDto,
+  PHASE_NAME_DUPLICATE,
+  UNKNOWN_PHASE_MESSAGE,
+  ACTUAL_FINISH_BEFORE_START,
+  saveBaselineSchema,
+  PHASE_TARGET_STATUSES,
+  savePhaseListSchema,
+  type SavePhaseListInput,
+  type TimelineDto,
+  type TimelinePhaseDto,
   type TaskDto,
   type TaskRecordCounts,
   type TaskStatus,
@@ -57,9 +66,10 @@ import {
   type Project,
   type Task,
 } from '../models/index.js';
-import { audit } from '../services/audit.js';
+import { audit, auditMany } from '../services/audit.js';
 import { loadCalendar } from '../services/calendar.js';
 import { taskRecordCounts } from '../services/taskRecords.js';
+import { phaseKey, syncProjectPhases } from '../services/phases.js';
 import { followUpUnseenCounts, markFollowUpsSeen } from '../services/followUpSeen.js';
 import { renumberProjectTasks } from '../services/taskOrder.js';
 import { notify } from '../services/notify.js';
@@ -111,18 +121,36 @@ export function taskCan(
   return { edit: status, plan, status, approve };
 }
 
-/**
- * A project's phases: task phases in plan order, then phases that only have an evidence folder
- * left (their tasks were deleted). Counts tasks, and documents in the folder and its sub-folders.
- */
-/** Doc 14 §J: phase identity ignores case and leading/trailing spaces. */
-export function phaseKey(name: string) {
-  return name.trim().toLowerCase();
+export { phaseKey };
+
+export interface ProjectPhase {
+  /** Phase record id (CR-22 FR-TL-23); null when the phase only exists as task or folder text. */
+  id: Types.ObjectId | null;
+  name: string;
+  targetDate: Date | null;
+  taskCount: number;
+  documentCount: number;
+  folderIds: Types.ObjectId[];
+  /** Every spelling of this phase on tasks and folders (same phaseKey). */
+  variants: string[];
 }
 
-async function projectPhases(projectId: Types.ObjectId, session?: mongoose.ClientSession) {
+/**
+ * A project's phases (CR-22 FR-TL-23): the saved phase list in its order, then phases that only
+ * exist as task text in plan order, then phases that only have an evidence folder left (their
+ * tasks were deleted). Names match ignoring case and spaces. Counts tasks, and documents in the
+ * folder and its sub-folders.
+ */
+export async function projectPhases(
+  projectId: Types.ObjectId,
+  session?: mongoose.ClientSession,
+): Promise<ProjectPhase[]> {
+  const project = await ProjectModel.findById(projectId)
+    .select('phases')
+    .session(session ?? null)
+    .lean();
   const tasks = await TaskModel.find({ projectId })
-    .select('phase order')
+    .select('phase phaseId order')
     .sort({ order: 1 })
     .session(session ?? null)
     .lean();
@@ -130,28 +158,52 @@ async function projectPhases(projectId: Types.ObjectId, session?: mongoose.Clien
     .select('_id parentId kind phase')
     .session(session ?? null)
     .lean();
-  const names = [
-    ...new Set([
-      ...tasks.map((t) => t.phase).filter((x): x is string => Boolean(x)),
-      ...folders.filter((f) => f.kind === 'PHASE' && f.phase).map((f) => f.phase as string),
-    ]),
-  ];
-  const out = [];
-  for (const name of names) {
-    const root = folders.filter((f) => f.kind === 'PHASE' && f.phase === name).map((f) => f._id);
+  const byKey = new Map<string, ProjectPhase>();
+  const add = (name: string, rec?: { _id: Types.ObjectId; targetDate?: Date | null }) => {
+    const key = phaseKey(name);
+    if (!key) return;
+    const have = byKey.get(key);
+    if (have) {
+      if (!have.variants.includes(name)) have.variants.push(name);
+      return;
+    }
+    byKey.set(key, {
+      id: rec?._id ?? null,
+      name: name.trim(),
+      targetDate: rec?.targetDate ?? null,
+      taskCount: 0,
+      documentCount: 0,
+      folderIds: [],
+      variants: [name],
+    });
+  };
+  for (const r of project?.phases ?? []) add(r.name, r);
+  const recordIds = new Set((project?.phases ?? []).map((r) => r._id.toString()));
+  // Lead: tasks belong to their phase record by id; only a task without one (before the phase
+  // migration) is matched by its phase text.
+  const linked = (t: (typeof tasks)[number]) =>
+    Boolean(t.phaseId && recordIds.has(t.phaseId.toString()));
+  for (const t of tasks) if (t.phase && !linked(t)) add(t.phase);
+  for (const f of folders) if (f.kind === 'PHASE' && f.phase) add(f.phase);
+  const out = [...byKey.values()];
+  for (const ph of out) {
+    const key = phaseKey(ph.name);
+    ph.taskCount = tasks.filter((t) =>
+      linked(t)
+        ? Boolean(ph.id?.equals(t.phaseId!))
+        : Boolean(t.phase && phaseKey(t.phase) === key),
+    ).length;
+    const root = folders
+      .filter((f) => f.kind === 'PHASE' && f.phase && phaseKey(f.phase) === key)
+      .map((f) => f._id);
     const ids = [...root];
     for (let i = 0; i < ids.length; i++) {
       for (const f of folders) if (f.parentId?.equals(ids[i])) ids.push(f._id);
     }
-    const documentCount = ids.length
+    ph.folderIds = ids;
+    ph.documentCount = ids.length
       ? await DocumentModel.countDocuments({ folderId: { $in: ids } }).session(session ?? null)
       : 0;
-    out.push({
-      name,
-      taskCount: tasks.filter((t) => t.phase === name).length,
-      documentCount,
-      folderIds: ids,
-    });
   }
   return out;
 }
@@ -172,11 +224,304 @@ function mayManagePhases(user: ScopeUser, perms: PermissionGrid, project: Projec
 }
 
 /** FR-PRJ-23 (Q-53/Q-55): PMs change phase details only while the project is in Planning. */
-function phaseEditableNow(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+export function phaseEditableNow(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
   return (
     mayManagePhases(user, perms, project) &&
     (user.systemRole === 'ADMIN' || project.status === 'PLANNING')
   );
+}
+
+/** CR-22 FR-TL-14 / AC-74.5: Excel template and export, for the project's planners. */
+export function timelineExcelAllowed(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  return !project.archived && perms.tasks.edit && isPlanner(user, project);
+}
+
+/** CR-22 Q-141: import is for planners while the project is Planning, Active or On hold. */
+export const TIMELINE_IMPORT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD'] as const;
+export function timelineImportAllowed(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  return (
+    timelineExcelAllowed(user, perms, project) &&
+    (TIMELINE_IMPORT_STATUSES as readonly string[]).includes(project.status ?? '')
+  );
+}
+
+/**
+ * CR-22 FR-TL-23 (Lean, 2026-11-11 ~12:59 AM SGT): phase target dates may change while the project
+ * is Planning, Active or On hold for a PM; Admins any time (not archived).
+ */
+function phaseTargetsEditableNow(user: ScopeUser, perms: PermissionGrid, project: ProjectDoc) {
+  return (
+    mayManagePhases(user, perms, project) &&
+    (user.systemRole === 'ADMIN' ||
+      PHASE_TARGET_STATUSES.includes(project.status as (typeof PHASE_TARGET_STATUSES)[number]))
+  );
+}
+
+/** FR-TL-31: the Philippine date each task was last marked Completed, from its history. */
+async function markedDoneOn(taskIds: Types.ObjectId[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!taskIds.length) return out;
+  const logs = await ActivityLogModel.find({
+    entityType: 'task',
+    entityId: { $in: taskIds },
+    changes: { $elemMatch: { field: 'status', new: 'COMPLETED' } },
+  })
+    .select('entityId at')
+    .sort({ at: 1 })
+    .lean();
+  for (const l of logs) out.set(l.entityId!.toString(), toDateOnly(todayPH(l.at)));
+  return out;
+}
+
+function timelinePhaseDto(ph: ProjectPhase): TimelinePhaseDto {
+  return {
+    id: ph.id ? ph.id.toString() : null,
+    name: ph.name,
+    targetDate: dateOrNull(ph.targetDate),
+    taskCount: ph.taskCount,
+    documentCount: ph.documentCount,
+  };
+}
+
+/** Renames a phase everywhere: its tasks, its evidence folder and its phase record. */
+async function renamePhase(projectId: Id, src: ProjectPhase, newName: string) {
+  // Tasks point at the record by id; their name copy follows the record.
+  await TaskModel.updateMany(
+    src.id
+      ? { projectId, $or: [{ phaseId: src.id }, { phaseId: null, phase: { $in: src.variants } }] }
+      : { projectId, phase: { $in: src.variants } },
+    { $set: { phase: newName, ...(src.id ? { phaseId: src.id } : {}) }, $inc: { version: 1 } },
+  );
+  const folders = await FolderModel.find({
+    projectId,
+    kind: 'PHASE',
+    phase: { $in: src.variants },
+  });
+  for (const f of folders) {
+    const oldPhase = f.phase;
+    f.phase = newName;
+    // Keep a custom folder name; rename the default one when the new name is free.
+    const key = newName.trim().toLowerCase();
+    const taken = await FolderModel.exists({
+      projectId,
+      parentId: f.parentId ?? null,
+      nameKey: key,
+      _id: { $ne: f._id },
+    });
+    if (f.name === oldPhase && !taken) {
+      f.name = newName;
+      f.nameKey = key;
+    }
+    await f.save();
+  }
+  if (src.id) {
+    await ProjectModel.updateOne(
+      { _id: projectId, 'phases._id': src.id },
+      { $set: { 'phases.$.name': newName } },
+    );
+  }
+}
+
+/** Adds a phase: its record at the end of the list and its (empty) evidence folder. */
+async function createPhase(
+  projectId: Id,
+  existing: ProjectPhase[],
+  phaseName: string,
+  targetDate: Date | null,
+  recordId = new Types.ObjectId(),
+  pushRecord = true,
+) {
+  let name = phaseName;
+  for (
+    let n = 2;
+    await FolderModel.exists({ projectId, parentId: null, nameKey: name.trim().toLowerCase() });
+    n++
+  ) {
+    name = `${phaseName} (${n})`;
+  }
+  await FolderModel.create({
+    projectId,
+    name,
+    nameKey: name.trim().toLowerCase(),
+    parentId: null,
+    kind: 'PHASE',
+    phase: phaseName,
+    order: existing.length + 1,
+  });
+  if (pushRecord) {
+    // Text-only phases that were listed before this one join the list first, so order holds.
+    const missing = existing.filter((x) => !x.id);
+    await ProjectModel.updateOne(
+      { _id: projectId },
+      {
+        $push: {
+          phases: {
+            $each: [
+              ...missing.map((x) => ({ name: x.name, targetDate: null })),
+              { _id: recordId, name: phaseName, targetDate },
+            ],
+          },
+        },
+      },
+    );
+  }
+}
+
+/** FR-PRJ-22: only a phase with no tasks and no documents in its folder can be removed. */
+function assertPhaseRemovable(ph: ProjectPhase) {
+  if (ph.taskCount > 0) {
+    // FR-PRJ-22: 409 PHASE_NOT_EMPTY (taskCount kept for older clients).
+    throw conflictWith(phaseNotEmptyMessage(ph.taskCount), 'PHASE_NOT_EMPTY', {
+      activityCount: ph.taskCount,
+      taskCount: ph.taskCount,
+      phase: ph.name,
+    });
+  }
+  if (ph.documentCount > 0) {
+    throw conflictWith(phaseDeleteBlockedReason(0, ph.documentCount)!, 'PHASE_HAS_DOCUMENTS', {
+      documentCount: ph.documentCount,
+      phase: ph.name,
+    });
+  }
+}
+
+async function removePhase(projectId: Id, ph: ProjectPhase, session?: mongoose.ClientSession) {
+  await FolderModel.deleteMany({ _id: { $in: ph.folderIds } }, { session });
+  if (ph.id) {
+    await ProjectModel.updateOne(
+      { _id: projectId },
+      { $pull: { phases: { _id: ph.id } } },
+      { session },
+    );
+  }
+}
+
+type PhaseAudit = {
+  action: string;
+  changes?: { field: string; old: unknown; new: unknown }[];
+  meta?: Record<string, unknown>;
+};
+
+/**
+ * CR-22 FR-TL-23: saves the phase manager's list. Rows match an existing phase by record id, or by
+ * `originalName` for a phase that only exists as task text. New rows are added, missing phases
+ * removed (only when empty), and the list order and target dates saved. Structural changes (add,
+ * rename, reorder, remove) need `namesEditable`; target dates don't. A saved baseline is never
+ * touched (FR-TL-23).
+ */
+async function savePhaseList(
+  project: ProjectDoc,
+  input: SavePhaseListInput,
+  namesEditable: boolean,
+): Promise<{ audits: PhaseAudit[]; targetsOnly: boolean }> {
+  // Lead: every phase gets its record (and its tasks a phaseId) before the list changes.
+  await syncProjectPhases(project._id, { apply: true });
+  const current = await projectPhases(project._id);
+  const used = new Set<ProjectPhase>();
+  const rows = input.phases.map((row, index) => {
+    let match: ProjectPhase | undefined;
+    if (row.id) {
+      match = current.find((c) => c.id?.toString() === row.id);
+      if (!match) {
+        throw conflict('The phase list changed. Refresh to see the latest.', 'PHASES_CHANGED');
+      }
+    } else if (row.originalName) {
+      match = current.find((c) => phaseKey(c.name) === phaseKey(row.originalName!));
+      if (!match) {
+        throw conflict('The phase list changed. Refresh to see the latest.', 'PHASES_CHANGED');
+      }
+    }
+    if (match) {
+      if (used.has(match)) {
+        throw conflict('The phase list changed. Refresh to see the latest.', 'PHASES_CHANGED');
+      }
+      used.add(match);
+    }
+    return { index, row: { ...row, name: row.name.trim() }, match };
+  });
+  // UIE §2.7: names unique ignoring case and spaces.
+  const seen = new Map<string, number>();
+  const fieldErrors: { path: string; message: string }[] = [];
+  for (const r of rows) {
+    const k = phaseKey(r.row.name);
+    if (seen.has(k)) {
+      fieldErrors.push({ path: `phases.${r.index}.name`, message: PHASE_NAME_DUPLICATE });
+    } else seen.set(k, r.index);
+  }
+  if (fieldErrors.length) {
+    throw badRequest(PHASE_NAME_DUPLICATE, fieldErrors, 'DUPLICATE_NAME');
+  }
+  const removed = current.filter((c) => !used.has(c));
+  const added = rows.filter((r) => !r.match);
+  const renamed = rows.filter((r) => r.match && r.match.name !== r.row.name);
+  const keptBefore = current.filter((c) => used.has(c));
+  const keptAfter = rows.filter((r) => r.match).map((r) => r.match!);
+  const reordered = keptBefore.some((c, i) => keptAfter[i] !== c);
+  const structural = removed.length > 0 || added.length > 0 || renamed.length > 0 || reordered;
+  if (structural && !namesEditable) {
+    throw unprocessable(PROJECT_NOT_PLANNING_MESSAGE, 'PROJECT_NOT_PLANNING');
+  }
+  for (const ph of removed) assertPhaseRemovable(ph);
+
+  const audits: PhaseAudit[] = [];
+  for (const ph of removed) {
+    await removePhase(project._id, ph);
+    audits.push({
+      action: 'phase_deleted',
+      meta: { phase: ph.name, folderIds: ph.folderIds.map(String), via: 'phase_manager' },
+    });
+  }
+  for (const r of renamed) {
+    await renamePhase(project._id, r.match!, r.row.name);
+    audits.push({
+      action: 'phase_updated',
+      changes: [{ field: 'name', old: r.match!.name, new: r.row.name }],
+      meta: { via: 'phase_manager' },
+    });
+  }
+  const ids = new Map<number, Types.ObjectId>();
+  for (const r of added) {
+    const id = new Types.ObjectId();
+    ids.set(r.index, id);
+    await createPhase(project._id, current, r.row.name, null, id, false);
+    audits.push({
+      action: 'phase_created',
+      changes: [{ field: 'name', old: null, new: r.row.name }],
+      meta: { via: 'phase_manager' },
+    });
+  }
+  for (const r of rows) {
+    const old = r.match ? dateOrNull(r.match.targetDate) : null;
+    const next = r.row.targetDate ?? null;
+    if (old !== next) {
+      audits.push({
+        action: 'phase_updated',
+        changes: [{ field: 'targetDate', old, new: next }],
+        meta: { phase: r.row.name, via: 'phase_manager' },
+      });
+    }
+  }
+  if (reordered) {
+    audits.push({
+      action: 'phases_reordered',
+      changes: [
+        { field: 'order', old: keptBefore.map((c) => c.name), new: rows.map((r) => r.row.name) },
+      ],
+    });
+  }
+  await ProjectModel.updateOne(
+    { _id: project._id },
+    {
+      $set: {
+        phases: rows.map((r) => ({
+          _id: r.match?.id ?? ids.get(r.index) ?? new Types.ObjectId(),
+          name: r.row.name,
+          targetDate: r.row.targetDate ? parseDateOnly(r.row.targetDate) : null,
+        })),
+      },
+    },
+  );
+  return { audits, targetsOnly: !structural };
 }
 
 /**
@@ -191,7 +536,7 @@ function assertPhaseEdit(user: ScopeUser, perms: PermissionGrid, project: Projec
   assertNotArchived(project);
   assertNotOutsidePm(user, project);
   if (!mayManagePhases(user, perms, project)) {
-    throw forbidden('Only an Admin or this project’s PM can change its phases.');
+    throw forbidden("Only an Admin or this project's PM can change its phases.");
   }
   if (!phaseEditableNow(user, perms, project)) {
     throw unprocessable(PROJECT_NOT_PLANNING_MESSAGE, 'PROJECT_NOT_PLANNING');
@@ -251,6 +596,7 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
       projectId: t.projectId.toString(),
       order: t.order ?? 0,
       name: t.name,
+      phaseId: t.phaseId ? t.phaseId.toString() : null,
       phase: t.phase ?? null,
       taskType: t.taskType ?? null,
       priority: t.priority as TaskDto['priority'],
@@ -266,6 +612,8 @@ async function toTaskDtos(req: Request, project: ProjectDoc, tasks: TaskDoc[]): 
         : null,
       plannedStart: dateOrNull(t.plannedStart),
       dueDate: dateOrNull(t.dueDate),
+      actualStart: dateOrNull(t.actualStart),
+      actualFinish: dateOrNull(t.actualFinish),
       estHours: typeof t.estHours === 'number' ? t.estHours : null,
       actualHours: t.actualHours ?? 0,
       status,
@@ -563,6 +911,87 @@ async function writeWithMembers(
   }
 }
 
+/**
+ * CR-22 (Lead): a task's phase is one of its project's phase records. `phaseId` picks it (null =
+ * No phase); an older client's `phase` name must match a phase ignoring case and spaces (doc 14
+ * §J). Anything else is 422 UNKNOWN_PHASE: new phases come only from the phase manager (or a
+ * Planning import). Sets both `phaseId` and the `phase` name copy on the update.
+ */
+async function resolveTaskPhase(projectId: Types.ObjectId, plan: Record<string, unknown>) {
+  if (!('phaseId' in plan) && !('phase' in plan)) return;
+  const byId = 'phaseId' in plan;
+  const wanted = byId ? (plan.phaseId as string | null) : (plan.phase as string | null);
+  delete plan.phaseId;
+  delete plan.phase;
+  if (!wanted || !wanted.trim()) {
+    plan.phaseId = null;
+    plan.phase = null;
+    return;
+  }
+  const find = async () =>
+    (await projectPhases(projectId)).find((ph) =>
+      byId ? ph.id?.toString() === wanted : phaseKey(ph.name) === phaseKey(wanted),
+    );
+  let match = await find();
+  if (match && !match.id) {
+    // A phase known only from task text (before the migration) gets its record now.
+    await syncProjectPhases(projectId, { apply: true });
+    match = await find();
+  }
+  if (!match?.id) {
+    throw unprocessable(UNKNOWN_PHASE_MESSAGE, 'UNKNOWN_PHASE', [
+      { path: byId ? 'phaseId' : 'phase', message: UNKNOWN_PHASE_MESSAGE },
+    ]);
+  }
+  plan.phaseId = match.id;
+  plan.phase = match.name;
+}
+
+/** CR-22 FR-TL-10: the PM's actual dates stay in order with the ones not being changed. */
+function assertActualsInOrder(
+  task: { actualStart?: Date | null; actualFinish?: Date | null },
+  update: Record<string, unknown>,
+) {
+  const start = ('actualStart' in update ? update.actualStart : task.actualStart) as Date | null;
+  const finish = (
+    'actualFinish' in update ? update.actualFinish : task.actualFinish
+  ) as Date | null;
+  if (start && finish && finish.getTime() < start.getTime()) {
+    throw badRequest(
+      'Some fields are invalid.',
+      [{ path: 'actualFinish', message: ACTUAL_FINISH_BEFORE_START }],
+      'VALIDATION_ERROR',
+    );
+  }
+}
+
+/**
+ * CR-22 FR-TL-10 (Q-147): actual dates that follow a status change, on the Philippine date.
+ * Actual start is set the first time work starts (In Progress, or straight to For review or
+ * Completed); Completed sets actual finish; leaving Completed (Reopen) clears it and keeps the start.
+ */
+export function actualsForStatus(
+  task: { actualStart?: Date | null; actualFinish?: Date | null },
+  from: TaskStatus,
+  to: TaskStatus,
+  today: Date,
+): Record<string, Date | null> {
+  const set: Record<string, Date | null> = {};
+  if (!task.actualStart && (to === 'IN_PROGRESS' || to === 'FOR_REVIEW' || to === 'COMPLETED'))
+    set.actualStart = today;
+  if (to === 'COMPLETED') set.actualFinish = today;
+  else if (from === 'COMPLETED' && task.actualFinish) set.actualFinish = null;
+  return set;
+}
+
+const actualChanges = (
+  task: { actualStart?: Date | null; actualFinish?: Date | null },
+  set: Record<string, Date | null>,
+) =>
+  (['actualStart', 'actualFinish'] as const)
+    .filter((f) => f in set)
+    .map((f) => ({ field: f, old: fmt(task[f] ?? null), new: fmt(set[f]) }));
+
 function toPlanUpdate(input: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
@@ -577,8 +1006,10 @@ function toPlanUpdate(input: Record<string, unknown>) {
       k === 'code_challenge_method'
     )
       continue;
-    if (k === 'plannedStart' || k === 'dueDate') out[k] = v ? parseDateOnly(v as string) : null;
+    if (k === 'plannedStart' || k === 'dueDate' || k === 'actualStart' || k === 'actualFinish')
+      out[k] = v ? parseDateOnly(v as string) : null;
     else if (k === 'deliverable' || k === 'phase' || k === 'taskType') out[k] = v || null;
+    else if (k === 'phaseId') out[k] = v || null;
     else out[k] = v;
   }
   if ('reviewerId' in input && input.reviewerId !== undefined)
@@ -638,6 +1069,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       items: phases.map((ph): PhaseDto => {
         const reason = phaseDeleteBlockedReason(ph.taskCount, ph.documentCount);
         return {
+          id: ph.id ? ph.id.toString() : null,
           name: ph.name,
           taskCount: ph.taskCount,
           documentCount: ph.documentCount,
@@ -655,6 +1087,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const project = await loadProject(req, 'view');
     const user = currentUser(req);
     assertPhaseEdit(user, currentPermissions(req), project);
+    await syncProjectPhases(project._id, { apply: true });
     const phases = await projectPhases(project._id);
     // Doc 14 §J: phase names match ignoring case and leading/trailing spaces.
     const src = phases.find((x) => phaseKey(x.name) === phaseKey(input.name));
@@ -666,31 +1099,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         const msg = `"${input.newName}" already exists.`;
         throw conflictWith(msg, 'DUPLICATE_NAME', [{ path: 'newName', message: msg }]);
       }
-      await TaskModel.updateMany(
-        { projectId: project._id, phase: input.name },
-        { $set: { phase: input.newName }, $inc: { version: 1 } },
-      );
-      const folders = await FolderModel.find({
-        projectId: project._id,
-        kind: 'PHASE',
-        phase: input.name,
-      });
-      for (const f of folders) {
-        f.phase = input.newName;
-        // Keep a custom folder name; rename the default one when the new name is free.
-        const key = input.newName.trim().toLowerCase();
-        const taken = await FolderModel.exists({
-          projectId: project._id,
-          parentId: f.parentId ?? null,
-          nameKey: key,
-          _id: { $ne: f._id },
-        });
-        if (f.name === input.name && !taken) {
-          f.name = input.newName;
-          f.nameKey = key;
-        }
-        await f.save();
-      }
+      await renamePhase(project._id, src, input.newName);
       await audit({
         actorId: user._id,
         entityType: 'project',
@@ -709,32 +1118,13 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const project = await loadProject(req, 'view');
     const user = currentUser(req);
     assertPhaseEdit(user, currentPermissions(req), project);
+    await syncProjectPhases(project._id, { apply: true });
     const phases = await projectPhases(project._id);
     if (phases.some((x) => phaseKey(x.name) === phaseKey(input.name))) {
       const msg = `"${input.name}" already exists.`;
       throw conflictWith(msg, 'DUPLICATE_NAME', [{ path: 'name', message: msg }]);
     }
-    let name = input.name;
-    for (
-      let n = 2;
-      await FolderModel.exists({
-        projectId: project._id,
-        parentId: null,
-        nameKey: name.trim().toLowerCase(),
-      });
-      n++
-    ) {
-      name = `${input.name} (${n})`;
-    }
-    await FolderModel.create({
-      projectId: project._id,
-      name,
-      nameKey: name.trim().toLowerCase(),
-      parentId: null,
-      kind: 'PHASE',
-      phase: input.name,
-      order: phases.length + 1,
-    });
+    await createPhase(project._id, phases, input.name, null);
     await audit({
       actorId: user._id,
       entityType: 'project',
@@ -755,6 +1145,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const raw = typeof bodyName === 'string' ? bodyName : req.query.name;
     const name = typeof raw === 'string' ? raw.trim() : '';
     if (!name) throw badRequest('Say which phase to delete.');
+    await syncProjectPhases(project._id, { apply: true });
     const session = await mongoose.startSession();
     let folderIds: Types.ObjectId[] = [];
     let deleted = name;
@@ -765,22 +1156,9 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         );
         if (!ph) throw notFound('Phase not found');
         deleted = ph.name;
-        if (ph.taskCount > 0) {
-          // FR-PRJ-22: 409 PHASE_NOT_EMPTY (taskCount kept for older clients).
-          throw conflictWith(phaseNotEmptyMessage(ph.taskCount), 'PHASE_NOT_EMPTY', {
-            activityCount: ph.taskCount,
-            taskCount: ph.taskCount,
-          });
-        }
-        if (ph.documentCount > 0) {
-          throw conflictWith(
-            phaseDeleteBlockedReason(0, ph.documentCount)!,
-            'PHASE_HAS_DOCUMENTS',
-            { documentCount: ph.documentCount },
-          );
-        }
+        assertPhaseRemovable(ph);
         folderIds = ph.folderIds;
-        await FolderModel.deleteMany({ _id: { $in: folderIds } }, { session });
+        await removePhase(project._id, ph, session);
       });
     } finally {
       await session.endSession();
@@ -794,6 +1172,214 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       meta: { phase: deleted, folderIds: folderIds.map(String) },
     });
     res.status(204).end();
+  });
+
+  // CR-22 FR-TL-23: the phase manager saves the whole list (order, names, target dates) at once.
+  // PMs change target dates in Planning, Active or On hold; adding, renaming, reordering and
+  // removing stay Planning-only for PMs; Admins any time. Every change is audited.
+  p.put('/:id/phase-list', perm('projects', 'edit'), async (req, res) => {
+    const input = parseBody(savePhaseListSchema, req);
+    const project = await loadProject(req, 'view');
+    const user = currentUser(req);
+    const perms = currentPermissions(req);
+    assertNotArchived(project);
+    assertNotOutsidePm(user, project);
+    if (!mayManagePhases(user, perms, project)) {
+      throw forbidden("Only an Admin or this project's PM can change its phases.");
+    }
+    if (!phaseTargetsEditableNow(user, perms, project)) {
+      throw unprocessable(
+        'Phase target dates can be changed while the project is in Planning, Active or On hold.',
+        'PHASES_LOCKED',
+      );
+    }
+    const result = await savePhaseList(project, input, phaseEditableNow(user, perms, project));
+    if (result.audits.length) {
+      await auditMany(
+        result.audits.map((a) => ({
+          actorId: user._id,
+          entityType: 'project',
+          entityId: project._id,
+          projectId: project._id,
+          ...a,
+        })),
+      );
+    }
+    const phases = await projectPhases(project._id);
+    res.json({
+      items: phases.map((ph) => timelinePhaseDto(ph)),
+      targetsOnly: result.targetsOnly,
+      changed: result.audits.length,
+    });
+  });
+
+  // CR-22 FR-TL-01 to 07, 14: the Timeline tab's data. Anyone who can view the project's tasks
+  // sees it (read-only unless a planner, Q-142). The chart itself is computed by the shared
+  // buildTimeline() from these inputs (NFR-50).
+  p.get('/:id/timeline', perm('tasks', 'view'), async (req, res) => {
+    const project = await loadProject(req, 'view');
+    const user = currentUser(req);
+    const perms = currentPermissions(req);
+    const [tasks, phases, cal, holidays] = await Promise.all([
+      TaskModel.find({ projectId: project._id })
+        .select(
+          'order name phase phaseId status plannedStart dueDate isMilestone dependsOn ownerId actualStart actualFinish baseline',
+        )
+        .sort({ order: 1 })
+        .lean(),
+      projectPhases(project._id),
+      loadCalendar(),
+      HolidayModel.find().select('date name').lean(),
+    ]);
+    const baselines = [...(project.timelineBaselines ?? [])].reverse();
+    const owners = await userRefs([
+      ...tasks.map((t) => t.ownerId),
+      ...baselines.map((b) => b.savedBy),
+    ]);
+    const doneOn = await markedDoneOn(
+      tasks.filter((t) => t.status === 'COMPLETED' && !t.actualFinish).map((t) => t._id),
+    );
+    const open = !project.archived && project.status !== 'COMPLETED';
+    const planner = open && perms.tasks.edit && isPlanner(user, project);
+    const dto: TimelineDto = {
+      project: {
+        id: project._id.toString(),
+        name: project.name,
+        status: project.status as TimelineDto['project']['status'],
+        archived: Boolean(project.archived),
+        plannedEndDate: dateOrNull(project.plannedEndDate),
+      },
+      today: toDateOnly(todayPH(clockNow())),
+      calendar: {
+        workingDays: [...cal.workingDays],
+        holidays: { ...(cal.holidays ?? {}) },
+        holidayNames: Object.fromEntries(holidays.map((h) => [toDateOnly(h.date), h.name ?? ''])),
+      },
+      phases: phases.map((ph) => timelinePhaseDto(ph)),
+      tasks: tasks.map((t) => {
+        const o = t.ownerId ? owners.get(t.ownerId.toString()) : null;
+        return {
+          id: t._id.toString(),
+          order: t.order ?? 0,
+          name: t.name,
+          phaseId: t.phaseId ? t.phaseId.toString() : null,
+          phase: t.phase ?? null,
+          status: t.status as TaskStatus,
+          plannedStart: dateOrNull(t.plannedStart),
+          dueDate: dateOrNull(t.dueDate),
+          isMilestone: Boolean(t.isMilestone),
+          dependsOn: (t.dependsOn ?? []).map(String),
+          owner: o ? { id: o.id, name: o.name } : null,
+          actualStart: dateOrNull(t.actualStart),
+          actualFinish: dateOrNull(t.actualFinish),
+          baselineStart: dateOrNull(t.baseline?.start),
+          baselineFinish: dateOrNull(t.baseline?.finish),
+          doneOn: doneOn.get(t._id.toString()) ?? null,
+        };
+      }),
+      baselines: baselines.map((b) => {
+        const by = b.savedBy ? owners.get(b.savedBy.toString()) : null;
+        return {
+          id: b._id.toString(),
+          savedAt: b.savedAt.toISOString(),
+          savedBy: by ? { id: by.id, name: by.name } : null,
+          reason: b.reason ?? null,
+          taskCount: b.taskCount ?? 0,
+        };
+      }),
+      can: {
+        plan: planner,
+        editPhaseTargets: phaseTargetsEditableNow(user, perms, project),
+        editPhaseNames: phaseEditableNow(user, perms, project),
+        saveBaseline: planner,
+        excel: timelineExcelAllowed(user, perms, project),
+        importExcel: timelineImportAllowed(user, perms, project),
+      },
+    };
+    res.json(dto);
+  });
+
+  // CR-22 FR-TL-08 (Q-133): Save baseline copies every task's planned dates into its baseline and
+  // adds a Baseline history entry. Admin or a PM on the project; the reason is optional.
+  p.post('/:id/baseline', perm('tasks', 'edit'), async (req, res) => {
+    const input = parseBody(saveBaselineSchema, req);
+    const project = await loadProject(req, 'view');
+    const user = currentUser(req);
+    assertNotArchived(project);
+    assertPlanOpen(project);
+    if (!isPlanner(user, project)) {
+      throw forbidden("Only an Admin or this project's PM can save the baseline.");
+    }
+    const tasks = await TaskModel.find({ projectId: project._id })
+      .select('plannedStart dueDate')
+      .lean();
+    const scheduled = tasks.filter(
+      (t) => t.plannedStart && t.dueDate && t.dueDate >= t.plannedStart,
+    );
+    const ids = new Set(scheduled.map((t) => t._id.toString()));
+    const entry = {
+      _id: new Types.ObjectId(),
+      savedAt: clockNow(),
+      savedBy: user._id,
+      reason: input.reason || null,
+      taskCount: scheduled.length,
+    };
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        if (tasks.length) {
+          await TaskModel.bulkWrite(
+            tasks.map((t) => ({
+              updateOne: {
+                filter: { _id: t._id },
+                update: {
+                  $set: {
+                    baseline: ids.has(t._id.toString())
+                      ? { start: t.plannedStart, finish: t.dueDate }
+                      : { start: null, finish: null },
+                  },
+                },
+              },
+            })),
+            { session },
+          );
+        }
+        await ProjectModel.updateOne(
+          { _id: project._id },
+          { $push: { timelineBaselines: entry } },
+          { session },
+        );
+        await auditMany(
+          [
+            {
+              actorId: user._id,
+              entityType: 'project',
+              entityId: project._id,
+              projectId: project._id,
+              action: 'baseline_saved',
+              reason: entry.reason ?? undefined,
+              meta: {
+                baselineId: entry._id.toString(),
+                taskCount: scheduled.length,
+                unscheduledCount: tasks.length - scheduled.length,
+              },
+            },
+          ],
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+    res.status(201).json({
+      baseline: {
+        id: entry._id.toString(),
+        savedAt: entry.savedAt.toISOString(),
+        savedBy: { id: user._id.toString(), name: user.name },
+        reason: entry.reason,
+        taskCount: entry.taskCount,
+      },
+    });
   });
 
   p.post('/:id/tasks', perm('tasks', 'create'), async (req, res) => {
@@ -812,6 +1398,8 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       .sort({ order: -1 })
       .select('order')
       .lean();
+    const plan = toPlanUpdate(input);
+    await resolveTaskPhase(project._id, plan);
     await writeWithMembers(project, add, async (session) => {
       await TaskModel.create(
         [
@@ -819,7 +1407,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
             _id,
             projectId: project._id,
             order: (last?.order ?? 0) + 1,
-            ...toPlanUpdate(input),
+            ...plan,
             approval: { reviewerId: input.reviewerId ?? null },
           },
         ],
@@ -1091,6 +1679,8 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     const add = await prepareMemberAdds(req, project, input);
     await validatePlan(withMembers(project, add), input as PlanInput, task.toObject() as TaskDoc);
     const update = toPlanUpdate(input as Record<string, unknown>);
+    await resolveTaskPhase(project._id, update);
+    assertActualsInOrder(task, update);
     const before = task.toObject() as unknown as Record<string, unknown>;
     const changes = Object.entries(update)
       .map(([field, next]) => ({
@@ -1244,6 +1834,8 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       set['approval.comment'] = null;
     }
     set.status = to;
+    const actuals = actualsForStatus(task, from, to, todayPH(clockNow()));
+    Object.assign(set, actuals);
     const updated = await TaskModel.updateOne(
       { _id: task._id, version: input.version },
       { $set: set, $inc: { version: 1 } },
@@ -1256,7 +1848,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       entityId: task._id,
       projectId: project._id,
       action: meta.override ? 'task_status_override' : 'task_status_changed',
-      changes: [{ field: 'status', old: from, new: to }],
+      changes: [{ field: 'status', old: from, new: to }, ...actualChanges(task, actuals)],
       reason,
       meta: Object.keys(meta).length ? meta : null,
     });
@@ -1278,9 +1870,13 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
     if (task.status !== 'BLOCKED')
       throw badRequest('This task isn’t blocked.', undefined, 'INVALID_TRANSITION');
     const back = (task.previousStatus as TaskStatus | null) ?? 'TODO';
+    const actuals = actualsForStatus(task, 'BLOCKED', back, todayPH(clockNow()));
     await TaskModel.updateOne(
       { _id: task._id, version },
-      { $set: { status: back, previousStatus: null, blockerReason: null }, $inc: { version: 1 } },
+      {
+        $set: { status: back, previousStatus: null, blockerReason: null, ...actuals },
+        $inc: { version: 1 },
+      },
     );
     await recomputeProject(project._id);
     await audit({
@@ -1292,6 +1888,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       changes: [
         { field: 'status', old: 'BLOCKED', new: back },
         { field: 'blockerReason', old: task.blockerReason, new: null },
+        ...actualChanges(task, actuals),
       ],
     });
     await respondTask(req, res, project, task._id);
@@ -1312,10 +1909,12 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
       assertCan(req, project, task.toObject() as TaskDoc, 'approve');
       assertVersion(task, input.version);
       const to: TaskStatus = decision === 'approve' ? 'COMPLETED' : 'IN_PROGRESS';
+      const actuals = actualsForStatus(task, 'FOR_REVIEW', to, todayPH(clockNow()));
       await TaskModel.updateOne(
         { _id: task._id, version: input.version },
         {
           $set: {
+            ...actuals,
             status: to,
             'approval.state': decision === 'approve' ? 'APPROVED' : 'REJECTED',
             'approval.decidedBy': user._id,
@@ -1332,7 +1931,7 @@ export function tasksRouter(registry: RouteRegistry, config: AppConfig) {
         entityId: task._id,
         projectId: project._id,
         action: decision === 'approve' ? 'task_approved' : 'task_rejected',
-        changes: [{ field: 'status', old: 'FOR_REVIEW', new: to }],
+        changes: [{ field: 'status', old: 'FOR_REVIEW', new: to }, ...actualChanges(task, actuals)],
         reason: input.comment || undefined,
         // EC-20: self-approval is allowed (Q-14) and flagged.
         meta: task.ownerId?.equals(user._id) ? { selfApproval: true } : null,
