@@ -13,7 +13,7 @@ abstract final class AppConfig {
   static const _demoDefine = bool.fromEnvironment('DEMO');
   static const webAppUrl = String.fromEnvironment(
     'WEB_APP_URL',
-    defaultValue: 'https://example.com',
+    defaultValue: 'https://xc8-projectmgmt-web.vercel.app',
   );
 
   /// Tests only: run in live mode against a fake/local API (wins over [debugDemoMode]).

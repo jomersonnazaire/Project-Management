@@ -14,6 +14,8 @@ import '../../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/permission_gate.dart';
 import 'dependencies.dart';
+import 'action_email_ui.dart';
+import '../../data/action_email.dart' show EmailOnSave, partlyEmailedLabel;
 
 void refreshTask(WidgetRef ref, Task t) {
   invalidateTask(ref, t);
@@ -502,6 +504,15 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
   Map<String, String> _errors = {};
   Task? _task;
 
+  /// Owner and assignees before this edit (for "Email new assignees").
+  Set<String> _before = {};
+  bool _emailAssigned = true;
+
+  Set<String> _newlyAssigned() {
+    final me = ref.read(authProvider).value?.id;
+    return {?_owner, ..._assignees}.difference({..._before, ?me});
+  }
+
   @override
   void dispose() {
     for (final c in [_name, _phase, _est, _deliverable]) {
@@ -523,6 +534,7 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
     _owner = x.ownerId;
     _contact = x.clientContactId;
     _assignees = {...x.assigneeIds};
+    _before = {?x.ownerId, ...x.assigneeIds};
     _deps = [...t.dependsOn];
     _reviewer = x.reviewerId;
     _planned = t.plannedStart;
@@ -550,10 +562,16 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
     setState(() => _busy = true);
     final t = _task!;
     final extras = ref.read(taskExtrasProvider(t.id)).value;
+    final mail = ref.read(darMailSendProvider);
+    final pkce = wantsEmail(ref, _emailAssigned) && _newlyAssigned().isNotEmpty
+        ? mail.newPair()
+        : null;
+    final email = pkce == null ? null : EmailOnSave(pkce.challenge);
     try {
       await ref
           .read(taskActionsRepositoryProvider)
           .update(
+            email: email,
             t.id,
             TaskEdit(
               version: t.version,
@@ -576,6 +594,16 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
             ),
           );
       refreshTask(ref, t);
+      if (pkce != null) {
+        await continueSaveEmail(
+          ref,
+          email,
+          pkce,
+          flow: 'task_assigned',
+          projectId: t.projectId,
+          taskId: t.id,
+        );
+      }
       if (mounted) popOrGo(context, '/tasks/${t.id}');
     } on ApiException catch (err) {
       if (mounted) {
@@ -793,6 +821,19 @@ class _EditTaskScreenState extends ConsumerState<EditTaskScreen> {
                       ),
                   ],
                 ),
+                if (!ro && _newlyAssigned().isNotEmpty)
+                  EmailCheckbox(
+                    key: const ValueKey('taskAssignedEmail'),
+                    label: emailAssigneesLabel(
+                      [
+                        for (final id in _newlyAssigned())
+                          people.where((p) => p.id == id).firstOrNull?.name ??
+                              '',
+                      ]..removeWhere((n) => n.isEmpty),
+                    ),
+                    value: _emailAssigned,
+                    onChanged: (v) => setState(() => _emailAssigned = v),
+                  ),
                 gap(),
                 if (canPlan)
                   DependenciesField(
@@ -892,6 +933,7 @@ class TaskHistoryTab extends ConsumerStatefulWidget {
 class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
   final _note = TextEditingController();
   String? _error;
+  bool _email = true;
   @override
   void dispose() {
     _note.dispose();
@@ -904,12 +946,22 @@ class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
       return;
     }
     try {
-      await ref
+      final email = wantsEmail(ref, _email);
+      final fu = await ref
           .read(taskActionsRepositoryProvider)
           .addFollowUp(widget.task.id, _note.text);
       _note.clear();
       setState(() => _error = null);
       ref.invalidate(taskExtrasProvider(widget.task.id));
+      // PR #37: the follow-up is saved either way; the email is a second step.
+      if (email && fu != null) {
+        await startFollowUpEmail(
+          ref,
+          taskId: widget.task.id,
+          followUpId: fu,
+          projectId: widget.task.projectId,
+        );
+      }
     } on ApiException catch (e) {
       setState(() => _error = e.fields['note'] ?? e.message);
     }
@@ -932,6 +984,7 @@ class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
     final id = widget.task.id;
     final x = ref.watch(taskExtrasProvider(id)).value;
     final h = ref.watch(taskHistoryProvider(id)).value ?? const <HistoryItem>[];
+    final partly = ref.watch(partlyEmailedFollowUpsProvider);
     final items = <({DateTime at, String title, String sub, String action})>[
       for (final f in x?.followUps ?? const <FollowUp>[])
         (
@@ -941,6 +994,10 @@ class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
             ?f.author,
             if (f.contact != null) 'to ${f.contact}',
             _when(f.at),
+            if (partly.contains(f.id))
+              partlyEmailedLabel
+            else if (f.emailedAt != null)
+              'Emailed',
           ].join(' · '),
           action: 'follow_up',
         ),
@@ -977,6 +1034,12 @@ class _TaskHistoryTabState extends ConsumerState<TaskHistoryTab> {
               filled: true,
               errorText: _error,
             ),
+          ),
+          EmailCheckbox(
+            key: const ValueKey('followUpEmail'),
+            label: 'Email the team',
+            value: _email,
+            onChanged: (v) => setState(() => _email = v),
           ),
           Align(
             alignment: Alignment.centerLeft,

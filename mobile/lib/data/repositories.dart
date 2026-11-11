@@ -1,3 +1,4 @@
+import 'action_email.dart';
 import 'models.dart';
 
 /// Repository interfaces. [ApiRepositories] (api_repositories.dart) talks to the
@@ -20,7 +21,9 @@ abstract interface class ProjectRepository {
   });
   Future<Project> get(String id);
   Future<List<Task>> tasks(String projectId);
-  Future<Task> createTask(String projectId, NewTask task);
+
+  /// [email]: "Email {name}" / "Email new assignees" (PR #37); filled from the response.
+  Future<Task> createTask(String projectId, NewTask task, {EmailOnSave? email});
 }
 
 abstract interface class TaskRepository {

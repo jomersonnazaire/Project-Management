@@ -74,6 +74,20 @@ abstract class MsPkceStorage {
   Future<void> delete(String key);
 }
 
+/// In-memory PKCE storage (demo mode and tests).
+class MemoryMsPkceStorage implements MsPkceStorage {
+  final map = <String, String>{};
+
+  @override
+  Future<void> delete(String key) async => map.remove(key);
+
+  @override
+  Future<String?> read(String key) async => map[key];
+
+  @override
+  Future<void> write(String key, String value) async => map[key] = value;
+}
+
 class FlutterMsPkceStorage implements MsPkceStorage {
   FlutterMsPkceStorage([FlutterSecureStorage? storage])
     : _storage = storage ?? const FlutterSecureStorage();
