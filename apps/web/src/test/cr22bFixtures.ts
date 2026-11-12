@@ -102,8 +102,6 @@ export const timelineDto = (over: Partial<TimelineDto> = {}): TimelineDto => ({
     editPhaseTargets: true,
     editPhaseNames: false,
     saveBaseline: true,
-    excel: true,
-    importExcel: true,
   },
   ...over,
 });

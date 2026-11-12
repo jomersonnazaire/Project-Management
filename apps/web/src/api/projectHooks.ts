@@ -16,6 +16,7 @@ import type {
   TemplateSummaryDto,
   UpdateProjectInput,
   UpdateTaskInput,
+  DeliverableAuditChange,
 } from '@xc8/shared';
 import { api, qs } from './client';
 
@@ -200,6 +201,8 @@ export interface ActivityEntry {
   action: string;
   changes: { field: string; old: unknown; new: unknown }[];
   reason: string | null;
+  /** CR-23 AC-76.18: deliverable item changes (panel or import). */
+  deliverables?: DeliverableAuditChange[] | null;
 }
 
 export function useProjectActivity(projectId: string, enabled: boolean) {

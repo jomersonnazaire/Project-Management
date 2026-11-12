@@ -25,7 +25,7 @@ export const SMALL_TEMPLATE: TemplateInput = {
       estHours: 8,
       offsetDays: 0,
       durationDays: 2,
-      deliverable: 'Minutes',
+      deliverableItems: [{ text: 'Minutes' }],
     },
     {
       id: 'a2',
@@ -152,4 +152,32 @@ export async function ptypeId(name = 'Implementation'): Promise<string> {
   const doc = await ProjectTypeModel.findOne({ nameKey: name.toLowerCase() }).lean();
   if (!doc) throw new Error(`No project type ${name}`);
   return doc._id.toString();
+}
+
+/**
+ * CR-23 fixture: puts a task (or template activity) back in its pre-CR-23 shape, the old single
+ * `deliverable` text and no items, written raw like an old record, so the read-only fallback
+ * (Lean) shows until it's migrated or a first item is added.
+ */
+export async function seedLegacyDeliverable(
+  ref: { taskId: string } | { templateId: string; activity: number },
+  text: string,
+) {
+  const { TaskModel, TemplateModel } = await import('../src/models/index.js');
+  const { Types } = await import('mongoose');
+  if ('taskId' in ref) {
+    await TaskModel.collection.updateOne(
+      { _id: new Types.ObjectId(ref.taskId) },
+      { $set: { deliverable: text, deliverableItems: [] }, $unset: { deliverableLegacyMoved: '' } },
+    );
+    return;
+  }
+  const n = ref.activity;
+  await TemplateModel.collection.updateOne(
+    { _id: new Types.ObjectId(ref.templateId) },
+    {
+      $set: { [`activities.${n}.deliverable`]: text, [`activities.${n}.deliverableItems`]: [] },
+      $unset: { [`activities.${n}.deliverableLegacyMoved`]: '' },
+    },
+  );
 }

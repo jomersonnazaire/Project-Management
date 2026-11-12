@@ -1,5 +1,6 @@
 import { JOB_ROLES, PARTIES, PRIORITIES, TEMPLATE_STATUSES, TEMPLATE_TYPES } from '@xc8/shared';
 import { Schema, model, type InferSchemaType } from 'mongoose';
+import { deliverableItemSchema } from './deliverableItem.js';
 
 /**
  * Implementation templates (FR-TPL-01..10, 07 §2). One document per version: `templateKey` stays
@@ -26,7 +27,12 @@ const activitySchema = new Schema(
     estHours: { type: Number, min: 0, default: null },
     offsetDays: { type: Number, min: 0, default: 0 },
     durationDays: { type: Number, min: 0, default: 1 },
-    deliverable: { type: String, default: null },
+    /** CR-23 FR-DLV-01: the activity's deliverable items, never ticked (copied onto new tasks). */
+    deliverableItems: { type: [deliverableItemSchema], default: [] },
+    /** Pre-CR-23 single text, kept untouched for rollback (Lean); see Task.deliverable. */
+    deliverable: { type: String },
+    /** CR-23: true once the old text was copied into `deliverableItems` (or items were saved). */
+    deliverableLegacyMoved: { type: Boolean },
     requiresApproval: { type: Boolean, default: false },
     isMilestone: { type: Boolean, default: false },
     dependsOn: { type: [String], default: [] },

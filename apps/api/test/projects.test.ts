@@ -238,6 +238,8 @@ describe('Project scope (FR-ACL-07, Q-12, Q-26)', () => {
       planTasks: true,
       addMembers: true,
       activity: true,
+      checklistExcel: true,
+      checklistImport: true,
     });
   });
 

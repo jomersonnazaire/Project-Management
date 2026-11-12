@@ -1,5 +1,8 @@
 import {
   CLIENT_IMPORT_MAX_ROWS,
+  LEGACY_TIMELINE_SHEET,
+  formatDeliverablesCell,
+  type DeliverableLine,
   TIMELINE_COLUMNS,
   TIMELINE_FILE_ERRORS,
   TIMELINE_MAX_BYTES,
@@ -20,7 +23,8 @@ import { HttpError } from '../../lib/errors.js';
 import { cellText, checkUpload } from '../clientImport/workbook.js';
 
 /**
- * CR-22 §B4 / UIE §6: the timeline workbook (template and export) and reading an upload. Same
+ * CR-22 §B4 / UIE §6, CR-23 UIE §7: the ONE checklist workbook (template and download) and reading
+ * an upload (a "Checklist" sheet, or an older "Timeline" one, FR-CLX-10). Same
  * file checks as CR-19 (NFR-52): content sniffing, 5 MB, zip-bomb guard, cells read as text and
  * formulas never evaluated. Everything runs in memory (nothing stored).
  */
@@ -43,6 +47,10 @@ export interface ParsedTimeline {
   rows: TimelineFileRow[];
   /** null when the file has no `_meta` sheet. */
   meta: TimelineMeta | null;
+  /** CR-23 FR-CLX-11: false = no Deliverables column, so items stay as they are. */
+  hasDeliverables: boolean;
+  /** CR-23 FR-CLX-10: the data sheet was an older "Timeline" one. */
+  legacySheet: boolean;
 }
 
 export const timelineFileError = (
@@ -65,7 +73,7 @@ const solid = (argb: string): ExcelJS.Fill => ({
   pattern: 'solid',
   fgColor: { argb },
 });
-const WIDTHS = [13, 34, 16, 11, 13, 13, 13, 30, 15, 15, 14];
+const WIDTHS = [13, 34, 16, 11, 13, 13, 13, 30, 15, 15, 48, 14];
 const DATE_COLS = new Set<TimelineImportField>([
   'start',
   'finish',
@@ -78,15 +86,19 @@ const HEADER_NOTES: Partial<Record<TimelineImportField, string>> = {
   dependsOn: 'Task numbers this task waits for (finish-to-start, no lag), e.g. 5, 6',
   baselineStart:
     'Filled on export, ignored on import. Click Save baseline in OpsTrack after importing.',
+  deliverables:
+    "One item per line (Alt+Enter for a new line). Put [x] and a space in front of a done item. The cell replaces the task's list; leave it blank to remove all items.",
 };
 
 /** UIE §6 Instructions sheet ("How import works" and the column table). */
 const HOW_IT_WORKS = [
-  '• Fill in the Timeline sheet. Keep the header row and the column order. Row 1 is the header; data starts on row 2.',
+  '• Fill in the Checklist sheet. Keep the header row and the column order. Row 1 is the header; data starts on row 2.',
   '• Import adds or updates tasks. Rows exported from OpsTrack carry a hidden Task ID and update that task. Rows without a Task ID (rows you add) become new tasks.',
   '• Import never deletes tasks. A task that is missing from the file stays in the project as it is.',
   '• Task number must be unique in the file. Depends on refers to these numbers, so new rows can depend on each other. It is never used to match rows. When you import, OpsTrack assigns the final numbers and adds new tasks at the end.',
-  '• A blank optional cell clears that field on an existing task (Phase, Milestone, Start, Finish, Depends on, Owner). The preview lists every field that will be cleared before you confirm.',
+  '• A blank optional cell clears that field on an existing task (Phase, Milestone, Start, Finish, Depends on, Owner, Deliverables). The preview lists every field that will be cleared before you confirm.',
+  "• Deliverables: one item per line. Put [x] and a space in front of a done item. Leave the cell blank to remove all items. The cell replaces the task's list: lines that aren't in the cell are removed, and only lines starting with [x] stay ticked. Up to 50 items, 200 characters each.",
+  "• Owner: the email of an active user. Someone who isn't on the project team yet is added to it when you import. An email nobody has (or a deactivated account) leaves the task without an owner.",
   '• Dates: use a date cell or text in YYYY-MM-DD (for example 2026-11-04). Other formats such as 04/11/2026 are refused.',
   '• Baseline start and Baseline finish are filled on export and ignored on import. Only Save baseline in OpsTrack sets a baseline, so click Save baseline after importing.',
   '• You see a preview with every row checked before anything is saved. Any row with an error stops the whole import: fix the errors in the file and upload it again.',
@@ -144,7 +156,7 @@ const COLUMN_TABLE: [string, string, string, string, string][] = [
     'Email',
     'No',
     'Email of an active internal user (case ignored)',
-    "Sets the owner; blank clears it. An unknown email, or a user who isn't a member of the project, is a row error.",
+    "Sets the owner; blank clears it. A user who isn't on the project team is added to it. An email nobody has, or a deactivated account, leaves the task without an owner.",
   ],
   [
     'Baseline start',
@@ -159,6 +171,13 @@ const COLUMN_TABLE: [string, string, string, string, string][] = [
     'No',
     'On or after Baseline start',
     'Filled on export, ignored on import. Use Save baseline in OpsTrack.',
+  ],
+  [
+    'Deliverables',
+    'Text, one item per line',
+    'No',
+    '[x] in front of a done item; up to 50 lines of 200 characters',
+    "Replaces the task's deliverable items; [x] lines are ticked. Blank clears them.",
   ],
   [
     'Task ID (hidden)',
@@ -181,6 +200,7 @@ export interface TimelineExportRow {
   owner: string | null;
   baselineStart: string | null;
   baselineFinish: string | null;
+  deliverables: DeliverableLine[];
   taskId: string;
 }
 
@@ -201,7 +221,7 @@ function instructions(wb: ExcelJS.Workbook, note: string) {
   const ws = wb.addWorksheet(TIMELINE_INSTRUCTIONS_SHEET);
   [18, 16, 16, 36, 64].forEach((w, i) => (ws.getColumn(i + 1).width = w));
   const title = ws.getCell('A1');
-  title.value = 'OpsTrack project timeline template';
+  title.value = 'OpsTrack project checklist template';
   title.font = { bold: true, size: 14, color: { argb: COLOR.text } };
   ws.mergeCells('A2:E2');
   const n = ws.getCell('A2');
@@ -283,6 +303,7 @@ export async function buildTimelineWorkbook(input: TimelineWorkbookInput): Promi
       owner: r.owner ?? null,
       baselineStart: r.baselineStart ? asDate(r.baselineStart) : null,
       baselineFinish: r.baselineFinish ? asDate(r.baselineFinish) : null,
+      deliverables: r.deliverables.length ? formatDeliverablesCell(r.deliverables) : null,
       taskId: r.taskId,
     };
     TIMELINE_COLUMNS.forEach((c, j) => {
@@ -303,12 +324,13 @@ export async function buildTimelineWorkbook(input: TimelineWorkbookInput): Promi
       } else {
         cell.numFmt = '@';
       }
+      if (c.field === 'deliverables') cell.alignment = { wrapText: true, vertical: 'top' };
       if (r.milestone) cell.fill = solid(COLOR.milestone);
     });
   });
 
   const last = Math.max(1 + input.rows.length, 1 + CLIENT_IMPORT_MAX_ROWS);
-  ws.autoFilter = `A1:J${Math.max(2, 1 + input.rows.length)}`;
+  ws.autoFilter = `A1:K${Math.max(2, 1 + input.rows.length)}`;
   type DvSheet = { dataValidations: { add: (range: string, dv: ExcelJS.DataValidation) => void } };
   const dv = (ws as unknown as DvSheet).dataValidations;
   dv.add(`D2:D${last}`, {
@@ -446,12 +468,14 @@ function readMeta(wb: ExcelJS.Workbook): TimelineMeta | null {
   };
 }
 
+type Column = (typeof TIMELINE_COLUMNS)[number];
+
 /**
  * Template headers that are missing, or present but out of order (not in the longest run of
  * headers already in template order), in template order; then unknown extra headers.
  */
-function headerProblems(head: ExcelJS.Row): string[] {
-  const want = TIMELINE_COLUMNS.map((c) => norm(c.header));
+function headerProblems(head: ExcelJS.Row, columns: readonly Column[]): string[] {
+  const want = columns.map((c) => norm(c.header));
   const found: { idx: number }[] = [];
   const extra: string[] = [];
   const seen = new Set<number>();
@@ -490,35 +514,47 @@ function headerProblems(head: ExcelJS.Row): string[] {
     const idx = want.indexOf(norm(cellText(cell)));
     if (idx >= 0 && !positions.has(idx)) positions.set(idx, col - 1);
   });
-  const bad = TIMELINE_COLUMNS.map((c, i) => ({ c, i })).filter(
-    ({ i }) => !seen.has(i) || !inOrder.has(i),
-  );
+  const bad = columns.map((c, i) => ({ c, i })).filter(({ i }) => !seen.has(i) || !inOrder.has(i));
   const shifted =
     // (a blank-header column pushed them right; an extra named column is reported itself)
     bad.length === 0 && extra.length === 0 && [...positions].some(([idx, pos]) => idx !== pos)
-      ? TIMELINE_COLUMNS.filter((_, i) => positions.get(i) !== i)
+      ? columns.filter((_, i) => positions.get(i) !== i)
       : [];
   return [...bad.map(({ c }) => c.header), ...shifted.map((c) => c.header), ...extra];
 }
 
-/** §B4/§B5 file checks, then the Timeline rows (blank rows dropped, cells trimmed). */
+/**
+ * §B4/§B5 file checks, then the data rows (blank rows dropped, cells trimmed). CR-23 FR-CLX-10:
+ * the sheet is "Checklist", or an older "Timeline" one. FR-CLX-11: without a Deliverables header
+ * the file is read with the CR-22 columns and items stay unchanged (missing ≠ blank).
+ */
 export async function readTimelineWorkbook(buf: Buffer): Promise<ParsedTimeline> {
   checkTimelineUpload(buf);
   const wb = await load(buf);
-  const ws = wb.worksheets.find((w) => norm(w.name) === norm(TIMELINE_SHEET));
+  const ws =
+    wb.worksheets.find((w) => norm(w.name) === norm(TIMELINE_SHEET)) ??
+    wb.worksheets.find((w) => norm(w.name) === norm(LEGACY_TIMELINE_SHEET));
   if (!ws)
     throw timelineFileError(422, 'NO_TIMELINE_SHEET', TIMELINE_FILE_ERRORS.NO_TIMELINE_SHEET);
+  const legacySheet = norm(ws.name) !== norm(TIMELINE_SHEET);
+  let hasDeliverables = false;
+  ws.getRow(1).eachCell((cell) => {
+    if (norm(cellText(cell)) === norm('Deliverables')) hasDeliverables = true;
+  });
+  const columns = hasDeliverables
+    ? TIMELINE_COLUMNS
+    : TIMELINE_COLUMNS.filter((c) => c.field !== 'deliverables');
   // §B4: headers match ignoring case and surrounding spaces. UIE review: compared BY NAME, so
   // the error lists only the missing or misplaced columns (a deleted column doesn't make every
   // later one "wrong"), then any unknown extra headers.
-  const wrong = headerProblems(ws.getRow(1));
+  const wrong = headerProblems(ws.getRow(1), columns);
   if (wrong.length) throw timelineFileError(422, 'COLUMNS', columnsError(wrong));
   const rows: TimelineFileRow[] = [];
   ws.eachRow((r, n) => {
     if (n < 2) return;
-    const values = {} as TimelineValues;
+    const values = { deliverables: '' } as TimelineValues;
     let blank = true;
-    TIMELINE_COLUMNS.forEach((c, i) => {
+    columns.forEach((c, i) => {
       const text = cellText(r.getCell(i + 1)).trim();
       values[c.field] = text;
       if (text) blank = false;
@@ -533,5 +569,5 @@ export async function readTimelineWorkbook(buf: Buffer): Promise<ParsedTimeline>
     );
   }
   if (!rows.length) throw timelineFileError(422, 'EMPTY_FILE', TIMELINE_FILE_ERRORS.EMPTY_FILE);
-  return { rows, meta: readMeta(wb) };
+  return { rows, meta: readMeta(wb), hasDeliverables, legacySheet };
 }

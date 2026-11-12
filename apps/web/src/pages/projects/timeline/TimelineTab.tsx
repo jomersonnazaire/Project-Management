@@ -14,6 +14,7 @@ import {
   TIMELINE_LARGER_SCREEN,
   TIMELINE_PHONE_NOTE,
   TIMELINE_READ_ONLY_NOTE,
+  TIMELINE_IMPORT_COPY,
   brokenBannerLead,
   buildTimeline,
   noDatesLine,
@@ -36,29 +37,15 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import {
-  Alert,
-  Button,
-  ButtonGroup,
-  Dropdown,
-  Form,
-  Overlay,
-  Popover,
-  Spinner,
-} from 'react-bootstrap';
+import { Alert, Button, ButtonGroup, Form, Overlay, Popover, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import {
-  downloadTimelineExport,
-  downloadTimelineTemplate,
-  useTimeline,
-} from '../../../api/timelineHooks';
+import { useTimeline } from '../../../api/timelineHooks';
 import { EmptyState, ErrorAlert, LockNotice } from '../../../components/Feedback';
 import { shortDate } from '../../../lib/format';
 import { useIsCompact } from '../../../lib/useMediaQuery';
 import { BaselineHistoryModal, SaveBaselineModal } from './BaselineModals';
 import { savedOn } from './format';
 import { PhaseManagerModal } from './PhaseManagerModal';
-import { TimelineImportModal } from './TimelineImportModal';
 import {
   ROW_H,
   ZOOMS,
@@ -168,7 +155,6 @@ export function TimelineTab({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [showCritical, setShowCritical] = useState(true);
   const [showBaseline, setShowBaseline] = useState(true);
-  const [importOpen, setImportOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<'success' | 'danger'>('success');
   const [pop, setPop] = useState<{ id: string; el: HTMLElement } | null>(null);
@@ -229,24 +215,6 @@ export function TimelineTab({
     if (compact) say(TIMELINE_LARGER_SCREEN);
     else setBaselineOpen(true);
   };
-  // UIE §4: on a phone, import shows the larger-screen message; downloads still work.
-  const openImport = () => {
-    if (compact) say(TIMELINE_LARGER_SCREEN);
-    else setImportOpen(true);
-  };
-  const download = (run: () => Promise<unknown>, failed: string) => {
-    run().catch(() => say(failed, 'danger'));
-  };
-  const downloadExport = () =>
-    download(
-      () => downloadTimelineExport(project.id, data.project.name),
-      "Couldn't download the timeline. Try again.",
-    );
-  const downloadTemplate = () =>
-    download(
-      () => downloadTimelineTemplate(project.id),
-      "Couldn't download the template. Try again.",
-    );
   const showGantt = !compact || view === 'gantt';
   const display = { critical: showCritical, baseline: showBaseline };
   const firstBroken = model.broken[0];
@@ -379,7 +347,7 @@ export function TimelineTab({
               ))}
             </ButtonGroup>
           )}
-          {(canPhases || data.can.saveBaseline || data.can.excel) && (
+          {(canPhases || data.can.saveBaseline) && (
             <div className={`d-flex gap-2${compact ? '' : ' ms-auto'}`}>
               {canPhases && (
                 <Button size="sm" variant="outline-secondary" onClick={openPhases}>
@@ -393,36 +361,17 @@ export function TimelineTab({
                   Save baseline
                 </Button>
               )}
-              {data.can.excel && (
-                <Dropdown align="end">
-                  <Dropdown.Toggle size="sm" variant="outline-secondary" id="tlx-excel">
-                    <i className="bx bx-spreadsheet me-1" aria-hidden="true" />
-                    Excel
-                  </Dropdown.Toggle>
-                  <Dropdown.Menu>
-                    {data.can.importExcel && (
-                      <Dropdown.Item as="button" onClick={openImport}>
-                        <i className="bx bx-upload me-2" aria-hidden="true" />
-                        Import from Excel…
-                      </Dropdown.Item>
-                    )}
-                    <Dropdown.Item as="button" onClick={downloadExport}>
-                      <i className="bx bx-download me-2" aria-hidden="true" />
-                      Download timeline (.xlsx)
-                    </Dropdown.Item>
-                    <Dropdown.Divider />
-                    <Dropdown.Item as="button" onClick={downloadTemplate}>
-                      <i className="bx bx-file-blank me-2" aria-hidden="true" />
-                      Download template
-                    </Dropdown.Item>
-                  </Dropdown.Menu>
-                </Dropdown>
-              )}
             </div>
           )}
         </div>
       )}
       {readOnly && <LockNotice>{TIMELINE_READ_ONLY_NOTE}</LockNotice>}
+      {/* CR-23 UIE §1.2: the Timeline has no Excel controls; Excel lives on the Checklist. */}
+      <p className="small text-body-secondary mb-3" data-testid="timeline-checklist-note">
+        <i className="bx bx-info-circle me-1" aria-hidden="true" />
+        {TIMELINE_IMPORT_COPY.TIMELINE_NOTE_LEAD}{' '}
+        <Link to={`/projects/${project.id}`}>{TIMELINE_IMPORT_COPY.TIMELINE_NOTE_REST}</Link>
+      </p>
 
       {firstBroken && (
         <Alert variant="warning" className="py-2" data-testid="broken-banner">
@@ -471,18 +420,6 @@ export function TimelineTab({
             </EmptyState>
             {data.can.plan && (
               <div className="d-flex flex-wrap justify-content-center gap-2 mb-3">
-                {data.can.importExcel && (
-                  <Button size="sm" onClick={openImport}>
-                    <i className="bx bx-upload me-1" aria-hidden="true" />
-                    Import from Excel
-                  </Button>
-                )}
-                {data.can.excel && (
-                  <Button size="sm" variant="outline-secondary" onClick={downloadTemplate}>
-                    <i className="bx bx-download me-1" aria-hidden="true" />
-                    Download template
-                  </Button>
-                )}
                 <Link to={`/projects/${project.id}`} className="btn btn-sm btn-outline-primary">
                   Open Checklist
                 </Link>
@@ -562,9 +499,6 @@ export function TimelineTab({
       )}
       {historyOpen && (
         <BaselineHistoryModal baselines={data.baselines} onClose={() => setHistoryOpen(false)} />
-      )}
-      {importOpen && (
-        <TimelineImportModal projectId={project.id} onClose={() => setImportOpen(false)} />
       )}
       {phasesOpen && (
         <PhaseManagerModal timeline={data} onClose={() => setPhasesOpen(false)} onSaved={say} />
@@ -1117,8 +1051,14 @@ function TaskRow({
             {/* A button centres overflowing text; the inner span clips at the end with "…". */}
             <span className="tlx-name-text">{t.name}</span>
           </button>
-          {cancelled && <span className="badge bg-label-secondary ms-1 tlx-badge">Cancelled</span>}
-          {/* UIE §4: at 390 the left column shows the number and name only. */}
+          {/* UIE §4 / Queen (CR-22 QA, CR-23 UIE §9): at 390 the left column shows the number and
+              name only; a cancelled task keeps its strikethrough and says so to screen readers. */}
+          {cancelled &&
+            (compact ? (
+              <span className="visually-hidden"> (Cancelled)</span>
+            ) : (
+              <span className="badge bg-label-secondary ms-1 tlx-badge">Cancelled</span>
+            ))}
           {delayed && !compact && (
             <span className="badge bg-label-danger ms-1 tlx-badge">Delayed</span>
           )}

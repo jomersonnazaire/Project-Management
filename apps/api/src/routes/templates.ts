@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  LEGACY_DELIVERABLE_ID,
   TEMPLATE_STATUSES,
   findCycle,
   templateSchema,
@@ -10,7 +11,9 @@ import {
   type TemplateType,
 } from '@xc8/shared';
 import type { Request } from 'express';
-import mongoose, { type FilterQuery, type Types } from 'mongoose';
+import mongoose, { Types as MongoTypes, type FilterQuery, type Types } from 'mongoose';
+
+const MongoId = MongoTypes.ObjectId;
 import { z } from 'zod';
 import { perm, type RouteRegistry } from '../access/registry.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
@@ -21,6 +24,15 @@ import { currentPermissions, currentUser } from '../middleware/auth.js';
 import { ProjectModel, TemplateModel, type Template } from '../models/index.js';
 import { audit } from '../services/audit.js';
 import { projectScopeFilter } from '../services/scope.js';
+import {
+  assertItemCount,
+  assertItemText,
+  legacyDeliverable,
+  legacyItem,
+  rejectLegacyDeliverable,
+  sortedItems,
+  type ItemLike,
+} from '../services/deliverableItems.js';
 
 /**
  * Implementation templates (FR-TPL-01..10, US-07/08). Every route is declared with its record
@@ -40,7 +52,6 @@ interface Content {
     name: string;
     phaseId: string;
     dependsOn: string[];
-    deliverable?: string | null;
   }[];
 }
 
@@ -90,7 +101,12 @@ function counts(t: Pick<TemplateDoc, 'phases' | 'activities'>) {
     phaseCount: (t.phases ?? []).length,
     activityCount: acts.length,
     dependencyCount: acts.reduce((n, a) => n + (a.dependsOn?.length ?? 0), 0),
-    deliverableCount: acts.filter((a) => a.deliverable).length,
+    // CR-23: deliverable items across all activities (was: activities with a deliverable text).
+    // An activity that still only has its old Deliverable text counts it as one (Lean).
+    deliverableCount: acts.reduce(
+      (n, a) => n + (a.deliverableItems?.length || (legacyDeliverable(a) ? 1 : 0)),
+      0,
+    ),
   };
 }
 
@@ -174,7 +190,13 @@ export async function toTemplateDto(req: Request, t: TemplateDoc): Promise<Templ
       estHours: a.estHours ?? null,
       offsetDays: a.offsetDays ?? 0,
       durationDays: a.durationDays ?? 1,
-      deliverable: a.deliverable ?? null,
+      // Lean: the old Deliverable text shows as a read-only item until the activity has items.
+      deliverableItems: legacyDeliverable(a)
+        ? [{ id: LEGACY_DELIVERABLE_ID, text: legacyDeliverable(a)!, legacy: true }]
+        : sortedItems(a.deliverableItems).map((i) => ({
+            id: i._id.toString(),
+            text: i.text,
+          })),
       requiresApproval: Boolean(a.requiresApproval),
       isMilestone: Boolean(a.isMilestone),
       dependsOn: [...(a.dependsOn ?? [])],
@@ -193,6 +215,72 @@ async function loadTemplate(req: Request) {
   const t = await TemplateModel.findById(idParam(req));
   if (!t || (t.status !== 'PUBLISHED' && !seesDrafts(req))) throw notFound();
   return t;
+}
+
+type StoredActivity = {
+  id?: string;
+  deliverableItems?: ItemLike[] | null;
+  deliverable?: string | null;
+  deliverableLegacyMoved?: boolean | null;
+};
+
+/**
+ * CR-23 FR-DLV-01: a template activity's items from the editor, never ticked. An item that keeps
+ * its id keeps its author; text over 200 characters is allowed only when it is already stored on
+ * this template (migrated text, Q-160); anything typed follows NFR-56 (422).
+ */
+function withItems<A extends { id: string; deliverableItems?: { id?: string; text: string }[] }>(
+  activities: A[],
+  stored: StoredActivity[],
+  actorId: Types.ObjectId,
+) {
+  const existing = new Map<string, ItemLike>();
+  for (const a of stored)
+    for (const i of a.deliverableItems ?? []) existing.set(i._id.toString(), i);
+  const storedById = new Map(stored.map((a) => [String(a.id), a]));
+  const keep = new Set([
+    ...[...existing.values()].map((i) => i.text),
+    ...stored.map((a) => legacyDeliverable(a)).filter((t): t is string => Boolean(t)),
+  ]);
+  const at = clockNow();
+  return activities.map((a) => {
+    const s = storedById.get(a.id);
+    // Lean: the old `deliverable` text is carried over untouched (rollback); the editor only
+    // sends the activity's items.
+    const kept = {
+      ...(typeof s?.deliverable === 'string' ? { deliverable: s.deliverable } : {}),
+      ...(s?.deliverableLegacyMoved ? { deliverableLegacyMoved: true } : {}),
+    };
+    const legacy = legacyDeliverable(s);
+    const items = a.deliverableItems ?? [];
+    const isLegacy = (i: { id?: string }) => Boolean(legacy) && i.id === LEGACY_DELIVERABLE_ID;
+    // Only the read-only old-text item sent back: nothing changed, it stays as it is.
+    if (legacy && items.length === 1 && isLegacy(items[0]!))
+      return { ...a, ...kept, deliverableItems: [] };
+    assertItemCount(items.length);
+    return {
+      ...a,
+      ...kept,
+      // Any other list is saved, with the old text (if still there) as a real item.
+      ...(legacy ? { deliverableLegacyMoved: true } : {}),
+      deliverableItems: items.map((i, n) => {
+        if (isLegacy(i)) return { ...legacyItem(legacy!, at), order: n + 1 };
+        assertItemText(i.text, keep);
+        const old = i.id ? existing.get(i.id) : undefined;
+        return {
+          _id: old?._id ?? new MongoId(),
+          text: i.text.trim(),
+          done: false,
+          doneBy: null,
+          doneAt: null,
+          doneViaImport: false,
+          order: n + 1,
+          createdBy: old ? (old.createdBy ?? null) : actorId,
+          createdAt: old?.createdAt ?? at,
+        };
+      }),
+    };
+  });
 }
 
 function copyContent(t: TemplateDoc) {
@@ -238,11 +326,13 @@ export function templatesRouter(registry: RouteRegistry) {
   });
 
   r.post('/', perm('templates', 'create'), async (req, res) => {
+    rejectLegacyDeliverable(req);
     const input = parseBody(templateSchema, req);
     validateTemplateContent(input);
     const userId = currentUser(req)._id;
     const t = await TemplateModel.create({
       ...input,
+      activities: withItems(input.activities, [], userId),
       templateKey: randomUUID(),
       version: 1,
       status: 'DRAFT',
@@ -260,6 +350,7 @@ export function templatesRouter(registry: RouteRegistry) {
 
   // Only Drafts are edited; a Published version is changed through a new Draft (FR-TPL-04).
   r.patch('/:id', perm('templates', 'edit'), async (req, res) => {
+    rejectLegacyDeliverable(req);
     const input = parseBody(updateTemplateSchema, req);
     const t = await loadTemplate(req);
     if (t.status !== 'DRAFT') {
@@ -273,7 +364,19 @@ export function templatesRouter(registry: RouteRegistry) {
       phases: input.phases ?? content.phases,
       activities: (input.activities ?? content.activities) as Content['activities'],
     });
-    t.set({ ...input, updatedBy: currentUser(req)._id });
+    t.set({
+      ...input,
+      ...(input.activities
+        ? {
+            activities: withItems(
+              input.activities,
+              content.activities as StoredActivity[],
+              currentUser(req)._id,
+            ),
+          }
+        : {}),
+      updatedBy: currentUser(req)._id,
+    });
     await t.save();
     await audit({
       actorId: currentUser(req)._id,

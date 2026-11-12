@@ -120,6 +120,8 @@ describe('Task form: add someone to this project (FR-PRJ-19)', () => {
           planTasks: true,
           addMembers: false,
           activity: true,
+          checklistExcel: false,
+          checklistImport: false,
         },
       }),
     );

@@ -1,5 +1,6 @@
 import { PARTIES, PRIORITIES, TASK_STATUSES } from '@xc8/shared';
 import { Schema, model, type InferSchemaType } from 'mongoose';
+import { deliverableItemSchema } from './deliverableItem.js';
 
 /** Project tasks (FR-TSK-01..14, 07 §2). `version` gives optimistic concurrency (EC-18). */
 const taskSchema = new Schema(
@@ -48,7 +49,19 @@ const taskSchema = new Schema(
     status: { type: String, enum: TASK_STATUSES, default: 'TODO' },
     previousStatus: { type: String, enum: [...TASK_STATUSES, null], default: null },
     dependsOn: { type: [Schema.Types.ObjectId], ref: 'Task', default: [] },
-    deliverable: { type: String, default: null },
+    /**
+     * CR-23 FR-DLV-01: the deliverable checklist, in `order`. Replaces the old single `deliverable`
+     * text: scripts/migrate-deliverables.ts (or the first item added) copies it into the first
+     * item. Until then the API shows the old text as a read-only item (Lean).
+     */
+    deliverableItems: { type: [deliverableItemSchema], default: [] },
+    /**
+     * Pre-CR-23 single text. Lean: kept as it is, never cleared or rewritten by CR-23, so a rollback
+     * to the old app still shows it. No default, so new tasks don't get the key.
+     */
+    deliverable: { type: String },
+    /** CR-23: true once the old text was copied into `deliverableItems` (or items were saved). */
+    deliverableLegacyMoved: { type: Boolean },
     blockerReason: { type: String, default: null },
     requiresApproval: { type: Boolean, default: false },
     approval: {

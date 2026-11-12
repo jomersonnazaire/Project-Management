@@ -172,7 +172,7 @@ describe('Templates: drafts, validation and publishing (US-07, Q-11)', () => {
             estHours: 4.5,
             offsetDays: 3,
             durationDays: 2,
-            deliverable: 'Doc',
+            deliverableItems: [{ text: 'Doc' }, { text: 'Sign-off' }],
             requiresApproval: true,
             isMilestone: true,
             dependsOn: [],
@@ -191,6 +191,10 @@ describe('Templates: drafts, validation and publishing (US-07, Q-11)', () => {
       requiresApproval: true,
       isMilestone: true,
     });
+    // CR-23: an activity's deliverable is a list of item texts, in order.
+    expect(
+      res.body.template.activities[0].deliverableItems.map((i: { text: string }) => i.text),
+    ).toEqual(['Doc', 'Sign-off']);
     expect(res.body.template.activities[1].estHours).toBeNull();
   });
 
@@ -202,9 +206,9 @@ describe('Templates: drafts, validation and publishing (US-07, Q-11)', () => {
       .send({ ...SMALL_TEMPLATE, name: 'Round trip' });
     expect(created.status).toBe(201);
     const t = created.body.template;
-    expect(t.activities.some((a: { deliverable: string | null }) => a.deliverable === null)).toBe(
-      true,
-    );
+    expect(
+      t.activities.some((a: { deliverableItems: unknown[] }) => a.deliverableItems.length === 0),
+    ).toBe(true);
     const res = await pm.agent.patch(`/api/v1/templates/${t.id}`).set(CSRF).send({
       name: t.name,
       type: t.type,

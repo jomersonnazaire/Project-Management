@@ -33,7 +33,8 @@ import { clientsRouter, contactsRouter } from './routes/clients.js';
 import { projectsRouter } from './routes/projects.js';
 import { projectTypesRouter } from './routes/projectTypes.js';
 import { tasksRouter } from './routes/tasks.js';
-import { timelineImportRouter } from './routes/timelineImport.js';
+import { checklistImportRouter } from './routes/checklistImport.js';
+import { deliverablesRouter } from './routes/deliverables.js';
 import { teamsRouter } from './routes/teams.js';
 import { templatesRouter } from './routes/templates.js';
 import { usersRouter } from './routes/users.js';
@@ -178,8 +179,10 @@ export function createApp(
     contactsRouter(registry),
     templatesRouter(registry),
     ...tasksRouter(registry, config),
-    // CR-22 Part B slice 3: timeline Excel template, export and import.
-    timelineImportRouter(config, registry),
+    // CR-23 FR-DLV-05: a task's deliverable checklist items.
+    deliverablesRouter(registry),
+    // CR-23: the Checklist Excel template, download and import (the CR-22 timeline engine).
+    checklistImportRouter(config, registry),
     ...projectsRouter(registry, config),
     projectTypesRouter(registry),
     accessRulesRouter(registry),

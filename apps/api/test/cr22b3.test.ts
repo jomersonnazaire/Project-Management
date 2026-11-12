@@ -27,7 +27,8 @@ afterEach(resetRules);
 type W = Awaited<ReturnType<typeof world>>;
 type Agent = W['pm']['agent'];
 
-const base = (pid: string) => `/api/v1/projects/${pid}/timeline`;
+// CR-23: the one Excel import moved to the Checklist tab.
+const base = (pid: string) => `/api/v1/projects/${pid}/checklist`;
 const fileOf = (agent: Agent, path: string) =>
   agent
     .get(path)
@@ -79,7 +80,7 @@ const col = (field: (typeof TIMELINE_COLUMNS)[number]['field']) =>
 /** Edits the Timeline sheet of a workbook and returns the new file. */
 async function edit(buf: Buffer, fn: (ws: ExcelJS.Worksheet, wb: ExcelJS.Workbook) => void) {
   const wb = await load(buf);
-  fn(wb.getWorksheet('Timeline')!, wb);
+  fn(wb.getWorksheet('Checklist')!, wb);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 const tl = async (agent: Agent, pid: string) =>
@@ -91,20 +92,21 @@ describe('CR-22 B3: template and export (FR-TL-15, 16; AC-74.1, 74.2, 74.5)', ()
     const res = await fileOf(w.pm.agent, `${base(w.project.id)}/template`);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain(XLSX_MIME);
-    expect(res.headers['content-disposition']).toContain('OpsTrack-timeline-template.xlsx');
+    expect(res.headers['content-disposition']).toContain('OpsTrack-checklist-template.xlsx');
     const wb = await load(res.body as Buffer);
-    expect(wb.worksheets.map((s) => s.name)).toEqual(['Instructions', 'Timeline', '_meta']);
+    expect(wb.worksheets.map((s) => s.name)).toEqual(['Instructions', 'Checklist', '_meta']);
     expect(wb.getWorksheet('_meta')!.state).toBe('hidden');
-    const ws = wb.getWorksheet('Timeline')!;
+    const ws = wb.getWorksheet('Checklist')!;
     expect(TIMELINE_COLUMNS.map((_, i) => ws.getRow(1).getCell(i + 1).value)).toEqual(
       TIMELINE_COLUMNS.map((c) => c.header),
     );
-    expect(ws.getColumn(11).hidden).toBe(true);
+    // The hidden Task ID is the last column (CR-23: after Deliverables).
+    expect(ws.getColumn(12).hidden).toBe(true);
     expect(ws.getRow(2).getCell(2).value).toBeNull();
     expect(ws.views[0]).toMatchObject({ state: 'frozen', xSplit: 2, ySplit: 1 });
     const meta = wb.getWorksheet('_meta')!;
     expect(meta.getCell('A2').value).toBe('template');
-    expect(meta.getCell('B2').value).toBe('opstrack-timeline');
+    expect(meta.getCell('B2').value).toBe('opstrack-checklist');
     expect(meta.getCell('B4').value).toBeFalsy(); // projectId empty
   });
 
@@ -114,7 +116,7 @@ describe('CR-22 B3: template and export (FR-TL-15, 16; AC-74.1, 74.2, 74.5)', ()
     const before = await tl(w.pm.agent, pid);
     const buf = await exported(w.pm.agent, pid);
     const wb = await load(buf);
-    const ws = wb.getWorksheet('Timeline')!;
+    const ws = wb.getWorksheet('Checklist')!;
     expect(ws.getRow(2).getCell(col('taskId')).value).toBe(before.tasks[0]!.id);
     expect(ws.getRow(3).getCell(col('dependsOn')).value).toBe(String(before.tasks[0]!.order));
     expect(ws.getRow(2).getCell(col('start')).value).toBeInstanceOf(Date);
@@ -122,7 +124,7 @@ describe('CR-22 B3: template and export (FR-TL-15, 16; AC-74.1, 74.2, 74.5)', ()
     // Milliseconds kept, so a save in the same second just before the export isn't "changed after".
     expect(String(wb.getWorksheet('_meta')!.getCell('B6').value)).toMatch(/\.\d{3}Z$/);
     expect(
-      await ActivityLogModel.countDocuments({ projectId: pid, action: 'timeline_exported' }),
+      await ActivityLogModel.countDocuments({ projectId: pid, action: 'checklist_exported' }),
     ).toBe(1);
 
     const p = await preview(w.pm.agent, pid, buf);
@@ -191,7 +193,7 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
       'meta.importId': done.importId,
     }).lean();
     expect(logs.filter((l) => l.action === 'task_updated')).toHaveLength(2);
-    const summary = logs.find((l) => l.action === 'timeline_imported')!;
+    const summary = logs.find((l) => l.action === 'checklist_imported')!;
     expect(summary.meta).toMatchObject({ counts: { added: 0, updated: 2, unchanged: 1 } });
     // EC-194: the same file again is all Unchanged.
     expect((await preview(w.pm.agent, pid, file)).counts.unchanged).toBe(3);
@@ -252,6 +254,7 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
         '',
         '',
         '',
+        '',
         'aaaaaaaaaaaaaaaaaaaaaaaa',
       ];
     });
@@ -261,7 +264,7 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
     expect(msgs(2).some((m) => m.startsWith('Depends on: circular dependency'))).toBe(true);
     expect(msgs(3)).toContain("Finish can't be before Start.");
     expect(msgs(4)).toContain(
-      "Depends on: 42 isn't a task number in this file. To link an existing task, include its row from a downloaded timeline.",
+      "Depends on: 42 isn't a task number in this file. To link an existing task, include its row from a downloaded checklist.",
     );
     expect(msgs(5)).toEqual(
       expect.arrayContaining([
@@ -269,16 +272,23 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
         'Milestone must be Y or N.',
         "Start isn't a valid date. Use a date cell or YYYY-MM-DD.",
         'Depends on: use task numbers only, e.g. 3, 5.',
-        "Owner nobody@xceler8.example isn't an active internal user.",
       ]),
+    );
+    // CR-23 Q-151: an unknown Owner email is no longer an error; the row imports without an owner.
+    expect(msgs(5).some((m) => m.includes('nobody@'))).toBe(false);
+    expect(p.rows.find((r) => r.row === 5)!.warnings.map((x) => x.message)).toContain(
+      "Email nobody@xceler8.example doesn't exist.",
     );
     expect(msgs(6)).toEqual(
       expect.arrayContaining([
         'Task number 7 appears more than once in the file.',
         "Depends on: a task can't depend on itself.",
-        `${w.outsider.user.email} isn't a member of this project. Add them to the project first.`,
       ]),
     );
+    // CR-23 Q-151: an active user not on the team is added by the import, not an error.
+    expect(msgs(6).some((m) => m.includes(w.outsider.user.email))).toBe(false);
+    // A row with errors adds nobody (it can't be saved).
+    expect(p.addMembers).toEqual([]);
     expect(msgs(8)).toContain("Task ID aaaaaaaaaaaaaaaaaaaaaaaa isn't a task in this project.");
     expect(p.counts.error).toBeGreaterThanOrEqual(6);
     // Q-146: any row error blocks the commit.
@@ -311,7 +321,7 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
     res = await send(w.pm.agent, pid, 'preview', madeUp);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('OTHER_PROJECT');
-    expect(res.body.error.message).toContain('Export the timeline from Rollout P');
+    expect(res.body.error.message).toContain('Export the checklist from Rollout P');
   });
 
   it('AC-74.8 / AC-74.9: a Task ID of another project is a row error; matching survives renumbering', async () => {
@@ -347,7 +357,7 @@ describe('CR-22 B3: import (FR-TL-17 to 21; AC-74.3, 74.4, 74.6, 74.10 to 74.12)
     );
     const foreign = await edit(renamed, (ws) => {
       ws.spliceRows(2, 1);
-      ws.getRow(4).values = [9, 'Foreign', '', '', '', '', '', '', '', '', otherTask.id];
+      ws.getRow(4).values = [9, 'Foreign', '', '', '', '', '', '', '', '', '', otherTask.id];
     });
     p = await preview(w.pm.agent, pid, foreign);
     expect(p.rows.find((r) => r.values.name === 'Foreign')!.errors[0]!.message).toBe(
@@ -435,7 +445,7 @@ describe('CR-22 B3: changed since export, phases, status (FR-TL-20, 25; Q-141)',
       await ActivityLogModel.countDocuments({
         projectId: pid,
         action: 'phase_created',
-        'meta.via': 'timeline_import',
+        'meta.via': 'checklist_import',
       }),
     ).toBe(1);
   });
@@ -490,7 +500,7 @@ describe("CR-22 B3: Lead's slice-3 rulings (Q20 notices, phase targets)", () => 
       .map((t) => t._id.toString())
       .sort();
     expect(notes[0]!.taskIds!.map(String).sort()).toEqual(ids);
-    expect(notes[0]).toMatchObject({ taskId: null, link: `/projects/${pid}/timeline` });
+    expect(notes[0]).toMatchObject({ taskId: null, link: `/projects/${pid}` });
     expect(String(notes[0]!.actorId)).toBe(w.pm.user._id.toString());
     // The importer made themself owner of task 5: no notice (notify() never tells the actor).
     expect(await assignedTo(w.pm.user._id, pid)).toHaveLength(0);
@@ -570,7 +580,7 @@ describe('CR-22 B3: Q24 copy (UIE §5.1, §5.2) and NFR-52 limits (5 MB, 2,000 r
     expect(await fileError(w.pm.agent, pid, blank)).toEqual([
       422,
       'EMPTY_FILE',
-      'This file has no tasks. Add at least one row under the headers on the Timeline sheet and try again. Nothing was imported.',
+      'This file has no tasks. Add at least one row under the headers on the Checklist sheet and try again. Nothing was imported.',
     ]);
     const renamed = await edit(await exported(w.pm.agent, pid), (ws) => {
       ws.name = 'Plan';
@@ -578,7 +588,7 @@ describe('CR-22 B3: Q24 copy (UIE §5.1, §5.2) and NFR-52 limits (5 MB, 2,000 r
     expect(await fileError(w.pm.agent, pid, renamed)).toEqual([
       422,
       'NO_TIMELINE_SHEET',
-      'This file has no Timeline sheet. Use the OpsTrack template or a downloaded timeline, and keep the sheet name Timeline. Nothing was imported.',
+      'This file has no Checklist sheet. Use the OpsTrack template or a downloaded checklist, and keep the sheet name Checklist (an older Timeline sheet also works). Nothing was imported.',
     ]);
     // A zip header with nothing readable behind it (a damaged workbook).
     const damaged = Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.alloc(2048, 7)]);
@@ -697,7 +707,7 @@ describe('CR-22 B3: UIE review of 6cc0f3e', () => {
     });
     const p = await preview(w.pm.agent, pid, file);
     expect(p.rows[1]!.errors.map((e) => e.message)).toEqual([
-      "Depends on: 3 isn't a task number in this file. To link an existing task, include its row from a downloaded timeline.",
+      "Depends on: 3 isn't a task number in this file. To link an existing task, include its row from a downloaded checklist.",
     ]);
   });
 

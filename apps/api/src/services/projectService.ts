@@ -28,6 +28,8 @@ import {
   type Template,
 } from '../models/index.js';
 import { canAddProjectMembers, canEditProjectScope, isPlanner, type ScopeUser } from './scope.js';
+import { checklistExcelAllowed, checklistImportAllowed } from './checklistAccess.js';
+import { copyTemplateItems, legacyDeliverable } from './deliverableItems.js';
 import { projectTypeRefs } from './projectTypes.js';
 import { now as clockNow } from '../lib/clock.js';
 
@@ -187,6 +189,8 @@ export async function toProjectDto(
       planTasks: perms.tasks.edit && isPlanner(user, project),
       addMembers: canAddProjectMembers(user, perms, project),
       activity: canViewProjectActivity(user.systemRole as SystemRole, perms),
+      checklistExcel: checklistExcelAllowed(user, perms, project),
+      checklistImport: checklistImportAllowed(user, perms, project),
     },
   };
 }
@@ -227,7 +231,9 @@ export function buildPlanTasks(
       dueDate,
       estHours: typeof a.estHours === 'number' ? a.estHours : null,
       dependsOn: (a.dependsOn ?? []).map((d) => taskIds.get(d)!).filter(Boolean),
-      deliverable: a.deliverable ?? null,
+      // FR-TSK-38: the activity's items, unticked, text in full (Q-160). An activity that still
+      // only has its old Deliverable text gives the task that text as its first item (Lean).
+      deliverableItems: copyTemplateItems(a.deliverableItems, legacyDeliverable(a)),
       requiresApproval: Boolean(a.requiresApproval),
       isMilestone: Boolean(a.isMilestone),
     };

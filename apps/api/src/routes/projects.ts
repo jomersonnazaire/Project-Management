@@ -18,6 +18,7 @@ import {
   PROJECT_TYPE_REQUIRED,
   type ProjectSaveNoteDto,
   unownedTasksNote,
+  deliverableAuditChanges,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
@@ -1055,6 +1056,8 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
         action: e.action,
         changes: e.changes ?? [],
         reason: e.reason ?? null,
+        // CR-23 AC-76.18: item changes, so the Activity log can list them.
+        deliverables: deliverableAuditChanges(e),
       })),
     });
   });

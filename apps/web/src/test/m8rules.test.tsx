@@ -48,11 +48,17 @@ describe('blank project Checklist', () => {
         : undefined,
     );
     renderAt(`/projects/${PID}`, <App />);
-    expect(await screen.findByText('No phases yet')).toBeInTheDocument();
-    expect(screen.getByText('Add your first phase, or apply a template.')).toBeInTheDocument();
+    // CR-23 UIE §3.3 copy (the Excel import joined the empty state).
+    expect(await screen.findByText('No phases or activities yet')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Add a phase, apply a template, or import a checklist from Excel. Every row in the file becomes a task with its phase, dates, owner and deliverables.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByTestId('started-from')).toHaveTextContent('Started blank');
     expect(screen.getByRole('button', { name: '+ Add phase' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apply template' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Import from Excel' })).toBeInTheDocument();
   });
 
   it('labels a templated project with the starting template and version', async () => {

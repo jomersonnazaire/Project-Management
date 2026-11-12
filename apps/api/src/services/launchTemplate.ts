@@ -1,6 +1,7 @@
 import type { TemplateActivityDto } from '@xc8/shared';
 import type { Logger } from 'pino';
 import { TemplateModel } from '../models/index.js';
+import { copyTemplateItems } from './deliverableItems.js';
 
 /**
  * Launch template (FR-TPL-09, Q-04, Q-06): "SAP B1 Implementation", the 10 blueprint activities of
@@ -13,9 +14,9 @@ export const LAUNCH_TEMPLATE_NAME = 'SAP B1 Implementation';
 
 type Act = Omit<
   TemplateActivityDto,
-  'defaultTeamId' | 'taskType' | 'priority' | 'estHours' | 'isMilestone'
+  'defaultTeamId' | 'taskType' | 'priority' | 'estHours' | 'isMilestone' | 'deliverableItems'
 > &
-  Partial<Pick<TemplateActivityDto, 'isMilestone'>>;
+  Partial<Pick<TemplateActivityDto, 'isMilestone'>> & { deliverableItems: { text: string }[] };
 
 const P1 = 'p1';
 const P2 = 'p2';
@@ -39,7 +40,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Data gathering',
     party: 'INTERNAL',
     defaultJobRole: 'CONSULTANT',
-    deliverable: 'Completed data-gathering document',
+    deliverableItems: [{ text: 'Completed data-gathering document' }],
     offsetDays: 0,
     dependsOn: [],
   },
@@ -50,7 +51,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Submit master data template to client',
     party: 'INTERNAL',
     defaultJobRole: 'CONSULTANT',
-    deliverable: 'Template sent to client',
+    deliverableItems: [{ text: 'Template sent to client' }],
     offsetDays: 5,
     dependsOn: ['a1'],
   },
@@ -61,7 +62,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Client master data – Items',
     party: 'CLIENT',
     defaultJobRole: 'CONSULTANT',
-    deliverable: 'Completed items template',
+    deliverableItems: [{ text: 'Completed items template' }],
     offsetDays: 10,
     dependsOn: ['a2'],
   },
@@ -72,7 +73,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Client master data – Business Partners',
     party: 'CLIENT',
     defaultJobRole: 'CONSULTANT',
-    deliverable: 'Completed BP template',
+    deliverableItems: [{ text: 'Completed BP template' }],
     offsetDays: 10,
     dependsOn: ['a2'],
   },
@@ -83,7 +84,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Validate imported master data',
     party: 'INTERNAL',
     defaultJobRole: 'TECHNICAL_DATA',
-    deliverable: 'Validation results and exceptions',
+    deliverableItems: [{ text: 'Validation results and exceptions' }],
     offsetDays: 15,
     dependsOn: ['a3', 'a4'],
   },
@@ -94,7 +95,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Configure system and validate setup',
     party: 'INTERNAL',
     defaultJobRole: 'TECHNICAL_DATA',
-    deliverable: 'Configuration evidence',
+    deliverableItems: [{ text: 'Configuration evidence' }],
     offsetDays: 5,
     dependsOn: ['a1'],
   },
@@ -105,7 +106,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'User acceptance testing (UAT)',
     party: 'INTERNAL',
     defaultJobRole: 'QA_TESTER',
-    deliverable: 'Test results and sign-off',
+    deliverableItems: [{ text: 'Test results and sign-off' }],
     offsetDays: 20,
     dependsOn: ['a5', 'a6'],
     requiresApproval: true,
@@ -117,7 +118,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'End-user training',
     party: 'INTERNAL',
     defaultJobRole: 'CONSULTANT',
-    deliverable: 'Training completion record',
+    deliverableItems: [{ text: 'Training completion record' }],
     offsetDays: 25,
     dependsOn: ['a7'],
   },
@@ -128,7 +129,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Cutover preparation',
     party: 'INTERNAL',
     defaultJobRole: 'PROJECT_MANAGER',
-    deliverable: 'Approved cutover checklist',
+    deliverableItems: [{ text: 'Approved cutover checklist' }],
     offsetDays: 25,
     dependsOn: ['a7'],
   },
@@ -139,7 +140,7 @@ export const LAUNCH_TEMPLATE_ACTIVITIES: Act[] = [
     name: 'Go-live and post-implementation support',
     party: 'INTERNAL',
     defaultJobRole: 'SUPPORT',
-    deliverable: 'Go-live approval and handover',
+    deliverableItems: [{ text: 'Go-live approval and handover' }],
     offsetDays: 30,
     dependsOn: ['a8', 'a9'],
     requiresApproval: true,
@@ -175,6 +176,8 @@ export async function ensureLaunchTemplate(logger?: Logger): Promise<boolean> {
           estHours: null,
           isMilestone: false,
           ...a,
+          // CR-23 FR-DLV-01: template items are never ticked.
+          deliverableItems: copyTemplateItems(a.deliverableItems),
         })),
         createdBy: null,
         updatedBy: null,

@@ -21,7 +21,9 @@
     "seed:qa-completed": "tsx --env-file-if-exists=.env scripts/seed-qa-completed.ts",
     "renumber:tasks": "tsx --env-file-if-exists=.env scripts/renumber-tasks.ts",
     "migrate:phases": "node dist/scripts/migrate-phases.js",
-    "migrate:phases:dev": "tsx --env-file-if-exists=.env scripts/migrate-phases.ts"
+    "migrate:phases:dev": "tsx --env-file-if-exists=.env scripts/migrate-phases.ts",
+    "migrate:deliverables": "node dist/scripts/migrate-deliverables.js",
+    "migrate:deliverables:dev": "tsx --env-file-if-exists=.env scripts/migrate-deliverables.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.3",

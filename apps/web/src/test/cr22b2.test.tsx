@@ -213,8 +213,6 @@ describe('CR-22 B2: baseline (FR-TL-08, 09; UIE §2.7)', () => {
           editPhaseTargets: false,
           editPhaseNames: false,
           saveBaseline: false,
-          excel: false,
-          importExcel: false,
         },
       }),
       'MEMBER',

@@ -1770,6 +1770,70 @@ $board-gap: 0.75rem;
 .tli-cell.tli-chg {
   background: #f1f1ff;
 }
+// CR-23 / Queen (CR-22 QA): long unbroken text wraps inside its cell, so a 201-character name
+// never makes the preview scroll sideways. Dates still don't wrap (.tli-date).
+.tli-tbl tbody td {
+  overflow-wrap: break-word;
+}
+// UIE #51 item 2: only the Task name and the deliverable lines may break anywhere (long
+// unbroken strings); everything else breaks between words.
+.tli-tbl tbody td.tli-f-name,
+.tli-tbl .tli-dl li {
+  overflow-wrap: anywhere;
+}
+.tli-tbl td.tli-f-name {
+  min-width: 9rem;
+}
+.tli-tbl td.tli-f-owner {
+  min-width: 9.5rem;
+}
+// UIE §4.4 (c5e0ee8): the file email muted, then "No owner", then the replaced owner struck out.
+.tli-cell.tli-nown {
+  color: #5d6878;
+}
+.tli-noown {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #8a5300;
+  margin-top: 2px;
+}
+// CR-23 UIE §4.3: a cell that loses deliverable items.
+.tli-cell.tli-loss {
+  background: #fff6f4;
+}
+.tli-pre {
+  white-space: pre-line;
+}
+.tli-dl {
+  min-width: 180px;
+  max-width: 16rem;
+  li + li {
+    margin-top: 2px;
+  }
+  .tli-dl-done {
+    color: #5d6878;
+  }
+  .tli-dl-add {
+    color: #2e7d17;
+    font-weight: 600;
+  }
+  .tli-dl-tick {
+    color: #4547c9;
+    font-weight: 600;
+  }
+  .tli-dl-untick,
+  .tli-dl-gone {
+    color: #b8240a;
+    font-weight: 600;
+  }
+  .tli-dl-gone s {
+    color: #b8240a;
+  }
+  .tli-was {
+    font-weight: 400;
+  }
+}
 .tli-cell.tli-bad {
   background: #ffe0db;
   outline: 1px solid #b8240a;
@@ -1797,4 +1861,155 @@ $board-gap: 0.75rem;
 }
 .tli-foot {
   gap: 8px;
+}
+
+// ----- CR-23: Checklist Excel menu, deliverable chips and the deliverables checklist -----
+.ckx-menu {
+  min-width: 300px;
+  max-width: 340px;
+}
+.ckx-chip {
+  cursor: pointer;
+  font-weight: 500;
+}
+.dlv-bar {
+  width: 72px;
+  height: 6px;
+}
+.dlv-empty {
+  border: 1px dashed #d0d4d9;
+  border-radius: 6px;
+  padding: 12px;
+}
+.dlv-list.dlv-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+// UIE #51 blocker: in the scrolling list (over 12 items) rows keep their height instead of
+// shrinking into each other.
+.dlv-list.dlv-scroll > .dlv-row {
+  flex-shrink: 0;
+}
+.dlv-row {
+  min-height: 44px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  transition: background-color 0.6s;
+}
+.dlv-row.dlv-flash {
+  background: #e7e7ff;
+}
+.dlv-cb {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+// UIE #51 item 6: a 36 x 36 hit area around the 18 px box (44 x 44 at 760 px and below); the
+// negative margin keeps the row layout as if only the box were there.
+.dlv-hit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin: -9px;
+  position: relative;
+  top: 3px;
+  cursor: pointer;
+}
+.dlv-text {
+  cursor: pointer;
+  overflow-wrap: break-word;
+  min-width: 0;
+  &.is-done {
+    text-decoration: line-through;
+    color: #5d6878;
+  }
+}
+.dlv-by {
+  color: #5d6878;
+}
+.dlv-icon {
+  padding: 2px 6px;
+  color: #5d6878;
+}
+.dlv-undo {
+  background: #2f3349;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+.dlv-grip,
+.dlv-touch {
+  flex-shrink: 0;
+}
+// Edit and Remove show on hover and focus on desktop; always on touch and at 390. The ↑ / ↓
+// buttons are the touch alternative to drag (FR-DLV-05).
+@media (hover: hover) and (pointer: fine) and (min-width: 761px) {
+  .dlv-touch {
+    display: none !important;
+  }
+  .dlv-row .dlv-actions {
+    opacity: 0;
+  }
+  .dlv-row:hover .dlv-actions,
+  .dlv-row:focus-within .dlv-actions {
+    opacity: 1;
+  }
+}
+@media (max-width: 760px), (pointer: coarse) {
+  .dlv-grip {
+    display: none;
+  }
+  .dlv-row .btn,
+  .dlv-add .btn,
+  .dlv-add .form-control {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .dlv-hit {
+    width: 44px;
+    height: 44px;
+    margin: -13px;
+  }
+}
+// UIE #51 item 4: at 390 the Edit / Remove / move buttons go on their own line under the text.
+@media (max-width: 760px) {
+  .dlv-row {
+    flex-wrap: wrap;
+  }
+  // The text stays next to its checkbox however long it is; only the actions wrap.
+  .dlv-row > .dlv-body {
+    flex: 1 1 0;
+  }
+  .dlv-row .dlv-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    padding-left: 28px;
+  }
+}
+
+/* CR-23 (Lean): the read-only item showing a task's old Deliverable text. */
+.dlv-legacy {
+  background: #f5f5f9;
+  .dlv-text,
+  .dlv-hit {
+    cursor: default;
+  }
+}
+.dlv-legacy-badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+// CR-23 (UIE r4): long unbroken import items in Task History and Project Activity wrap inside the panel.
+.audit-what {
+  overflow-wrap: anywhere;
+}
+.task-history > li {
+  min-width: 0;
 }

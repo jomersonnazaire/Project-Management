@@ -122,8 +122,6 @@ describe('CR-22 B: Timeline tab (desktop)', () => {
           editPhaseTargets: false,
           editPhaseNames: false,
           saveBaseline: false,
-          excel: false,
-          importExcel: false,
         },
       }),
       'MEMBER',
@@ -206,8 +204,6 @@ describe('CR-22 B: phase manager (FR-TL-23, UIE §2.7)', () => {
           editPhaseTargets: true,
           editPhaseNames: true,
           saveBaseline: true,
-          excel: true,
-          importExcel: true,
         },
       }),
     );
