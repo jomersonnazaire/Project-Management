@@ -23,16 +23,16 @@ One component, used on the tab and on the project row.
 - **Count:** messages from other people since your last-read time that aren't hidden (FR-CNV-10 to 12). Your own messages never count (FR-CNV-11), and posting advances your own last-read. The server computes the count and returns it as `conversationUnread` (AC-80.7).
 - **Cap:** **99+** above 99 (Q-171). The bell keeps its own **9+** (`badgeCount`), unchanged.
 - **Zero:** at 0 the pill isn't rendered at all. There's no empty pill and no "0".
-- **@ marker (proposed, see Q1 in §10):** when at least one unread message mentions you, the pill starts with `bx-at` (for example "@3"). With no mention, the project row shows `bx-message-rounded-dots` and the tab shows the number only.
+- **Number only (Q-184, Lean):** the pill shows the count and nothing else, on both the tab and the project row. There's no @ marker and no icon, and the API adds no `conversationMentionUnread` field. A mention of you is shown inside the Conversation (row tint and solid "you" chip) and by the bell.
 - **Release:** at release, everything earlier counts as read (Q-170), so nobody opens the app to a wall of 99+ badges.
 
 ### 2.1 Conversation tab
-- Markup: `{label}<span class="unread-count" aria-hidden="true">3</span><span class="visually-hidden">, 3 unread</span>` inside the existing `NavLink`. The accessible name is "Conversation, 3 unread", or "Conversation, 3 unread, one mentions you". It doesn't rely on `aria-label` on a `span` (the Issues tab pattern), which screen readers ignore.
+- Markup: `{label}<span class="unread-count" aria-hidden="true">3</span><span class="visually-hidden">, 3 unread</span>` inside the existing `NavLink`. The accessible name is "Conversation, 3 unread". It doesn't rely on `aria-label` on a `span` (the Issues tab pattern), which screen readers ignore.
 - Opening the tab clears it: last-read is set on the server, the pill is removed straight away (an optimistic cache update for `conversationUnread` on the project detail query and on the list query), and it stays cleared on other devices after their next check (AC-80.2, AC-80.4). Viewing the Checklist or any other tab doesn't clear it.
-- **Phone (390):** the tab strip scrolls (`nav-scrollable`), and Conversation is the fifth tab, so it starts off screen. When the Conversation pill is out of view, a cue sits on the right edge of the strip: the same pill plus a chevron, over a fade into `#f5f5f9`. Tapping it scrolls the strip to Conversation and focuses that tab. The cue has the visually hidden text "More tabs. Conversation has 3 unread." It hides itself once the tab is in view. Screenshots: `cr24-mock-tab-badge-390.png` (cue) and `cr24-mock-tab-badge-scrolled-390.png`.
+- **Phone (390):** the tab strip scrolls (`nav-scrollable`), and Conversation is the fifth tab, so it starts off screen. When the Conversation pill is out of view, a cue sits on the right edge of the strip: the same pill plus a chevron, over a fade into `#f5f5f9`. Tapping it scrolls the strip to Conversation and focuses that tab. The cue has the visually hidden text "More tabs. Conversation has 3 unread." It hides itself once the tab is in view. Screenshots: `cr24-mock-tab-badge-390.png` (cue) and `cr24-mock-tab-badge-scrolled-390.png`. Decided by Lean: this edge count is enough at 390, and the tab order stays the same on phones.
 
 ### 2.2 Project row
-- The pill sits in `td.cell-primary`, right after the project name, in a flex wrapper (`.c24-name`, `gap .5rem`, wraps). It's a link straight to `/projects/:id/conversation`. Its `aria-label` is "{Project} Conversation, 3 unread[, one mentions you]", and its `title` gives the same text for mouse users.
+- The pill sits in `td.cell-primary`, right after the project name, in a flex wrapper (`.c24-name`, `gap .5rem`, wraps). It's a link straight to `/projects/:id/conversation`. Its `aria-label` is "{Project} Conversation, 3 unread", and its `title` gives the same text for mouse users.
 - A row with unread messages shows the project name at weight 600. That's a second cue, so the state isn't carried by colour alone.
 - **1440:** the pill wraps under the name when the column is narrow. It never pushes other columns.
 - **390 (`.table-stack-md` card):** the name and pill share the first line (`justify-content: space-between`, `flex-wrap: nowrap`). A long name wraps with `overflow-wrap: anywhere`, and the pill stays on the right.
@@ -122,10 +122,12 @@ I checked each screenshot for horizontal overflow (`scrollWidth` equals the view
 
 `cr24-mock-{name}-{1440|390}.png` for: `tab-badge`, `tab-badge-scrolled`, `tab-badge-cap`, `project-row-badge`, `project-row-cleared`, `convo-new-divider`, `composer-mention-picker`, `composer-mention-nomatch`, `composer-mention-chips`, `composer-mention-limit`, `composer-mention-limit-error`, `mention-deactivated`, `posted-mention`, `convo-new-arrived`, `convo-from-bell`, `bell-mention-row`, `states`.
 
-## 10. Open questions (for Rich and Lean)
+## 10. Decisions
 
-Closed: Q-170 to Q-183 and A-65 (spec), and L-1 to L-4 (Lean, Nov 12: last-read while watching, the bell excerpt, mention storage and display, the 10-mention limit).
+Closed in the spec: Q-170 to Q-183 and A-65. Closed by Lean on Nov 12: L-1 to L-4 (last-read while watching, the bell excerpt, mention storage and display, the 10-mention limit), plus the three below.
 
-1. **The @ marker in the pill.** Do we want it? It needs one more server field, for example `conversationMentionUnread` (a count, or a boolean) next to `conversationUnread` on `GET /projects` and `GET /projects/:id`. If not, the pill shows the number only.
-2. **Phone edge cue.** Is the right-edge cue on the scrolling tab strip enough at 390? The alternative is putting Conversation earlier in the tab order on phones.
-3. **Follow-ups.** CR-24 refreshes Follow-ups (FR-ARF-02), but I've added no new Follow-ups pill, because the CR-20 follow-up badge and the "New" divider already cover it. Please confirm that nothing extra is wanted.
+- **Q-184 (Lean):** the unread pill is number only, with no @ marker and no `conversationMentionUnread` (§2).
+- **Phone tab strip (Lean):** at 390, the right-edge count on the scrolling tab strip is enough. The tab order is unchanged on phones (§2.1).
+- **Q-185 (Lean):** no new Follow-ups pill. Follow-ups get the 10 s refresh (FR-ARF-02), and the CR-20 follow-up badge and the "New" divider stay as they are.
+
+There are no open questions.
