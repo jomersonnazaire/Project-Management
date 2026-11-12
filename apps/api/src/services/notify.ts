@@ -18,6 +18,9 @@ export async function notify(input: {
   taskIds?: Id[];
   link?: string | null;
   issueId?: Id | null;
+  /** CR-24 CONVERSATION_MENTION: the message and its plain-text quote. */
+  messageId?: Id | null;
+  excerpt?: string | null;
   actorId: Id | null;
   recipients: (Id | null | undefined)[];
 }): Promise<number> {
@@ -31,6 +34,8 @@ export async function notify(input: {
       ...(input.taskIds?.length ? { taskIds: input.taskIds } : {}),
       ...(input.link ? { link: input.link } : {}),
       issueId: input.issueId ?? null,
+      ...(input.messageId ? { messageId: input.messageId } : {}),
+      ...(input.excerpt ? { excerpt: input.excerpt } : {}),
       type: input.type,
       actorId: input.actorId,
     })),

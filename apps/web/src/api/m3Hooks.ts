@@ -1,6 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
+  CONVERSATION_POLL_MS,
   NOTIFICATION_POLL_MS,
+  type ConversationUnreadDto,
+  type ProjectDto,
+  type ProjectListItemDto,
   type CalendarDto,
   type DocumentDto,
   type DocumentListDto,
@@ -23,6 +27,7 @@ import {
   type UploadTicketDto,
 } from '@xc8/shared';
 import { ApiError, api, qs } from './client';
+import { usePoll } from './poll';
 
 /** Data hooks for Milestone 3: calendar, time, documents, evidence, notifications, conversation. */
 
@@ -276,6 +281,7 @@ export function useMarkRead() {
 }
 
 // ----- Conversation -----
+/** FR-ARF-01: the open Conversation refreshes every 10 s (and on focus) while visible. */
 export function useMessages(
   projectId: string,
   params: { type?: string; taskId?: string; q?: string },
@@ -283,7 +289,47 @@ export function useMessages(
   return useQuery({
     queryKey: ['messages', projectId, params],
     queryFn: () => api<MessageListDto>(`/projects/${projectId}/messages${qs(params)}`),
+    ...usePoll(CONVERSATION_POLL_MS),
   });
+}
+
+/**
+ * CR-24 FR-CNV-10 / L-1: the caller read the Conversation (up to `at`, the newest message shown).
+ * The pill clears at once on the project and list caches; the server's count then stands.
+ */
+export function useMarkConversationSeen(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ['conversation-seen', projectId],
+    mutationFn: (at?: string) =>
+      api<{ unread: number }>(`/projects/${projectId}/messages/seen`, {
+        method: 'POST',
+        body: at ? { at } : {},
+      }),
+    onMutate: () => setConversationUnread(qc, projectId, 0),
+    onSuccess: (r) => setConversationUnread(qc, projectId, r.unread),
+  });
+}
+
+/** Writes one project's unread into the detail, list and counts-only caches (no refetch). */
+export function setConversationUnread(qc: QueryClient, projectId: string, unread: number) {
+  qc.setQueryData<ProjectDto>(['projects', 'detail', projectId], (p) =>
+    p ? { ...p, conversationUnread: unread } : p,
+  );
+  qc.setQueriesData<{ items: ProjectListItemDto[] }>({ queryKey: ['projects', 'list'] }, (l) =>
+    l
+      ? {
+          ...l,
+          items: l.items.map((i) =>
+            i.id === projectId ? { ...i, conversationUnread: unread } : i,
+          ),
+        }
+      : l,
+  );
+  qc.setQueriesData<ConversationUnreadDto>(
+    { queryKey: ['projects', 'conversation-unread'] },
+    (c) => (c && projectId in c.counts ? { counts: { ...c.counts, [projectId]: unread } } : c),
+  );
 }
 
 export function usePostMessage(projectId: string) {

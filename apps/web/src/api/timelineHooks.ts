@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  PROJECT_POLL_MS,
   CLIENT_IMPORT_TOKEN_HEADER,
   TIMELINE_CONFIRM_QUERY,
   TIMELINE_TEMPLATE_NAME,
@@ -17,15 +18,18 @@ import type {
   TimelinePhaseDto,
 } from '@xc8/shared';
 import { api, downloadFile, qs } from './client';
+import { usePoll } from './poll';
 
 /** CR-22 Part B: the Timeline tab's data (FR-TL-01 to 07). Refetched after any task change. */
 export const timelineKey = (projectId: string) => ['tasks', 'timeline', projectId] as const;
 
-export function useTimeline(projectId: string, enabled = true) {
+/** FR-ARF-03: `poll` on the Timeline tab refreshes every 30 s (and on focus). */
+export function useTimeline(projectId: string, enabled = true, opts: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: timelineKey(projectId),
     queryFn: () => api<TimelineDto>(`/projects/${projectId}/timeline`),
     enabled,
+    ...usePoll(opts.poll ? PROJECT_POLL_MS : false),
   });
 }
 

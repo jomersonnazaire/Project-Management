@@ -157,7 +157,8 @@ export function TimelineTab({
   /** Opens the task panel (the task form for planners, read-only for others). */
   onOpen: (taskId: string) => void;
 }) {
-  const q = useTimeline(project.id);
+  // CR-24 FR-ARF-03: the Timeline refreshes every 30 s while visible.
+  const q = useTimeline(project.id, true, { poll: true });
   const compact = useIsCompact();
   const [zoom, setZoom] = useState<Zoom>('weeks');
   const [filter, setFilter] = useState<Filter>('all');

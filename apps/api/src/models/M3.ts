@@ -258,6 +258,9 @@ const notificationSchema = new Schema(
     message: { type: String, default: null },
     link: { type: String, default: null },
     issueId: { type: ObjectId, ref: 'Issue', default: null },
+    /** CR-24 CONVERSATION_MENTION: the message, and its plain-text quote taken at send time. */
+    messageId: { type: ObjectId, ref: 'Message', default: undefined },
+    excerpt: { type: String, default: undefined },
     type: { type: String, enum: NOTIFICATION_TYPES, required: true },
     actorId: { type: ObjectId, ref: 'User', default: null },
     readAt: { type: Date, default: null },
@@ -282,6 +285,8 @@ const messageSchema = new Schema(
     text: { type: String, required: true, maxlength: 5000 },
     taskId: { type: ObjectId, ref: 'Task', default: null },
     contactIds: { type: [ObjectId], ref: 'ClientContact', default: [] },
+    /** CR-24 FR-CNV-13: team members mentioned with `<@id>` tokens in `text` (checked on save). */
+    mentionIds: { type: [ObjectId], ref: 'User', default: [] },
     hidden: {
       type: new Schema(
         {

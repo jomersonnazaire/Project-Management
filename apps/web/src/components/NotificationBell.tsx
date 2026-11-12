@@ -61,7 +61,7 @@ export function NotificationBell() {
             <i className="bx bx-bell fs-2 text-body-secondary" aria-hidden="true" />
             <div className="fw-semibold text-heading mt-2">You're all caught up</div>
             <small className="text-body-secondary">
-              Follow-ups on your tasks and issues will show here.
+              Follow-ups, mentions and issues for you will show here.
             </small>
           </div>
         ) : (
@@ -95,6 +95,15 @@ export function NotificationBell() {
                     {n.message ? (
                       // Personal notices (tracker, leave) carry their own sentence.
                       <>{n.message}</>
+                    ) : n.type === 'CONVERSATION_MENTION' ? (
+                      // CR-24 FR-NTF-14 (UIE §5): the project is the object; the quote is the
+                      // excerpt stored at send time, shown as is (clamped to 2 lines in CSS).
+                      <>
+                        <strong>{n.actor ? shortName(n.actor.name) : 'Someone'}</strong>{' '}
+                        {NOTIFICATION_VERBS[n.type]}{' '}
+                        <strong>{n.project?.name ?? 'a project'}</strong>
+                        {n.excerpt && <span className="notif-quote d-block mt-1">{n.excerpt}</span>}
+                      </>
                     ) : n.type === 'ADDED_TO_PROJECT' ? (
                       // Added to a project: no task, the project is the object.
                       <>
@@ -124,8 +133,19 @@ export function NotificationBell() {
                         </strong>
                       </>
                     )}
-                    {n.project && n.type !== 'ADDED_TO_PROJECT' && ` · ${n.project.name}`}
-                    <span className="d-block text-body-secondary">{relativeTime(n.at)}</span>
+                    {n.project &&
+                      n.type !== 'ADDED_TO_PROJECT' &&
+                      n.type !== 'CONVERSATION_MENTION' &&
+                      ` · ${n.project.name}`}
+                    <span className="d-block text-body-secondary">
+                      {n.type === 'CONVERSATION_MENTION' && (
+                        <>
+                          <i className="bx bx-message-rounded-dots me-1" aria-hidden="true" />
+                          Conversation ·{' '}
+                        </>
+                      )}
+                      {relativeTime(n.at)}
+                    </span>
                   </span>
                 </button>
               </li>

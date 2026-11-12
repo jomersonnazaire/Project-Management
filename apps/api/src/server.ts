@@ -15,6 +15,7 @@ import { migrateProjectCodes } from './services/projectCodes.js';
 import { ensureDefaultLookups, sweepAutoStop } from './services/tracker.js';
 import { ensureDefaultProjectTypes } from './services/projectTypes.js';
 import { ensureDefaultLeaveTypes } from './services/leave.js';
+import { ensureConversationReadCutoff } from './services/conversationRead.js';
 import { ensureFollowUpSeenCutoff } from './services/followUpSeen.js';
 
 const config = loadConfig();
@@ -42,6 +43,8 @@ await migrateModuleText(logger);
 await ensureDefaultLeaveTypes(logger);
 // CR-20: follow-ups posted before the badge went live count as seen (cutoff written once).
 await ensureFollowUpSeenCutoff();
+// CR-24 Q-170: Conversation messages before this release count as read.
+await ensureConversationReadCutoff();
 const app = createApp(config, logger);
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'API listening');
