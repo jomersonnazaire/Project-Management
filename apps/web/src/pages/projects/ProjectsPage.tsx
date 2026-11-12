@@ -2,7 +2,8 @@ import { PROJECT_FILTER_LABELS, PROJECT_FILTERS, PROJECT_TYPE_NOT_SET } from '@x
 import { useState } from 'react';
 import { Form, Nav } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { useProjects } from '../../api/projectHooks';
+import { useConversationUnread, useProjects } from '../../api/projectHooks';
+import { UnreadPill } from '../../components/UnreadPill';
 import { useProjectTypes } from '../../api/projectTypeHooks';
 import { useCan } from '../../auth/useCan';
 import { EmptyState, ErrorAlert, LoadingRows } from '../../components/Feedback';
@@ -27,6 +28,17 @@ export function ProjectsPage() {
   });
   const counts = projects.data?.counts ?? {};
   const items = projects.data?.items ?? [];
+  // CR-24 FR-ARF-08 / Q-173: the row pills refresh every 30 s and on focus, counts only. The
+  // list payload's `conversationUnread` stands until a newer check answers (FR-CNV-15).
+  const canConversation = useCan('conversations', 'view');
+  const unread = useConversationUnread(projects.data, projects.dataUpdatedAt, canConversation);
+  const unreadOf = (p: (typeof items)[number]) =>
+    // Whichever answered last stands: a refetched list, or a newer counts check.
+    unread.data?.counts &&
+    unread.dataUpdatedAt >= projects.dataUpdatedAt &&
+    p.id in unread.data.counts
+      ? unread.data.counts[p.id]!
+      : (p.conversationUnread ?? 0);
 
   return (
     <>
@@ -128,8 +140,22 @@ export function ProjectsPage() {
                 <tbody>
                   {items.map((p) => (
                     <tr key={p.id}>
-                      <td className="text-heading fw-medium cell-primary">
-                        <Link to={`/projects/${p.id}`}>{p.name}</Link>
+                      <td
+                        className={`text-heading cell-primary ${unreadOf(p) ? 'fw-semibold' : 'fw-medium'}`}
+                      >
+                        <span className="c24-name">
+                          <Link to={`/projects/${p.id}`}>{p.name}</Link>
+                          {unreadOf(p) > 0 && (
+                            <Link
+                              to={`/projects/${p.id}/conversation`}
+                              className="unread-link"
+                              aria-label={`${p.name} Conversation, ${unreadOf(p)} unread`}
+                              title={`${p.name} Conversation, ${unreadOf(p)} unread`}
+                            >
+                              <UnreadPill count={unreadOf(p)} srText={false} />
+                            </Link>
+                          )}
+                        </span>
                         {p.templateName && (
                           <div className="small text-body-secondary fw-normal">
                             {p.templateName} v{p.templateVersion}

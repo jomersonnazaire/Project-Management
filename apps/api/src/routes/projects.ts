@@ -18,6 +18,9 @@ import {
   PROJECT_TYPE_REQUIRED,
   type ProjectSaveNoteDto,
   unownedTasksNote,
+  conversationUnreadQuerySchema,
+  type ConversationUnreadDto,
+  type ProjectListItemDto,
 } from '@xc8/shared';
 import type { Request } from 'express';
 import mongoose, { Types, type FilterQuery } from 'mongoose';
@@ -61,6 +64,7 @@ import {
   toProjectListItems,
   type ProjectDoc,
 } from '../services/projectService.js';
+import { conversationUnreadCounts } from '../services/conversationRead.js';
 import { assertProjectScope, isProjectPm, projectScopeFilter } from '../services/scope.js';
 import { syncProjectPhases } from '../services/phases.js';
 import { loadCalendar } from '../services/calendar.js';
@@ -241,6 +245,22 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
 
   const r = registry.router('/projects');
 
+  /**
+   * CR-24 AC-80.7/80.8 (NFR-60): the caller's Conversation unread on list and detail rows, in one
+   * query; only for callers who can view Conversation.
+   */
+  async function withConversationUnread<T extends ProjectListItemDto>(
+    req: Request,
+    items: T[],
+  ): Promise<T[]> {
+    if (!currentPermissions(req).conversations.view) return items;
+    const counts = await conversationUnreadCounts(
+      currentUser(req)._id,
+      items.map((i) => new Types.ObjectId(i.id)),
+    );
+    return items.map((i) => ({ ...i, conversationUnread: counts.get(i.id) ?? 0 }));
+  }
+
   r.get('/', perm('projects', 'view'), async (req, res) => {
     const q = parseQuery(projectListQuerySchema, req);
     const user = currentUser(req);
@@ -290,14 +310,38 @@ export function projectsRouter(registry: RouteRegistry, config: AppConfig) {
         counts[g._id.health] = (counts[g._id.health] ?? 0) + g.n;
       }
     }
-    const items = await toProjectListItems(await refreshStale(rows as ProjectDoc[]));
+    const items = await withConversationUnread(
+      req,
+      await toProjectListItems(await refreshStale(rows as ProjectDoc[])),
+    );
     res.json({ items, page: q.page, pageSize: q.pageSize, total, counts });
+  });
+
+  // CR-24 FR-ARF-08 / Q-173: the Projects list's timed check; unread counts only, one batch.
+  r.get('/conversation-unread', perm('conversations', 'view'), async (req, res) => {
+    const q = parseQuery(conversationUnreadQuerySchema, req);
+    const user = currentUser(req);
+    const visible = await ProjectModel.find({
+      ...projectScopeFilter(user),
+      _id: { $in: q.ids.map((id) => new Types.ObjectId(id)) },
+    })
+      .select('_id')
+      .lean();
+    const counts = await conversationUnreadCounts(
+      user._id,
+      visible.map((p) => p._id),
+    );
+    const body: ConversationUnreadDto = { counts: Object.fromEntries(counts) };
+    res.json(body);
   });
 
   r.get('/:id', perm('projects', 'view'), async (req, res) => {
     const project = await loadProject(req, 'view');
     const [fresh] = await refreshStale([project.toObject() as ProjectDoc]);
-    res.json({ project: await toProjectDto(fresh!, currentUser(req), currentPermissions(req)) });
+    const [dto] = await withConversationUnread(req, [
+      await toProjectDto(fresh!, currentUser(req), currentPermissions(req)),
+    ]);
+    res.json({ project: dto });
   });
 
   // FR-PRJ-01..04, AC-09.*: create the project and generate its plan from a published template in

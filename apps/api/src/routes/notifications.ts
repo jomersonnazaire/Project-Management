@@ -77,6 +77,9 @@ export function notificationsRouter(registry: RouteRegistry) {
           : null,
         message: d.message ?? null,
         link: d.link ?? null,
+        ...(d.type === 'CONVERSATION_MENTION'
+          ? { messageId: d.messageId?.toString() ?? null, excerpt: d.excerpt ?? null }
+          : {}),
         read: Boolean(d.readAt),
         at: d.createdAt.toISOString(),
       };

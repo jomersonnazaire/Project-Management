@@ -489,7 +489,7 @@ describe('Project Conversation (FR-CNV-01..08)', () => {
       screen.getByText(/Message hidden by Ada Admin on Oct 9\. Reason: Conduct policy/),
     ).toBeInTheDocument();
     expect(screen.getByText('You can read this conversation but not post.')).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Message' })).toBeNull();
   });
 
   it('members post with a type and tagged task', async () => {
@@ -507,11 +507,12 @@ describe('Project Conversation (FR-CNV-01..08)', () => {
     ).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Message type'), 'CALL');
     await userEvent.selectOptions(screen.getByLabelText('Tag a task'), 'k1');
-    await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Called the client');
+    await userEvent.type(screen.getByRole('combobox', { name: 'Message' }), 'Called the client');
     await userEvent.click(screen.getByRole('button', { name: 'Post' }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
-        ([u, i]) => String(u).includes('/messages') && i?.method === 'POST',
+        // CR-24: opening the tab also POSTs /messages/seen; this is the post itself.
+        ([u, i]) => String(u).endsWith('/messages') && i?.method === 'POST',
       );
       expect(JSON.parse(String(call?.[1]?.body))).toEqual({
         text: 'Called the client',

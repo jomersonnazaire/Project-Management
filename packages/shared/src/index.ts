@@ -16,3 +16,4 @@ export * from './projectTypes.js';
 export * from './clientImport.js';
 export * from './timeline.js';
 export * from './timelineImport.js';
+export * from './conversation.js';

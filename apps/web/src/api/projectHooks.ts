@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CONVERSATION_POLL_MS, PROJECT_POLL_MS } from '@xc8/shared';
 import type {
+  ConversationUnreadDto,
   ActionEmailStartDto,
   ProjectSaveNoteDto,
   CreateProjectInput,
@@ -18,6 +20,7 @@ import type {
   UpdateTaskInput,
 } from '@xc8/shared';
 import { api, qs } from './client';
+import { usePoll } from './poll';
 
 /** Data hooks for Milestone 2: templates, projects, tasks and My tasks. */
 
@@ -104,10 +107,40 @@ export function useProjects(
   });
 }
 
-export function useProject(id: string) {
+/**
+ * CR-24 FR-ARF-08 / Q-173: the Projects list's 30-second and focus check. Unread counts only, one
+ * request for the listed projects (never the threads, never one per row).
+ */
+export function useConversationUnread(
+  list: { items: ProjectListItemDto[] } | undefined,
+  listUpdatedAt: number,
+  enabled: boolean,
+) {
+  const key = (list?.items ?? [])
+    .map((p) => p.id)
+    .sort()
+    .join(',');
+  return useQuery({
+    queryKey: ['projects', 'conversation-unread', key],
+    queryFn: () => api<ConversationUnreadDto>(`/projects/conversation-unread${qs({ ids: key })}`),
+    enabled: enabled && key.length > 0,
+    ...usePoll(PROJECT_POLL_MS),
+    // The list payload already carries the first counts (NFR-60), so nothing is fetched on mount;
+    // only the 30-second and focus checks ask for counts.
+    initialData: () => ({
+      counts: Object.fromEntries((list?.items ?? []).map((p) => [p.id, p.conversationUnread ?? 0])),
+    }),
+    initialDataUpdatedAt: listUpdatedAt,
+    staleTime: PROJECT_POLL_MS,
+  });
+}
+
+/** FR-ARF-03: `poll` on the project page (header, Checklist, Board) refreshes every 30 s. */
+export function useProject(id: string, opts: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: ['projects', 'detail', id],
     queryFn: () => api<{ project: ProjectDto }>(`/projects/${id}`).then((r) => r.project),
+    ...usePoll(opts.poll ? PROJECT_POLL_MS : false),
   });
 }
 
@@ -212,21 +245,28 @@ export function useProjectActivity(projectId: string, enabled: boolean) {
 }
 
 // ----- Tasks -----
-export function useProjectTasks(projectId: string, assignee?: string) {
+export function useProjectTasks(
+  projectId: string,
+  assignee?: string,
+  opts: { poll?: boolean } = {},
+) {
   return useQuery({
     queryKey: ['tasks', 'project', projectId, assignee ?? ''],
     queryFn: () =>
       api<{ items: TaskDto[] }>(`/projects/${projectId}/tasks${qs({ assignee })}`).then(
         (r) => r.items,
       ),
+    ...usePoll(opts.poll ? PROJECT_POLL_MS : false),
   });
 }
 
-export function useTask(id: string | null) {
+/** FR-ARF-02: an open task panel (its Follow-ups) refreshes every 10 s with `poll`. */
+export function useTask(id: string | null, opts: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: ['tasks', 'detail', id],
     queryFn: () => api<{ task: TaskDto }>(`/tasks/${id}`).then((r) => r.task),
     enabled: Boolean(id),
+    ...usePoll(opts.poll ? CONVERSATION_POLL_MS : false),
   });
 }
 

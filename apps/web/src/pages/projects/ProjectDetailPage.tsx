@@ -7,7 +7,8 @@ import {
   type AccessAction,
   type RecordType,
 } from '@xc8/shared';
-import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Modal } from 'react-bootstrap';
 import {
   Link,
@@ -30,6 +31,8 @@ import { ProgressBar, ProjectBadge, ScheduleVariance } from '../../components/Pr
 import { shortDate } from '../../lib/format';
 import { NotFoundPage } from '../ErrorPages';
 import { ProjectEditModal } from './ProjectEditModal';
+import { UnreadPill } from '../../components/UnreadPill';
+import { TabEdgeCue } from './TabEdgeCue';
 import { ActivityTab, BoardTab, ChecklistTab, ContactsTab, TeamTab } from './ProjectTabs';
 import { ConversationTab } from './ConversationTab';
 import { DocumentsTab } from './DocumentsTab';
@@ -48,8 +51,21 @@ export function ProjectDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
-  const project = useProject(id);
-  const tasks = useProjectTasks(id);
+  // CR-24 FR-ARF-03: the header, Checklist and Board refresh every 30 s while visible.
+  const project = useProject(id, { poll: true });
+  const tasks = useProjectTasks(id, undefined, { poll: true });
+  // CR-24 (spec §11.2): these queries stay mounted across tabs, so switching tabs refetches them;
+  // coming back to the Checklist never shows what was there before.
+  const qc = useQueryClient();
+  const tab = location.pathname.split('/')[3] ?? '';
+  const lastTab = useRef(tab);
+  useEffect(() => {
+    if (lastTab.current === tab) return;
+    lastTab.current = tab;
+    if (qc.isMutating()) return;
+    void qc.invalidateQueries({ queryKey: ['projects', 'detail', id] });
+    void qc.invalidateQueries({ queryKey: ['tasks', 'project', id] });
+  }, [tab, id, qc]);
   const action = useProjectAction(id);
   const [editing, setEditing] = useState(false);
   const [saveNotes, setSaveNotes] = useState<string[]>([]);
@@ -100,7 +116,9 @@ export function ProjectDetailPage() {
     { to: 'board', label: 'Board' },
     { to: 'team', label: 'Team' },
     { to: 'contacts', label: 'Active contacts' },
-    ...(can('conversations', 'view') ? [{ to: 'conversation', label: 'Conversation' }] : []),
+    ...(can('conversations', 'view')
+      ? [{ to: 'conversation', label: 'Conversation', unread: p.conversationUnread ?? 0 }]
+      : []),
     ...(can('issues', 'view')
       ? [{ to: 'issues', label: 'Issues', count: issues.data?.counts.open }]
       : []),
@@ -266,24 +284,33 @@ export function ProjectDetailPage() {
           </div>
         </div>
 
-        <ul className="nav nav-tabs nav-scrollable mb-4" role="tablist">
-          {tabs.map((t) => (
-            <li className="nav-item" key={t.to}>
-              <NavLink
-                to={t.to ? `/projects/${p.id}/${t.to}` : `/projects/${p.id}`}
-                end={t.end}
-                className="nav-link"
-              >
-                {t.label}
-                {'count' in t && t.count ? (
-                  <span className="badge bg-label-danger ms-2" aria-label={`${t.count} open`}>
-                    {t.count}
-                  </span>
-                ) : null}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+        <div className="tabs-wrap position-relative">
+          <ul className="nav nav-tabs nav-scrollable mb-4" role="tablist">
+            {tabs.map((t) => (
+              <li className="nav-item" key={t.to}>
+                <NavLink
+                  to={t.to ? `/projects/${p.id}/${t.to}` : `/projects/${p.id}`}
+                  end={t.end}
+                  className="nav-link"
+                  id={t.to === 'conversation' ? 'tab-conversation' : undefined}
+                >
+                  {t.label}
+                  {/* CR-24 FR-CNV-09: the server's count; opening the tab clears it. */}
+                  {'unread' in t && <UnreadPill count={t.unread} />}
+                  {'count' in t && t.count ? (
+                    <span className="badge bg-label-danger ms-2" aria-label={`${t.count} open`}>
+                      {t.count}
+                    </span>
+                  ) : null}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+          {/* UIE §2.1 (390): the Conversation pill when its tab is scrolled out of view. */}
+          {(p.conversationUnread ?? 0) > 0 && (
+            <TabEdgeCue targetId="tab-conversation" count={p.conversationUnread!} />
+          )}
+        </div>
         <ErrorAlert error={tasks.error} />
         {tasks.isPending ? (
           <LoadingRows rows={4} />

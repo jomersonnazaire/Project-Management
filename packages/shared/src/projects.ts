@@ -967,6 +967,11 @@ export interface ProjectListItemDto {
   taskCount: number;
   /** Tasks without an estimate (EC-58). */
   unestimatedTaskCount: number;
+  /**
+   * CR-24 FR-CNV-09/15: the caller's unread Conversation messages (server-counted); absent or null
+   * when the caller can't view Conversation.
+   */
+  conversationUnread?: number | null;
 }
 
 export interface ActiveContactDto {

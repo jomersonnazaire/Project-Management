@@ -699,6 +699,8 @@ export const NOTIFICATION_TYPES = [
   'DAR_READY',
   // Action emails (roadmap §4): someone was added to a project (always in-app; email optional).
   'ADDED_TO_PROJECT',
+  // CR-24 FR-NTF-14: someone @mentioned you in a project's Conversation (in-app only).
+  'CONVERSATION_MENTION',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -721,6 +723,9 @@ export interface NotificationDto {
   /** Personal notices: the full sentence and where it opens. */
   message: string | null;
   link: string | null;
+  /** CR-24 CONVERSATION_MENTION: the message (opens the Conversation at it) and its quote. */
+  messageId?: string | null;
+  excerpt?: string | null;
   read: boolean;
   at: string;
 }
@@ -757,6 +762,7 @@ export const NOTIFICATION_VERBS: Record<NotificationType, string> = {
   LEAVE_CANCELLED: 'cancelled leave',
   DAR_READY: 'has a report ready',
   ADDED_TO_PROJECT: 'added you to',
+  CONVERSATION_MENTION: 'mentioned you in',
 };
 
 // ---------- Project conversation (FR-CNV-01..08) ----------
@@ -809,11 +815,22 @@ export interface MessageDto {
   task: Ref | null;
   contacts: (Ref & { active: boolean })[];
   hidden: { by: Ref | null; at: string; reason: string } | null;
+  /**
+   * CR-24 L-3: the people named by `<@id>` tokens in `text`, with their CURRENT name. `chip` is a
+   * saved mention (or the author's own); otherwise the token reads as plain "@Name". A token whose
+   * id isn't listed here has no user any more ("Unknown user").
+   */
+  mentions?: (Ref & { active: boolean; chip: boolean })[];
 }
 
 export interface MessageListDto {
   items: MessageDto[];
   can: { post: boolean; hide: boolean };
+  /**
+   * CR-24 FR-CNV-10: the caller's last-read time before this visit (with the release cutoff), for
+   * the "New messages" divider; null = nothing before counts as read.
+   */
+  lastReadAt?: string | null;
 }
 
 /** Splits plain text into text and http(s) links (FR-CNV-07); nothing is ever rendered as HTML. */

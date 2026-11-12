@@ -59,7 +59,8 @@ export function TaskPanel({
 }) {
   const [confirm, confirmDialog] = useConfirm();
   const { user } = useAuth();
-  const task = useTask(taskId);
+  // CR-24 FR-ARF-02: the open panel (its Follow-ups) refreshes every 10 s.
+  const task = useTask(taskId, { poll: true });
   const history = useTaskHistory(taskId);
   const mutation = useTaskMutation();
   const status = useStatusMove(project);
