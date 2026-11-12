@@ -56,6 +56,8 @@ function mount(
     project?: ProjectDto;
     fail?: number;
     history?: unknown[];
+    /** Like the API: a stale version gets 409 VERSION_CONFLICT. */
+    strict?: boolean;
   } = {},
 ) {
   let t: TaskDto = task({
@@ -77,6 +79,14 @@ function mount(
         return { status: opts.fail, body: { error: { code: 'X', message: 'x' }, requestId: 'r' } };
       const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
       const id = /deliverable-items\/([^/?]+)/.exec(url)?.[1];
+      if (opts.strict && m === 'PATCH' && body.version !== t.version)
+        return {
+          status: 409,
+          body: {
+            error: { code: 'VERSION_CONFLICT', message: 'Someone else changed this task.' },
+            requestId: 'r',
+          },
+        };
       if (m === 'POST' && url.endsWith('/restore') && removed) {
         const back = removed;
         removed = null;
@@ -225,6 +235,29 @@ describe('CR-23 deliverables checklist in the task panel (UIE §5)', () => {
     expect(calls('/status')).toHaveLength(0);
     const [, init] = calls('/deliverable-items/i2')[0]!;
     expect(JSON.parse(String(init!.body))).toMatchObject({ done: true, version: 1 });
+  });
+
+  it('Queen #51 (EC-210): two quick ticks both save, each with the version the last one returned', async () => {
+    const { calls } = mount({ strict: true });
+    const box = await openPanel();
+    const a = within(box).getByRole('checkbox', { name: 'Defect log' });
+    const b = within(box).getByRole('checkbox', { name: 'UAT script' });
+    // Both clicks land before the first save comes back.
+    act(() => {
+      a.click();
+      b.click();
+    });
+    await waitFor(() => expect(calls('/deliverable-items/')).toHaveLength(2));
+    expect(await within(box).findByText('1 of 2 done')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(box).getByRole('checkbox', { name: 'Defect log' })).toBeChecked(),
+    );
+    expect(within(box).getByRole('checkbox', { name: 'UAT script' })).not.toBeChecked();
+    const versions = calls('/deliverable-items/').map(
+      ([, i]) => (JSON.parse(String(i!.body)) as { version: number }).version,
+    );
+    expect(versions).toEqual([0, 1]);
+    expect(within(box).queryByText(/Someone else changed/)).not.toBeInTheDocument();
   });
 
   it('inline edit: Enter saves, Esc cancels; over 200 characters shows the error and saves nothing', async () => {

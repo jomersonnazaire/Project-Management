@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { DeliverableItemDto, TaskDto } from '@xc8/shared';
 import { api } from './client';
@@ -75,11 +76,28 @@ export function withTick(
   );
 }
 
+/**
+ * Queen #51 (EC-210): saves from one panel go out one at a time (mutation scope per task), and
+ * each reads the task version when it actually starts: the newest of the cached task, the task it
+ * was clicked on and the last version our own save returned. A quick second tick therefore carries the version
+ * the first tick produced, instead of the stale one it had when clicked, so only someone else's
+ * change can give a 409.
+ */
 export function useDeliverableChange(task: Pick<TaskDto, 'id' | 'version' | 'projectId'>) {
   const qc = useQueryClient();
+  const lastSaved = useRef(task.version);
+  const currentVersion = () => {
+    const cached = qc.getQueryData<TaskDto>(['tasks', 'detail', task.id])?.version ?? 0;
+    return Math.max(cached, task.version, lastSaved.current);
+  };
   return useMutation({
-    mutationFn: (c: DeliverableChange) => request(task, c).then((r) => r.task),
-    onSuccess: (fresh) => putTask(qc, fresh),
+    scope: { id: `deliverables-${task.id}` },
+    mutationFn: (c: DeliverableChange) =>
+      request({ id: task.id, version: currentVersion() }, c).then((r) => r.task),
+    onSuccess: (fresh) => {
+      lastSaved.current = Math.max(lastSaved.current, fresh.version);
+      putTask(qc, fresh);
+    },
     onError: () => {
       // A 409 means someone else changed the task: reload it (and the lists that show chips).
       void qc.invalidateQueries({ queryKey: ['tasks', 'detail', task.id] });
